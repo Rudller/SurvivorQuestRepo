@@ -1,49 +1,94 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { useGetUsersQuery } from "@/features/users/api/user.api";
 import { CreateUserForm } from "@/features/users/components/create-user-form";
+import { UsersTable } from "@/features/users/components/users-table";
+
+function isUnauthorized(error: unknown) {
+  const err = error as FetchBaseQueryError | undefined;
+  return typeof err?.status === "number" && err.status === 401;
+}
 
 export default function UsersPage() {
-    const { data, isLoading, isError, error, refetch } = useGetUsersQuery();
+  const router = useRouter();
 
-    return (
-        <main className="p-8">
-            <h1 className="text-2xl font-semibold">
-                Użytkownicy
-            </h1>
+  const {
+    data: meData,
+    isLoading: isMeLoading,
+    isError: isMeError,
+    error: meError,
+  } = useMeQuery();
 
-            <CreateUserForm />
+  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
-            {isLoading && (
-                <p className="mt-4 text-zinc-600">
-                    Ładowanie użytkowników...
-                </p>
-            )}
+  const {
+    data: users,
+    isLoading: isUsersLoading,
+    isError: isUsersError,
+    error: usersError,
+    refetch,
+  } = useGetUsersQuery(undefined, {
+    skip: !meData,
+  });
 
-            {isError && (
-                <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    <p>Wystąpił błąd podczas ładowania użytkowników.</p>
-                    <pre className="mt-2 whitespace-pre-wrap text-xs">
-                        {JSON.stringify(error, null, 2)}
-                    </pre>
-                    <button
-                        onClick={() => refetch()}
-                        className="mt-3 rounded bg-black px-3 py-1.5 text-white hover:opacity-90"
-                    >
-                        Spróbuj ponownie
-                    </button>
-                </div>
-            )}
+  useEffect(() => {
+    if (isMeError && isUnauthorized(meError)) {
+      router.replace("/login");
+    }
+  }, [isMeError, meError, router]);
 
-            {!isLoading && !isError && (
-                <ul className="mt-4 list-disc pl-5">
-                    {(data ?? []).map((u) => (
-                        <li key={u.id}>
-                            {u.email} ({u.role})
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </main>
-    )
+  if (isMeLoading) {
+    return <main className="p-8">Sprawdzanie sesji...</main>;
+  }
+
+  if (isMeError) {
+    return <main className="p-8">Przekierowanie do logowania...</main>;
+  }
+
+  return (
+    <main className="p-8">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Użytkownicy</h1>
+        <button
+          onClick={async () => {
+            await logout().unwrap();
+            router.replace("/login");
+          }}
+          disabled={isLoggingOut}
+          className="rounded border px-3 py-1.5"
+        >
+          {isLoggingOut ? "Wylogowywanie..." : "Wyloguj"}
+        </button>
+      </div>
+
+      <p className="mb-4 text-sm text-zinc-600">
+        Zalogowany: {meData?.user.email}
+      </p>
+
+      <CreateUserForm />
+
+      {isUsersLoading && <p className="mt-4 text-zinc-600">Ładowanie użytkowników...</p>}
+
+      {isUsersError && (
+        <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>Nie udało się pobrać użytkowników.</p>
+          <pre className="mt-2 whitespace-pre-wrap text-xs">
+            {JSON.stringify(usersError, null, 2)}
+          </pre>
+          <button
+            onClick={() => refetch()}
+            className="mt-3 rounded bg-black px-3 py-1.5 text-white"
+          >
+            Spróbuj ponownie
+          </button>
+        </div>
+      )}
+
+      {!isUsersLoading && !isUsersError && <UsersTable data={users ?? []} />}
+    </main>
+  );
 }
