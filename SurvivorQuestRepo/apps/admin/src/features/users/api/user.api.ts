@@ -1,4 +1,5 @@
 import { baseApi } from "@/shared/api/base-api";
+import { buildApiPath } from "@/shared/api/api-path";
 import type { User, UserRole, UserStatus } from "../types/user";
 
 type CreateUserPayload = {
@@ -24,12 +25,12 @@ export const userApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     // /api/users endpoint temporarily implemented in route handler for testing purposes, will be replaced with real database logic later
     getUsers: build.query<User[], void>({
-      query: () => "/api/users",
+      query: () => buildApiPath("/users"),
       providesTags: ["User"],
     }),
     createUser: build.mutation<User, CreateUserPayload>({
       query: (body) => ({
-        url: "/api/users",
+        url: buildApiPath("/users"),
         method: "POST",
         body,
       }),
@@ -37,7 +38,7 @@ export const userApi = baseApi.injectEndpoints({
     }),
     updateUser: build.mutation<User, UpdateUserPayload>({
       query: (body) => ({
-        url: "/api/users",
+        url: buildApiPath("/users"),
         method: "PUT",
         body,
       }),

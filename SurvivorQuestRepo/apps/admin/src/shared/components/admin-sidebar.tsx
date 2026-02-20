@@ -12,6 +12,7 @@ type AdminSidebarProps = {
 const navItems = [
   { href: "/", label: "Panel główny" },
   { href: "/tasks", label: "Lista zadań" },
+  { href: "/current-realization", label: "Aktualna realizacja" },
   { href: "/users", label: "Użytkownicy" },
   { href: "/realizations", label: "Realizacje" },
   { href: "/games", label: "Gry" },

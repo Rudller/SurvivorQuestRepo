@@ -1,4 +1,5 @@
 import { baseApi } from "@/shared/api/base-api";
+import { buildApiPath } from "@/shared/api/api-path";
 import type { ChatMessage } from "../types/chat-message";
 
 type CreateChatMessagePayload = {
@@ -9,12 +10,12 @@ type CreateChatMessagePayload = {
 export const chatApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getChatMessages: build.query<ChatMessage[], void>({
-      query: () => "/api/chat/messages",
+      query: () => buildApiPath("/chat/messages"),
       providesTags: ["Chat"],
     }),
     createChatMessage: build.mutation<ChatMessage, CreateChatMessagePayload>({
       query: (body) => ({
-        url: "/api/chat/messages",
+        url: buildApiPath("/chat/messages"),
         method: "POST",
         body,
       }),

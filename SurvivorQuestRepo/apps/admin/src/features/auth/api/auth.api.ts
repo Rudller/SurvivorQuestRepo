@@ -1,4 +1,5 @@
 import { baseApi } from "@/shared/api/base-api";
+import { buildApiPath } from "@/shared/api/api-path";
 
 type LoginPayload = {
   email: string;
@@ -15,19 +16,19 @@ export const authApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     login: build.mutation<{ user: AuthUser }, LoginPayload>({
       query: (body) => ({
-        url: "/api/auth/login",
+        url: buildApiPath("/auth/login"),
         method: "POST",
         body,
       }),
       invalidatesTags: ["Auth"],
     }),
     me: build.query<{ user: AuthUser }, void>({
-      query: () => "/api/auth/me",
+      query: () => buildApiPath("/auth/me"),
       providesTags: ["Auth"],
     }),
     logout: build.mutation<{ ok: true }, void>({
       query: () => ({
-        url: "/api/auth/logout",
+        url: buildApiPath("/auth/logout"),
         method: "POST",
       }),
       invalidatesTags: ["Auth"],

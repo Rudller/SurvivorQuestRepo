@@ -1,4 +1,5 @@
 import { baseApi } from "@/shared/api/base-api";
+import { buildApiPath } from "@/shared/api/api-path";
 import type { Realization, RealizationStatus } from "../types/realization";
 
 type CreateRealizationPayload = {
@@ -13,12 +14,12 @@ type CreateRealizationPayload = {
 export const realizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getRealizations: build.query<Realization[], void>({
-      query: () => "/api/realizations",
+      query: () => buildApiPath("/realizations"),
       providesTags: ["Realization"],
     }),
     createRealization: build.mutation<Realization, CreateRealizationPayload>({
       query: (body) => ({
-        url: "/api/realizations",
+        url: buildApiPath("/realizations"),
         method: "POST",
         body,
       }),
