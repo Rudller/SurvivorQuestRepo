@@ -10,6 +10,6 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    user: { id: "1", email: "admin@survivorquest.app", role: "admin" as const },
+    user: { id: "1", email: "test@mail.com", role: "admin" as const },
   });
 }

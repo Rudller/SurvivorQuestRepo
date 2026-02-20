@@ -1,9 +1,23 @@
 import { baseApi } from "@/shared/api/base-api";
-import type { User, UserRole } from "../types/user";
+import type { User, UserRole, UserStatus } from "../types/user";
 
 type CreateUserPayload = {
+  displayName: string;
   email: string;
+  phone?: string;
   role: UserRole;
+  status: UserStatus;
+  photoUrl?: string;
+};
+
+type UpdateUserPayload = {
+  id: string;
+  displayName: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  status: UserStatus;
+  photoUrl?: string;
 };
 
 export const userApi = baseApi.injectEndpoints({
@@ -21,7 +35,15 @@ export const userApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["User"],
     }),
+    updateUser: build.mutation<User, UpdateUserPayload>({
+      query: (body) => ({
+        url: "/api/users",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["User"],
+    }),
   }),
 });
 
-export const { useGetUsersQuery, useCreateUserMutation } = userApi;
+export const { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation } = userApi;

@@ -10,10 +10,11 @@ import { useUsersColumns } from "../hooks/use-users-columns";
 
 type UsersTableProps = {
   data: User[];
+  onEdit: (user: User) => void;
 };
 
-export function UsersTable({ data }: UsersTableProps) {
-  const columns = useUsersColumns();
+export function UsersTable({ data, onEdit }: UsersTableProps) {
+  const columns = useUsersColumns({ onEdit });
 
   const table = useReactTable({
     data,
@@ -22,11 +23,11 @@ export function UsersTable({ data }: UsersTableProps) {
   });
 
   return (
-    <div className="mt-4 overflow-hidden rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-zinc-50 text-black">
+    <div className="mt-2 w-full max-w-5xl overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/80">
+      <table className="w-full min-w-245 text-sm">
+        <thead className="bg-zinc-900 text-zinc-300">
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="border-b">
+            <tr key={headerGroup.id} className="border-b border-zinc-800">
               {headerGroup.headers.map((header) => (
                 <th key={header.id} className="px-3 py-2 text-left font-medium">
                   {header.isPlaceholder
@@ -39,9 +40,9 @@ export function UsersTable({ data }: UsersTableProps) {
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border-b last:border-0">
+            <tr key={row.id} className="border-b border-zinc-800/80 bg-zinc-900/60 last:border-0">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-3 py-2">
+                <td key={cell.id} className="px-3 py-2 text-zinc-100">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
@@ -49,7 +50,7 @@ export function UsersTable({ data }: UsersTableProps) {
           ))}
           {data.length === 0 && (
             <tr>
-              <td className="px-3 py-6 text-center text-zinc-500" colSpan={3}>
+              <td className="px-3 py-6 text-center text-zinc-400" colSpan={10}>
                 Brak użytkowników
               </td>
             </tr>
