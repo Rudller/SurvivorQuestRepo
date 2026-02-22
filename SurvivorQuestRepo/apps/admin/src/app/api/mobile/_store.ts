@@ -29,7 +29,7 @@ type MobileRealization = {
   locationRequired: boolean;
   joinCode: string;
   teamCount: number;
-  gameIds: string[];
+  stationIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -66,7 +66,7 @@ type TeamTaskProgress = {
   id: string;
   realizationId: string;
   teamId: string;
-  gameId: string;
+  stationId: string;
   status: TaskStatus;
   pointsAwarded: number;
   startedAt: string | null;
@@ -113,7 +113,7 @@ type LocationInput = {
 
 type CompleteTaskInput = {
   sessionToken: string;
-  gameId: string;
+  stationId: string;
   pointsAwarded: number;
   finishedAt?: string;
 };
@@ -157,7 +157,7 @@ const FUNNY_TEAM_NAMES = [
   "Ekipa Bez GPS",
 ];
 
-const GAME_POINTS: Record<string, number> = {
+const STATION_POINTS: Record<string, number> = {
   "g-1": 100,
   "g-2": 180,
   "g-3": 220,
@@ -234,7 +234,7 @@ const realizations: MobileRealization[] = [
     locationRequired: true,
     joinCode: "BL2026",
     teamCount: 6,
-    gameIds: ["g-2", "g-3"],
+    stationIds: ["g-2", "g-3"],
     createdAt: new Date(now - 2 * dayMs).toISOString(),
     updatedAt: new Date(now - dayMs).toISOString(),
   },
@@ -246,7 +246,7 @@ const realizations: MobileRealization[] = [
     locationRequired: false,
     joinCode: "HZ2026",
     teamCount: 3,
-    gameIds: ["g-1", "g-4", "g-5"],
+    stationIds: ["g-1", "g-4", "g-5"],
     createdAt: new Date(now - dayMs).toISOString(),
     updatedAt: new Date(now - dayMs).toISOString(),
   },
@@ -264,7 +264,7 @@ const teams: MobileTeam[] = realizations.flatMap((realization) =>
       badgeKey: null,
       badgeImageUrl: null,
       points: 0,
-      taskStats: { total: realization.gameIds.length, done: 0 },
+      taskStats: { total: realization.stationIds.length, done: 0 },
       lastLocation: null,
       status: "unassigned",
       createdAt,
@@ -467,11 +467,11 @@ export function joinMobileSession(input: JoinSessionInput) {
 export function getMobileSessionState(sessionToken: string) {
   const { assignment, team, realization } = requireSession(sessionToken);
 
-  const teamTasks = realization.gameIds.map((gameId) => {
-    const progress = taskProgresses.find((item) => item.realizationId === realization.id && item.teamId === team.id && item.gameId === gameId);
+  const teamTasks = realization.stationIds.map((stationId) => {
+    const progress = taskProgresses.find((item) => item.realizationId === realization.id && item.teamId === team.id && item.stationId === stationId);
 
     return {
-      gameId,
+      stationId,
       status: (progress?.status || "todo") as TaskStatus,
       pointsAwarded: progress?.pointsAwarded || 0,
     };
@@ -688,12 +688,12 @@ export function updateMobileTeamLocation(input: LocationInput) {
 export function completeMobileTask(input: CompleteTaskInput) {
   const { assignment, team, realization } = requireSession(input.sessionToken);
 
-  if (!input.gameId?.trim() || !isFiniteNumber(input.pointsAwarded) || input.pointsAwarded < 0) {
+  if (!input.stationId?.trim() || !isFiniteNumber(input.pointsAwarded) || input.pointsAwarded < 0) {
     throw new MobileApiError(400, "Invalid payload");
   }
 
-  if (!realization.gameIds.includes(input.gameId)) {
-    throw new MobileApiError(400, "Game not available in this realization");
+  if (!realization.stationIds.includes(input.stationId)) {
+    throw new MobileApiError(400, "Station not available in this realization");
   }
 
   if (realization.locationRequired && !team.lastLocation) {
@@ -704,7 +704,7 @@ export function completeMobileTask(input: CompleteTaskInput) {
     (progress) =>
       progress.realizationId === realization.id &&
       progress.teamId === team.id &&
-      progress.gameId === input.gameId &&
+        progress.stationId === input.stationId &&
       progress.status === "done",
   );
 
@@ -713,13 +713,13 @@ export function completeMobileTask(input: CompleteTaskInput) {
   }
 
   const finishedAt = input.finishedAt ? new Date(input.finishedAt).toISOString() : nowIso();
-  const defaultPoints = GAME_POINTS[input.gameId] ?? 0;
+  const defaultPoints = STATION_POINTS[input.stationId] ?? 0;
 
   const progress: TeamTaskProgress = {
     id: crypto.randomUUID(),
     realizationId: realization.id,
     teamId: team.id,
-    gameId: input.gameId,
+    stationId: input.stationId,
     status: "done",
     pointsAwarded: Math.round(input.pointsAwarded || defaultPoints),
     startedAt: null,
@@ -738,7 +738,7 @@ export function completeMobileTask(input: CompleteTaskInput) {
     actorId: assignment.deviceId,
     eventType: "task_completed",
     payload: {
-      gameId: input.gameId,
+      stationId: input.stationId,
       pointsAwarded: progress.pointsAwarded,
       finishedAt,
     },
@@ -758,7 +758,7 @@ export function completeMobileTask(input: CompleteTaskInput) {
 
   return {
     teamId: team.id,
-    gameId: input.gameId,
+    stationId: input.stationId,
     pointsTotal: team.points,
     taskStatus: "done" as const,
   };
@@ -787,13 +787,13 @@ export function getMobileAdminRealizationOverview(realizationId: string) {
         (assignment) => assignment.teamId === team.id && !isExpired(assignment.expiresAt),
       );
 
-      const teamTasks = realization.gameIds.map((gameId) => {
+      const teamTasks = realization.stationIds.map((stationId) => {
         const progress = taskProgresses.find(
-          (item) => item.realizationId === realization.id && item.teamId === team.id && item.gameId === gameId,
+          (item) => item.realizationId === realization.id && item.teamId === team.id && item.stationId === stationId,
         );
 
         return {
-          gameId,
+          stationId,
           status: (progress?.status || "todo") as TaskStatus,
           pointsAwarded: progress?.pointsAwarded || 0,
           finishedAt: progress?.finishedAt || null,
@@ -836,10 +836,10 @@ export function getMobileAdminRealizationOverview(realizationId: string) {
       locationRequired: realization.locationRequired,
       joinCode: realization.joinCode,
       teamCount: realization.teamCount,
-      gameIds: realization.gameIds,
-      games: realization.gameIds.map((gameId) => ({
-        gameId,
-        defaultPoints: GAME_POINTS[gameId] ?? 0,
+      stationIds: realization.stationIds,
+      stations: realization.stationIds.map((stationId) => ({
+        stationId,
+        defaultPoints: STATION_POINTS[stationId] ?? 0,
       })),
       updatedAt: realization.updatedAt,
     },
@@ -867,7 +867,7 @@ export function getMobileBootstrap() {
       joinCode: realization.joinCode,
       locationRequired: realization.locationRequired,
       teamCount: realization.teamCount,
-      gameIds: realization.gameIds,
+      stationIds: realization.stationIds,
     })),
   };
 }

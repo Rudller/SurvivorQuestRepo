@@ -13,8 +13,8 @@ export type CurrentRealizationOverview = {
     locationRequired: boolean;
     joinCode: string;
     teamCount: number;
-    gameIds: string[];
-    games: Array<{ gameId: string; defaultPoints: number }>;
+    stationIds: string[];
+    stations: Array<{ stationId: string; defaultPoints: number }>;
     updatedAt: string;
   };
   teams: Array<{
@@ -36,7 +36,7 @@ export type CurrentRealizationOverview = {
       expiresAt: string;
     }>;
     tasks: Array<{
-      gameId: string;
+      stationId: string;
       status: CurrentTeamTaskStatus;
       pointsAwarded: number;
       finishedAt: string | null;

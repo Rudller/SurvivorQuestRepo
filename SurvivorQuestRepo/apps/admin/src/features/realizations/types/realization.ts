@@ -11,7 +11,8 @@ export type RealizationLog = {
 export type Realization = {
   id: string;
   companyName: string;
-  gameIds: string[];
+  scenarioId: string;
+  stationIds: string[];
   teamCount: number;
   requiredDevicesCount: number;
   peopleCount: number;

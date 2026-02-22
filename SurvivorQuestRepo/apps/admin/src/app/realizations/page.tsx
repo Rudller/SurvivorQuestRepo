@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
-import { useGetGamesQuery } from "@/features/games/api/game.api";
+import { useGetStationsQuery } from "@/features/games/api/station.api";
+import { useGetScenariosQuery } from "@/features/scenario/api/scenario.api";
 import type { Realization, RealizationStatus } from "@/features/realizations/types/realization";
 import {
   useCreateRealizationMutation,
@@ -93,7 +94,7 @@ export default function RealizationsPage() {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
 
-  const { data: games } = useGetGamesQuery(undefined, { skip: !meData });
+  const { data: stations } = useGetStationsQuery(undefined, { skip: !meData });
   const {
     data: realizations,
     isLoading,
@@ -101,9 +102,10 @@ export default function RealizationsPage() {
     error,
     refetch,
   } = useGetRealizationsQuery(undefined, { skip: !meData });
+  const { data: scenarios } = useGetScenariosQuery(undefined, { skip: !meData });
 
   const [companyName, setCompanyName] = useState("");
-  const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [teamCount, setTeamCount] = useState(2);
   const [peopleCount, setPeopleCount] = useState(10);
   const [positionsCount, setPositionsCount] = useState(2);
@@ -117,7 +119,7 @@ export default function RealizationsPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({
     companyName: "",
-    gameIds: [] as string[],
+    scenarioId: "",
     teamCount: 2,
     peopleCount: 10,
     positionsCount: 2,
@@ -125,26 +127,32 @@ export default function RealizationsPage() {
     scheduledAt: "",
   });
 
-  const selectedGamesData = useMemo(
+  const scenarioById = useMemo(() => new Map((scenarios ?? []).map((scenario) => [scenario.id, scenario])), [scenarios]);
+
+  const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
+
+  const selectedStationsData = useMemo(
     () =>
-      selectedGameIds
-        .map((gameId) => games?.find((game) => game.id === gameId))
-        .filter((game): game is NonNullable<typeof game> => Boolean(game)),
-    [selectedGameIds, games],
+      (selectedScenario?.stationIds ?? [])
+        .map((stationId) => stations?.find((station) => station.id === stationId))
+        .filter((station): station is NonNullable<typeof station> => Boolean(station)),
+    [selectedScenario, stations],
   );
 
-  const selectedGamesPoints = selectedGamesData.reduce((sum, game) => sum + game.points, 0);
+  const selectedStationsPoints = selectedStationsData.reduce((sum, station) => sum + station.points, 0);
   const requiredDevicesCount = calculateRequiredDevices(teamCount);
 
-  const editSelectedGames = useMemo(
+  const editSelectedScenario = editValues.scenarioId ? scenarioById.get(editValues.scenarioId) : undefined;
+
+  const editSelectedStations = useMemo(
     () =>
-      editValues.gameIds
-        .map((gameId) => games?.find((game) => game.id === gameId))
-        .filter((game): game is NonNullable<typeof game> => Boolean(game)),
-    [editValues.gameIds, games],
+      (editSelectedScenario?.stationIds ?? [])
+        .map((stationId) => stations?.find((station) => station.id === stationId))
+        .filter((station): station is NonNullable<typeof station> => Boolean(station)),
+    [editSelectedScenario, stations],
   );
 
-  const editGamesPoints = editSelectedGames.reduce((sum, game) => sum + game.points, 0);
+  const editStationsPoints = editSelectedStations.reduce((sum, station) => sum + station.points, 0);
   const editRequiredDevicesCount = calculateRequiredDevices(editValues.teamCount);
 
   const sortedRealizations = useMemo(() => {
@@ -254,7 +262,7 @@ export default function RealizationsPage() {
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Firma</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Termin</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status</th>
-                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Gry</th>
+                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Scenariusz</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Drużyny</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Urządzenia</th>
@@ -266,13 +274,14 @@ export default function RealizationsPage() {
                           </thead>
                           <tbody>
                             {sortedRealizations.map((realization) => {
-                              const realizationGames = realization.gameIds
-                                .map((gameId) => games?.find((game) => game.id === gameId))
-                                .filter((game): game is NonNullable<typeof game> => Boolean(game));
+                              const linkedScenario = scenarioById.get(realization.scenarioId);
+                              const realizationStationIds = linkedScenario?.stationIds ?? realization.stationIds;
+                              const realizationStations = realizationStationIds
+                                .map((stationId) => stations?.find((station) => station.id === stationId))
+                                .filter((station): station is NonNullable<typeof station> => Boolean(station));
 
-                              const totalPoints = realizationGames.reduce((sum, game) => sum + game.points, 0);
-                              const firstGamesLabel = realizationGames.slice(0, 2).map((game) => game.name).join(", ");
-                              const moreGamesCount = realizationGames.length - 2;
+                              const totalPoints = realizationStations.reduce((sum, station) => sum + station.points, 0);
+                              const stationCount = realizationStations.length;
 
                               return (
                                 <tr key={realization.id} className="border-t border-zinc-800 bg-zinc-900/70">
@@ -288,12 +297,10 @@ export default function RealizationsPage() {
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-zinc-300">
-                                    {realizationGames.length > 0 ? (
+                                    {linkedScenario ? (
                                       <>
-                                        <p className="line-clamp-1">{firstGamesLabel}</p>
-                                        {moreGamesCount > 0 && (
-                                          <p className="text-xs text-zinc-500">+{moreGamesCount} więcej</p>
-                                        )}
+                                        <p className="line-clamp-1">{linkedScenario.name}</p>
+                                        <p className="text-xs text-zinc-500">Stanowiska: {stationCount}</p>
                                       </>
                                     ) : (
                                       "-"
@@ -315,7 +322,7 @@ export default function RealizationsPage() {
                                         setEditError(null);
                                         setEditValues({
                                           companyName: realization.companyName,
-                                          gameIds: realization.gameIds,
+                                          scenarioId: realization.scenarioId,
                                           teamCount: realization.teamCount,
                                           peopleCount: realization.peopleCount,
                                           positionsCount: realization.positionsCount,
@@ -346,8 +353,8 @@ export default function RealizationsPage() {
                 event.preventDefault();
                 setFormError(null);
 
-                if (!companyName.trim() || selectedGameIds.length === 0) {
-                  setFormError("Uzupełnij nazwę firmy i wybierz co najmniej jedną grę.");
+                if (!companyName.trim() || !selectedScenarioId) {
+                  setFormError("Uzupełnij nazwę firmy i wybierz scenariusz.");
                   return;
                 }
 
@@ -359,7 +366,7 @@ export default function RealizationsPage() {
                 try {
                   await createRealization({
                     companyName: companyName.trim(),
-                    gameIds: selectedGameIds,
+                    scenarioId: selectedScenarioId,
                     teamCount,
                     peopleCount,
                     positionsCount,
@@ -369,7 +376,7 @@ export default function RealizationsPage() {
                   }).unwrap();
                   setCompanyName("");
                   setStatus("planned");
-                  setSelectedGameIds([]);
+                  setSelectedScenarioId("");
                   setTeamCount(2);
                   setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
                 } catch {
@@ -452,32 +459,21 @@ export default function RealizationsPage() {
                     </label>
                   </div>
 
-                  <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-950 p-3">
-                    <p className="text-xs uppercase tracking-wider text-zinc-500">Wybierz gry</p>
-                    <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
-                      {(games ?? []).map((game) => {
-                        const isChecked = selectedGameIds.includes(game.id);
-
-                        return (
-                          <label key={game.id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
-                            <span className="truncate">{game.name}</span>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                setSelectedGameIds((prev) =>
-                                  checked ? [...prev, game.id] : prev.filter((id) => id !== game.id),
-                                );
-                              }}
-                              className="h-4 w-4 accent-amber-400"
-                            />
-                          </label>
-                        );
-                      })}
-                      {games?.length === 0 && <p className="text-xs text-zinc-500">Brak gier do wyboru.</p>}
-                    </div>
-                  </div>
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz</span>
+                    <select
+                      value={selectedScenarioId}
+                      onChange={(event) => setSelectedScenarioId(event.target.value)}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    >
+                      <option value="">Wybierz scenariusz</option>
+                      {(scenarios ?? []).map((scenario) => (
+                        <option key={scenario.id} value={scenario.id}>
+                          {scenario.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
 
                 {formError && <p className="text-sm text-red-300">{formError}</p>}
@@ -511,11 +507,14 @@ export default function RealizationsPage() {
                     <span className="text-zinc-500">Wymagane urządzenia:</span> {requiredDevicesCount}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Wybrane gry:</span> {selectedGamesData.length}
+                    <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Stanowiska w scenariuszu:</span> {selectedStationsData.length}
                   </p>
                   <p>
                     <span className="text-zinc-500">Suma punktów:</span>{" "}
-                    <span className="font-medium text-amber-300">{selectedGamesPoints}</span>
+                    <span className="font-medium text-amber-300">{selectedStationsPoints}</span>
                   </p>
                 </div>
               </aside>
@@ -554,8 +553,8 @@ export default function RealizationsPage() {
                   event.preventDefault();
                   setEditError(null);
 
-                  if (!editValues.companyName.trim() || editValues.gameIds.length === 0 || !editValues.scheduledAt) {
-                    setEditError("Uzupełnij firmę, gry i termin realizacji.");
+                  if (!editValues.companyName.trim() || !editValues.scenarioId || !editValues.scheduledAt) {
+                    setEditError("Uzupełnij firmę, scenariusz i termin realizacji.");
                     return;
                   }
 
@@ -563,7 +562,7 @@ export default function RealizationsPage() {
                     await updateRealization({
                       id: editingRealization.id,
                       companyName: editValues.companyName.trim(),
-                      gameIds: editValues.gameIds,
+                      scenarioId: editValues.scenarioId,
                       teamCount: editValues.teamCount,
                       peopleCount: editValues.peopleCount,
                       positionsCount: editValues.positionsCount,
@@ -645,32 +644,19 @@ export default function RealizationsPage() {
                   </label>
 
                   <label className="col-span-2 space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Wybierz gry</span>
-                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 pr-2">
-                      {(games ?? []).map((game) => {
-                        const isChecked = editValues.gameIds.includes(game.id);
-
-                        return (
-                          <label key={game.id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
-                            <span className="truncate">{game.name}</span>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                setEditValues((prev) => ({
-                                  ...prev,
-                                  gameIds: checked
-                                    ? [...prev.gameIds, game.id]
-                                    : prev.gameIds.filter((id) => id !== game.id),
-                                }));
-                              }}
-                              className="h-4 w-4 accent-amber-400"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz</span>
+                    <select
+                      value={editValues.scenarioId}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, scenarioId: event.target.value }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    >
+                      <option value="">Wybierz scenariusz</option>
+                      {(scenarios ?? []).map((scenario) => (
+                        <option key={scenario.id} value={scenario.id}>
+                          {scenario.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
 
@@ -679,8 +665,8 @@ export default function RealizationsPage() {
                     <span className="text-zinc-500">Wymagane urządzenia:</span> {editRequiredDevicesCount}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Suma punktów gier:</span>{" "}
-                    <span className="font-medium text-amber-300">{editGamesPoints}</span>
+                    <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}
+                    <span className="font-medium text-amber-300">{editStationsPoints}</span>
                   </p>
                 </div>
 

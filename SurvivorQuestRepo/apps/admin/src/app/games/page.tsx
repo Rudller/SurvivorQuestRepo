@@ -7,13 +7,13 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { ClipboardEvent } from "react";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import {
-  useCreateGameMutation,
-  useDeleteGameMutation,
-  useGetGamesQuery,
-  useUpdateGameMutation,
-} from "@/features/games/api/game.api";
-import type { Game, GameType } from "@/features/games/types/game";
-import { gameTypeOptions } from "@/features/games/types/game";
+  useCreateStationMutation,
+  useDeleteStationMutation,
+  useGetStationsQuery,
+  useUpdateStationMutation,
+} from "@/features/games/api/station.api";
+import type { Station, StationType } from "@/features/games/types/station";
+import { stationTypeOptions } from "@/features/games/types/station";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
 
 type ImageInputMode = "upload" | "paste" | "url";
@@ -44,8 +44,8 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
-function getGameTypeLabel(type: GameType) {
-  return gameTypeOptions.find((option) => option.value === type)?.label ?? "Inna";
+function getStationTypeLabel(type: StationType) {
+  return stationTypeOptions.find((option) => option.value === type)?.label ?? "Quiz";
 }
 
 function clampTimeLimitSeconds(value: number) {
@@ -68,7 +68,7 @@ function formatTimeLimit(seconds: number) {
   return `${minutes}:${paddedSeconds}`;
 }
 
-export default function GamesPage() {
+export default function StationPage() {
   const router = useRouter();
 
   const {
@@ -79,27 +79,27 @@ export default function GamesPage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
-  const [createGame, { isLoading: isCreating }] = useCreateGameMutation();
-  const [updateGame, { isLoading: isUpdating }] = useUpdateGameMutation();
-  const [deleteGame, { isLoading: isDeleting }] = useDeleteGameMutation();
+  const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
+  const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
+  const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
 
-  const { data: games, isLoading: isGamesLoading, isError, error, refetch } = useGetGamesQuery(undefined, {
+  const { data: games, isLoading: isGamesLoading, isError, error, refetch } = useGetStationsQuery(undefined, {
     skip: !meData,
   });
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<GameType>("quiz");
+  const [type, setType] = useState<StationType>("quiz");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [points, setPoints] = useState(100);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [editingGame, setEditingGame] = useState<Game | null>(null);
+  const [editingGame, setEditingGame] = useState<Station | null>(null);
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{
     name: string;
-    type: GameType;
+    type: StationType;
     description: string;
     imageUrl: string;
     points: number;
@@ -124,12 +124,12 @@ export default function GamesPage() {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  const previewName = name.trim() || "Nowa gra";
-  const previewDescription = description.trim() || "Krótki opis gry pojawi się tutaj.";
+  const previewName = name.trim() || "Nowe stanowisko";
+  const previewDescription = description.trim() || "Krótki opis stanowiska pojawi się tutaj.";
   const previewImage = imageUrl.trim() || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(previewName)}`;
 
-  const editPreviewName = editValues.name.trim() || "Nazwa gry";
-  const editPreviewDescription = editValues.description.trim() || "Opis gry pojawi się tutaj.";
+  const editPreviewName = editValues.name.trim() || "Nazwa stanowiska";
+  const editPreviewDescription = editValues.description.trim() || "Opis stanowiska pojawi się tutaj.";
   const editPreviewImage =
     editValues.imageUrl.trim() || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(editPreviewName)}`;
 
@@ -137,8 +137,8 @@ export default function GamesPage() {
     const list = [...(games ?? [])];
 
     list.sort((left, right) => {
-      const a = sortField === "name" ? left.name : getGameTypeLabel(left.type);
-      const b = sortField === "name" ? right.name : getGameTypeLabel(right.type);
+      const a = sortField === "name" ? left.name : getStationTypeLabel(left.type);
+      const b = sortField === "name" ? right.name : getStationTypeLabel(right.type);
       const base = a.localeCompare(b, "pl", { sensitivity: "base" });
 
       if (base === 0) {
@@ -256,7 +256,7 @@ export default function GamesPage() {
               }
 
               try {
-                await createGame({
+                await createStation({
                   name: name.trim(),
                   type,
                   description: description.trim(),
@@ -272,19 +272,19 @@ export default function GamesPage() {
                 setTimeLimitSeconds(0);
                 setCreateImageMode("upload");
               } catch {
-                setFormError("Nie udało się utworzyć gry.");
+                setFormError("Nie udało się utworzyć stanowiska.");
               }
             }}
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Nowa gra</h2>
+                <h2 className="text-lg font-semibold">Nowe stanowisko</h2>
                 <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300">Robocza</span>
               </div>
 
               <div className="grid gap-4">
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa gry</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
@@ -294,13 +294,13 @@ export default function GamesPage() {
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Typ gry</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Typ stanowiska</span>
                   <select
                     value={type}
-                    onChange={(event) => setType(event.target.value as GameType)}
+                    onChange={(event) => setType(event.target.value as StationType)}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   >
-                    {gameTypeOptions.map((option) => (
+                    {stationTypeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -313,14 +313,14 @@ export default function GamesPage() {
                   <textarea
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
-                    placeholder="Krótki opis gry"
+                    placeholder="Krótki opis stanowiska"
                     rows={4}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz gry (URL opcjonalny)</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska (URL opcjonalny)</span>
                   <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3">
                     <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
                       {imageModeOptions.map((option) => (
@@ -469,7 +469,7 @@ export default function GamesPage() {
                 disabled={isCreating}
                 className="inline-flex w-fit items-center rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
               >
-                {isCreating ? "Dodawanie..." : "Dodaj grę"}
+                {isCreating ? "Dodawanie..." : "Dodaj stanowisko"}
               </button>
             </div>
 
@@ -486,7 +486,7 @@ export default function GamesPage() {
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h3 className="font-semibold text-zinc-100">{previewName}</h3>
                   <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                    {getGameTypeLabel(type)}
+                    {getStationTypeLabel(type)}
                   </span>
                 </div>
                 <p className="mt-1 line-clamp-3 text-sm text-zinc-400">{previewDescription}</p>
@@ -497,11 +497,11 @@ export default function GamesPage() {
           </form>
 
           <div className="space-y-5 xl:order-1">
-          {isGamesLoading && <p className="text-zinc-400">Ładowanie gier...</p>}
+          {isGamesLoading && <p className="text-zinc-400">Ładowanie stanowisk...</p>}
 
           {isError && (
             <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-              <p>Nie udało się pobrać gier.</p>
+              <p>Nie udało się pobrać stanowisk.</p>
               <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(error, null, 2)}</pre>
               <button onClick={() => refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
                 Spróbuj ponownie
@@ -512,7 +512,7 @@ export default function GamesPage() {
           {!isGamesLoading && !isError && (
             <div className="space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                <h3 className="text-sm font-medium text-zinc-200">Lista gier</h3>
+                <h3 className="text-sm font-medium text-zinc-200">Lista stanowisk</h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="text-xs text-zinc-400">Sortuj po</label>
                   <select
@@ -536,8 +536,8 @@ export default function GamesPage() {
 
               {sortedGames.length === 0 && (
                 <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
-                  <p className="text-sm font-medium text-zinc-200">Brak gier</p>
-                  <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszą grę w formularzu powyżej.</p>
+                  <p className="text-sm font-medium text-zinc-200">Brak stanowisk</p>
+                  <p className="mt-1 text-sm text-zinc-400">Dodaj pierwsze stanowisko w formularzu powyżej.</p>
                 </div>
               )}
 
@@ -567,7 +567,7 @@ export default function GamesPage() {
                           />
                           <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
                           <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                            {getGameTypeLabel(game.type)}
+                            {getStationTypeLabel(game.type)}
                           </span>
                           <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
                           <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
@@ -623,8 +623,8 @@ export default function GamesPage() {
             <div className="space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold text-zinc-100">Edytuj grę</h2>
-                  <p className="mt-1 text-sm text-zinc-400">Zmieniasz dane gry: {editingGame.name}</p>
+                  <h2 className="text-xl font-semibold text-zinc-100">Edytuj stanowisko</h2>
+                  <p className="mt-1 text-sm text-zinc-400">Zmieniasz dane stanowiska: {editingGame.name}</p>
                 </div>
                 <button
                   type="button"
@@ -648,7 +648,7 @@ export default function GamesPage() {
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <h3 className="font-semibold text-zinc-100">{editPreviewName}</h3>
                     <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                      {getGameTypeLabel(editValues.type)}
+                      {getStationTypeLabel(editValues.type)}
                     </span>
                   </div>
                   <p className="mt-1 line-clamp-3 text-sm text-zinc-400">{editPreviewDescription}</p>
@@ -673,7 +673,7 @@ export default function GamesPage() {
                   }
 
                   try {
-                    await updateGame({
+                    await updateStation({
                       id: editingGame.id,
                       name: editValues.name.trim(),
                       type: editValues.type,
@@ -684,13 +684,13 @@ export default function GamesPage() {
                     }).unwrap();
                     setEditingGame(null);
                   } catch {
-                    setEditFormError("Nie udało się zapisać zmian gry.");
+                    setEditFormError("Nie udało się zapisać zmian stanowiska.");
                   }
                 }}
                 className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
               >
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa gry</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
                   <input
                     value={editValues.name}
                     onChange={(event) =>
@@ -699,24 +699,24 @@ export default function GamesPage() {
                         name: event.target.value,
                       }))
                     }
-                    placeholder="Nazwa gry"
+                    placeholder="Nazwa stanowiska"
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 </label>
 
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Typ gry</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Typ stanowiska</span>
                   <select
                     value={editValues.type}
                     onChange={(event) =>
                       setEditValues((prev) => ({
                         ...prev,
-                        type: event.target.value as GameType,
+                        type: event.target.value as StationType,
                       }))
                     }
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   >
-                    {gameTypeOptions.map((option) => (
+                    {stationTypeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -735,13 +735,13 @@ export default function GamesPage() {
                       }))
                     }
                     rows={4}
-                    placeholder="Opis gry"
+                    placeholder="Opis stanowiska"
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 </label>
 
                 <div className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz gry</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
                   <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3">
                     <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
                       {imageModeOptions.map((option) => (
@@ -910,9 +910,9 @@ export default function GamesPage() {
               </form>
 
               <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-                <h3 className="text-sm font-semibold text-red-200">Usuń grę</h3>
+                <h3 className="text-sm font-semibold text-red-200">Usuń stanowisko</h3>
                 <p className="text-xs text-red-200/90">
-                  Aby usunąć grę, wpisz dokładnie jej nazwę: <span className="font-semibold">{editingGame.name}</span>
+                  Aby usunąć stanowisko, wpisz dokładnie jego nazwę: <span className="font-semibold">{editingGame.name}</span>
                 </p>
                 <input
                   value={deleteConfirmName}
@@ -920,7 +920,7 @@ export default function GamesPage() {
                     setDeleteConfirmName(event.target.value);
                     setDeleteError(null);
                   }}
-                  placeholder="Wpisz nazwę gry do potwierdzenia"
+                  placeholder="Wpisz nazwę stanowiska do potwierdzenia"
                   className="w-full rounded-lg border border-red-400/40 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-red-300"
                 />
                 <button
@@ -930,23 +930,23 @@ export default function GamesPage() {
                     setDeleteError(null);
 
                     if (deleteConfirmName.trim() !== editingGame.name) {
-                      setDeleteError("Nazwa gry nie zgadza się z potwierdzeniem.");
+                      setDeleteError("Nazwa stanowiska nie zgadza się z potwierdzeniem.");
                       return;
                     }
 
                     try {
-                      await deleteGame({
+                      await deleteStation({
                         id: editingGame.id,
                         confirmName: deleteConfirmName.trim(),
                       }).unwrap();
                       setEditingGame(null);
                     } catch {
-                      setDeleteError("Nie udało się usunąć gry.");
+                      setDeleteError("Nie udało się usunąć stanowiska.");
                     }
                   }}
                   className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isDeleting ? "Usuwanie..." : "Usuń grę"}
+                  {isDeleting ? "Usuwanie..." : "Usuń stanowisko"}
                 </button>
                 {deleteError && <p className="text-sm text-red-200">{deleteError}</p>}
               </section>

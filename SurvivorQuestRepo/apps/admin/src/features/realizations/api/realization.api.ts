@@ -2,9 +2,25 @@ import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
 import type { Realization, RealizationStatus } from "../types/realization";
 
+type RealizationDto = {
+  id: string;
+  companyName: string;
+  scenarioId: string;
+  stationIds?: string[];
+  teamCount: number;
+  requiredDevicesCount: number;
+  peopleCount: number;
+  positionsCount: number;
+  status: RealizationStatus;
+  scheduledAt: string;
+  createdAt: string;
+  updatedAt: string;
+  logs: Realization["logs"];
+};
+
 type CreateRealizationPayload = {
   companyName: string;
-  gameIds: string[];
+  scenarioId: string;
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
@@ -16,7 +32,7 @@ type CreateRealizationPayload = {
 type UpdateRealizationPayload = {
   id: string;
   companyName: string;
-  gameIds: string[];
+  scenarioId: string;
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
@@ -34,8 +50,8 @@ type MobileAdminRealizationOverview = {
     locationRequired: boolean;
     joinCode: string;
     teamCount: number;
-    gameIds: string[];
-    games: Array<{ gameId: string; defaultPoints: number }>;
+    stationIds: string[];
+    stations: Array<{ stationId: string; defaultPoints: number }>;
     updatedAt: string;
   };
   teams: Array<{
@@ -57,7 +73,7 @@ type MobileAdminRealizationOverview = {
       expiresAt: string;
     }>;
     tasks: Array<{
-      gameId: string;
+      stationId: string;
       status: "todo" | "in-progress" | "done";
       pointsAwarded: number;
       finishedAt: string | null;
@@ -82,10 +98,29 @@ type MobileAdminRealizationOverview = {
   };
 };
 
+function normalizeRealization(dto: RealizationDto): Realization {
+  return {
+    id: dto.id,
+    companyName: dto.companyName,
+    scenarioId: dto.scenarioId,
+    stationIds: dto.stationIds ?? [],
+    teamCount: dto.teamCount,
+    requiredDevicesCount: dto.requiredDevicesCount,
+    peopleCount: dto.peopleCount,
+    positionsCount: dto.positionsCount,
+    status: dto.status,
+    scheduledAt: dto.scheduledAt,
+    createdAt: dto.createdAt,
+    updatedAt: dto.updatedAt,
+    logs: dto.logs,
+  };
+}
+
 export const realizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getRealizations: build.query<Realization[], void>({
       query: () => buildApiPath("/realizations"),
+      transformResponse: (response: RealizationDto[]) => response.map(normalizeRealization),
       providesTags: ["Realization"],
     }),
     createRealization: build.mutation<Realization, CreateRealizationPayload>({
@@ -94,6 +129,7 @@ export const realizationApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
+      transformResponse: (response: RealizationDto) => normalizeRealization(response),
       invalidatesTags: ["Realization"],
     }),
     updateRealization: build.mutation<Realization, UpdateRealizationPayload>({
@@ -102,6 +138,7 @@ export const realizationApi = baseApi.injectEndpoints({
         method: "PUT",
         body,
       }),
+      transformResponse: (response: RealizationDto) => normalizeRealization(response),
       invalidatesTags: ["Realization"],
     }),
     getMobileAdminRealizationOverview: build.query<MobileAdminRealizationOverview, string>({

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findScenarioById } from "../scenario/_store";
 
 type RealizationStatus = "planned" | "in-progress" | "done";
 
@@ -13,7 +14,8 @@ type RealizationLog = {
 type Realization = {
   id: string;
   companyName: string;
-  gameIds: string[];
+  scenarioId: string;
+  stationIds: string[];
   teamCount: number;
   requiredDevicesCount: number;
   peopleCount: number;
@@ -60,7 +62,8 @@ let realizations: Realization[] = [
   {
     id: "r-1",
     companyName: "Northwind Sp. z o.o.",
-    gameIds: ["g-1", "g-2"],
+    scenarioId: "s-1",
+    stationIds: ["g-1", "g-2", "g-4"],
     teamCount: 4,
     requiredDevicesCount: 6,
     peopleCount: 18,
@@ -89,7 +92,8 @@ let realizations: Realization[] = [
   {
     id: "r-2",
     companyName: "Baltic Logistics",
-    gameIds: ["g-2", "g-3"],
+    scenarioId: "s-3",
+    stationIds: ["g-2", "g-3"],
     teamCount: 6,
     requiredDevicesCount: 8,
     peopleCount: 24,
@@ -111,7 +115,8 @@ let realizations: Realization[] = [
   {
     id: "r-3",
     companyName: "Horizon Tech",
-    gameIds: ["g-1", "g-4", "g-5"],
+    scenarioId: "s-1",
+    stationIds: ["g-1", "g-2", "g-4"],
     teamCount: 3,
     requiredDevicesCount: 5,
     peopleCount: 14,
@@ -133,7 +138,8 @@ let realizations: Realization[] = [
   {
     id: "r-4",
     companyName: "Vector Group",
-    gameIds: ["g-3"],
+    scenarioId: "s-2",
+    stationIds: ["g-4", "g-5"],
     teamCount: 2,
     requiredDevicesCount: 4,
     peopleCount: 10,
@@ -155,7 +161,8 @@ let realizations: Realization[] = [
   {
     id: "r-5",
     companyName: "GreenFarm Team",
-    gameIds: ["g-1", "g-2", "g-4"],
+    scenarioId: "s-1",
+    stationIds: ["g-1", "g-2", "g-4"],
     teamCount: 7,
     requiredDevicesCount: 9,
     peopleCount: 30,
@@ -190,7 +197,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = (await req.json()) as {
     companyName?: string;
-    gameIds?: string[];
+    scenarioId?: string;
     teamCount?: number;
     peopleCount?: number;
     positionsCount?: number;
@@ -203,9 +210,7 @@ export async function POST(req: Request) {
 
   if (
     !body?.companyName ||
-    !Array.isArray(body.gameIds) ||
-    body.gameIds.length === 0 ||
-    body.gameIds.some((gameId) => typeof gameId !== "string" || !gameId.trim()) ||
+    !body.scenarioId ||
     typeof body.teamCount !== "number" ||
     body.teamCount < 1 ||
     typeof body.peopleCount !== "number" ||
@@ -219,13 +224,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
   }
 
+  const scenario = findScenarioById(body.scenarioId);
+
+  if (!scenario || scenario.stationIds.length === 0) {
+    return NextResponse.json({ message: "Scenario not found" }, { status: 400 });
+  }
+
   const nowIso = new Date().toISOString();
   const changedBy = getChangedBy(body.changedBy);
 
   const newRealization: Realization = {
     id: crypto.randomUUID(),
     companyName: body.companyName.trim(),
-    gameIds: body.gameIds,
+    scenarioId: scenario.id,
+    stationIds: scenario.stationIds,
     teamCount: Math.round(body.teamCount),
     requiredDevicesCount: calculateRequiredDevices(Math.round(body.teamCount)),
     peopleCount: Math.round(body.peopleCount),
@@ -245,7 +257,7 @@ export async function PUT(req: Request) {
   const body = (await req.json()) as {
     id?: string;
     companyName?: string;
-    gameIds?: string[];
+    scenarioId?: string;
     teamCount?: number;
     peopleCount?: number;
     positionsCount?: number;
@@ -259,9 +271,7 @@ export async function PUT(req: Request) {
   if (
     !body?.id ||
     !body.companyName ||
-    !Array.isArray(body.gameIds) ||
-    body.gameIds.length === 0 ||
-    body.gameIds.some((gameId) => typeof gameId !== "string" || !gameId.trim()) ||
+    !body.scenarioId ||
     typeof body.teamCount !== "number" ||
     body.teamCount < 1 ||
     typeof body.peopleCount !== "number" ||
@@ -273,6 +283,12 @@ export async function PUT(req: Request) {
     !Number.isFinite(scheduledTimestamp)
   ) {
     return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+  }
+
+  const scenario = findScenarioById(body.scenarioId);
+
+  if (!scenario || scenario.stationIds.length === 0) {
+    return NextResponse.json({ message: "Scenario not found" }, { status: 400 });
   }
 
   const realizationIndex = realizations.findIndex((realization) => realization.id === body.id);
@@ -311,14 +327,15 @@ export async function PUT(req: Request) {
     changes.push("termin");
   }
 
-  if (JSON.stringify(current.gameIds) !== JSON.stringify(body.gameIds)) {
-    changes.push("lista gier");
+  if (current.scenarioId !== scenario.id) {
+    changes.push("scenariusz");
   }
 
   const updatedRealization: Realization = {
     ...current,
     companyName: body.companyName.trim(),
-    gameIds: body.gameIds,
+    scenarioId: scenario.id,
+    stationIds: scenario.stationIds,
     teamCount: Math.round(body.teamCount),
     requiredDevicesCount: calculateRequiredDevices(Math.round(body.teamCount)),
     peopleCount: Math.round(body.peopleCount),

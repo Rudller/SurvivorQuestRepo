@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { DashboardCalendar } from "@/features/dashboard/components/dashboard-calendar";
-import { useGetGamesQuery } from "@/features/games/api/game.api";
+import { useGetStationsQuery } from "@/features/games/api/station.api";
 import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
 import { getTaskCounts } from "@/features/tasks/lib/tasks.data";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
@@ -27,7 +27,7 @@ export default function HomePage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
-  const { data: games } = useGetGamesQuery(undefined, { skip: !meData });
+  const { data: stations } = useGetStationsQuery(undefined, { skip: !meData });
   const { data: realizations, isLoading: isRealizationsLoading } = useGetRealizationsQuery(undefined, {
     skip: !meData,
   });
@@ -49,16 +49,16 @@ export default function HomePage() {
     );
   }, [realizations]);
 
-  const nearestGameName = nearestRealization
-    ? nearestRealization.gameIds
-        .map((gameId) => games?.find((game) => game.id === gameId)?.name)
+  const nearestStationNames = nearestRealization
+    ? nearestRealization.stationIds
+        .map((stationId) => stations?.find((station) => station.id === stationId)?.name)
         .filter(Boolean)
         .join(", ") || "-"
     : "-";
 
   const nearestTotalPoints = nearestRealization
-    ? nearestRealization.gameIds.reduce((sum, gameId) => {
-        const points = games?.find((game) => game.id === gameId)?.points ?? 0;
+    ? nearestRealization.stationIds.reduce((sum, stationId) => {
+        const points = stations?.find((station) => station.id === stationId)?.points ?? 0;
         return sum + points;
       }, 0)
     : 0;
@@ -145,8 +145,8 @@ export default function HomePage() {
                   <p className="mt-1 text-base font-medium text-zinc-100">{nearestRealization.companyName}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-zinc-500">Gra</p>
-                  <p className="mt-1 text-base font-medium text-zinc-100">{nearestGameName}</p>
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">Stanowiska</p>
+                  <p className="mt-1 text-base font-medium text-zinc-100">{nearestStationNames}</p>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wider text-zinc-500">Status</p>

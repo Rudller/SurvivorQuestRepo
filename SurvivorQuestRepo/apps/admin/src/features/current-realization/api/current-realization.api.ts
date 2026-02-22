@@ -38,11 +38,13 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       joinCode: asString(realization.joinCode ?? realization.join_code),
       teamCount: asNumber(realization.teamCount ?? realization.team_count),
-      gameIds: asArray(realization.gameIds ?? realization.game_ids).map((value) => asString(value)).filter(Boolean),
-      games: asArray(realization.games).map((value) => {
+      stationIds: asArray(realization.stationIds ?? realization.station_ids)
+        .map((value) => asString(value))
+        .filter(Boolean),
+      stations: asArray(realization.stations).map((value) => {
         const item = asRecord(value);
         return {
-          gameId: asString(item.gameId ?? item.game_id),
+          stationId: asString(item.stationId ?? item.station_id),
           defaultPoints: asNumber(item.defaultPoints ?? item.default_points),
         };
       }),
@@ -94,7 +96,7 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         tasks: asArray(team.tasks).map((item) => {
           const task = asRecord(item);
           return {
-            gameId: asString(task.gameId ?? task.game_id),
+            stationId: asString(task.stationId ?? task.station_id),
             status: asString(task.status, "todo") as CurrentRealizationOverview["teams"][number]["tasks"][number]["status"],
             pointsAwarded: asNumber(task.pointsAwarded ?? task.points_awarded),
             finishedAt: (task.finishedAt as string | null) ?? (task.finished_at as string | null) ?? null,

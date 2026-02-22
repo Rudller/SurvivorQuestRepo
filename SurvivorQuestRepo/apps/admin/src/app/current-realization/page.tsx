@@ -175,7 +175,7 @@ export default function CurrentRealizationPage() {
                           {overview.realization.locationRequired ? "Tak" : "Nie"}
                         </p>
                         <p>
-                          <span className="text-zinc-500">Gry:</span> {overview.realization.gameIds.join(", ")}
+                          <span className="text-zinc-500">Stanowiska:</span> {overview.realization.stationIds.join(", ")}
                         </p>
                       </div>
                     </div>

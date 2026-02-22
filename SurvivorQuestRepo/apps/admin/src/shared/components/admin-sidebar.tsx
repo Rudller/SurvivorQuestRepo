@@ -15,7 +15,8 @@ const navItems = [
   { href: "/current-realization", label: "Aktualna realizacja" },
   { href: "/users", label: "Użytkownicy" },
   { href: "/realizations", label: "Realizacje" },
-  { href: "/games", label: "Gry" },
+  { href: "/station", label: "Stanowisko" },
+  { href: "/scenario", label: "Scenariusz" },
   { href: "/chat", label: "Czat" },
 ];
 
