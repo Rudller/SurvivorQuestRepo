@@ -1,4 +1,10 @@
 {
+	"scripts": {
+		"dev:admin": "pnpm --filter admin dev",
+		"dev:mobile": "pnpm --filter mobile start",
+		"android:mobile": "pnpm --filter mobile android",
+		"ios:mobile": "pnpm --filter mobile ios"
+	},
 	"devDependencies": {
 		"turbo": "^2.8.10",
 		"typescript": "^5.9.3",

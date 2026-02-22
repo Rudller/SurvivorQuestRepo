@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { useGetGamesQuery } from "@/features/games/api/game.api";
-import type { RealizationStatus } from "@/features/realizations/types/realization";
+import type { Realization, RealizationStatus } from "@/features/realizations/types/realization";
 import {
   useCreateRealizationMutation,
   useGetRealizationsQuery,
+  useUpdateRealizationMutation,
 } from "@/features/realizations/api/realization.api";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
 
@@ -58,6 +59,26 @@ function getStatusOrder(status: RealizationStatus) {
   return 2;
 }
 
+function toDateTimeLocalValue(isoDate: string) {
+  const date = new Date(isoDate);
+
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
+
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function toIsoFromDateTimeLocal(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+}
+
+function calculateRequiredDevices(teamCount: number) {
+  return teamCount + 2;
+}
+
 export default function RealizationsPage() {
   const router = useRouter();
 
@@ -70,6 +91,7 @@ export default function RealizationsPage() {
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
+  const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
 
   const { data: games } = useGetGamesQuery(undefined, { skip: !meData });
   const {
@@ -82,13 +104,26 @@ export default function RealizationsPage() {
 
   const [companyName, setCompanyName] = useState("");
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
+  const [teamCount, setTeamCount] = useState(2);
   const [peopleCount, setPeopleCount] = useState(10);
   const [positionsCount, setPositionsCount] = useState(2);
   const [status, setStatus] = useState<RealizationStatus>("planned");
-  const [scheduledAt, setScheduledAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [sortField, setSortField] = useState<RealizationSortField>("scheduledAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({
+    companyName: "",
+    gameIds: [] as string[],
+    teamCount: 2,
+    peopleCount: 10,
+    positionsCount: 2,
+    status: "planned" as RealizationStatus,
+    scheduledAt: "",
+  });
 
   const selectedGamesData = useMemo(
     () =>
@@ -99,6 +134,18 @@ export default function RealizationsPage() {
   );
 
   const selectedGamesPoints = selectedGamesData.reduce((sum, game) => sum + game.points, 0);
+  const requiredDevicesCount = calculateRequiredDevices(teamCount);
+
+  const editSelectedGames = useMemo(
+    () =>
+      editValues.gameIds
+        .map((gameId) => games?.find((game) => game.id === gameId))
+        .filter((game): game is NonNullable<typeof game> => Boolean(game)),
+    [editValues.gameIds, games],
+  );
+
+  const editGamesPoints = editSelectedGames.reduce((sum, game) => sum + game.points, 0);
+  const editRequiredDevicesCount = calculateRequiredDevices(editValues.teamCount);
 
   const sortedRealizations = useMemo(() => {
     const list = [...(realizations ?? [])];
@@ -201,7 +248,7 @@ export default function RealizationsPage() {
                   {sortedRealizations.length > 0 && (
                     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
                       <div className="overflow-x-auto">
-                        <table className="min-w-245 w-full text-sm">
+                        <table className="w-full min-w-245 text-sm">
                           <thead className="bg-zinc-900 text-zinc-300">
                             <tr>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Firma</th>
@@ -209,9 +256,12 @@ export default function RealizationsPage() {
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Gry</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
+                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Drużyny</th>
+                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Urządzenia</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Osoby</th>
                               <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Stanowiska</th>
-                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Utworzono</th>
+                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ostatnia zmiana</th>
+                              <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -228,7 +278,7 @@ export default function RealizationsPage() {
                                 <tr key={realization.id} className="border-t border-zinc-800 bg-zinc-900/70">
                                   <td className="px-3 py-2 font-medium text-zinc-100">{realization.companyName}</td>
                                   <td className="px-3 py-2 text-zinc-300">
-                                    {new Date(realization.scheduledAt).toLocaleDateString("pl-PL")}
+                                    {new Date(realization.scheduledAt).toLocaleString("pl-PL")}
                                   </td>
                                   <td className="px-3 py-2">
                                     <span
@@ -250,10 +300,33 @@ export default function RealizationsPage() {
                                     )}
                                   </td>
                                   <td className="px-3 py-2 font-medium text-amber-300">{totalPoints}</td>
+                                  <td className="px-3 py-2 text-zinc-300">{realization.teamCount}</td>
+                                  <td className="px-3 py-2 text-zinc-300">{realization.requiredDevicesCount}</td>
                                   <td className="px-3 py-2 text-zinc-300">{realization.peopleCount}</td>
                                   <td className="px-3 py-2 text-zinc-300">{realization.positionsCount}</td>
                                   <td className="px-3 py-2 text-zinc-500">
-                                    {new Date(realization.createdAt).toLocaleDateString("pl-PL")}
+                                    {new Date(realization.updatedAt).toLocaleString("pl-PL")}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRealization(realization);
+                                        setEditError(null);
+                                        setEditValues({
+                                          companyName: realization.companyName,
+                                          gameIds: realization.gameIds,
+                                          teamCount: realization.teamCount,
+                                          peopleCount: realization.peopleCount,
+                                          positionsCount: realization.positionsCount,
+                                          status: realization.status,
+                                          scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
+                                        });
+                                      }}
+                                      className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                                    >
+                                      Edytuj
+                                    </button>
                                   </td>
                                 </tr>
                               );
@@ -278,18 +351,27 @@ export default function RealizationsPage() {
                   return;
                 }
 
+                if (!scheduledAt) {
+                  setFormError("Uzupełnij termin (data i godzina).");
+                  return;
+                }
+
                 try {
                   await createRealization({
                     companyName: companyName.trim(),
                     gameIds: selectedGameIds,
+                    teamCount,
                     peopleCount,
                     positionsCount,
                     status,
-                    scheduledAt,
+                    scheduledAt: toIsoFromDateTimeLocal(scheduledAt),
+                    changedBy: meData?.user.email,
                   }).unwrap();
                   setCompanyName("");
                   setStatus("planned");
                   setSelectedGameIds([]);
+                  setTeamCount(2);
+                  setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
                 } catch {
                   setFormError("Nie udało się dodać realizacji.");
                 }
@@ -315,7 +397,7 @@ export default function RealizationsPage() {
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
                     <input
-                      type="date"
+                      type="datetime-local"
                       value={scheduledAt}
                       onChange={(event) => setScheduledAt(event.target.value)}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -336,6 +418,17 @@ export default function RealizationsPage() {
                   </label>
 
                   <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={teamCount}
+                        onChange={(event) => setTeamCount(Number(event.target.value))}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Osoby</span>
                       <input
@@ -406,10 +499,16 @@ export default function RealizationsPage() {
                   </p>
                   <p>
                     <span className="text-zinc-500">Termin:</span>{" "}
-                    {scheduledAt ? new Date(scheduledAt).toLocaleDateString("pl-PL") : "-"}
+                    {scheduledAt ? new Date(toIsoFromDateTimeLocal(scheduledAt)).toLocaleString("pl-PL") : "-"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Status:</span> {getStatusLabel(status)}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Drużyny:</span> {teamCount}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Wymagane urządzenia:</span> {requiredDevicesCount}
                   </p>
                   <p>
                     <span className="text-zinc-500">Wybrane gry:</span> {selectedGamesData.length}
@@ -424,6 +523,205 @@ export default function RealizationsPage() {
           </div>
         </section>
       </div>
+
+      {editingRealization && (
+        <>
+          <button
+            type="button"
+            aria-label="Zamknij edycję realizacji"
+            onClick={() => setEditingRealization(null)}
+            className="fixed inset-0 z-40 bg-zinc-950/70"
+          />
+
+          <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-zinc-100">Edytuj realizację</h2>
+                  <p className="mt-1 text-sm text-zinc-400">{editingRealization.companyName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingRealization(null)}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+                >
+                  Zamknij
+                </button>
+              </div>
+
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  setEditError(null);
+
+                  if (!editValues.companyName.trim() || editValues.gameIds.length === 0 || !editValues.scheduledAt) {
+                    setEditError("Uzupełnij firmę, gry i termin realizacji.");
+                    return;
+                  }
+
+                  try {
+                    await updateRealization({
+                      id: editingRealization.id,
+                      companyName: editValues.companyName.trim(),
+                      gameIds: editValues.gameIds,
+                      teamCount: editValues.teamCount,
+                      peopleCount: editValues.peopleCount,
+                      positionsCount: editValues.positionsCount,
+                      status: editValues.status,
+                      scheduledAt: toIsoFromDateTimeLocal(editValues.scheduledAt),
+                      changedBy: meData?.user.email,
+                    }).unwrap();
+                    setEditingRealization(null);
+                  } catch {
+                    setEditError("Nie udało się zapisać zmian realizacji.");
+                  }
+                }}
+                className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="col-span-2 space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa firmy</span>
+                    <input
+                      value={editValues.companyName}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, companyName: event.target.value }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="col-span-2 space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
+                    <input
+                      type="datetime-local"
+                      value={editValues.scheduledAt}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, scheduledAt: event.target.value }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Status</span>
+                    <select
+                      value={editValues.status}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, status: event.target.value as RealizationStatus }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    >
+                      <option value="planned">Zaplanowana</option>
+                      <option value="in-progress">W trakcie</option>
+                      <option value="done">Zrealizowana</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editValues.teamCount}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, teamCount: Number(event.target.value) }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Osoby</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editValues.peopleCount}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, peopleCount: Number(event.target.value) }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editValues.positionsCount}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, positionsCount: Number(event.target.value) }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="col-span-2 space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Wybierz gry</span>
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 pr-2">
+                      {(games ?? []).map((game) => {
+                        const isChecked = editValues.gameIds.includes(game.id);
+
+                        return (
+                          <label key={game.id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
+                            <span className="truncate">{game.name}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  gameIds: checked
+                                    ? [...prev.gameIds, game.id]
+                                    : prev.gameIds.filter((id) => id !== game.id),
+                                }));
+                              }}
+                              className="h-4 w-4 accent-amber-400"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </label>
+                </div>
+
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-300">
+                  <p>
+                    <span className="text-zinc-500">Wymagane urządzenia:</span> {editRequiredDevicesCount}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Suma punktów gier:</span>{" "}
+                    <span className="font-medium text-amber-300">{editGamesPoints}</span>
+                  </p>
+                </div>
+
+                {editError && <p className="text-sm text-red-300">{editError}</p>}
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingRealization(null)}
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdating}
+                    className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+                  >
+                    {isUpdating ? "Zapisywanie..." : "Zapisz"}
+                  </button>
+                </div>
+              </form>
+
+              <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                <h3 className="text-sm font-semibold text-zinc-100">Logi zmian</h3>
+                <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                  {editingRealization.logs.map((log) => (
+                    <article key={log.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
+                      <p className="text-zinc-200">{log.description}</p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {log.changedBy} • {new Date(log.changedAt).toLocaleString("pl-PL")}
+                      </p>
+                    </article>
+                  ))}
+                  {editingRealization.logs.length === 0 && <p className="text-xs text-zinc-500">Brak logów zmian.</p>}
+                </div>
+              </section>
+            </div>
+          </aside>
+        </>
+      )}
     </main>
   );
 }
