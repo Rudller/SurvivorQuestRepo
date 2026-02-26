@@ -3,6 +3,7 @@ export type Scenario = {
   name: string;
   description: string;
   stationIds: string[];
+  sourceTemplateId?: string;
   createdAt: string;
   updatedAt: string;
 };

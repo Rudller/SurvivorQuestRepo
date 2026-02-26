@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
 	addScenario,
+	cloneScenario,
 	findScenarioById,
 	listScenarios,
 	removeScenario,
@@ -107,4 +108,20 @@ export async function DELETE(req: Request) {
 
 	removeScenario(body.id);
 	return NextResponse.json({ id: body.id });
+}
+
+export async function PATCH(req: Request) {
+	const body = (await req.json()) as { sourceId?: string };
+
+	if (!body.sourceId) {
+		return NextResponse.json({ message: "sourceId is required" }, { status: 400 });
+	}
+
+	const cloned = cloneScenario(body.sourceId);
+
+	if (!cloned) {
+		return NextResponse.json({ message: "Source scenario not found" }, { status: 404 });
+	}
+
+	return NextResponse.json(cloned, { status: 201 });
 }

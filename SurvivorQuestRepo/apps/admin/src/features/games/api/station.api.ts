@@ -10,6 +10,9 @@ type StationDto = {
   imageUrl?: string | null;
   points: number;
   timeLimitSeconds?: number;
+  sourceTemplateId?: string;
+  scenarioInstanceId?: string;
+  realizationId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -58,6 +61,9 @@ function normalizeStation(station: StationDto): Station {
     imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
+    sourceTemplateId: station.sourceTemplateId,
+    scenarioInstanceId: station.scenarioInstanceId,
+    realizationId: station.realizationId,
     createdAt: station.createdAt,
     updatedAt: station.updatedAt,
   };

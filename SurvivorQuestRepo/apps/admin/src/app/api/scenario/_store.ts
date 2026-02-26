@@ -1,8 +1,11 @@
+import { cloneStationsForScenario } from "../games/_store";
+
 export type ScenarioEntity = {
   id: string;
   name: string;
   description: string;
   stationIds: string[];
+  sourceTemplateId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -56,4 +59,28 @@ export function replaceScenario(updatedScenario: ScenarioEntity) {
 
 export function removeScenario(id: string) {
   scenarios = scenarios.filter((scenario) => scenario.id !== id);
+}
+
+export function cloneScenario(sourceId: string, options?: { realizationId?: string }): ScenarioEntity | null {
+  const source = findScenarioById(sourceId);
+  if (!source) return null;
+
+  const nowIso = new Date().toISOString();
+  const clonedScenarioId = crypto.randomUUID();
+  const clonedStations = cloneStationsForScenario(source.stationIds, {
+    scenarioInstanceId: clonedScenarioId,
+    realizationId: options?.realizationId,
+  });
+  const cloned: ScenarioEntity = {
+    id: clonedScenarioId,
+    name: source.name,
+    description: source.description,
+    stationIds: clonedStations.map((station) => station.id),
+    sourceTemplateId: source.sourceTemplateId ?? source.id,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  scenarios = [cloned, ...scenarios];
+  return cloned;
 }

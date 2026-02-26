@@ -1,12 +1,37 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { Realization, RealizationStatus } from "../types/realization";
+import type { Station, StationType } from "@/features/games/types/station";
+import type { Realization, RealizationStatus, RealizationStationDraft, RealizationType } from "../types/realization";
+
+type StationDto = {
+  id: string;
+  name: string;
+  type?: StationType;
+  description: string;
+  imageUrl?: string | null;
+  points: number;
+  timeLimitSeconds?: number;
+  sourceTemplateId?: string;
+  scenarioInstanceId?: string;
+  realizationId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 type RealizationDto = {
   id: string;
   companyName: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  instructors?: string[];
+  type?: RealizationType;
+  logoUrl?: string;
+  offerPdfUrl?: string;
+  offerPdfName?: string;
   scenarioId: string;
   stationIds?: string[];
+  scenarioStations?: StationDto[];
   teamCount: number;
   requiredDevicesCount: number;
   peopleCount: number;
@@ -20,6 +45,14 @@ type RealizationDto = {
 
 type CreateRealizationPayload = {
   companyName: string;
+  contactPerson: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  instructors: string[];
+  type: RealizationType;
+  logoUrl?: string;
+  offerPdfUrl?: string;
+  offerPdfName?: string;
   scenarioId: string;
   teamCount: number;
   peopleCount: number;
@@ -27,11 +60,20 @@ type CreateRealizationPayload = {
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
+  scenarioStations?: RealizationStationDraft[];
 };
 
 type UpdateRealizationPayload = {
   id: string;
   companyName: string;
+  contactPerson: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  instructors: string[];
+  type: RealizationType;
+  logoUrl?: string;
+  offerPdfUrl?: string;
+  offerPdfName?: string;
   scenarioId: string;
   teamCount: number;
   peopleCount: number;
@@ -39,6 +81,7 @@ type UpdateRealizationPayload = {
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
+  scenarioStations?: RealizationStationDraft[];
 };
 
 type MobileAdminRealizationOverview = {
@@ -99,11 +142,28 @@ type MobileAdminRealizationOverview = {
 };
 
 function normalizeRealization(dto: RealizationDto): Realization {
+  const scenarioStations = (dto.scenarioStations ?? []).map(normalizeStation);
+  const instructors = Array.isArray(dto.instructors)
+    ? dto.instructors
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+        .filter((item, index, list) => list.indexOf(item) === index)
+    : [];
+
   return {
     id: dto.id,
     companyName: dto.companyName,
+    contactPerson: dto.contactPerson?.trim() || "",
+    contactPhone: dto.contactPhone?.trim() || undefined,
+    contactEmail: dto.contactEmail?.trim() || undefined,
+    instructors,
+    type: dto.type ?? "outdoor-games",
+    logoUrl: dto.logoUrl,
+    offerPdfUrl: dto.offerPdfUrl,
+    offerPdfName: dto.offerPdfName,
     scenarioId: dto.scenarioId,
-    stationIds: dto.stationIds ?? [],
+    stationIds: dto.stationIds ?? scenarioStations.map((station) => station.id),
+    scenarioStations,
     teamCount: dto.teamCount,
     requiredDevicesCount: dto.requiredDevicesCount,
     peopleCount: dto.peopleCount,
@@ -113,6 +173,34 @@ function normalizeRealization(dto: RealizationDto): Realization {
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
     logs: dto.logs,
+  };
+}
+
+function getFallbackImage(seed: string) {
+  return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
+}
+
+function normalizeStation(station: StationDto): Station {
+  const trimmedName = station.name?.trim() || "Untitled station";
+  const safePoints = Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
+  const safeTimeLimitSeconds =
+    Number.isFinite(station.timeLimitSeconds) && (station.timeLimitSeconds ?? -1) >= 0
+      ? Math.round(station.timeLimitSeconds as number)
+      : 0;
+
+  return {
+    id: station.id,
+    name: trimmedName,
+    type: station.type ?? "quiz",
+    description: station.description?.trim() || "",
+    imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
+    points: safePoints,
+    timeLimitSeconds: safeTimeLimitSeconds,
+    sourceTemplateId: station.sourceTemplateId,
+    scenarioInstanceId: station.scenarioInstanceId,
+    realizationId: station.realizationId,
+    createdAt: station.createdAt,
+    updatedAt: station.updatedAt,
   };
 }
 

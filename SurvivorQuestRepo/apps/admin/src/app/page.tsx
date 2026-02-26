@@ -49,19 +49,19 @@ export default function HomePage() {
     );
   }, [realizations]);
 
+  const nearestStations = nearestRealization
+    ? nearestRealization.scenarioStations.length > 0
+      ? nearestRealization.scenarioStations
+      : nearestRealization.stationIds
+          .map((stationId) => stations?.find((station) => station.id === stationId))
+          .filter((station): station is NonNullable<typeof station> => Boolean(station))
+    : [];
+
   const nearestStationNames = nearestRealization
-    ? nearestRealization.stationIds
-        .map((stationId) => stations?.find((station) => station.id === stationId)?.name)
-        .filter(Boolean)
-        .join(", ") || "-"
+    ? nearestStations.map((station) => station.name).join(", ") || "-"
     : "-";
 
-  const nearestTotalPoints = nearestRealization
-    ? nearestRealization.stationIds.reduce((sum, stationId) => {
-        const points = stations?.find((station) => station.id === stationId)?.points ?? 0;
-        return sum + points;
-      }, 0)
-    : 0;
+  const nearestTotalPoints = nearestStations.reduce((sum, station) => sum + station.points, 0);
 
   const nearestStatusBadgeClassName =
     nearestRealization?.status === "done"

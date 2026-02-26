@@ -50,6 +50,14 @@ export const scenarioApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Scenario"],
     }),
+    cloneScenario: build.mutation<Scenario, { sourceId: string }>({
+      query: (body) => ({
+        url: buildApiPath("/scenario"),
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: ["Scenario"],
+    }),
   }),
 });
 
@@ -58,4 +66,5 @@ export const {
   useCreateScenarioMutation,
   useUpdateScenarioMutation,
   useDeleteScenarioMutation,
+  useCloneScenarioMutation,
 } = scenarioApi;
