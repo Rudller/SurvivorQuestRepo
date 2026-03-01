@@ -1,3 +1,5 @@
+import { getRealizationsMobileSnapshot, type RealizationMobileSnapshot } from "../realizations/route";
+
 type RealizationStatus = "planned" | "in-progress" | "done";
 type TeamStatus = "unassigned" | "active" | "offline";
 type TaskStatus = "todo" | "in-progress" | "done";
@@ -101,6 +103,11 @@ type ClaimTeamInput = {
 
 type RandomizeTeamInput = {
   sessionToken: string;
+};
+
+type SelectTeamInput = {
+  sessionToken: string;
+  slotNumber: number;
 };
 
 type LocationInput = {
@@ -222,60 +229,125 @@ function emitEvent(log: Omit<EventLog, "id" | "createdAt">) {
   });
 }
 
-const now = Date.now();
-const dayMs = 24 * 60 * 60 * 1000;
+const TEST_JOIN_CODE = "TEST";
 
-const realizations: MobileRealization[] = [
-  {
-    id: "r-2",
-    companyName: "Baltic Logistics",
-    status: "in-progress",
-    scheduledAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
-    locationRequired: true,
-    joinCode: "BL2026",
-    teamCount: 6,
-    stationIds: ["g-2", "g-3"],
-    createdAt: new Date(now - 2 * dayMs).toISOString(),
-    updatedAt: new Date(now - dayMs).toISOString(),
-  },
-  {
-    id: "r-3",
-    companyName: "Horizon Tech",
-    status: "planned",
-    scheduledAt: new Date(now + dayMs).toISOString(),
-    locationRequired: false,
-    joinCode: "HZ2026",
-    teamCount: 3,
-    stationIds: ["g-1", "g-4", "g-5"],
-    createdAt: new Date(now - dayMs).toISOString(),
-    updatedAt: new Date(now - dayMs).toISOString(),
-  },
-];
+type MobileStateSnapshot = {
+  realizations: MobileRealization[];
+  teams: MobileTeam[];
+  assignments: TeamAssignment[];
+  taskProgresses: TeamTaskProgress[];
+  eventLogs: EventLog[];
+};
 
-const teams: MobileTeam[] = realizations.flatMap((realization) =>
-  Array.from({ length: realization.teamCount }, (_, index) => {
-    const createdAt = nowIso();
-    return {
-      id: `t-${realization.id}-${index + 1}`,
-      realizationId: realization.id,
-      slotNumber: index + 1,
-      name: null,
-      color: null,
-      badgeKey: null,
-      badgeImageUrl: null,
-      points: 0,
-      taskStats: { total: realization.stationIds.length, done: 0 },
-      lastLocation: null,
-      status: "unassigned",
-      createdAt,
-      updatedAt: createdAt,
-    };
-  }),
-);
-
+let realizations: MobileRealization[] = [];
+let teams: MobileTeam[] = [];
 let assignments: TeamAssignment[] = [];
 let taskProgresses: TeamTaskProgress[] = [];
-const eventLogs: EventLog[] = [];
+let eventLogs: EventLog[] = [];
+
+function resolveSnapshotPrimaryRealization(items: RealizationMobileSnapshot[]) {
+  const inProgress = items.find((item) => item.status === "in-progress");
+
+  if (inProgress) {
+    return inProgress;
+  }
+
+  const planned = items
+    .filter((item) => item.status === "planned")
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime());
+
+  if (planned.length > 0) {
+    return planned[0];
+  }
+
+  return items[0] ?? null;
+}
+
+function buildJoinCode(realization: RealizationMobileSnapshot, index: number) {
+  const normalizedId = realization.id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const baseCode = `SQ${normalizedId}${String(index + 1).padStart(2, "0")}`;
+  return baseCode.slice(0, 12);
+}
+
+function buildMobileStateFromAdminSnapshot(): MobileStateSnapshot {
+  const sourceRealizations = getRealizationsMobileSnapshot();
+  const primaryRealization = resolveSnapshotPrimaryRealization(sourceRealizations);
+  const createdAt = nowIso();
+  const usedJoinCodes = new Set<string>();
+
+  const nextRealizations = sourceRealizations.map((source, index) => {
+    const generatedJoinCode = buildJoinCode(source, index);
+    let joinCode = generatedJoinCode;
+
+    if (source.id === primaryRealization?.id) {
+      joinCode = TEST_JOIN_CODE;
+    }
+
+    let collisionIndex = 1;
+    while (usedJoinCodes.has(joinCode)) {
+      collisionIndex += 1;
+      joinCode = `${generatedJoinCode.slice(0, 10)}${String(collisionIndex).slice(-2)}`;
+    }
+
+    usedJoinCodes.add(joinCode);
+
+    return {
+      id: source.id,
+      companyName: source.companyName,
+      status: source.status,
+      scheduledAt: source.scheduledAt,
+      locationRequired: source.status === "in-progress",
+      joinCode,
+      teamCount: Math.max(1, Math.round(source.teamCount)),
+      stationIds: source.stationIds,
+      createdAt,
+      updatedAt: createdAt,
+    } satisfies MobileRealization;
+  });
+
+  const nextTeams: MobileTeam[] = nextRealizations.flatMap((realization) =>
+    Array.from({ length: realization.teamCount }, (_, index) => {
+      const teamCreatedAt = nowIso();
+      return {
+        id: `t-${realization.id}-${index + 1}`,
+        realizationId: realization.id,
+        slotNumber: index + 1,
+        name: null,
+        color: null,
+        badgeKey: null,
+        badgeImageUrl: null,
+        points: 0,
+        taskStats: { total: realization.stationIds.length, done: 0 },
+        lastLocation: null,
+        status: "unassigned",
+        createdAt: teamCreatedAt,
+        updatedAt: teamCreatedAt,
+      };
+    }),
+  );
+
+  return {
+    realizations: nextRealizations,
+    teams: nextTeams,
+    assignments: [],
+    taskProgresses: [],
+    eventLogs: [],
+  };
+}
+
+function applyMobileStateSnapshot(snapshot: MobileStateSnapshot) {
+  realizations = snapshot.realizations;
+  teams = snapshot.teams;
+  assignments = snapshot.assignments;
+  taskProgresses = snapshot.taskProgresses;
+  eventLogs = snapshot.eventLogs;
+}
+
+function resetMobileStateFromAdminSnapshot() {
+  applyMobileStateSnapshot(buildMobileStateFromAdminSnapshot());
+}
+
+resetMobileStateFromAdminSnapshot();
 
 function getRealizationByJoinCode(joinCode: string) {
   return realizations.find((realization) => realization.joinCode.toLowerCase() === joinCode.toLowerCase().trim());
@@ -321,6 +393,12 @@ function requireSession(sessionToken: string) {
 
 function getTeamById(teamId: string) {
   return teams.find((team) => team.id === teamId);
+}
+
+function hasActiveTeamAssignment(teamId: string, ignoredAssignmentId?: string) {
+  return assignments.some(
+    (assignment) => assignment.teamId === teamId && !isExpired(assignment.expiresAt) && assignment.id !== ignoredAssignmentId,
+  );
 }
 
 function recalculateTeamPoints(teamId: string) {
@@ -374,6 +452,10 @@ export function joinMobileSession(input: JoinSessionInput) {
     throw new MobileApiError(400, "Invalid payload");
   }
 
+  if (joinCode.toUpperCase() === TEST_JOIN_CODE) {
+    resetMobileStateFromAdminSnapshot();
+  }
+
   const realization = getRealizationByJoinCode(joinCode);
 
   if (!realization) {
@@ -413,7 +495,7 @@ export function joinMobileSession(input: JoinSessionInput) {
   const freeTeam = teams
     .filter((team) => team.realizationId === realization.id)
     .sort((left, right) => left.slotNumber - right.slotNumber)
-    .find((team) => !assignments.some((assignment) => assignment.teamId === team.id && !isExpired(assignment.expiresAt)));
+    .find((team) => !hasActiveTeamAssignment(team.id));
 
   if (!freeTeam) {
     throw new MobileApiError(409, "No free team slots");
@@ -589,6 +671,62 @@ export function claimMobileTeam(input: ClaimTeamInput) {
     color: team.color,
     badgeKey: team.badgeKey,
     changedFields,
+  };
+}
+
+export function selectMobileTeam(input: SelectTeamInput) {
+  const { assignment, team, realization } = requireSession(input.sessionToken);
+  const slotNumber = Number(input.slotNumber);
+
+  if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+    throw new MobileApiError(400, "Invalid team slot");
+  }
+
+  const requestedTeam = teams.find(
+    (candidate) => candidate.realizationId === realization.id && candidate.slotNumber === slotNumber,
+  );
+
+  if (!requestedTeam) {
+    throw new MobileApiError(404, "Team not found");
+  }
+
+  if (requestedTeam.id !== team.id && hasActiveTeamAssignment(requestedTeam.id, assignment.id)) {
+    throw new MobileApiError(409, "Selected team is not available");
+  }
+
+  if (requestedTeam.id !== team.id) {
+    assignment.teamId = requestedTeam.id;
+    assignment.lastSeenAt = nowIso();
+    assignment.expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+
+    team.status = hasActiveTeamAssignment(team.id, assignment.id) ? "active" : "unassigned";
+    team.updatedAt = nowIso();
+
+    requestedTeam.status = "active";
+    requestedTeam.updatedAt = nowIso();
+
+    emitEvent({
+      realizationId: realization.id,
+      teamId: requestedTeam.id,
+      actorType: "mobile-device",
+      actorId: assignment.deviceId,
+      eventType: "team_reassigned",
+      payload: {
+        fromSlotNumber: team.slotNumber,
+        toSlotNumber: requestedTeam.slotNumber,
+      },
+    });
+  }
+
+  return {
+    team: {
+      id: requestedTeam.id,
+      slotNumber: requestedTeam.slotNumber,
+      name: requestedTeam.name,
+      color: requestedTeam.color,
+      badgeKey: requestedTeam.badgeKey,
+      points: requestedTeam.points,
+    },
   };
 }
 

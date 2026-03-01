@@ -70,6 +70,15 @@ type Realization = {
   logs: RealizationLog[];
 };
 
+export type RealizationMobileSnapshot = {
+  id: string;
+  companyName: string;
+  status: RealizationStatus;
+  scheduledAt: string;
+  teamCount: number;
+  stationIds: string[];
+};
+
 type ScenarioStationDraftsResult =
   | { provided: false; drafts: [] }
   | { provided: true; drafts: ScenarioStationDraftPayload[] }
@@ -365,6 +374,33 @@ function resolveRealizationStations(realization: Realization) {
   };
 }
 
+function normalizeRealizationsForRead() {
+  const normalizedRealizations = realizations.map((realization) => {
+    const resolvedStations = resolveRealizationStations(realization);
+
+    return {
+      ...realization,
+      ...resolvedStations,
+      requiredDevicesCount: calculateRequiredDevices(realization.teamCount),
+      status: resolveRealizationStatus(realization.status, realization.scheduledAt),
+    };
+  });
+
+  realizations = normalizedRealizations;
+  return normalizedRealizations;
+}
+
+export function getRealizationsMobileSnapshot(): RealizationMobileSnapshot[] {
+  return normalizeRealizationsForRead().map((realization) => ({
+    id: realization.id,
+    companyName: realization.companyName,
+    status: realization.status,
+    scheduledAt: realization.scheduledAt,
+    teamCount: realization.teamCount,
+    stationIds: realization.stationIds,
+  }));
+}
+
 const now = Date.now();
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -559,18 +595,7 @@ let realizations: Realization[] = [
 ];
 
 export async function GET() {
-  const normalizedRealizations = realizations.map((realization) => {
-    const resolvedStations = resolveRealizationStations(realization);
-
-    return {
-      ...realization,
-      ...resolvedStations,
-      requiredDevicesCount: calculateRequiredDevices(realization.teamCount),
-      status: resolveRealizationStatus(realization.status, realization.scheduledAt),
-    };
-  });
-
-  realizations = normalizedRealizations;
+  const normalizedRealizations = normalizeRealizationsForRead();
   return NextResponse.json(normalizedRealizations);
 }
 
