@@ -1,1 +1,37 @@
 node_modules
+**/node_modules/
+
+# caches
+.pnpm-store/
+**/.pnpm-store/
+.turbo/
+**/.turbo/
+
+# build outputs
+dist/
+build/
+coverage/
+**/coverage/
+**/.next/
+**/out/
+**/.expo/
+**/web-build/
+**/.vercel/
+**/next-env.d.ts
+**/expo-env.d.ts
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# OS
+.DS_Store

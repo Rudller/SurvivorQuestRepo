@@ -2,10 +2,16 @@
 
 # dependencies
 node_modules/
+**/node_modules/
+.pnpm-store/
+.turbo/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
+build/
+coverage/
 web-build/
 expo-env.d.ts
 
@@ -25,13 +31,16 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
+.pnpm-debug.log*
 
 # macOS
 .DS_Store
 *.pem
 
 # local env files
-.env*.local
+.env*
+!.env.example
 
 # typescript
 *.tsbuildinfo
