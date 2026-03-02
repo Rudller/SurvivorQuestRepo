@@ -10,6 +10,7 @@ import {
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -197,6 +198,14 @@ function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
 export function RealizationOnboardingScreen() {
   const routePulse = useRef(new Animated.Value(0)).current;
   const deviceIdRef = useRef(`sq-${Platform.OS}-${Math.random().toString(36).slice(2, 10)}`);
+  const { width } = useWindowDimensions();
+  const isTabletLayout = width >= 768;
+  const contentMaxWidth = isTabletLayout ? 560 : 448;
+  const contentHorizontalPadding = isTabletLayout ? 40 : 16;
+  const contentTopPadding = isTabletLayout ? 44 : 24;
+  const contentBottomPadding = isTabletLayout ? 56 : 32;
+  const contentGapClassName = isTabletLayout ? "gap-8" : "gap-4";
+  const teamPickerListMaxHeight = isTabletLayout ? 420 : 316;
 
   const [screen, setScreen] = useState<Screen>("code");
   const [setupState, setSetupState] = useState<SetupState>("idle");
@@ -575,13 +584,19 @@ export function RealizationOnboardingScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1 }}
-        contentContainerClassName="px-4 pb-8 pt-6"
+        contentContainerStyle={{
+          flexGrow: 1,
+          alignItems: "center",
+          justifyContent: isTabletLayout ? "center" : "flex-start",
+          paddingHorizontal: contentHorizontalPadding,
+          paddingTop: contentTopPadding,
+          paddingBottom: contentBottomPadding,
+        }}
       >
-        <View className="mx-auto w-full max-w-md gap-4">
+        <View className={`w-full ${contentGapClassName}`} style={{ maxWidth: contentMaxWidth }}>
           {screen !== "customize" && (
             <View
-              className="rounded-3xl border px-5 py-5"
+              className={`rounded-3xl border ${isTabletLayout ? "px-8 py-7" : "px-5 py-5"}`}
               style={{
                 borderColor: EXPEDITION_THEME.border,
                 backgroundColor: EXPEDITION_THEME.panel,
@@ -593,7 +608,10 @@ export function RealizationOnboardingScreen() {
               >
                 Expedition Map
               </Text>
-              <Text className="mt-1 text-3xl font-semibold tracking-tight" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text
+                className={`mt-1 font-semibold tracking-tight ${isTabletLayout ? "text-5xl" : "text-3xl"}`}
+                style={{ color: EXPEDITION_THEME.textPrimary }}
+              >
                 SurvivorQuest
               </Text>
               <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
@@ -632,7 +650,7 @@ export function RealizationOnboardingScreen() {
 
           {screen === "code" && (
             <View
-              className="rounded-3xl border p-5"
+              className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
               style={{
                 borderColor: EXPEDITION_THEME.border,
                 backgroundColor: EXPEDITION_THEME.panel,
@@ -736,7 +754,7 @@ export function RealizationOnboardingScreen() {
 
           {screen === "team" && (
             <View
-              className="rounded-3xl border p-5"
+              className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
               style={{
                 borderColor: EXPEDITION_THEME.border,
                 backgroundColor: EXPEDITION_THEME.panel,
@@ -811,7 +829,7 @@ export function RealizationOnboardingScreen() {
 
           {screen === "customize" && (
             <View
-              className="rounded-3xl border p-5"
+              className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
               style={{
                 borderColor: EXPEDITION_THEME.border,
                 backgroundColor: EXPEDITION_THEME.panel,
@@ -954,8 +972,12 @@ export function RealizationOnboardingScreen() {
       >
         <View className="flex-1 items-center justify-center px-4" style={{ backgroundColor: "rgba(12, 18, 15, 0.72)" }}>
           <View
-            className="w-full max-w-xl rounded-3xl border p-4"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+            className={`w-full rounded-3xl border ${isTabletLayout ? "p-6" : "p-4"}`}
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+              maxWidth: isTabletLayout ? 760 : 640,
+            }}
           >
             <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
               Wybierz drużynę
@@ -965,7 +987,7 @@ export function RealizationOnboardingScreen() {
             </Text>
 
             <View className="mt-3 rounded-2xl border p-2" style={{ borderColor: EXPEDITION_THEME.border }}>
-              <ScrollView style={{ maxHeight: 316 }} showsVerticalScrollIndicator>
+              <ScrollView style={{ maxHeight: teamPickerListMaxHeight }} showsVerticalScrollIndicator>
                 <View className="gap-2">
                   {availableTeamSlots.map((slotNumber) => {
                     const isCurrent = slotNumber === selectedTeam;
@@ -977,7 +999,7 @@ export function RealizationOnboardingScreen() {
                         style={{
                           borderColor: isCurrent ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                           backgroundColor: isCurrent ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                          minHeight: 64,
+                          minHeight: isTabletLayout ? 76 : 64,
                           justifyContent: "center",
                           opacity: isSwitchingTeam ? 0.65 : 1,
                         }}
