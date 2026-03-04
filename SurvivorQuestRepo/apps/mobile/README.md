@@ -37,6 +37,8 @@ or directly in `apps/mobile`:
 2. App wykonuje auto-przydział pierwszej dostępnej drużyny
 3. W etapie 2 zobaczysz komunikat o przydziale i możesz zmienić drużynę z popup listy
 4. W etapie 3 użytkownik uzupełnia nazwę/kolor/ikonę i zapisuje ustawienia (`/api/mobile/team/claim`)
+5. Po zapisie aplikacja przechodzi do etapu docelowego: mapa (`react-native-maps`), status sesji (`/api/mobile/session/state`),
+   synchronizacja pozycji (`/api/mobile/team/location`) i akcje stacji (`/api/mobile/task/complete`)
 
 ## 5) Verify in admin
 

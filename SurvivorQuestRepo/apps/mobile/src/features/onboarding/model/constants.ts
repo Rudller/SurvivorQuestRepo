@@ -23,13 +23,39 @@ export const TEAM_COLORS: TeamColorOption[] = [
   { key: "yellow", label: "Żółty", hex: "#eab308" },
   { key: "lime", label: "Limonkowy", hex: "#84cc16" },
   { key: "emerald", label: "Szmaragdowy", hex: "#10b981" },
+  { key: "teal", label: "Morski", hex: "#14b8a6" },
   { key: "cyan", label: "Cyjan", hex: "#06b6d4" },
+  { key: "sky", label: "Błękitny", hex: "#0ea5e9" },
   { key: "blue", label: "Niebieski", hex: "#3b82f6" },
+  { key: "indigo", label: "Indygo", hex: "#6366f1" },
   { key: "violet", label: "Fioletowy", hex: "#8b5cf6" },
   { key: "rose", label: "Różowy", hex: "#f43f5e" },
+  { key: "pink", label: "Jasnoróżowy", hex: "#ec4899" },
+  { key: "slate", label: "Grafitowy", hex: "#64748b" },
 ];
 
-export const TEAM_ICONS = ["🦊", "🐺", "🦅", "🦫", "🐯", "🐉", "🦁", "🦈", "🐙", "🐻"];
+export const TEAM_ICONS = [
+  "🦊",
+  "🐺",
+  "🦅",
+  "🦫",
+  "🐯",
+  "🐉",
+  "🦁",
+  "🦈",
+  "🐙",
+  "🐻",
+  "🐼",
+  "🦉",
+  "🐧",
+  "🐢",
+  "🐬",
+  "🦄",
+  "🐸",
+  "🦖",
+  "🦩",
+  "🐝",
+];
 
 export const TEAM_SLOTS = Array.from({ length: 8 }, (_, index) => index + 1);
 

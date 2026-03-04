@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
-import type { Screen, TeamColor } from "../model/types";
+import type { OnboardingSession, Screen, TeamColor } from "../model/types";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 
@@ -25,6 +25,7 @@ type MobileBootstrapRealization = {
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
   joinCode: string;
+  locationRequired: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -87,6 +88,10 @@ const STEP_HINT: Record<Screen, string> = {
   code: "Etap 1 jest inicjalizowany kodem realizacji od administratora.",
   team: "Etap 2 automatycznie przypisuje pierwszą dostępną drużynę.",
   customize: "Etap 3 jest przeznaczony dla użytkownika końcowego.",
+};
+
+type RealizationOnboardingScreenProps = {
+  onComplete?: (session: OnboardingSession) => void;
 };
 
 function getErrorMessage(error: unknown) {
@@ -183,6 +188,22 @@ function isTeamColor(value: string | null): value is TeamColor {
   return TEAM_COLORS.some((color) => color.key === value);
 }
 
+function resolveCardTextColor(hexColor: string) {
+  const normalizedHex = hexColor.replace("#", "");
+
+  if (!/^[0-9a-fA-F]{6}$/.test(normalizedHex)) {
+    return "#f8fafc";
+  }
+
+  const parsedHex = Number.parseInt(normalizedHex, 16);
+  const red = (parsedHex >> 16) & 255;
+  const green = (parsedHex >> 8) & 255;
+  const blue = parsedHex & 255;
+  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+
+  return brightness > 172 ? "#0f172a" : "#f8fafc";
+}
+
 function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
   return {
     id: "offline-test-realization",
@@ -190,12 +211,13 @@ function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
     status: "in-progress",
     scheduledAt: new Date().toISOString(),
     joinCode: code,
+    locationRequired: true,
     teamCount: 6,
     stationIds: ["g-1", "g-2", "g-3"],
   };
 }
 
-export function RealizationOnboardingScreen() {
+export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardingScreenProps) {
   const routePulse = useRef(new Animated.Value(0)).current;
   const deviceIdRef = useRef(`sq-${Platform.OS}-${Math.random().toString(36).slice(2, 10)}`);
   const { width } = useWindowDimensions();
@@ -230,11 +252,47 @@ export function RealizationOnboardingScreen() {
     () => TEAM_COLORS.find((color) => color.key === teamColor) ?? TEAM_COLORS[0],
     [teamColor],
   );
+  const expeditionCardTextColor = useMemo(() => resolveCardTextColor(selectedColor.hex), [selectedColor.hex]);
+  const expeditionCardSecondaryTextColor =
+    expeditionCardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.84)";
+  const expeditionCardIconBackground =
+    expeditionCardTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
+  const expeditionCardIconBorderColor =
+    expeditionCardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.24)" : "rgba(248, 250, 252, 0.36)";
   const topPanelActiveStepIndex = TOP_PANEL_STEP_ORDER.indexOf(screen);
   const availableTeamSlots = useMemo(
     () => Array.from({ length: activeRealization?.teamCount ?? 0 }, (_, index) => index + 1),
     [activeRealization?.teamCount],
   );
+
+  function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
+    onComplete?.({
+      realizationId: activeRealization?.id ?? null,
+      realizationCode,
+      sessionToken: nextSessionToken,
+      apiBaseUrl,
+      realization: activeRealization
+        ? {
+            id: activeRealization.id,
+            companyName: activeRealization.companyName,
+            status: activeRealization.status,
+            scheduledAt: activeRealization.scheduledAt,
+            joinCode: activeRealization.joinCode,
+            teamCount: activeRealization.teamCount,
+            stationIds: activeRealization.stationIds,
+            locationRequired: activeRealization.locationRequired,
+          }
+        : null,
+      team: {
+        slotNumber: selectedTeam,
+        name: nextTeamName,
+        colorKey: teamColor,
+        colorLabel: selectedColor.label,
+        colorHex: selectedColor.hex,
+        icon: teamIcon,
+      },
+    });
+  }
 
   useEffect(() => {
     const pulseAnimation = Animated.loop(
@@ -455,7 +513,9 @@ export function RealizationOnboardingScreen() {
     }
 
     if (sessionToken === OFFLINE_TEST_SESSION_TOKEN) {
+      setTeamName(trimmedName);
       setSaveMessage(`Zapisano lokalnie ustawienia: ${trimmedName}.`);
+      completeOnboarding(sessionToken, trimmedName);
       return;
     }
 
@@ -466,6 +526,7 @@ export function RealizationOnboardingScreen() {
 
     setIsSaving(true);
     setSaveMessage(null);
+    let completionTeamName: string | null = null;
 
     try {
       const result = await requestMobileApi<MobileClaimResponse>(apiBaseUrl, "/api/mobile/team/claim", {
@@ -478,11 +539,18 @@ export function RealizationOnboardingScreen() {
         }),
       });
 
-      setSaveMessage(`Zapisano ustawienia: ${result.name}.`);
+      const normalizedResultName = result.name.trim() || trimmedName;
+      setTeamName(normalizedResultName);
+      setSaveMessage(`Zapisano ustawienia: ${normalizedResultName}.`);
+      completionTeamName = normalizedResultName;
     } catch (error) {
       setSaveMessage(`Nie udało się zapisać: ${getErrorMessage(error)}`);
     } finally {
       setIsSaving(false);
+    }
+
+    if (completionTeamName) {
+      completeOnboarding(sessionToken, completionTeamName);
     }
   }
 
@@ -835,29 +903,34 @@ export function RealizationOnboardingScreen() {
                 backgroundColor: EXPEDITION_THEME.panel,
               }}
             >
+              <Text className="mb-2 text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                Karta wyprawy
+              </Text>
               <View
                 className="rounded-2xl border"
                 style={{
                   borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                  backgroundColor: selectedColor.hex,
                   overflow: "hidden",
                 }}
               >
-                <View className="h-2" style={{ backgroundColor: selectedColor.hex }} />
-                <View className="px-4 py-3">
-                  <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                    Karta wyprawy
-                  </Text>
-                  <View className="mt-2 flex-row items-center gap-3">
-                    <View className="h-12 w-12 items-center justify-center rounded-xl border" style={{ borderColor: EXPEDITION_THEME.border }}>
-                      <Text className="text-2xl">{teamIcon}</Text>
+                <View className="px-4 py-4">
+                  <View className="flex-row items-center gap-4">
+                    <View
+                      className="h-16 w-16 items-center justify-center rounded-2xl border"
+                      style={{
+                        borderColor: expeditionCardIconBorderColor,
+                        backgroundColor: expeditionCardIconBackground,
+                      }}
+                    >
+                      <Text className="text-4xl">{teamIcon}</Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                      <Text className="text-3xl font-extrabold leading-9" style={{ color: expeditionCardTextColor }}>
                         {teamName.trim() || "Drużyna bez nazwy"}
                       </Text>
-                      <Text className="text-xs" style={{ color: selectedColor.hex }}>
-                        Drużyna {selectedTeam ?? "-"} • Kolor: {selectedColor.label}
+                      <Text className="mt-1 text-xs font-semibold uppercase tracking-wide" style={{ color: expeditionCardSecondaryTextColor }}>
+                        Drużyna {selectedTeam ?? "-"} • {selectedColor.label}
                       </Text>
                     </View>
                   </View>

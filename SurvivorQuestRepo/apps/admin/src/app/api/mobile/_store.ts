@@ -11,10 +11,15 @@ type TeamColor =
   | "yellow"
   | "lime"
   | "emerald"
+  | "teal"
   | "cyan"
+  | "sky"
   | "blue"
+  | "indigo"
   | "violet"
-  | "rose";
+  | "rose"
+  | "pink"
+  | "slate";
 
 type LocationPoint = {
   lat: number;
@@ -132,10 +137,15 @@ const TEAM_COLORS: TeamColor[] = [
   "yellow",
   "lime",
   "emerald",
+  "teal",
   "cyan",
+  "sky",
   "blue",
+  "indigo",
   "violet",
   "rose",
+  "pink",
+  "slate",
 ];
 
 const BADGE_KEYS = [
