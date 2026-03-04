@@ -22,6 +22,16 @@ export type MobileRealizationClientDetails = {
   }>;
 };
 
+export type MobileStationCatalogItem = {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  imageUrl: string;
+  points: number;
+  timeLimitSeconds: number;
+};
+
 function asRecord(value: unknown): UnknownRecord {
   return typeof value === "object" && value !== null ? (value as UnknownRecord) : {};
 }
@@ -179,6 +189,30 @@ export async function postMobileCompleteTask(
       }),
     },
   );
+}
+
+export async function fetchMobileStationCatalog(apiBaseUrl: string) {
+  const result = await requestMobileApi<unknown>(apiBaseUrl, "/api/station");
+
+  return asArray(result)
+    .map((item) => {
+      const station = asRecord(item);
+      const id = asString(station.id);
+      const name = asString(station.name, id || "Stanowisko");
+
+      return {
+        id,
+        name,
+        type: asString(station.type, "quiz"),
+        description: asString(station.description, "Opis stanowiska jest dostępny po skanie QR."),
+        imageUrl:
+          asString(station.imageUrl ?? station.image_url) ||
+          `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
+        points: Math.max(0, Math.round(asNumber(station.points, 0))),
+        timeLimitSeconds: Math.max(0, Math.round(asNumber(station.timeLimitSeconds ?? station.time_limit_seconds, 0))),
+      } satisfies MobileStationCatalogItem;
+    })
+    .filter((station) => station.id.trim().length > 0);
 }
 
 export async function fetchMobileRealizationClientDetails(apiBaseUrl: string, realizationId: string) {

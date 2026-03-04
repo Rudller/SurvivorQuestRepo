@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Platform, Text, View } from "react-native";
 import MapView, { Callout, Marker } from "react-native-maps";
+import Svg, { Circle, Path } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
 
@@ -17,6 +18,27 @@ const DEFAULT_DELTA = {
   latitudeDelta: 0.015,
   longitudeDelta: 0.015,
 };
+
+function StationPinMarker({ color }: { color: string }) {
+  return (
+    <View
+      style={{
+        width: 34,
+        height: 44,
+        shadowColor: "#000",
+        shadowOpacity: 0.28,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 5,
+      }}
+    >
+      <Svg width={34} height={44} viewBox="0 0 24 32">
+        <Path d="M12 0C6.477 0 2 4.477 2 10c0 7.5 10 22 10 22s10-14.5 10-22C22 4.477 17.523 0 12 0z" fill={color} />
+        <Circle cx={12} cy={10} r={4.2} fill="#ffffff" />
+      </Svg>
+    </View>
+  );
+}
 
 export function ExpeditionMap({
   centerCoordinate,
@@ -90,36 +112,30 @@ export function ExpeditionMap({
       {pins.map((pin) => {
         const isSelected = selectedStationId === pin.stationId;
         const isDone = pin.status === "done";
+        const markerColor = isSelected ? EXPEDITION_THEME.accentStrong : isDone ? "#10b981" : pin.customization.color;
 
         return (
           <Marker
             key={pin.stationId}
             coordinate={pin.coordinate}
             onPress={() => onSelectStation(pin.stationId)}
-            title={pin.label}
+            anchor={{ x: 0.5, y: 1 }}
           >
-            <View
-              style={{
-                minWidth: 38,
-                minHeight: 38,
-                borderRadius: 19,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: pin.customization.color,
-                borderWidth: 2,
-                borderColor: isSelected
-                  ? EXPEDITION_THEME.accentStrong
-                  : isDone
-                    ? "#10b981"
-                    : "rgba(15, 23, 42, 0.35)",
-              }}
-            >
-              <Text style={{ fontSize: 18 }}>{pin.customization.icon}</Text>
-            </View>
-            <Callout tooltip={false}>
-              <View className="max-w-56 rounded-xl border bg-zinc-900 px-3 py-2" style={{ borderColor: EXPEDITION_THEME.border }}>
-                <Text className="text-xs font-semibold text-zinc-100">{pin.label}</Text>
-                <Text className="mt-0.5 text-xs text-zinc-400">
+            <StationPinMarker color={markerColor} />
+            <Callout tooltip>
+              <View
+                style={{
+                  width: 280,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panel,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "600", color: EXPEDITION_THEME.textPrimary }}>{pin.label}</Text>
+                <Text style={{ marginTop: 4, fontSize: 12, color: EXPEDITION_THEME.textMuted }}>
                   Status: {pin.status === "done" ? "Ukończone" : pin.status === "in-progress" ? "W trakcie" : "Do zrobienia"}
                 </Text>
               </View>

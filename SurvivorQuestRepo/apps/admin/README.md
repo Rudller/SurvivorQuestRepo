@@ -50,7 +50,7 @@ NEXT_PUBLIC_USE_MOCK_API=true
 
 # backend mode
 # NEXT_PUBLIC_USE_MOCK_API=false
-# NEXT_PUBLIC_API_URL=https://api.your-domain.com
+# NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 When switching mode, restart the dev server.

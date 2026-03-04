@@ -5,20 +5,20 @@
 Create `.env.local` in this folder with:
 
 ```
-EXPO_PUBLIC_API_BASE_URL=http://YOUR_PC_LAN_IP:3000
+EXPO_PUBLIC_API_BASE_URL=http://YOUR_PC_LAN_IP:3001
 ```
 
 Example:
 
 ```
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.10:3000
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.10:3001
 ```
 
-## 2) Start admin (mock API host)
+## 2) Start backend API
 
-In `apps/admin`:
+From repo root:
 
-- `pnpm dev` (or your current dev command)
+- `pnpm dev:backend`
 
 ## 3) Start mobile
 
@@ -48,4 +48,4 @@ Open `Aktualna realizacja` in admin and watch team/event updates.
 
 - `localhost` from a real phone points to the phone, not your PC.
 - Use PC LAN IP and keep both devices on the same Wi-Fi network.
-- Kod `TEST` odświeża izolowany snapshot mobilnego backendu na podstawie aktualnych mocków realizacji z panelu admina.
+- Kod `TEST` odświeża izolowany snapshot mobilnego backendu na podstawie aktualnych realizacji backendu.

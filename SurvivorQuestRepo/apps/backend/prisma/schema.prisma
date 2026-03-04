@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  INSTRUCTOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  BLOCKED
+}
+
+enum StationType {
+  QUIZ
+  TIME
+  POINTS
+}
+
+enum RealizationStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+}
+
+enum RealizationType {
+  OUTDOOR_GAMES
+  HOTEL_GAMES
+  WORKSHOPS
+  EVENING_ATTRACTIONS
+  DJ
+  RECREATION
+}
+
+enum TeamStatus {
+  UNASSIGNED
+  ACTIVE
+  OFFLINE
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum EventActorType {
+  ADMIN
+  MOBILE_DEVICE
+  SYSTEM
+}
+
+model User {
+  id           String        @id @default(uuid())
+  displayName  String
+  email        String        @unique
+  phone        String?
+  role         UserRole      @default(INSTRUCTOR)
+  status       UserStatus    @default(INVITED)
+  photoUrl     String?
+  passwordHash String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  authSessions AuthSession[]
+  chatMessages ChatMessage[]
+}
+
+model AuthSession {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Station {
+  id               String             @id @default(uuid())
+  name             String
+  type             StationType
+  description      String
+  imageUrl         String?
+  points           Int
+  timeLimitSeconds Int                @default(0)
+  sourceTemplateId String?
+  scenarioInstanceId String?
+  realizationId    String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  sourceTemplate   Station?           @relation("StationTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  derivedStations  Station[]          @relation("StationTemplate")
+  scenarioStations ScenarioStation[]
+  taskProgresses   TeamTaskProgress[]
+}
+
+model Scenario {
+  id               String           @id @default(uuid())
+  name             String
+  description      String
+  sourceTemplateId String?
+  realizationId    String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  sourceTemplate   Scenario?        @relation("ScenarioTemplate", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  derivedScenarios Scenario[]       @relation("ScenarioTemplate")
+  scenarioStations ScenarioStation[]
+  realizations     Realization[]
+}
+
+model ScenarioStation {
+  id        String   @id @default(uuid())
+  scenarioId String
+  stationId String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scenario  Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  station   Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, order])
+  @@unique([scenarioId, stationId])
+  @@index([stationId])
+}
+
+model Realization {
+  id                  String             @id @default(uuid())
+  companyName         String
+  contactPerson       String
+  contactPhone        String?
+  contactEmail        String?
+  instructors         Json?
+  type                RealizationType
+  logoUrl             String?
+  offerPdfUrl         String?
+  offerPdfName        String?
+  scenarioId          String
+  teamCount           Int
+  requiredDevicesCount Int
+  peopleCount         Int
+  positionsCount      Int
+  status              RealizationStatus
+  scheduledAt         DateTime
+  locationRequired    Boolean            @default(true)
+  joinCode            String             @unique
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  scenario            Scenario           @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  teams               Team[]
+  teamAssignments     TeamAssignment[]
+  teamTaskProgresses  TeamTaskProgress[]
+  eventLogs           EventLog[]
+}
+
+model Team {
+  id                 String             @id @default(uuid())
+  realizationId      String
+  slotNumber         Int
+  name               String?
+  color              String?
+  badgeKey           String?
+  badgeImageUrl      String?
+  points             Int                @default(0)
+  taskTotal          Int                @default(0)
+  taskDone           Int                @default(0)
+  status             TeamStatus         @default(UNASSIGNED)
+  lastLocationLat    Float?
+  lastLocationLng    Float?
+  lastLocationAccuracy Float?
+  lastLocationAt     DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  realization        Realization        @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  assignments        TeamAssignment[]
+  taskProgresses     TeamTaskProgress[]
+  eventLogs          EventLog[]
+
+  @@unique([realizationId, slotNumber])
+}
+
+model TeamAssignment {
+  id          String     @id @default(uuid())
+  realizationId String
+  teamId      String
+  deviceId    String
+  memberName  String?
+  sessionToken String    @unique
+  expiresAt   DateTime
+  lastSeenAt  DateTime
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  realization Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([realizationId, deviceId])
+}
+
+model TeamTaskProgress {
+  id           String     @id @default(uuid())
+  realizationId String
+  teamId       String
+  stationId    String
+  status       TaskStatus @default(TODO)
+  pointsAwarded Int       @default(0)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  realization  Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team         Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  station      Station    @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([realizationId, teamId, stationId])
+  @@index([teamId])
+  @@index([stationId])
+}
+
+model EventLog {
+  id           String         @id @default(uuid())
+  realizationId String
+  teamId       String?
+  actorType    EventActorType
+  actorId      String
+  eventType    String
+  payload      Json
+  createdAt    DateTime       @default(now())
+  realization  Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team         Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([realizationId, createdAt])
+  @@index([teamId, createdAt])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String?
+  userName  String
+  content   String
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}

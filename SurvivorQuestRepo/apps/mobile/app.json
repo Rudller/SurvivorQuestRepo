@@ -15,7 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Aplikacja potrzebuje lokalizacji, aby pokazać pozycję drużyny na mapie realizacji."
+        "NSLocationWhenInUseUsageDescription": "Aplikacja potrzebuje lokalizacji, aby pokazać pozycję drużyny na mapie realizacji.",
+        "NSCameraUsageDescription": "Aplikacja potrzebuje kamery, aby skanować QR i wykonywać zdjęcia podczas realizacji."
       }
     },
     "android": {
@@ -26,6 +27,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "CAMERA",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ]
