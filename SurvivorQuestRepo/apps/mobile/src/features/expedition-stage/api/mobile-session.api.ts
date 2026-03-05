@@ -222,7 +222,20 @@ export async function fetchMobileRealizationClientDetails(apiBaseUrl: string, re
     return null;
   }
 
-  const result = await requestMobileApi<unknown>(apiBaseUrl, "/api/realizations");
+  let result: unknown;
+
+  try {
+    result = await requestMobileApi<unknown>(apiBaseUrl, "/realizations");
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "";
+
+    if (!/404|not found/i.test(errorMessage)) {
+      throw error;
+    }
+
+    result = await requestMobileApi<unknown>(apiBaseUrl, "/api/realizations");
+  }
+
   const realizations = asArray(result).map((item) => asRecord(item));
   const matched = realizations.find((item) => asString(item.id) === normalizedRealizationId);
 

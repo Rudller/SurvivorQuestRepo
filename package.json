@@ -1,0 +1,9 @@
+{
+  "name": "survivorquest-launcher",
+  "private": true,
+  "scripts": {
+    "start": "pnpm --dir \"SurvivorQuestRepo\" start",
+    "start:dev": "pnpm --dir \"SurvivorQuestRepo\" start:dev",
+    "dev": "pnpm --dir \"SurvivorQuestRepo\" dev:all"
+  }
+}
