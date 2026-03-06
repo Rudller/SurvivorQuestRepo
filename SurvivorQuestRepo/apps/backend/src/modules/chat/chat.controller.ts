@@ -1,4 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+} from '@nestjs/common';
 import { ChatService } from './chat.service';
 
 type CreateChatMessagePayload = {
@@ -11,12 +17,12 @@ export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Get()
-  getChatMessages() {
+  async getChatMessages() {
     return this.chatService.listMessages();
   }
 
   @Post()
-  createChatMessage(@Body() payload: CreateChatMessagePayload) {
+  async createChatMessage(@Body() payload: CreateChatMessagePayload) {
     if (!payload?.userName?.trim() || !payload.content?.trim()) {
       throw new BadRequestException('Invalid payload');
     }

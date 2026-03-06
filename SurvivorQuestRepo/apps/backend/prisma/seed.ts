@@ -47,9 +47,19 @@ const users: Prisma.UserCreateManyInput[] = [
     email: 'test@mail.com',
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
+    passwordHash: 'hasło123',
     photoUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=test@mail.com',
     createdAt: atOffset(-10 * dayMs),
     updatedAt: atOffset(-5 * dayMs),
+  },
+];
+
+const chatMessages: Prisma.ChatMessageCreateManyInput[] = [
+  {
+    id: 'm-1',
+    userName: 'Admin',
+    content: 'Witajcie! Tu możecie zostawiać wiadomości dla zespołu.',
+    createdAt: atOffset(-1 * hourMs),
   },
 ];
 
@@ -301,6 +311,7 @@ async function main() {
   await prisma.scenarioStation.createMany({ data: scenarioStations });
   await prisma.realization.createMany({ data: realizations });
   await prisma.eventLog.createMany({ data: eventLogs });
+  await prisma.chatMessage.createMany({ data: chatMessages });
 
   console.log(
     `Seed completed: ${users.length} users, ${stations.length} stations, ${scenarios.length} scenarios, ${realizations.length} realizations.`,

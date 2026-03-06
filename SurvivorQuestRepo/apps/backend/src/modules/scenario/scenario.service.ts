@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
 
 export type ScenarioEntity = {
@@ -13,47 +14,123 @@ export type ScenarioEntity = {
 
 @Injectable()
 export class ScenarioService {
-  private scenarios: ScenarioEntity[] = this.createInitialScenarios();
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stationService: StationService,
+  ) {}
 
-  constructor(private readonly stationService: StationService) {}
+  async listScenarios() {
+    const scenarios = await this.prisma.scenario.findMany({
+      include: {
+        scenarioStations: { orderBy: { order: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-  listScenarios() {
-    return this.scenarios;
+    return scenarios.map((scenario) => ({
+      id: scenario.id,
+      name: scenario.name,
+      description: scenario.description,
+      stationIds: scenario.scenarioStations.map((item) => item.stationId),
+      sourceTemplateId: scenario.sourceTemplateId || undefined,
+      createdAt: scenario.createdAt.toISOString(),
+      updatedAt: scenario.updatedAt.toISOString(),
+    }));
   }
 
-  findScenarioById(id: string) {
-    return this.scenarios.find((scenario) => scenario.id === id) || null;
+  async findScenarioById(id: string) {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id },
+      include: {
+        scenarioStations: { orderBy: { order: 'asc' } },
+      },
+    });
+
+    if (!scenario) {
+      return null;
+    }
+
+    return {
+      id: scenario.id,
+      name: scenario.name,
+      description: scenario.description,
+      stationIds: scenario.scenarioStations.map((item) => item.stationId),
+      sourceTemplateId: scenario.sourceTemplateId || undefined,
+      createdAt: scenario.createdAt.toISOString(),
+      updatedAt: scenario.updatedAt.toISOString(),
+    };
   }
 
-  addScenario(scenario: ScenarioEntity) {
-    this.scenarios = [scenario, ...this.scenarios];
-    return scenario;
+  async addScenario(scenario: ScenarioEntity) {
+    await this.prisma.scenario.create({
+      data: {
+        id: scenario.id,
+        name: scenario.name,
+        description: scenario.description,
+        sourceTemplateId: scenario.sourceTemplateId,
+        scenarioStations: {
+          create: scenario.stationIds.map((stationId, index) => ({
+            stationId,
+            order: index + 1,
+          })),
+        },
+      },
+    });
+
+    const created = await this.findScenarioById(scenario.id);
+    if (!created) {
+      throw new Error('Failed to create scenario');
+    }
+
+    return created;
   }
 
-  replaceScenario(updatedScenario: ScenarioEntity) {
-    this.scenarios = this.scenarios.map((scenario) =>
-      scenario.id === updatedScenario.id ? updatedScenario : scenario,
-    );
-    return updatedScenario;
+  async replaceScenario(updatedScenario: ScenarioEntity) {
+    await this.prisma.$transaction([
+      this.prisma.scenario.update({
+        where: { id: updatedScenario.id },
+        data: {
+          name: updatedScenario.name,
+          description: updatedScenario.description,
+          sourceTemplateId: updatedScenario.sourceTemplateId,
+        },
+      }),
+      this.prisma.scenarioStation.deleteMany({
+        where: { scenarioId: updatedScenario.id },
+      }),
+      this.prisma.scenarioStation.createMany({
+        data: updatedScenario.stationIds.map((stationId, index) => ({
+          scenarioId: updatedScenario.id,
+          stationId,
+          order: index + 1,
+        })),
+      }),
+    ]);
+
+    const updated = await this.findScenarioById(updatedScenario.id);
+    if (!updated) {
+      throw new Error('Failed to update scenario');
+    }
+
+    return updated;
   }
 
-  removeScenario(id: string) {
-    this.scenarios = this.scenarios.filter((scenario) => scenario.id !== id);
+  async removeScenario(id: string) {
+    await this.prisma.scenario.delete({ where: { id } });
   }
 
-  cloneScenario(
+  async cloneScenario(
     sourceId: string,
     options?: { realizationId?: string },
-  ): ScenarioEntity | null {
-    const source = this.findScenarioById(sourceId);
+  ): Promise<ScenarioEntity | null> {
+    const source = await this.findScenarioById(sourceId);
 
     if (!source) {
       return null;
     }
 
-    const nowIso = new Date().toISOString();
     const clonedScenarioId = crypto.randomUUID();
-    const clonedStations = this.stationService.cloneStationsForScenario(
+    const clonedStations = await this.stationService.cloneStationsForScenario(
       source.stationIds,
       {
         scenarioInstanceId: clonedScenarioId,
@@ -61,51 +138,14 @@ export class ScenarioService {
       },
     );
 
-    const cloned: ScenarioEntity = {
+    return this.addScenario({
       id: clonedScenarioId,
       name: source.name,
       description: source.description,
       stationIds: clonedStations.map((station) => station.id),
       sourceTemplateId: source.sourceTemplateId ?? source.id,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    this.scenarios = [cloned, ...this.scenarios];
-    return cloned;
-  }
-
-  private createInitialScenarios() {
-    const now = new Date().toISOString();
-
-    return [
-      {
-        id: 's-1',
-        name: 'Scenariusz integracyjny',
-        description:
-          'Wariant bazowy z trzema stanowiskami terenowymi i jednym quizem końcowym.',
-        stationIds: ['g-1', 'g-2', 'g-4'],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 's-2',
-        name: 'Scenariusz nocny',
-        description:
-          'Krótki scenariusz dla mniejszej grupy, nacisk na reakcję kryzysową.',
-        stationIds: ['g-4', 'g-5'],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 's-3',
-        name: 'Scenariusz terenowy',
-        description:
-          'Dłuższy wariant terenowy z orientacją i zadaniami współpracy.',
-        stationIds: ['g-2', 'g-3'],
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
   }
 }

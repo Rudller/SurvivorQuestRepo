@@ -39,12 +39,12 @@ export class StationController {
   constructor(private readonly stationService: StationService) {}
 
   @Get()
-  getStations() {
+  async getStations() {
     return this.stationService.listTemplateStations();
   }
 
   @Post()
-  createStation(@Body() payload: CreateStationPayload) {
+  async createStation(@Body() payload: CreateStationPayload) {
     const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
       payload.timeLimitSeconds,
     );
@@ -69,9 +69,7 @@ export class StationController {
       description: payload.description.trim(),
       imageUrl:
         payload.imageUrl?.trim() ||
-        `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(
-          payload.name.trim(),
-        )}`,
+        `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(payload.name.trim())}`,
       points: Math.round(payload.points),
       timeLimitSeconds: parsedTimeLimit.value,
       createdAt: now,
@@ -80,7 +78,7 @@ export class StationController {
   }
 
   @Put()
-  updateStation(@Body() payload: UpdateStationPayload) {
+  async updateStation(@Body() payload: UpdateStationPayload) {
     const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
       payload.timeLimitSeconds,
     );
@@ -98,7 +96,7 @@ export class StationController {
       throw new BadRequestException('Invalid payload');
     }
 
-    const current = this.stationService.findStationById(payload.id);
+    const current = await this.stationService.findStationById(payload.id);
 
     if (!current || !this.stationService.isTemplateStation(current)) {
       throw new NotFoundException('Station not found');
@@ -111,9 +109,7 @@ export class StationController {
       description: payload.description.trim(),
       imageUrl:
         payload.imageUrl?.trim() ||
-        `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(
-          payload.name.trim(),
-        )}`,
+        `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(payload.name.trim())}`,
       points: Math.round(payload.points),
       timeLimitSeconds: parsedTimeLimit.value,
       updatedAt: new Date().toISOString(),
@@ -121,12 +117,12 @@ export class StationController {
   }
 
   @Delete()
-  deleteStation(@Body() payload: DeleteStationPayload) {
+  async deleteStation(@Body() payload: DeleteStationPayload) {
     if (!payload?.id?.trim() || !payload.confirmName?.trim()) {
       throw new BadRequestException('Invalid payload');
     }
 
-    const current = this.stationService.findStationById(payload.id);
+    const current = await this.stationService.findStationById(payload.id);
 
     if (!current || !this.stationService.isTemplateStation(current)) {
       throw new NotFoundException('Station not found');
@@ -136,7 +132,7 @@ export class StationController {
       throw new BadRequestException('Station name confirmation does not match');
     }
 
-    this.stationService.removeStationById(payload.id);
+    await this.stationService.removeStationById(payload.id);
     return { id: payload.id };
   }
 }

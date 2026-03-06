@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, StationType as PrismaStationType } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export type StationType = 'quiz' | 'time' | 'points';
 
@@ -33,29 +35,52 @@ export type ParseTimeLimitResult =
 
 @Injectable()
 export class StationService {
-  private stations: StationEntity[] = this.createInitialStations();
+  constructor(private readonly prisma: PrismaService) {}
 
   parseTimeLimitSeconds(value: unknown): ParseTimeLimitResult {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 600) {
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 600
+    ) {
       return { ok: false, value: null };
     }
 
     return { ok: true, value: Math.round(value) };
   }
 
-  listTemplateStations() {
-    return this.stations.filter(
-      (station) => !station.scenarioInstanceId && !station.realizationId,
+  async listTemplateStations() {
+    const stations = await this.prisma.station.findMany({
+      where: {
+        scenarioInstanceId: null,
+        realizationId: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return stations.map((station) => this.mapStation(station));
+  }
+
+  async findStationById(id: string) {
+    const station = await this.prisma.station.findUnique({ where: { id } });
+    return station ? this.mapStation(station) : null;
+  }
+
+  async findStationsByIds(ids: string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const stations = await this.prisma.station.findMany({
+      where: { id: { in: ids } },
+    });
+
+    const stationMap = new Map(
+      stations.map((station) => [station.id, this.mapStation(station)]),
     );
-  }
-
-  findStationById(id: string) {
-    return this.stations.find((station) => station.id === id) || null;
-  }
-
-  findStationsByIds(ids: string[]) {
     return ids
-      .map((stationId) => this.findStationById(stationId))
+      .map((id) => stationMap.get(id))
       .filter((station): station is StationEntity => Boolean(station));
   }
 
@@ -63,115 +88,141 @@ export class StationService {
     return !station.scenarioInstanceId && !station.realizationId;
   }
 
-  addTemplateStation(
+  async addTemplateStation(
     station: Omit<
       StationEntity,
       'sourceTemplateId' | 'scenarioInstanceId' | 'realizationId'
     >,
   ) {
-    const templateStation: StationEntity = {
-      ...station,
-      sourceTemplateId: station.id,
-      scenarioInstanceId: undefined,
-      realizationId: undefined,
-    };
+    const created = await this.prisma.station.create({
+      data: {
+        id: station.id,
+        name: station.name,
+        type: this.toPrismaType(station.type),
+        description: station.description,
+        imageUrl: station.imageUrl,
+        points: station.points,
+        timeLimitSeconds: station.timeLimitSeconds,
+        sourceTemplateId: station.id,
+      },
+    });
 
-    this.stations = [templateStation, ...this.stations];
-    return templateStation;
+    return this.mapStation(created);
   }
 
-  replaceTemplateStation(updatedStation: StationEntity) {
-    this.stations = this.stations.map((station) =>
-      station.id === updatedStation.id ? updatedStation : station,
-    );
-    return updatedStation;
+  async replaceTemplateStation(updatedStation: StationEntity) {
+    const updated = await this.prisma.station.update({
+      where: { id: updatedStation.id },
+      data: {
+        name: updatedStation.name,
+        type: this.toPrismaType(updatedStation.type),
+        description: updatedStation.description,
+        imageUrl: updatedStation.imageUrl,
+        points: updatedStation.points,
+        timeLimitSeconds: updatedStation.timeLimitSeconds,
+      },
+    });
+
+    return this.mapStation(updated);
   }
 
-  removeStationById(id: string) {
-    const beforeLength = this.stations.length;
-    this.stations = this.stations.filter((station) => station.id !== id);
+  async removeStationById(id: string) {
+    try {
+      await this.prisma.station.delete({ where: { id } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException('Station not found');
+      }
 
-    if (this.stations.length === beforeLength) {
-      throw new NotFoundException('Station not found');
+      throw error;
     }
   }
 
-  removeStationsByIds(ids: string[]) {
-    const idSet = new Set(ids);
-    this.stations = this.stations.filter((station) => !idSet.has(station.id));
+  async removeStationsByIds(ids: string[]) {
+    await this.prisma.station.deleteMany({
+      where: {
+        id: { in: ids },
+      },
+    });
   }
 
-  cloneStationsForScenario(
+  async cloneStationsForScenario(
     sourceStationIds: string[],
     options?: { scenarioInstanceId?: string; realizationId?: string },
   ) {
-    const nowIso = new Date().toISOString();
+    const sourceStations = await this.findStationsByIds(sourceStationIds);
+    const cloned: StationEntity[] = [];
 
-    const clonedStations = sourceStationIds.flatMap((stationId) => {
-      const sourceStation = this.findStationById(stationId);
+    for (const source of sourceStations) {
+      const created = await this.prisma.station.create({
+        data: {
+          name: source.name,
+          type: this.toPrismaType(source.type),
+          description: source.description,
+          imageUrl: source.imageUrl,
+          points: source.points,
+          timeLimitSeconds: source.timeLimitSeconds,
+          sourceTemplateId: source.sourceTemplateId ?? source.id,
+          scenarioInstanceId:
+            options?.scenarioInstanceId ?? source.scenarioInstanceId,
+          realizationId: options?.realizationId ?? source.realizationId,
+        },
+      });
+      cloned.push(this.mapStation(created));
+    }
 
-      if (!sourceStation) {
-        return [];
-      }
-
-      const clonedStation: StationEntity = {
-        ...sourceStation,
-        id: crypto.randomUUID(),
-        sourceTemplateId: sourceStation.sourceTemplateId ?? sourceStation.id,
-        scenarioInstanceId:
-          options?.scenarioInstanceId ?? sourceStation.scenarioInstanceId,
-        realizationId: options?.realizationId ?? sourceStation.realizationId,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-
-      return [clonedStation];
-    });
-
-    this.stations = [...clonedStations, ...this.stations];
-    return clonedStations;
+    return cloned;
   }
 
-  createScenarioStationInstance(
+  async createScenarioStationInstance(
     input: StationDraftInput,
     context: { scenarioInstanceId: string; realizationId?: string },
   ) {
-    const nowIso = new Date().toISOString();
-    const stationId = crypto.randomUUID();
-    const normalized = this.normalizeStationDraft(input, stationId);
+    const normalized = this.normalizeStationDraft(input, crypto.randomUUID());
 
-    const station: StationEntity = {
-      id: stationId,
-      ...normalized,
-      scenarioInstanceId: context.scenarioInstanceId,
-      realizationId: context.realizationId,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
+    const created = await this.prisma.station.create({
+      data: {
+        id: crypto.randomUUID(),
+        name: normalized.name,
+        type: this.toPrismaType(normalized.type),
+        description: normalized.description,
+        imageUrl: normalized.imageUrl,
+        points: normalized.points,
+        timeLimitSeconds: normalized.timeLimitSeconds,
+        sourceTemplateId: normalized.sourceTemplateId,
+        scenarioInstanceId: context.scenarioInstanceId,
+        realizationId: context.realizationId,
+      },
+    });
 
-    this.stations = [station, ...this.stations];
-    return station;
+    return this.mapStation(created);
   }
 
-  updateScenarioStationInstance(id: string, input: StationDraftInput) {
-    const currentStation = this.findStationById(id);
-
-    if (!currentStation) {
+  async updateScenarioStationInstance(id: string, input: StationDraftInput) {
+    const current = await this.findStationById(id);
+    if (!current) {
       return null;
     }
 
-    const normalized = this.normalizeStationDraft(input, currentStation.id);
-    const updatedStation: StationEntity = {
-      ...currentStation,
-      ...normalized,
-      sourceTemplateId: normalized.sourceTemplateId ?? currentStation.sourceTemplateId,
-      updatedAt: new Date().toISOString(),
-    };
+    const normalized = this.normalizeStationDraft(input, current.id);
+    const updated = await this.prisma.station.update({
+      where: { id },
+      data: {
+        name: normalized.name,
+        type: this.toPrismaType(normalized.type),
+        description: normalized.description,
+        imageUrl: normalized.imageUrl,
+        points: normalized.points,
+        timeLimitSeconds: normalized.timeLimitSeconds,
+        sourceTemplateId:
+          normalized.sourceTemplateId ?? current.sourceTemplateId,
+      },
+    });
 
-    this.stations = this.stations.map((station) =>
-      station.id === id ? updatedStation : station,
-    );
-    return updatedStation;
+    return this.mapStation(updated);
   }
 
   private getFallbackImage(seed: string) {
@@ -189,82 +240,55 @@ export class StationService {
       name: normalizedName,
       type: input.type,
       description: input.description.trim(),
-      imageUrl: this.resolveImageUrl(input.imageUrl, normalizedName || currentId),
+      imageUrl: this.resolveImageUrl(
+        input.imageUrl,
+        normalizedName || currentId,
+      ),
       points: Math.round(input.points),
       timeLimitSeconds: Math.round(input.timeLimitSeconds),
       sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
     };
   }
 
-  private createInitialStations() {
-    const now = new Date().toISOString();
+  private mapStation(station: {
+    id: string;
+    name: string;
+    type: PrismaStationType;
+    description: string;
+    imageUrl: string | null;
+    points: number;
+    timeLimitSeconds: number;
+    sourceTemplateId: string | null;
+    scenarioInstanceId: string | null;
+    realizationId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): StationEntity {
+    return {
+      id: station.id,
+      name: station.name,
+      type: this.fromPrismaType(station.type),
+      description: station.description,
+      imageUrl: station.imageUrl || this.getFallbackImage(station.name),
+      points: station.points,
+      timeLimitSeconds: station.timeLimitSeconds,
+      sourceTemplateId: station.sourceTemplateId || undefined,
+      scenarioInstanceId: station.scenarioInstanceId || undefined,
+      realizationId: station.realizationId || undefined,
+      createdAt: station.createdAt.toISOString(),
+      updatedAt: station.updatedAt.toISOString(),
+    };
+  }
 
-    return [
-      {
-        id: 'g-1',
-        name: 'Quiz: Podstawy survivalu',
-        type: 'quiz' as const,
-        description:
-          'Stanowisko quizowe z pytaniami o bezpieczeństwo i podstawy przetrwania.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=640&q=80&auto=format&fit=crop',
-        points: 100,
-        timeLimitSeconds: 300,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'g-2',
-        name: 'Na czas: Ewakuacja z lasu',
-        type: 'time' as const,
-        description:
-          'Stanowisko na czas z zadaniami zespołowymi wykonywanymi pod presją minut.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?w=640&q=80&auto=format&fit=crop',
-        points: 180,
-        timeLimitSeconds: 420,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'g-3',
-        name: 'Na punkty: Mapa i kompas',
-        type: 'points' as const,
-        description:
-          'Stanowisko punktowane za poprawne odnalezienie punktów kontrolnych i współpracę.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1502920514313-52581002a659?w=640&q=80&auto=format&fit=crop',
-        points: 220,
-        timeLimitSeconds: 0,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'g-4',
-        name: 'Quiz: Alarm nocny',
-        type: 'quiz' as const,
-        description:
-          'Szybki quiz decyzyjny z reakcjami kryzysowymi i priorytetyzacją działań.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1526498460520-4c246339dccb?w=640&q=80&auto=format&fit=crop',
-        points: 130,
-        timeLimitSeconds: 240,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'g-5',
-        name: 'Na punkty: Strefa taktyczna',
-        type: 'points' as const,
-        description:
-          'Stanowisko punktowane za mini-zadania logiczne i poprawne decyzje zespołowe.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=640&q=80&auto=format&fit=crop',
-        points: 160,
-        timeLimitSeconds: 0,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
+  private toPrismaType(type: StationType) {
+    if (type === 'quiz') return PrismaStationType.QUIZ;
+    if (type === 'time') return PrismaStationType.TIME;
+    return PrismaStationType.POINTS;
+  }
+
+  private fromPrismaType(type: PrismaStationType): StationType {
+    if (type === PrismaStationType.QUIZ) return 'quiz';
+    if (type === PrismaStationType.TIME) return 'time';
+    return 'points';
   }
 }

@@ -44,12 +44,12 @@ export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
 
   @Get('bootstrap')
-  getMobileBootstrap() {
+  async getMobileBootstrap() {
     return this.mobileService.getMobileBootstrap();
   }
 
   @Post('session/join')
-  joinMobileSession(@Body() payload: JoinSessionPayload) {
+  async joinMobileSession(@Body() payload: JoinSessionPayload) {
     return this.mobileService.joinMobileSession({
       joinCode: payload.joinCode || '',
       deviceId: payload.deviceId || '',
@@ -58,12 +58,12 @@ export class MobileController {
   }
 
   @Get('session/state')
-  getMobileSessionState(@Query('sessionToken') sessionToken?: string) {
+  async getMobileSessionState(@Query('sessionToken') sessionToken?: string) {
     return this.mobileService.getMobileSessionState(sessionToken || '');
   }
 
   @Post('team/claim')
-  claimMobileTeam(@Body() payload: ClaimTeamPayload) {
+  async claimMobileTeam(@Body() payload: ClaimTeamPayload) {
     return this.mobileService.claimMobileTeam({
       sessionToken: payload.sessionToken || '',
       name: payload.name || '',
@@ -74,7 +74,7 @@ export class MobileController {
   }
 
   @Post('team/select')
-  selectMobileTeam(@Body() payload: SelectTeamPayload) {
+  async selectMobileTeam(@Body() payload: SelectTeamPayload) {
     return this.mobileService.selectMobileTeam({
       sessionToken: payload.sessionToken || '',
       slotNumber: Number(payload.slotNumber),
@@ -82,14 +82,14 @@ export class MobileController {
   }
 
   @Post('team/randomize')
-  randomizeMobileTeam(@Body() payload: RandomizeTeamPayload) {
+  async randomizeMobileTeam(@Body() payload: RandomizeTeamPayload) {
     return this.mobileService.randomizeMobileTeam({
       sessionToken: payload.sessionToken || '',
     });
   }
 
   @Post('team/location')
-  updateMobileTeamLocation(@Body() payload: LocationPayload) {
+  async updateMobileTeamLocation(@Body() payload: LocationPayload) {
     return this.mobileService.updateMobileTeamLocation({
       sessionToken: payload.sessionToken || '',
       lat: Number(payload.lat),
@@ -100,7 +100,7 @@ export class MobileController {
   }
 
   @Post('task/complete')
-  completeMobileTask(@Body() payload: CompleteTaskPayload) {
+  async completeMobileTask(@Body() payload: CompleteTaskPayload) {
     return this.mobileService.completeMobileTask({
       sessionToken: payload.sessionToken || '',
       stationId: payload.stationId || '',
@@ -109,8 +109,13 @@ export class MobileController {
     });
   }
 
+  @Get('admin/realizations/current')
+  async getMobileAdminCurrentRealizationOverview() {
+    return this.mobileService.getMobileAdminRealizationOverview('current');
+  }
+
   @Get('admin/realizations/:realizationId')
-  getMobileAdminRealizationOverview(
+  async getMobileAdminRealizationOverview(
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminRealizationOverview(realizationId);

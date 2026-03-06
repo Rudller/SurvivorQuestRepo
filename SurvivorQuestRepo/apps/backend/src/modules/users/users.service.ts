@@ -1,4 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  UserRole as PrismaUserRole,
+  UserStatus as PrismaUserStatus,
+} from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export type UserRole = 'admin' | 'instructor';
 export type UserStatus = 'active' | 'invited' | 'blocked';
@@ -37,70 +42,107 @@ export type UpdateUserInput = {
 
 @Injectable()
 export class UsersService {
-  private users: UserRecord[] = [
-    {
-      id: '1',
-      displayName: 'Admin',
-      email: 'admin@survivorquest.app',
-      phone: '+48 500 600 700',
-      role: 'admin',
-      status: 'active',
-      photoUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=Admin',
-      lastLoginAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.users;
+  async findAll() {
+    const users = await this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map((user) => this.mapUser(user));
   }
 
-  create(input: CreateUserInput) {
-    const now = new Date().toISOString();
+  async create(input: CreateUserInput) {
     const safeEmail = input.email.trim();
     const safeDisplayName = input.displayName.trim();
 
-    const newUser: UserRecord = {
-      id: crypto.randomUUID(),
-      displayName: safeDisplayName,
-      email: safeEmail,
-      phone: input.phone?.trim() || undefined,
-      role: input.role,
-      status: input.status,
-      photoUrl:
-        input.photoUrl?.trim() || `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(safeEmail)}`,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const created = await this.prisma.user.create({
+      data: {
+        displayName: safeDisplayName,
+        email: safeEmail,
+        phone: input.phone?.trim() || null,
+        role: this.toPrismaRole(input.role),
+        status: this.toPrismaStatus(input.status),
+        photoUrl:
+          input.photoUrl?.trim() ||
+          `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(safeEmail)}`,
+      },
+    });
 
-    this.users = [newUser, ...this.users];
-    return newUser;
+    return this.mapUser(created);
   }
 
-  update(input: UpdateUserInput) {
-    const index = this.users.findIndex((user) => user.id === input.id);
+  async update(input: UpdateUserInput) {
+    const current = await this.prisma.user.findUnique({
+      where: { id: input.id },
+    });
 
-    if (index < 0) {
+    if (!current) {
       throw new NotFoundException('User not found');
     }
 
-    const current = this.users[index];
-    const updated: UserRecord = {
-      ...current,
-      displayName: input.displayName?.trim() || current.displayName,
-      email: input.email?.trim() || current.email,
-      phone: input.phone?.trim() || undefined,
-      role: input.role || current.role,
-      status: input.status || current.status,
-      photoUrl:
-        input.photoUrl?.trim() ||
-        current.photoUrl ||
-        `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(input.email || current.email)}`,
-      updatedAt: new Date().toISOString(),
-    };
+    const nextEmail = input.email?.trim() || current.email;
+    const updated = await this.prisma.user.update({
+      where: { id: input.id },
+      data: {
+        displayName: input.displayName?.trim() || current.displayName,
+        email: nextEmail,
+        phone: input.phone?.trim() || null,
+        role: input.role ? this.toPrismaRole(input.role) : current.role,
+        status: input.status
+          ? this.toPrismaStatus(input.status)
+          : current.status,
+        photoUrl:
+          input.photoUrl?.trim() ||
+          current.photoUrl ||
+          `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(nextEmail)}`,
+      },
+    });
 
-    this.users[index] = updated;
-    return updated;
+    return this.mapUser(updated);
+  }
+
+  private mapUser(user: {
+    id: string;
+    displayName: string;
+    email: string;
+    phone: string | null;
+    role: PrismaUserRole;
+    status: PrismaUserStatus;
+    photoUrl: string | null;
+    lastLoginAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): UserRecord {
+    return {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      phone: user.phone || undefined,
+      role: user.role === PrismaUserRole.ADMIN ? 'admin' : 'instructor',
+      status: this.fromPrismaStatus(user.status),
+      photoUrl:
+        user.photoUrl ||
+        `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.email)}`,
+      lastLoginAt: user.lastLoginAt?.toISOString(),
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+    };
+  }
+
+  private toPrismaRole(role: UserRole) {
+    return role === 'admin' ? PrismaUserRole.ADMIN : PrismaUserRole.INSTRUCTOR;
+  }
+
+  private toPrismaStatus(status: UserStatus) {
+    if (status === 'active') return PrismaUserStatus.ACTIVE;
+    if (status === 'blocked') return PrismaUserStatus.BLOCKED;
+    return PrismaUserStatus.INVITED;
+  }
+
+  private fromPrismaStatus(status: PrismaUserStatus): UserStatus {
+    if (status === PrismaUserStatus.ACTIVE) return 'active';
+    if (status === PrismaUserStatus.BLOCKED) return 'blocked';
+    return 'invited';
   }
 }

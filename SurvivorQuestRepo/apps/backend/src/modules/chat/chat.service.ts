@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export type ChatMessage = {
   id: string;
@@ -14,28 +15,34 @@ type CreateChatMessageInput = {
 
 @Injectable()
 export class ChatService {
-  private messages: ChatMessage[] = [
-    {
-      id: 'm-1',
-      userName: 'Admin',
-      content: 'Witajcie! Tu możecie zostawiać wiadomości dla zespołu.',
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  listMessages() {
-    return this.messages;
+  async listMessages() {
+    const messages = await this.prisma.chatMessage.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return messages.map((message) => ({
+      id: message.id,
+      userName: message.userName,
+      content: message.content,
+      createdAt: message.createdAt.toISOString(),
+    }));
   }
 
-  createMessage(input: CreateChatMessageInput) {
-    const message: ChatMessage = {
-      id: crypto.randomUUID(),
-      userName: input.userName.trim(),
-      content: input.content.trim(),
-      createdAt: new Date().toISOString(),
-    };
+  async createMessage(input: CreateChatMessageInput) {
+    const created = await this.prisma.chatMessage.create({
+      data: {
+        userName: input.userName.trim(),
+        content: input.content.trim(),
+      },
+    });
 
-    this.messages = [message, ...this.messages];
-    return message;
+    return {
+      id: created.id,
+      userName: created.userName,
+      content: created.content,
+      createdAt: created.createdAt.toISOString(),
+    };
   }
 }

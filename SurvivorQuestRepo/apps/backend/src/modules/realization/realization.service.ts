@@ -4,6 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  EventActorType,
+  RealizationStatus as PrismaRealizationStatus,
+  RealizationType as PrismaRealizationType,
+} from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
   ScenarioService,
   type ScenarioEntity,
 } from '../scenario/scenario.service';
@@ -91,26 +97,6 @@ type ScenarioStationDraftPayload = {
   sourceTemplateId?: string;
 };
 
-type ValidScenarioStationDraft = {
-  id?: string;
-  name: string;
-  type: StationType;
-  description: string;
-  imageUrl?: string;
-  points: number;
-  timeLimitSeconds: number;
-  sourceTemplateId?: string;
-};
-
-type ScenarioStationDraftsResult =
-  | { provided: false; drafts: [] }
-  | { provided: true; drafts: ScenarioStationDraftPayload[] }
-  | { provided: true; drafts: null };
-
-type SyncScenarioStationsResult =
-  | { ok: true; scenario: ScenarioEntity; stations: StationEntity[] }
-  | { ok: false; message: string };
-
 const REALIZATION_TYPES: RealizationType[] = [
   'outdoor-games',
   'hotel-games',
@@ -128,195 +114,357 @@ const REALIZATION_STATUSES: RealizationStatus[] = [
 
 @Injectable()
 export class RealizationService {
-  private realizations: RealizationEntity[] = this.createInitialRealizations();
-
   constructor(
+    private readonly prisma: PrismaService,
     private readonly scenarioService: ScenarioService,
     private readonly stationService: StationService,
   ) {}
 
-  listRealizations() {
-    const normalizedRealizations = this.realizations.map((realization) => {
-      const resolvedStations = this.resolveRealizationStations(realization);
-
-      return {
-        ...realization,
-        ...resolvedStations,
-        requiredDevicesCount: this.calculateRequiredDevices(realization.teamCount),
-        status: this.resolveRealizationStatus(
-          realization.status,
-          realization.scheduledAt,
-        ),
-      };
+  async listRealizations() {
+    const realizations = await this.prisma.realization.findMany({
+      orderBy: { createdAt: 'desc' },
     });
 
-    this.realizations = normalizedRealizations;
-    return normalizedRealizations;
+    const mapped = await Promise.all(
+      realizations.map((item) => this.toEntity(item.id)),
+    );
+    return mapped.filter((item) => item !== null) as RealizationEntity[];
   }
 
-  createRealization(payload: CreateRealizationPayload) {
-    const companyName =
-      typeof payload.companyName === 'string' ? payload.companyName.trim() : '';
-    const scenarioId =
-      typeof payload.scenarioId === 'string' ? payload.scenarioId.trim() : '';
-    const scheduledTimestamp = payload.scheduledAt
-      ? new Date(payload.scheduledAt).getTime()
-      : NaN;
-    const stationDraftsResult = this.readScenarioStationDrafts(
-      payload.scenarioStations,
-    );
-    const validatedStationDrafts =
-      stationDraftsResult.provided && stationDraftsResult.drafts
-        ? this.validateScenarioStationDrafts(stationDraftsResult.drafts)
-        : [];
-
-    const sanitizedContactPerson =
-      typeof payload.contactPerson === 'string'
-        ? payload.contactPerson.trim()
-        : '';
-    const sanitizedContactPhone =
-      typeof payload.contactPhone === 'string'
-        ? payload.contactPhone.trim()
-        : '';
-    const sanitizedContactEmail =
-      typeof payload.contactEmail === 'string'
-        ? payload.contactEmail.trim()
-        : '';
-    const sanitizedInstructors = this.sanitizeInstructors(payload.instructors);
-    const teamCount = Number.isFinite(payload.teamCount)
-      ? Math.round(payload.teamCount as number)
-      : NaN;
-    const peopleCount = Number.isFinite(payload.peopleCount)
-      ? Math.round(payload.peopleCount as number)
-      : NaN;
-    const positionsCount = Number.isFinite(payload.positionsCount)
-      ? Math.round(payload.positionsCount as number)
-      : NaN;
-
-    if (
-      !companyName ||
-      !sanitizedContactPerson ||
-      (!sanitizedContactPhone && !sanitizedContactEmail) ||
-      !this.isValidRealizationType(payload.type) ||
-      !scenarioId ||
-      !Number.isFinite(teamCount) ||
-      teamCount < 1 ||
-      !Number.isFinite(peopleCount) ||
-      peopleCount < 1 ||
-      !Number.isFinite(positionsCount) ||
-      positionsCount < 1 ||
-      !this.isValidRealizationStatus(payload.status) ||
-      !payload.scheduledAt ||
-      !Number.isFinite(scheduledTimestamp) ||
-      (stationDraftsResult.provided && stationDraftsResult.drafts === null) ||
-      (stationDraftsResult.provided && validatedStationDrafts === null)
-    ) {
-      throw new BadRequestException('Invalid payload');
-    }
-
+  async createRealization(payload: CreateRealizationPayload) {
+    const validated = this.validatePayload(payload);
     const realizationId = crypto.randomUUID();
-    const clonedScenario = this.scenarioService.cloneScenario(scenarioId, {
-      realizationId,
-    });
+    const clonedScenario = await this.scenarioService.cloneScenario(
+      validated.scenarioId,
+      {
+        realizationId,
+      },
+    );
 
     if (!clonedScenario) {
       throw new BadRequestException('Scenario not found');
     }
 
-    const syncResult = this.syncScenarioStations(
-      clonedScenario,
+    const finalStations = await this.syncScenarioStations(
       realizationId,
-      stationDraftsResult.provided
-        ? this.alignDraftIdsToScenario(
-            clonedScenario,
-            validatedStationDrafts as ValidScenarioStationDraft[],
-          )
-        : undefined,
+      clonedScenario,
+      validated.stationDrafts,
     );
 
-    if (!syncResult.ok) {
-      throw new BadRequestException(syncResult.message);
+    await this.prisma.realization.create({
+      data: {
+        id: realizationId,
+        companyName: validated.companyName,
+        contactPerson: validated.contactPerson,
+        contactPhone: validated.contactPhone,
+        contactEmail: validated.contactEmail,
+        instructors: validated.instructors,
+        type: this.toPrismaType(validated.type),
+        logoUrl: validated.logoUrl,
+        offerPdfUrl: validated.offerPdfUrl,
+        offerPdfName: validated.offerPdfName,
+        scenarioId: clonedScenario.id,
+        teamCount: validated.teamCount,
+        requiredDevicesCount: this.calculateRequiredDevices(
+          validated.teamCount,
+        ),
+        peopleCount: validated.peopleCount,
+        positionsCount: validated.positionsCount,
+        status: this.toPrismaStatus(
+          this.resolveRealizationStatus(
+            validated.status,
+            validated.scheduledAt,
+          ),
+        ),
+        scheduledAt: new Date(validated.scheduledAt),
+        locationRequired: true,
+        joinCode: await this.createUniqueJoinCode(
+          validated.companyName,
+          realizationId,
+        ),
+      },
+    });
+
+    await this.createLog(
+      realizationId,
+      validated.changedBy,
+      'created',
+      'Utworzono realizację.',
+    );
+
+    const entity = await this.toEntity(realizationId, finalStations);
+    if (!entity) {
+      throw new BadRequestException('Realization not found');
     }
 
-    const nowIso = new Date().toISOString();
-    const changedBy = this.getChangedBy(payload.changedBy);
-    const nextScheduledAt = new Date(scheduledTimestamp).toISOString();
-    const newRealization: RealizationEntity = {
-      id: realizationId,
-      companyName,
-      contactPerson: sanitizedContactPerson,
-      contactPhone: sanitizedContactPhone || undefined,
-      contactEmail: sanitizedContactEmail || undefined,
-      instructors: sanitizedInstructors,
-      type: payload.type,
-      logoUrl: payload.logoUrl?.trim() || undefined,
-      offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
-      offerPdfName: payload.offerPdfName?.trim() || undefined,
-      scenarioId: syncResult.scenario.id,
-      stationIds: syncResult.stations.map((station) => station.id),
-      scenarioStations: syncResult.stations,
-      teamCount,
-      requiredDevicesCount: this.calculateRequiredDevices(teamCount),
-      peopleCount,
-      positionsCount,
-      status: this.resolveRealizationStatus(payload.status, nextScheduledAt),
-      scheduledAt: nextScheduledAt,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      logs: [this.createLog(changedBy, 'created', 'Utworzono realizację.')],
-    };
-
-    this.realizations = [newRealization, ...this.realizations];
-    return newRealization;
+    return entity;
   }
 
-  updateRealization(payload: UpdateRealizationPayload) {
-    const realizationId =
-      typeof payload.id === 'string' ? payload.id.trim() : '';
-    const companyName =
-      typeof payload.companyName === 'string' ? payload.companyName.trim() : '';
-    const scenarioId =
-      typeof payload.scenarioId === 'string' ? payload.scenarioId.trim() : '';
-    const scheduledTimestamp = payload.scheduledAt
-      ? new Date(payload.scheduledAt).getTime()
-      : NaN;
-    const stationDraftsResult = this.readScenarioStationDrafts(
-      payload.scenarioStations,
-    );
-    const validatedStationDrafts =
-      stationDraftsResult.provided && stationDraftsResult.drafts
-        ? this.validateScenarioStationDrafts(stationDraftsResult.drafts)
-        : [];
+  async updateRealization(payload: UpdateRealizationPayload) {
+    const realizationId = payload.id?.trim();
+    if (!realizationId) {
+      throw new BadRequestException('Invalid payload');
+    }
 
-    const sanitizedContactPerson =
-      typeof payload.contactPerson === 'string'
-        ? payload.contactPerson.trim()
+    const current = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+    });
+    if (!current) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    const validated = this.validatePayload(payload);
+    const requestedScenario = await this.scenarioService.findScenarioById(
+      validated.scenarioId,
+    );
+    if (!requestedScenario) {
+      throw new BadRequestException('Scenario not found');
+    }
+
+    const scenario =
+      requestedScenario.id === current.scenarioId
+        ? requestedScenario
+        : await this.scenarioService.cloneScenario(requestedScenario.id, {
+            realizationId,
+          });
+
+    if (!scenario) {
+      throw new BadRequestException('Scenario not found');
+    }
+
+    const finalStations = await this.syncScenarioStations(
+      realizationId,
+      scenario,
+      validated.stationDrafts,
+    );
+
+    await this.prisma.realization.update({
+      where: { id: realizationId },
+      data: {
+        companyName: validated.companyName,
+        contactPerson: validated.contactPerson,
+        contactPhone: validated.contactPhone,
+        contactEmail: validated.contactEmail,
+        instructors: validated.instructors,
+        type: this.toPrismaType(validated.type),
+        logoUrl: validated.logoUrl,
+        offerPdfUrl: validated.offerPdfUrl,
+        offerPdfName: validated.offerPdfName,
+        scenarioId: scenario.id,
+        teamCount: validated.teamCount,
+        requiredDevicesCount: this.calculateRequiredDevices(
+          validated.teamCount,
+        ),
+        peopleCount: validated.peopleCount,
+        positionsCount: validated.positionsCount,
+        status: this.toPrismaStatus(
+          this.resolveRealizationStatus(
+            validated.status,
+            validated.scheduledAt,
+          ),
+        ),
+        scheduledAt: new Date(validated.scheduledAt),
+      },
+    });
+
+    await this.createLog(
+      realizationId,
+      validated.changedBy,
+      'updated',
+      'Zaktualizowano realizację.',
+    );
+
+    const entity = await this.toEntity(realizationId, finalStations);
+    if (!entity) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    return entity;
+  }
+
+  private async syncScenarioStations(
+    realizationId: string,
+    scenario: ScenarioEntity,
+    drafts: ScenarioStationDraftPayload[] | undefined,
+  ) {
+    if (!drafts) {
+      return this.stationService.findStationsByIds(scenario.stationIds);
+    }
+
+    if (drafts.length === 0) {
+      throw new BadRequestException(
+        'Realization must include at least one station',
+      );
+    }
+
+    const normalized: StationDraftInput[] = drafts.map((draft) => {
+      const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
+        draft.timeLimitSeconds,
+      );
+      if (
+        !draft.name?.trim() ||
+        !draft.description?.trim() ||
+        !this.isValidStationType(draft.type) ||
+        typeof draft.points !== 'number' ||
+        draft.points <= 0 ||
+        !parsedTimeLimit.ok
+      ) {
+        throw new BadRequestException('Invalid payload');
+      }
+
+      return {
+        name: draft.name.trim(),
+        type: draft.type,
+        description: draft.description.trim(),
+        imageUrl: draft.imageUrl?.trim() || undefined,
+        points: Math.round(draft.points),
+        timeLimitSeconds: parsedTimeLimit.value,
+        sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,
+      };
+    });
+
+    const currentStations = await this.stationService.findStationsByIds(
+      scenario.stationIds,
+    );
+    const nextStations: StationEntity[] = [];
+
+    for (let index = 0; index < normalized.length; index += 1) {
+      const existing = currentStations[index];
+      if (existing) {
+        const updated = await this.stationService.updateScenarioStationInstance(
+          existing.id,
+          normalized[index],
+        );
+        if (!updated) {
+          throw new BadRequestException('Station not found');
+        }
+        nextStations.push(updated);
+      } else {
+        const created = await this.stationService.createScenarioStationInstance(
+          normalized[index],
+          {
+            scenarioInstanceId: scenario.id,
+            realizationId,
+          },
+        );
+        nextStations.push(created);
+      }
+    }
+
+    const toRemove = currentStations
+      .slice(normalized.length)
+      .map((item) => item.id);
+    if (toRemove.length > 0) {
+      await this.stationService.removeStationsByIds(toRemove);
+    }
+
+    await this.scenarioService.replaceScenario({
+      ...scenario,
+      stationIds: nextStations.map((item) => item.id),
+      updatedAt: new Date().toISOString(),
+    });
+
+    return nextStations;
+  }
+
+  private async toEntity(
+    realizationId: string,
+    stationsFromSync?: StationEntity[],
+  ) {
+    const realization = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+    });
+    if (!realization) {
+      return null;
+    }
+
+    const scenario = await this.scenarioService.findScenarioById(
+      realization.scenarioId,
+    );
+    const stations =
+      stationsFromSync ||
+      (scenario
+        ? await this.stationService.findStationsByIds(scenario.stationIds)
+        : []);
+    const logsRaw = await this.prisma.eventLog.findMany({
+      where: { realizationId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      id: realization.id,
+      companyName: realization.companyName,
+      contactPerson: realization.contactPerson,
+      contactPhone: realization.contactPhone || undefined,
+      contactEmail: realization.contactEmail || undefined,
+      instructors: Array.isArray(realization.instructors)
+        ? realization.instructors.filter(
+            (item): item is string => typeof item === 'string',
+          )
+        : [],
+      type: this.fromPrismaType(realization.type),
+      logoUrl: realization.logoUrl || undefined,
+      offerPdfUrl: realization.offerPdfUrl || undefined,
+      offerPdfName: realization.offerPdfName || undefined,
+      scenarioId: realization.scenarioId,
+      stationIds: stations.map((item) => item.id),
+      scenarioStations: stations,
+      teamCount: realization.teamCount,
+      requiredDevicesCount: realization.requiredDevicesCount,
+      peopleCount: realization.peopleCount,
+      positionsCount: realization.positionsCount,
+      status: this.resolveRealizationStatus(
+        this.fromPrismaStatus(realization.status),
+        realization.scheduledAt.toISOString(),
+      ),
+      scheduledAt: realization.scheduledAt.toISOString(),
+      createdAt: realization.createdAt.toISOString(),
+      updatedAt: realization.updatedAt.toISOString(),
+      logs: logsRaw.map((log) => {
+        const payload = (log.payload || {}) as Record<string, unknown>;
+        const changedBy =
+          typeof payload.changedBy === 'string' && payload.changedBy.trim()
+            ? payload.changedBy
+            : log.actorId;
+        const action = payload.action === 'created' ? 'created' : 'updated';
+        const description =
+          typeof payload.description === 'string' ? payload.description : '';
+
+        return {
+          id: log.id,
+          changedBy,
+          changedAt: log.createdAt.toISOString(),
+          action,
+          description,
+        };
+      }),
+    } satisfies RealizationEntity;
+  }
+
+  private validatePayload(payload: CreateRealizationPayload) {
+    const companyName = payload.companyName?.trim() || '';
+    const contactPerson = payload.contactPerson?.trim() || '';
+    const contactPhone = payload.contactPhone?.trim() || '';
+    const contactEmail = payload.contactEmail?.trim() || '';
+    const instructors = this.sanitizeInstructors(payload.instructors);
+    const teamCount = Math.round(Number(payload.teamCount));
+    const peopleCount = Math.round(Number(payload.peopleCount));
+    const positionsCount = Math.round(Number(payload.positionsCount));
+    const scenarioId = payload.scenarioId?.trim() || '';
+    const scheduledAtDate = payload.scheduledAt
+      ? new Date(payload.scheduledAt)
+      : null;
+    const scheduledAt =
+      scheduledAtDate && Number.isFinite(scheduledAtDate.getTime())
+        ? scheduledAtDate.toISOString()
         : '';
-    const sanitizedContactPhone =
-      typeof payload.contactPhone === 'string'
-        ? payload.contactPhone.trim()
-        : '';
-    const sanitizedContactEmail =
-      typeof payload.contactEmail === 'string'
-        ? payload.contactEmail.trim()
-        : '';
-    const sanitizedInstructors = this.sanitizeInstructors(payload.instructors);
-    const teamCount = Number.isFinite(payload.teamCount)
-      ? Math.round(payload.teamCount as number)
-      : NaN;
-    const peopleCount = Number.isFinite(payload.peopleCount)
-      ? Math.round(payload.peopleCount as number)
-      : NaN;
-    const positionsCount = Number.isFinite(payload.positionsCount)
-      ? Math.round(payload.positionsCount as number)
-      : NaN;
 
     if (
-      !realizationId ||
       !companyName ||
-      !sanitizedContactPerson ||
-      (!sanitizedContactPhone && !sanitizedContactEmail) ||
+      !contactPerson ||
+      (!contactPhone && !contactEmail) ||
       !this.isValidRealizationType(payload.type) ||
+      !this.isValidRealizationStatus(payload.status) ||
       !scenarioId ||
       !Number.isFinite(teamCount) ||
       teamCount < 1 ||
@@ -324,193 +472,40 @@ export class RealizationService {
       peopleCount < 1 ||
       !Number.isFinite(positionsCount) ||
       positionsCount < 1 ||
-      !this.isValidRealizationStatus(payload.status) ||
-      !payload.scheduledAt ||
-      !Number.isFinite(scheduledTimestamp) ||
-      (stationDraftsResult.provided && stationDraftsResult.drafts === null) ||
-      (stationDraftsResult.provided && validatedStationDrafts === null)
+      !scheduledAt
     ) {
       throw new BadRequestException('Invalid payload');
     }
 
-    const realizationIndex = this.realizations.findIndex(
-      (realization) => realization.id === realizationId,
-    );
-
-    if (realizationIndex < 0) {
-      throw new NotFoundException('Realization not found');
+    let stationDrafts: ScenarioStationDraftPayload[] | undefined;
+    if (typeof payload.scenarioStations !== 'undefined') {
+      if (!Array.isArray(payload.scenarioStations)) {
+        throw new BadRequestException('Invalid payload');
+      }
+      stationDrafts = payload.scenarioStations.map(
+        (item) => (item || {}) as ScenarioStationDraftPayload,
+      );
     }
 
-    const current = this.realizations[realizationIndex];
-    const requestedScenario = this.scenarioService.findScenarioById(scenarioId);
-
-    if (!requestedScenario) {
-      throw new BadRequestException('Scenario not found');
-    }
-
-    const baseScenario =
-      requestedScenario.id === current.scenarioId
-        ? this.ensureRealizationScenarioInstance(requestedScenario, current.id)
-        : this.scenarioService.cloneScenario(requestedScenario.id, {
-            realizationId: current.id,
-          });
-
-    if (!baseScenario) {
-      throw new BadRequestException('Scenario not found');
-    }
-
-    const syncResult = this.syncScenarioStations(
-      baseScenario,
-      current.id,
-      stationDraftsResult.provided
-        ? this.alignDraftIdsToScenario(
-            baseScenario,
-            validatedStationDrafts as ValidScenarioStationDraft[],
-          )
-        : undefined,
-    );
-
-    if (!syncResult.ok) {
-      throw new BadRequestException(syncResult.message);
-    }
-
-    const changedBy = this.getChangedBy(payload.changedBy);
-    const nextScheduledAt = new Date(scheduledTimestamp).toISOString();
-    const nextStationIds = syncResult.stations.map((station) => station.id);
-    const changes: string[] = [];
-
-    if (current.companyName !== companyName) {
-      changes.push('firma');
-    }
-
-    if (current.type !== payload.type) {
-      changes.push('typ realizacji');
-    }
-
-    if (current.contactPerson !== sanitizedContactPerson) {
-      changes.push('osoba kontaktowa');
-    }
-
-    if ((current.contactPhone ?? '') !== sanitizedContactPhone) {
-      changes.push('telefon kontaktowy');
-    }
-
-    if ((current.contactEmail ?? '') !== sanitizedContactEmail) {
-      changes.push('e-mail kontaktowy');
-    }
-
-    if (current.instructors.join('|') !== sanitizedInstructors.join('|')) {
-      changes.push('instruktorzy');
-    }
-
-    if (current.status !== payload.status) {
-      changes.push('status');
-    }
-
-    if (current.teamCount !== teamCount) {
-      changes.push('liczba drużyn');
-    }
-
-    if (current.peopleCount !== peopleCount) {
-      changes.push('liczba osób');
-    }
-
-    if (current.positionsCount !== positionsCount) {
-      changes.push('liczba stanowisk');
-    }
-
-    if (current.scheduledAt !== nextScheduledAt) {
-      changes.push('termin');
-    }
-
-    if (current.scenarioId !== syncResult.scenario.id) {
-      changes.push('scenariusz');
-    }
-
-    if ((current.logoUrl ?? '') !== (payload.logoUrl?.trim() ?? '')) {
-      changes.push('logo');
-    }
-
-    if ((current.offerPdfUrl ?? '') !== (payload.offerPdfUrl?.trim() ?? '')) {
-      changes.push('oferta PDF');
-    }
-
-    if (current.stationIds.join('|') !== nextStationIds.join('|')) {
-      changes.push('stanowiska');
-    }
-
-    const updatedRealization: RealizationEntity = {
-      ...current,
+    return {
       companyName,
-      contactPerson: sanitizedContactPerson,
-      contactPhone: sanitizedContactPhone || undefined,
-      contactEmail: sanitizedContactEmail || undefined,
-      instructors: sanitizedInstructors,
+      contactPerson,
+      contactPhone: contactPhone || undefined,
+      contactEmail: contactEmail || undefined,
+      instructors,
       type: payload.type,
       logoUrl: payload.logoUrl?.trim() || undefined,
       offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
       offerPdfName: payload.offerPdfName?.trim() || undefined,
-      scenarioId: syncResult.scenario.id,
-      stationIds: nextStationIds,
-      scenarioStations: syncResult.stations,
+      scenarioId,
       teamCount,
-      requiredDevicesCount: this.calculateRequiredDevices(teamCount),
       peopleCount,
       positionsCount,
-      status: this.resolveRealizationStatus(payload.status, nextScheduledAt),
-      scheduledAt: nextScheduledAt,
-      updatedAt: new Date().toISOString(),
-      logs: [
-        ...current.logs,
-        this.createLog(
-          changedBy,
-          'updated',
-          changes.length > 0
-            ? `Zmieniono: ${changes.join(', ')}.`
-            : 'Zapisano bez zmian merytorycznych.',
-        ),
-      ],
+      status: payload.status,
+      scheduledAt,
+      changedBy: payload.changedBy?.trim() || 'admin@local',
+      stationDrafts,
     };
-
-    this.realizations = this.realizations.map((realization) =>
-      realization.id === realizationId ? updatedRealization : realization,
-    );
-    return updatedRealization;
-  }
-
-  private resolveRealizationStatus(
-    status: RealizationStatus,
-    scheduledAt: string,
-  ) {
-    const scheduledTimestamp = new Date(scheduledAt).getTime();
-
-    if (Number.isFinite(scheduledTimestamp) && scheduledTimestamp < Date.now()) {
-      return 'done' as const;
-    }
-
-    return status;
-  }
-
-  private calculateRequiredDevices(teamCount: number) {
-    return teamCount + 2;
-  }
-
-  private createLog(
-    changedBy: string,
-    action: 'created' | 'updated',
-    description: string,
-  ): RealizationLog {
-    return {
-      id: crypto.randomUUID(),
-      changedBy,
-      changedAt: new Date().toISOString(),
-      action,
-      description,
-    };
-  }
-
-  private getChangedBy(rawValue?: string) {
-    return rawValue?.trim() || 'admin@local';
   }
 
   private sanitizeInstructors(value: unknown) {
@@ -524,6 +519,81 @@ export class RealizationService {
       .filter((item, index, list) => list.indexOf(item) === index);
   }
 
+  private resolveRealizationStatus(
+    status: RealizationStatus,
+    scheduledAt: string,
+  ) {
+    const scheduledTimestamp = new Date(scheduledAt).getTime();
+
+    if (
+      Number.isFinite(scheduledTimestamp) &&
+      scheduledTimestamp < Date.now()
+    ) {
+      return 'done' as const;
+    }
+
+    return status;
+  }
+
+  private calculateRequiredDevices(teamCount: number) {
+    return teamCount + 2;
+  }
+
+  private async createLog(
+    realizationId: string,
+    changedBy: string,
+    action: 'created' | 'updated',
+    description: string,
+  ) {
+    await this.prisma.eventLog.create({
+      data: {
+        realizationId,
+        actorType: EventActorType.ADMIN,
+        actorId: changedBy,
+        eventType: `realization.${action}`,
+        payload: {
+          action,
+          changedBy,
+          description,
+        },
+      },
+    });
+  }
+
+  private generateJoinCode(companyName: string, realizationId: string) {
+    const letters = companyName
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 8);
+    const suffix = realizationId.replace(/-/g, '').toUpperCase().slice(0, 4);
+    return `${letters}${suffix}`.slice(0, 12) || `SQ${suffix}`;
+  }
+
+  private async createUniqueJoinCode(
+    companyName: string,
+    realizationId: string,
+  ) {
+    const base = this.generateJoinCode(companyName, realizationId);
+    let candidate = base;
+    let index = 0;
+
+    while (index < 100) {
+      const existing = await this.prisma.realization.findUnique({
+        where: { joinCode: candidate },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return candidate;
+      }
+
+      index += 1;
+      candidate = `${base.slice(0, 10)}${String(index).padStart(2, '0')}`;
+    }
+
+    return `${realizationId.replace(/-/g, '').toUpperCase().slice(0, 12)}`;
+  }
+
   private isValidStationType(value: unknown): value is StationType {
     return value === 'quiz' || value === 'time' || value === 'points';
   }
@@ -535,396 +605,42 @@ export class RealizationService {
     );
   }
 
-  private isValidRealizationStatus(
-    value: unknown,
-  ): value is RealizationStatus {
+  private isValidRealizationStatus(value: unknown): value is RealizationStatus {
     return (
       typeof value === 'string' &&
       REALIZATION_STATUSES.includes(value as RealizationStatus)
     );
   }
 
-  private readScenarioStationDrafts(value: unknown): ScenarioStationDraftsResult {
-    if (typeof value === 'undefined') {
-      return { provided: false, drafts: [] };
-    }
-
-    if (!Array.isArray(value)) {
-      return { provided: true, drafts: null };
-    }
-
-    return {
-      provided: true,
-      drafts: value.map((item) => {
-        const draft = (item ?? {}) as ScenarioStationDraftPayload;
-
-        return {
-          id: typeof draft.id === 'string' ? draft.id.trim() || undefined : undefined,
-          name: typeof draft.name === 'string' ? draft.name : undefined,
-          type: draft.type,
-          description:
-            typeof draft.description === 'string' ? draft.description : undefined,
-          imageUrl: typeof draft.imageUrl === 'string' ? draft.imageUrl : undefined,
-          points: typeof draft.points === 'number' ? draft.points : undefined,
-          timeLimitSeconds:
-            typeof draft.timeLimitSeconds === 'number'
-              ? draft.timeLimitSeconds
-              : undefined,
-          sourceTemplateId:
-            typeof draft.sourceTemplateId === 'string'
-              ? draft.sourceTemplateId.trim() || undefined
-              : undefined,
-        };
-      }),
-    };
+  private toPrismaType(type: RealizationType) {
+    if (type === 'outdoor-games') return PrismaRealizationType.OUTDOOR_GAMES;
+    if (type === 'hotel-games') return PrismaRealizationType.HOTEL_GAMES;
+    if (type === 'workshops') return PrismaRealizationType.WORKSHOPS;
+    if (type === 'evening-attractions')
+      return PrismaRealizationType.EVENING_ATTRACTIONS;
+    if (type === 'dj') return PrismaRealizationType.DJ;
+    return PrismaRealizationType.RECREATION;
   }
 
-  private validateScenarioStationDrafts(
-    drafts: ScenarioStationDraftPayload[],
-  ): ValidScenarioStationDraft[] | null {
-    const validated = drafts.map((draft) => {
-      const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
-        draft.timeLimitSeconds,
-      );
-
-      if (
-        !draft.name?.trim() ||
-        !this.isValidStationType(draft.type) ||
-        !draft.description?.trim() ||
-        typeof draft.points !== 'number' ||
-        !Number.isFinite(draft.points) ||
-        draft.points <= 0 ||
-        !parsedTimeLimit.ok
-      ) {
-        return null;
-      }
-
-      return {
-        id: draft.id,
-        name: draft.name.trim(),
-        type: draft.type,
-        description: draft.description.trim(),
-        imageUrl: draft.imageUrl?.trim() || undefined,
-        points: Math.round(draft.points),
-        timeLimitSeconds: parsedTimeLimit.value,
-        sourceTemplateId: draft.sourceTemplateId,
-      };
-    });
-
-    if (validated.some((draft) => draft === null)) {
-      return null;
-    }
-
-    return validated as ValidScenarioStationDraft[];
+  private fromPrismaType(type: PrismaRealizationType): RealizationType {
+    if (type === PrismaRealizationType.OUTDOOR_GAMES) return 'outdoor-games';
+    if (type === PrismaRealizationType.HOTEL_GAMES) return 'hotel-games';
+    if (type === PrismaRealizationType.WORKSHOPS) return 'workshops';
+    if (type === PrismaRealizationType.EVENING_ATTRACTIONS)
+      return 'evening-attractions';
+    if (type === PrismaRealizationType.DJ) return 'dj';
+    return 'recreation';
   }
 
-  private getScenarioStationsOrdered(scenario: ScenarioEntity) {
-    return this.stationService.findStationsByIds(scenario.stationIds);
+  private toPrismaStatus(status: RealizationStatus) {
+    if (status === 'planned') return PrismaRealizationStatus.PLANNED;
+    if (status === 'in-progress') return PrismaRealizationStatus.IN_PROGRESS;
+    return PrismaRealizationStatus.DONE;
   }
 
-  private scenarioBelongsToRealization(
-    scenario: ScenarioEntity,
-    realizationId: string,
-  ) {
-    if (!scenario.sourceTemplateId) {
-      return false;
-    }
-
-    const stations = this.getScenarioStationsOrdered(scenario);
-
-    if (stations.length === 0) {
-      return false;
-    }
-
-    return stations.every(
-      (station) =>
-        station.scenarioInstanceId === scenario.id &&
-        station.realizationId === realizationId,
-    );
-  }
-
-  private ensureRealizationScenarioInstance(
-    sourceScenario: ScenarioEntity,
-    realizationId: string,
-  ): ScenarioEntity | null {
-    if (this.scenarioBelongsToRealization(sourceScenario, realizationId)) {
-      return sourceScenario;
-    }
-
-    return this.scenarioService.cloneScenario(sourceScenario.id, {
-      realizationId,
-    });
-  }
-
-  private syncScenarioStations(
-    scenario: ScenarioEntity,
-    realizationId: string,
-    drafts?: ValidScenarioStationDraft[],
-  ): SyncScenarioStationsResult {
-    const currentStations = this.getScenarioStationsOrdered(scenario);
-
-    if (!drafts) {
-      if (currentStations.length === 0) {
-        return { ok: false, message: 'Scenario not found' };
-      }
-
-      const currentStationIds = currentStations.map((station) => station.id);
-
-      if (currentStationIds.join('|') !== scenario.stationIds.join('|')) {
-        this.scenarioService.replaceScenario({
-          ...scenario,
-          stationIds: currentStationIds,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      return {
-        ok: true,
-        scenario: { ...scenario, stationIds: currentStationIds },
-        stations: currentStations,
-      };
-    }
-
-    if (drafts.length === 0) {
-      return {
-        ok: false,
-        message: 'Realization must include at least one station',
-      };
-    }
-
-    const keptStationIds = new Set<string>();
-    const finalStations: StationEntity[] = [];
-
-    for (const draft of drafts) {
-      const stationInput: StationDraftInput = {
-        name: draft.name,
-        type: draft.type,
-        description: draft.description,
-        imageUrl: draft.imageUrl,
-        points: draft.points,
-        timeLimitSeconds: draft.timeLimitSeconds,
-        sourceTemplateId: draft.sourceTemplateId,
-      };
-
-      if (draft.id) {
-        const existingStation = this.stationService.findStationById(draft.id);
-
-        if (!existingStation) {
-          return { ok: false, message: 'Station not found' };
-        }
-
-        if (
-          existingStation.scenarioInstanceId !== scenario.id ||
-          existingStation.realizationId !== realizationId
-        ) {
-          return {
-            ok: false,
-            message: 'Station does not belong to this realization',
-          };
-        }
-
-        const updatedStation = this.stationService.updateScenarioStationInstance(
-          existingStation.id,
-          stationInput,
-        );
-
-        if (!updatedStation) {
-          return { ok: false, message: 'Station not found' };
-        }
-
-        keptStationIds.add(updatedStation.id);
-        finalStations.push(updatedStation);
-        continue;
-      }
-
-      const createdStation = this.stationService.createScenarioStationInstance(
-        stationInput,
-        { scenarioInstanceId: scenario.id, realizationId },
-      );
-      keptStationIds.add(createdStation.id);
-      finalStations.push(createdStation);
-    }
-
-    const stationsToRemove = currentStations
-      .filter(
-        (station) =>
-          station.scenarioInstanceId === scenario.id &&
-          station.realizationId === realizationId,
-      )
-      .filter((station) => !keptStationIds.has(station.id))
-      .map((station) => station.id);
-
-    if (stationsToRemove.length > 0) {
-      this.stationService.removeStationsByIds(stationsToRemove);
-    }
-
-    const updatedScenario = this.scenarioService.replaceScenario({
-      ...scenario,
-      stationIds: finalStations.map((station) => station.id),
-      updatedAt: new Date().toISOString(),
-    });
-
-    return { ok: true, scenario: updatedScenario, stations: finalStations };
-  }
-
-  private alignDraftIdsToScenario(
-    scenario: ScenarioEntity,
-    drafts: ValidScenarioStationDraft[],
-  ) {
-    const scenarioStations = this.getScenarioStationsOrdered(scenario);
-    const scenarioStationIds = new Set(
-      scenarioStations.map((station) => station.id),
-    );
-    const scenarioStationsBySourceTemplate = new Map<string, string>();
-
-    for (const station of scenarioStations) {
-      if (station.sourceTemplateId) {
-        scenarioStationsBySourceTemplate.set(station.sourceTemplateId, station.id);
-      }
-    }
-
-    return drafts.map((draft) => {
-      if (!draft.id) {
-        return draft;
-      }
-
-      if (scenarioStationIds.has(draft.id)) {
-        return draft;
-      }
-
-      const mappedId = scenarioStationsBySourceTemplate.get(draft.id);
-
-      if (mappedId) {
-        return {
-          ...draft,
-          id: mappedId,
-        };
-      }
-
-      return {
-        ...draft,
-        id: undefined,
-        sourceTemplateId: draft.sourceTemplateId ?? draft.id,
-      };
-    });
-  }
-
-  private resolveRealizationStations(realization: RealizationEntity) {
-    const linkedScenario = this.scenarioService.findScenarioById(
-      realization.scenarioId,
-    );
-    const stationIds = linkedScenario?.stationIds ?? realization.stationIds;
-    const stations = this.stationService.findStationsByIds(stationIds);
-
-    return {
-      scenarioId: linkedScenario?.id ?? realization.scenarioId,
-      stationIds: stations.map((station) => station.id),
-      scenarioStations: stations,
-    };
-  }
-
-  private createInitialRealizations(): RealizationEntity[] {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    return [
-      {
-        id: 'r-1',
-        companyName: 'Northwind Sp. z o.o.',
-        contactPerson: 'Anna Kowalczyk',
-        contactPhone: '+48 501 200 300',
-        contactEmail: 'anna.kowalczyk@northwind.pl',
-        instructors: ['Michał Krawiec', 'Patryk Lis'],
-        type: 'outdoor-games',
-        logoUrl: 'https://placehold.co/160x160/18181b/f4f4f5?text=NW',
-        offerPdfUrl: 'https://example.com/mock-offers/northwind-offer.pdf',
-        offerPdfName: 'Northwind - oferta.pdf',
-        scenarioId: 's-1',
-        stationIds: ['g-1', 'g-2', 'g-4'],
-        scenarioStations: [],
-        teamCount: 4,
-        requiredDevicesCount: this.calculateRequiredDevices(4),
-        peopleCount: 18,
-        positionsCount: 4,
-        status: 'done',
-        scheduledAt: new Date(now - 3 * dayMs).toISOString(),
-        createdAt: new Date(now - 6 * dayMs).toISOString(),
-        updatedAt: new Date(now - 2 * dayMs).toISOString(),
-        logs: [
-          {
-            id: crypto.randomUUID(),
-            changedBy: 'admin@survivorquest.app',
-            changedAt: new Date(now - 6 * dayMs).toISOString(),
-            action: 'created',
-            description: 'Utworzono realizację.',
-          },
-          {
-            id: crypto.randomUUID(),
-            changedBy: 'koordynator@survivorquest.app',
-            changedAt: new Date(now - 2 * dayMs).toISOString(),
-            action: 'updated',
-            description: 'Zmieniono status realizacji na zrealizowana.',
-          },
-        ],
-      },
-      {
-        id: 'r-2',
-        companyName: 'Baltic Logistics',
-        contactPerson: 'Łukasz Duda',
-        contactPhone: '+48 512 111 222',
-        contactEmail: 'lukasz.duda@balticlogistics.pl',
-        instructors: ['Kamil Brzeziński', 'Paweł Bąk'],
-        type: 'hotel-games',
-        scenarioId: 's-3',
-        stationIds: ['g-2', 'g-3'],
-        scenarioStations: [],
-        teamCount: 6,
-        requiredDevicesCount: this.calculateRequiredDevices(6),
-        peopleCount: 24,
-        positionsCount: 6,
-        status: 'in-progress',
-        scheduledAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date(now - 2 * dayMs).toISOString(),
-        updatedAt: new Date(now - 5 * 60 * 60 * 1000).toISOString(),
-        logs: [
-          {
-            id: crypto.randomUUID(),
-            changedBy: 'admin@survivorquest.app',
-            changedAt: new Date(now - 2 * dayMs).toISOString(),
-            action: 'created',
-            description: 'Utworzono realizację.',
-          },
-        ],
-      },
-      {
-        id: 'r-3',
-        companyName: 'Horizon Tech',
-        contactPerson: 'Karolina Nowak',
-        contactPhone: '+48 698 555 440',
-        contactEmail: 'karolina.nowak@horizontech.pl',
-        instructors: ['Mateusz Sikora'],
-        type: 'workshops',
-        scenarioId: 's-1',
-        stationIds: ['g-1', 'g-2', 'g-4'],
-        scenarioStations: [],
-        teamCount: 3,
-        requiredDevicesCount: this.calculateRequiredDevices(3),
-        peopleCount: 14,
-        positionsCount: 3,
-        status: 'planned',
-        scheduledAt: new Date(now + dayMs).toISOString(),
-        createdAt: new Date(now - dayMs).toISOString(),
-        updatedAt: new Date(now - dayMs).toISOString(),
-        logs: [
-          {
-            id: crypto.randomUUID(),
-            changedBy: 'admin@survivorquest.app',
-            changedAt: new Date(now - dayMs).toISOString(),
-            action: 'created',
-            description: 'Utworzono realizację.',
-          },
-        ],
-      },
-    ];
+  private fromPrismaStatus(status: PrismaRealizationStatus): RealizationStatus {
+    if (status === PrismaRealizationStatus.PLANNED) return 'planned';
+    if (status === PrismaRealizationStatus.IN_PROGRESS) return 'in-progress';
+    return 'done';
   }
 }

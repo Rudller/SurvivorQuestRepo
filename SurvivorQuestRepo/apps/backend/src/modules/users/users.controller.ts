@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Post, Put } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { UsersService, type UserRole, type UserStatus } from './users.service';
 
 type CreateUserPayload = {
@@ -25,13 +32,18 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  getUsers() {
+  async getUsers() {
     return this.usersService.findAll();
   }
 
   @Post()
-  createUser(@Body() payload: CreateUserPayload) {
-    if (!payload.displayName?.trim() || !payload.email?.trim() || !payload.role || !payload.status) {
+  async createUser(@Body() payload: CreateUserPayload) {
+    if (
+      !payload.displayName?.trim() ||
+      !payload.email?.trim() ||
+      !payload.role ||
+      !payload.status
+    ) {
       throw new BadRequestException('Invalid payload');
     }
 
@@ -46,7 +58,7 @@ export class UsersController {
   }
 
   @Put()
-  updateUser(@Body() payload: UpdateUserPayload) {
+  async updateUser(@Body() payload: UpdateUserPayload) {
     if (!payload.id?.trim()) {
       throw new BadRequestException('User id is required');
     }
