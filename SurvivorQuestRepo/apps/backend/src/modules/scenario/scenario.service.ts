@@ -2,15 +2,59 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
 
+export type ScenarioKind = 'template' | 'realization-instance';
+
 export type ScenarioEntity = {
   id: string;
   name: string;
   description: string;
   stationIds: string[];
   sourceTemplateId?: string;
+  realizationId?: string;
+  kind: ScenarioKind;
+  isTemplate: boolean;
+  isInstance: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+function deriveScenarioKind(input: {
+  sourceTemplateId: string | null;
+  realizationId: string | null;
+}): ScenarioKind {
+  if (input.realizationId || input.sourceTemplateId) {
+    return 'realization-instance';
+  }
+
+  return 'template';
+}
+
+function mapScenario(input: {
+  id: string;
+  name: string;
+  description: string;
+  sourceTemplateId: string | null;
+  realizationId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  scenarioStations: Array<{ stationId: string }>;
+}): ScenarioEntity {
+  const kind = deriveScenarioKind(input);
+
+  return {
+    id: input.id,
+    name: input.name,
+    description: input.description,
+    stationIds: input.scenarioStations.map((item) => item.stationId),
+    sourceTemplateId: input.sourceTemplateId || undefined,
+    realizationId: input.realizationId || undefined,
+    kind,
+    isTemplate: kind === 'template',
+    isInstance: kind !== 'template',
+    createdAt: input.createdAt.toISOString(),
+    updatedAt: input.updatedAt.toISOString(),
+  };
+}
 
 @Injectable()
 export class ScenarioService {
@@ -27,15 +71,7 @@ export class ScenarioService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return scenarios.map((scenario) => ({
-      id: scenario.id,
-      name: scenario.name,
-      description: scenario.description,
-      stationIds: scenario.scenarioStations.map((item) => item.stationId),
-      sourceTemplateId: scenario.sourceTemplateId || undefined,
-      createdAt: scenario.createdAt.toISOString(),
-      updatedAt: scenario.updatedAt.toISOString(),
-    }));
+    return scenarios.map((scenario) => mapScenario(scenario));
   }
 
   async findScenarioById(id: string) {
@@ -50,15 +86,7 @@ export class ScenarioService {
       return null;
     }
 
-    return {
-      id: scenario.id,
-      name: scenario.name,
-      description: scenario.description,
-      stationIds: scenario.scenarioStations.map((item) => item.stationId),
-      sourceTemplateId: scenario.sourceTemplateId || undefined,
-      createdAt: scenario.createdAt.toISOString(),
-      updatedAt: scenario.updatedAt.toISOString(),
-    };
+    return mapScenario(scenario);
   }
 
   async addScenario(scenario: ScenarioEntity) {
@@ -68,6 +96,7 @@ export class ScenarioService {
         name: scenario.name,
         description: scenario.description,
         sourceTemplateId: scenario.sourceTemplateId,
+        realizationId: scenario.realizationId,
         scenarioStations: {
           create: scenario.stationIds.map((stationId, index) => ({
             stationId,
@@ -144,6 +173,10 @@ export class ScenarioService {
       description: source.description,
       stationIds: clonedStations.map((station) => station.id),
       sourceTemplateId: source.sourceTemplateId ?? source.id,
+      realizationId: options?.realizationId,
+      kind: 'realization-instance',
+      isTemplate: false,
+      isInstance: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

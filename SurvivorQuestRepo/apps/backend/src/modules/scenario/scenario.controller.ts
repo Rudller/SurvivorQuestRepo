@@ -8,48 +8,22 @@ import {
   Patch,
   Post,
   Put,
+  UseGuards,
 } from '@nestjs/common';
+import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
 import { StationService } from '../station/station.service';
+import {
+  parseCloneScenarioDto,
+  parseCreateScenarioDto,
+  parseDeleteScenarioDto,
+  parseUpdateScenarioDto,
+  toCreateScenarioEntity,
+  toUpdatedScenarioEntity,
+} from './dto/scenario.dto';
 import { ScenarioService } from './scenario.service';
 
-type CreateScenarioPayload = {
-  name?: string;
-  description?: string;
-  stationIds?: unknown;
-};
-
-type UpdateScenarioPayload = {
-  id?: string;
-  name?: string;
-  description?: string;
-  stationIds?: unknown;
-};
-
-type DeleteScenarioPayload = {
-  id?: string;
-  confirmName?: string;
-};
-
-type CloneScenarioPayload = {
-  sourceId?: string;
-};
-
-function sanitizeStationIds(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [] as string[];
-  }
-
-  return value
-    .map((item) => String(item).trim())
-    .filter(Boolean)
-    .filter((item, index, list) => list.indexOf(item) === index);
-}
-
-function isValidName(value: unknown) {
-  return typeof value === 'string' && value.trim().length >= 3;
-}
-
 @Controller('scenario')
+@UseGuards(AdminSessionGuard)
 export class ScenarioController {
   constructor(
     private readonly scenarioService: ScenarioService,
@@ -62,102 +36,68 @@ export class ScenarioController {
   }
 
   @Post()
-  async createScenario(@Body() payload: CreateScenarioPayload) {
-    const stationIds = sanitizeStationIds(payload.stationIds);
-
-    if (!isValidName(payload.name) || stationIds.length === 0) {
-      throw new BadRequestException('Invalid payload');
-    }
+  async createScenario(@Body() payload: unknown) {
+    const dto = parseCreateScenarioDto(payload);
 
     if (
-      (await this.stationService.findStationsByIds(stationIds)).length !==
-      stationIds.length
+      (await this.stationService.findStationsByIds(dto.stationIds)).length !==
+      dto.stationIds.length
     ) {
       throw new BadRequestException('Invalid station ids');
     }
 
-    const now = new Date().toISOString();
-    return this.scenarioService.addScenario({
-      id: crypto.randomUUID(),
-      name: payload.name!.trim(),
-      description:
-        typeof payload.description === 'string'
-          ? payload.description.trim()
-          : '',
-      stationIds,
-      createdAt: now,
-      updatedAt: now,
-    });
+    return this.scenarioService.addScenario(toCreateScenarioEntity(dto));
   }
 
   @Put()
-  async updateScenario(@Body() payload: UpdateScenarioPayload) {
-    const stationIds = sanitizeStationIds(payload.stationIds);
+  async updateScenario(@Body() payload: unknown) {
+    const dto = parseUpdateScenarioDto(payload);
 
     if (
-      !payload.id?.trim() ||
-      !isValidName(payload.name) ||
-      stationIds.length === 0
-    ) {
-      throw new BadRequestException('Invalid payload');
-    }
-
-    if (
-      (await this.stationService.findStationsByIds(stationIds)).length !==
-      stationIds.length
+      (await this.stationService.findStationsByIds(dto.stationIds)).length !==
+      dto.stationIds.length
     ) {
       throw new BadRequestException('Invalid station ids');
     }
 
     const currentScenario = await this.scenarioService.findScenarioById(
-      payload.id,
+      dto.id,
     );
 
     if (!currentScenario) {
       throw new NotFoundException('Scenario not found');
     }
 
-    return this.scenarioService.replaceScenario({
-      ...currentScenario,
-      name: payload.name!.trim(),
-      description:
-        typeof payload.description === 'string'
-          ? payload.description.trim()
-          : '',
-      stationIds,
-      updatedAt: new Date().toISOString(),
-    });
+    return this.scenarioService.replaceScenario(
+      toUpdatedScenarioEntity(currentScenario, dto),
+    );
   }
 
   @Delete()
-  async deleteScenario(@Body() payload: DeleteScenarioPayload) {
-    if (!payload.id?.trim() || !payload.confirmName?.trim()) {
-      throw new BadRequestException('Invalid payload');
-    }
+  async deleteScenario(@Body() payload: unknown) {
+    const dto = parseDeleteScenarioDto(payload);
 
-    const scenario = await this.scenarioService.findScenarioById(payload.id);
+    const scenario = await this.scenarioService.findScenarioById(dto.id);
 
     if (!scenario) {
       throw new NotFoundException('Scenario not found');
     }
 
-    if (scenario.name !== payload.confirmName.trim()) {
+    if (scenario.name !== dto.confirmName) {
       throw new BadRequestException(
         'Scenario name confirmation does not match',
       );
     }
 
-    await this.scenarioService.removeScenario(payload.id);
-    return { id: payload.id };
+    await this.scenarioService.removeScenario(dto.id);
+    return { id: dto.id };
   }
 
   @Patch()
-  async cloneScenario(@Body() payload: CloneScenarioPayload) {
-    if (!payload.sourceId?.trim()) {
-      throw new BadRequestException('sourceId is required');
-    }
+  async cloneScenario(@Body() payload: unknown) {
+    const dto = parseCloneScenarioDto(payload);
 
-    const cloned = await this.scenarioService.cloneScenario(payload.sourceId);
+    const cloned = await this.scenarioService.cloneScenario(dto.sourceId);
 
     if (!cloned) {
       throw new NotFoundException('Source scenario not found');

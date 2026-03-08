@@ -60,4 +60,6 @@ export type RealizationStationDraft = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  latitude?: number;
+  longitude?: number;
 };

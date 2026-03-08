@@ -9,6 +9,7 @@ export type User = {
     role: UserRole;
     status: UserStatus;
     photoUrl: string;
+    hasPassword: boolean;
     lastLoginAt?: string;
     createdAt: string;
     updatedAt: string;

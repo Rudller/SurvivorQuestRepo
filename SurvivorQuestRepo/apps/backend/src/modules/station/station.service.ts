@@ -4,6 +4,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 export type StationType = 'quiz' | 'time' | 'points';
 
+export type StationKind =
+  | 'template'
+  | 'scenario-instance'
+  | 'realization-instance';
+
 export type StationEntity = {
   id: string;
   name: string;
@@ -12,9 +17,13 @@ export type StationEntity = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  latitude?: number;
+  longitude?: number;
   sourceTemplateId?: string;
   scenarioInstanceId?: string;
   realizationId?: string;
+  kind: StationKind;
+  isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -26,12 +35,83 @@ export type StationDraftInput = {
   imageUrl?: string;
   points: number;
   timeLimitSeconds: number;
+  latitude?: number;
+  longitude?: number;
   sourceTemplateId?: string;
 };
 
 export type ParseTimeLimitResult =
   | { ok: true; value: number }
   | { ok: false; value: null };
+
+function buildStationFallbackImage(seed: string) {
+  return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
+}
+
+function deriveStationKind(input: {
+  scenarioInstanceId: string | null;
+  realizationId: string | null;
+}): StationKind {
+  if (input.realizationId) {
+    return 'realization-instance';
+  }
+
+  if (input.scenarioInstanceId) {
+    return 'scenario-instance';
+  }
+
+  return 'template';
+}
+
+function toPrismaStationType(type: StationType) {
+  if (type === 'quiz') return PrismaStationType.QUIZ;
+  if (type === 'time') return PrismaStationType.TIME;
+  return PrismaStationType.POINTS;
+}
+
+function fromPrismaStationType(type: PrismaStationType): StationType {
+  if (type === PrismaStationType.QUIZ) return 'quiz';
+  if (type === PrismaStationType.TIME) return 'time';
+  return 'points';
+}
+
+function mapStation(input: {
+  id: string;
+  name: string;
+  type: PrismaStationType;
+  description: string;
+  imageUrl: string | null;
+  points: number;
+  timeLimitSeconds: number;
+  latitude: number | null;
+  longitude: number | null;
+  sourceTemplateId: string | null;
+  scenarioInstanceId: string | null;
+  realizationId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): StationEntity {
+  const kind = deriveStationKind(input);
+
+  return {
+    id: input.id,
+    name: input.name,
+    type: fromPrismaStationType(input.type),
+    description: input.description,
+    imageUrl: input.imageUrl || buildStationFallbackImage(input.name),
+    points: input.points,
+    timeLimitSeconds: input.timeLimitSeconds,
+    latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
+    longitude: typeof input.longitude === 'number' ? input.longitude : undefined,
+    sourceTemplateId: input.sourceTemplateId || undefined,
+    scenarioInstanceId: input.scenarioInstanceId || undefined,
+    realizationId: input.realizationId || undefined,
+    kind,
+    isTemplate: kind === 'template',
+    createdAt: input.createdAt.toISOString(),
+    updatedAt: input.updatedAt.toISOString(),
+  };
+}
 
 @Injectable()
 export class StationService {
@@ -59,12 +139,12 @@ export class StationService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return stations.map((station) => this.mapStation(station));
+    return stations.map((station) => mapStation(station));
   }
 
   async findStationById(id: string) {
     const station = await this.prisma.station.findUnique({ where: { id } });
-    return station ? this.mapStation(station) : null;
+    return station ? mapStation(station) : null;
   }
 
   async findStationsByIds(ids: string[]) {
@@ -77,7 +157,7 @@ export class StationService {
     });
 
     const stationMap = new Map(
-      stations.map((station) => [station.id, this.mapStation(station)]),
+      stations.map((station) => [station.id, mapStation(station)]),
     );
     return ids
       .map((id) => stationMap.get(id))
@@ -85,29 +165,35 @@ export class StationService {
   }
 
   isTemplateStation(station: StationEntity) {
-    return !station.scenarioInstanceId && !station.realizationId;
+    return station.kind === 'template';
   }
 
   async addTemplateStation(
     station: Omit<
       StationEntity,
-      'sourceTemplateId' | 'scenarioInstanceId' | 'realizationId'
+      | 'sourceTemplateId'
+      | 'scenarioInstanceId'
+      | 'realizationId'
+      | 'kind'
+      | 'isTemplate'
     >,
   ) {
     const created = await this.prisma.station.create({
       data: {
         id: station.id,
         name: station.name,
-        type: this.toPrismaType(station.type),
+        type: toPrismaStationType(station.type),
         description: station.description,
         imageUrl: station.imageUrl,
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
+        latitude: station.latitude,
+        longitude: station.longitude,
         sourceTemplateId: station.id,
       },
     });
 
-    return this.mapStation(created);
+    return mapStation(created);
   }
 
   async replaceTemplateStation(updatedStation: StationEntity) {
@@ -115,15 +201,17 @@ export class StationService {
       where: { id: updatedStation.id },
       data: {
         name: updatedStation.name,
-        type: this.toPrismaType(updatedStation.type),
+        type: toPrismaStationType(updatedStation.type),
         description: updatedStation.description,
         imageUrl: updatedStation.imageUrl,
         points: updatedStation.points,
         timeLimitSeconds: updatedStation.timeLimitSeconds,
+        latitude: updatedStation.latitude,
+        longitude: updatedStation.longitude,
       },
     });
 
-    return this.mapStation(updated);
+    return mapStation(updated);
   }
 
   async removeStationById(id: string) {
@@ -160,18 +248,20 @@ export class StationService {
       const created = await this.prisma.station.create({
         data: {
           name: source.name,
-          type: this.toPrismaType(source.type),
+          type: toPrismaStationType(source.type),
           description: source.description,
           imageUrl: source.imageUrl,
           points: source.points,
           timeLimitSeconds: source.timeLimitSeconds,
+          latitude: source.latitude,
+          longitude: source.longitude,
           sourceTemplateId: source.sourceTemplateId ?? source.id,
           scenarioInstanceId:
             options?.scenarioInstanceId ?? source.scenarioInstanceId,
           realizationId: options?.realizationId ?? source.realizationId,
         },
       });
-      cloned.push(this.mapStation(created));
+      cloned.push(mapStation(created));
     }
 
     return cloned;
@@ -187,18 +277,20 @@ export class StationService {
       data: {
         id: crypto.randomUUID(),
         name: normalized.name,
-        type: this.toPrismaType(normalized.type),
+        type: toPrismaStationType(normalized.type),
         description: normalized.description,
         imageUrl: normalized.imageUrl,
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
+        latitude: normalized.latitude,
+        longitude: normalized.longitude,
         sourceTemplateId: normalized.sourceTemplateId,
         scenarioInstanceId: context.scenarioInstanceId,
         realizationId: context.realizationId,
       },
     });
 
-    return this.mapStation(created);
+    return mapStation(created);
   }
 
   async updateScenarioStationInstance(id: string, input: StationDraftInput) {
@@ -212,25 +304,23 @@ export class StationService {
       where: { id },
       data: {
         name: normalized.name,
-        type: this.toPrismaType(normalized.type),
+        type: toPrismaStationType(normalized.type),
         description: normalized.description,
         imageUrl: normalized.imageUrl,
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
+        latitude: normalized.latitude,
+        longitude: normalized.longitude,
         sourceTemplateId:
           normalized.sourceTemplateId ?? current.sourceTemplateId,
       },
     });
 
-    return this.mapStation(updated);
-  }
-
-  private getFallbackImage(seed: string) {
-    return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
+    return mapStation(updated);
   }
 
   private resolveImageUrl(imageUrl: string | undefined, seed: string) {
-    return imageUrl?.trim() || this.getFallbackImage(seed);
+    return imageUrl?.trim() || buildStationFallbackImage(seed);
   }
 
   private normalizeStationDraft(input: StationDraftInput, currentId: string) {
@@ -246,49 +336,15 @@ export class StationService {
       ),
       points: Math.round(input.points),
       timeLimitSeconds: Math.round(input.timeLimitSeconds),
+      latitude:
+        typeof input.latitude === 'number' && Number.isFinite(input.latitude)
+          ? input.latitude
+          : undefined,
+      longitude:
+        typeof input.longitude === 'number' && Number.isFinite(input.longitude)
+          ? input.longitude
+          : undefined,
       sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
     };
-  }
-
-  private mapStation(station: {
-    id: string;
-    name: string;
-    type: PrismaStationType;
-    description: string;
-    imageUrl: string | null;
-    points: number;
-    timeLimitSeconds: number;
-    sourceTemplateId: string | null;
-    scenarioInstanceId: string | null;
-    realizationId: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): StationEntity {
-    return {
-      id: station.id,
-      name: station.name,
-      type: this.fromPrismaType(station.type),
-      description: station.description,
-      imageUrl: station.imageUrl || this.getFallbackImage(station.name),
-      points: station.points,
-      timeLimitSeconds: station.timeLimitSeconds,
-      sourceTemplateId: station.sourceTemplateId || undefined,
-      scenarioInstanceId: station.scenarioInstanceId || undefined,
-      realizationId: station.realizationId || undefined,
-      createdAt: station.createdAt.toISOString(),
-      updatedAt: station.updatedAt.toISOString(),
-    };
-  }
-
-  private toPrismaType(type: StationType) {
-    if (type === 'quiz') return PrismaStationType.QUIZ;
-    if (type === 'time') return PrismaStationType.TIME;
-    return PrismaStationType.POINTS;
-  }
-
-  private fromPrismaType(type: PrismaStationType): StationType {
-    if (type === PrismaStationType.QUIZ) return 'quiz';
-    if (type === PrismaStationType.TIME) return 'time';
-    return 'points';
   }
 }

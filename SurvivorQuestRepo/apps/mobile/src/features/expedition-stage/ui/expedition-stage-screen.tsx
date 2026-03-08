@@ -4,11 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import type { OnboardingSession } from "../../onboarding/model/types";
 import {
-  fetchMobileRealizationClientDetails,
-  fetchMobileStationCatalog,
   getApiErrorMessage,
-  type MobileRealizationClientDetails,
-  type MobileStationCatalogItem,
 } from "../api/mobile-session.api";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
@@ -66,6 +62,36 @@ const MOBILE_TEST_STATION_DEFINITIONS: Array<{
 
 function toCoordinate(latitude: number, longitude: number): MapCoordinate {
   return { latitude, longitude };
+}
+
+function toStationCoordinate(latitude?: number, longitude?: number): MapCoordinate | null {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude: latitude as number,
+    longitude: longitude as number,
+  };
+}
+
+function resolveCoordinateCentroid(coordinates: MapCoordinate[]) {
+  if (coordinates.length === 0) {
+    return null;
+  }
+
+  const sums = coordinates.reduce(
+    (accumulator, coordinate) => ({
+      latitude: accumulator.latitude + coordinate.latitude,
+      longitude: accumulator.longitude + coordinate.longitude,
+    }),
+    { latitude: 0, longitude: 0 },
+  );
+
+  return {
+    latitude: sums.latitude / coordinates.length,
+    longitude: sums.longitude / coordinates.length,
+  } satisfies MapCoordinate;
 }
 
 function resolveStationVisual(stationType: string | undefined, status: "todo" | "in-progress" | "done") {
@@ -134,11 +160,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [clientInfoError, setClientInfoError] = useState<string | null>(null);
-  const [stationCatalogError, setStationCatalogError] = useState<string | null>(null);
-  const [clientDetails, setClientDetails] = useState<MobileRealizationClientDetails | null>(null);
-  const [stationCatalogMap, setStationCatalogMap] = useState<Record<string, MobileStationCatalogItem>>({});
-  const [isClientDetailsLoading, setIsClientDetailsLoading] = useState(false);
   const [isCameraActivating, setIsCameraActivating] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
@@ -148,94 +169,44 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     sessionState.team.lastLocation ? toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude) : null,
   );
 
-  const realizationId = sessionState.realization.id || session.realizationId || "";
+  const stationMetadataMap = useMemo(
+    () =>
+      sessionState.realization.stations.reduce<
+        Record<string, { name: string; type: string; coordinate: MapCoordinate | null }>
+      >((accumulator, station) => {
+        accumulator[station.id] = {
+          name: station.name,
+          type: station.type,
+          coordinate: toStationCoordinate(station.latitude, station.longitude),
+        };
+        return accumulator;
+      }, {}),
+    [sessionState.realization.stations],
+  );
+
+  const realStationCoordinates = useMemo(
+    () =>
+      Object.entries(stationMetadataMap).reduce<Record<string, MapCoordinate>>((accumulator, [stationId, metadata]) => {
+        if (metadata.coordinate) {
+          accumulator[stationId] = metadata.coordinate;
+        }
+
+        return accumulator;
+      }, {}),
+    [stationMetadataMap],
+  );
+
+  const stationCoordinateAnchor = useMemo(
+    () => resolveCoordinateCentroid(Object.values(realStationCoordinates)),
+    [realStationCoordinates],
+  );
 
   useEffect(() => {
-    let isMounted = true;
+    const shouldResolveAnchorFromData =
+      !mapAnchor ||
+      (mapAnchor.latitude === DEFAULT_MAP_ANCHOR.latitude && mapAnchor.longitude === DEFAULT_MAP_ANCHOR.longitude);
 
-    async function loadClientDetails() {
-      if (!session.apiBaseUrl?.trim() || !realizationId.trim()) {
-        setClientDetails(null);
-        setClientInfoError(null);
-        return;
-      }
-
-      setIsClientDetailsLoading(true);
-      setClientInfoError(null);
-
-      try {
-        const result = await fetchMobileRealizationClientDetails(session.apiBaseUrl, realizationId);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setClientDetails(result);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setClientDetails(null);
-        setClientInfoError(getApiErrorMessage(error, "Nie udało się pobrać szczegółów klienta."));
-      } finally {
-        if (isMounted) {
-          setIsClientDetailsLoading(false);
-        }
-      }
-    }
-
-    void loadClientDetails();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [realizationId, session.apiBaseUrl]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadStationCatalog() {
-      if (!session.apiBaseUrl?.trim()) {
-        setStationCatalogMap({});
-        setStationCatalogError(null);
-        return;
-      }
-
-      setStationCatalogError(null);
-
-      try {
-        const stationCatalog = await fetchMobileStationCatalog(session.apiBaseUrl);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setStationCatalogMap(
-          stationCatalog.reduce<Record<string, MobileStationCatalogItem>>((accumulator, station) => {
-            accumulator[station.id] = station;
-            return accumulator;
-          }, {}),
-        );
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setStationCatalogMap({});
-        setStationCatalogError(getApiErrorMessage(error, "Nie udało się pobrać stanowisk do menu testowego."));
-      }
-    }
-
-    void loadStationCatalog();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [session.apiBaseUrl]);
-
-  useEffect(() => {
-    if (mapAnchor) {
+    if (!shouldResolveAnchorFromData) {
       return;
     }
 
@@ -249,10 +220,15 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
       return;
     }
 
+    if (stationCoordinateAnchor) {
+      setMapAnchor(stationCoordinateAnchor);
+      return;
+    }
+
     if (!isLoading) {
       setMapAnchor(DEFAULT_MAP_ANCHOR);
     }
-  }, [isLoading, mapAnchor, playerLocation, sessionState.team.lastLocation]);
+  }, [isLoading, mapAnchor, playerLocation, sessionState.team.lastLocation, stationCoordinateAnchor]);
 
   const stationIds = useMemo(
     () => sessionState.tasks.map((task) => task.stationId).filter((stationId) => stationId.trim().length > 0),
@@ -267,9 +243,14 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     setSelectedStationId(stationIds[0] ?? null);
   }, [selectedStationId, stationIds]);
 
-  const stationCoordinates = useMemo(
-    () => buildStationPinCoordinates(stationIds, mapAnchor ?? DEFAULT_MAP_ANCHOR),
-    [mapAnchor, stationIds],
+  const fallbackStationIds = useMemo(
+    () => stationIds.filter((stationId) => !realStationCoordinates[stationId]),
+    [realStationCoordinates, stationIds],
+  );
+
+  const fallbackStationCoordinates = useMemo(
+    () => buildStationPinCoordinates(fallbackStationIds, mapAnchor ?? stationCoordinateAnchor ?? DEFAULT_MAP_ANCHOR),
+    [fallbackStationIds, mapAnchor, stationCoordinateAnchor],
   );
 
   useEffect(() => {
@@ -292,16 +273,12 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     });
   }, [playerLocation, syncTeamLocation]);
 
-  const stationMetadataMap = useMemo(
-    () =>
-      (clientDetails?.stations ?? []).reduce<Record<string, { name: string; type: string }>>((accumulator, station) => {
-        accumulator[station.id] = {
-          name: station.name,
-          type: station.type,
-        };
-        return accumulator;
-      }, {}),
-    [clientDetails?.stations],
+  const stationCoordinates = useMemo(
+    () => ({
+      ...fallbackStationCoordinates,
+      ...realStationCoordinates,
+    }),
+    [fallbackStationCoordinates, realStationCoordinates],
   );
 
   const stationPins = useMemo(
@@ -350,14 +327,13 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
-      const catalogStations = Object.values(stationCatalogMap);
+      const catalogStations = sessionState.realization.stations;
       const baseEntries =
         catalogStations.length > 0
           ? catalogStations.map((stationCatalog) => {
-              const metadata = stationMetadataMap[stationCatalog.id];
               const task = taskByStationId[stationCatalog.id];
-              const stationName = resolveStationLabel(stationCatalog.id, stationCatalog.name || metadata?.name);
-              const stationType = stationCatalog.type || metadata?.type || "quiz";
+              const stationName = resolveStationLabel(stationCatalog.id, stationCatalog.name);
+              const stationType = stationCatalog.type || "quiz";
 
               return {
                 stationId: stationCatalog.id,
@@ -412,7 +388,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
       return [...baseEntries, ...mobileTestEntries].sort((left, right) => left.name.localeCompare(right.name, "pl"));
     },
-    [sessionState.tasks, stationCatalogMap, stationMetadataMap, taskByStationId],
+    [sessionState.realization.stations, sessionState.tasks, stationMetadataMap, taskByStationId],
   );
 
   const activeStationTest = useMemo(
@@ -512,12 +488,12 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
       <View className="absolute left-3 right-3 top-3">
         <TopRealizationPanel
-          companyName={clientDetails?.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`}
+          companyName={sessionState.realization.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`}
           scheduledAt={sessionState.realization.scheduledAt}
-          logoUrl={clientDetails?.logoUrl || undefined}
-          clientType={clientDetails?.type || undefined}
-          teamCount={clientDetails?.teamCount ?? session.realization?.teamCount}
-          peopleCount={clientDetails?.peopleCount || undefined}
+          logoUrl={sessionState.realization.logoUrl}
+          clientType={sessionState.realization.type}
+          teamCount={sessionState.realization.teamCount ?? session.realization?.teamCount}
+          peopleCount={sessionState.realization.peopleCount}
           locationRequired={sessionState.realization.locationRequired}
           teamName={teamName}
           teamSlot={sessionState.team.slotNumber ?? session.team.slotNumber}
@@ -591,16 +567,11 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
           />
         </View>
 
-        {(errorMessage || locationError || actionError || clientInfoError || stationCatalogError || actionMessage || isClientDetailsLoading) && (
+        {(errorMessage || locationError || actionError || actionMessage) && (
           <View
             className="mt-2 w-full max-w-[560px] rounded-2xl border px-3 py-2"
             style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.88)" }}
           >
-            {isClientDetailsLoading && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.textMuted }}>
-                Pobieranie szczegółów klienta...
-              </Text>
-            )}
             {errorMessage && (
               <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
                 {errorMessage}
@@ -609,16 +580,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             {locationError && (
               <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
                 {locationError}
-              </Text>
-            )}
-            {clientInfoError && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
-                {clientInfoError}
-              </Text>
-            )}
-            {stationCatalogError && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
-                {stationCatalogError}
               </Text>
             )}
             {actionError && (

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/http/http-exception.filter';
 
 function getCorsOriginAllowlist() {
   const rawAllowlist = process.env.CORS_ORIGIN_ALLOWLIST || '';
@@ -12,6 +13,7 @@ function getCorsOriginAllowlist() {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new HttpExceptionFilter());
   const allowlist = getCorsOriginAllowlist();
   const allowAllDevOrigins =
     process.env.NODE_ENV !== 'production' && allowlist.length === 0;

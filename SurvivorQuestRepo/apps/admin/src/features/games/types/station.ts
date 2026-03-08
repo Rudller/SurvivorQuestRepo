@@ -14,6 +14,8 @@ export type Station = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  latitude?: number;
+  longitude?: number;
   sourceTemplateId?: string;
   scenarioInstanceId?: string;
   realizationId?: string;

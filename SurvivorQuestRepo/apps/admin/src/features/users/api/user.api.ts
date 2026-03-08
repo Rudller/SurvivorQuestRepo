@@ -9,6 +9,7 @@ type CreateUserPayload = {
   role: UserRole;
   status: UserStatus;
   photoUrl?: string;
+  password?: string;
 };
 
 type UpdateUserPayload = {
@@ -19,6 +20,7 @@ type UpdateUserPayload = {
   role: UserRole;
   status: UserStatus;
   photoUrl?: string;
+  password?: string;
 };
 
 export const userApi = baseApi.injectEndpoints({

@@ -26,6 +26,7 @@ export default function UsersPage() {
     role: "instructor" as UserRole,
     status: "invited" as UserStatus,
     photoUrl: "",
+    password: "",
   });
 
   const {
@@ -98,6 +99,7 @@ export default function UsersPage() {
                     role: editFormValues.role,
                     status: editFormValues.status,
                     photoUrl: editFormValues.photoUrl.trim() || undefined,
+                    password: editFormValues.password.trim() || undefined,
                   }).unwrap();
 
                   setEditingUser(null);
@@ -180,6 +182,16 @@ export default function UsersPage() {
                 className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-amber-400/80"
               />
 
+              <input
+                type="password"
+                value={editFormValues.password}
+                onChange={(event) =>
+                  setEditFormValues((prev) => ({ ...prev, password: event.target.value }))
+                }
+                placeholder={editingUser.hasPassword ? "Nowe hasło (opcjonalnie)" : "Ustaw hasło (opcjonalnie)"}
+                className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-amber-400/80"
+              />
+
               {editFormError && <p className="text-sm text-red-300">{editFormError}</p>}
 
               <button
@@ -222,6 +234,7 @@ export default function UsersPage() {
                   role: user.role,
                   status: user.status,
                   photoUrl: user.photoUrl,
+                  password: "",
                 });
               }}
             />

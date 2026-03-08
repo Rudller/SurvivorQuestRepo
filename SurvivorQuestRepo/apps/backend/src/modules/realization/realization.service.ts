@@ -3,12 +3,29 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  EventActorType,
-  RealizationStatus as PrismaRealizationStatus,
-  RealizationType as PrismaRealizationType,
-} from '@prisma/client';
+import { EventActorType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  requireRealizationId,
+  validateRealizationPayload,
+  type CreateRealizationDto,
+  type UpdateRealizationDto,
+} from './dto/realization.dto';
+import type {
+  RealizationEntity,
+  RealizationStatus,
+  RealizationType,
+  ScenarioStationDraftPayload,
+} from './entities/realization.entity';
+import {
+  buildRealizationEntity,
+  calculateRequiredDevices,
+  fromPrismaRealizationStatus,
+  mapRealizationLogs,
+  resolveRealizationStatus,
+  toPrismaRealizationStatus,
+  toPrismaRealizationType,
+} from './mappers/realization.mapper';
 import {
   ScenarioService,
   type ScenarioEntity,
@@ -20,97 +37,7 @@ import {
   type StationType,
 } from '../station/station.service';
 
-export type RealizationStatus = 'planned' | 'in-progress' | 'done';
-export type RealizationType =
-  | 'outdoor-games'
-  | 'hotel-games'
-  | 'workshops'
-  | 'evening-attractions'
-  | 'dj'
-  | 'recreation';
-
-export type RealizationLog = {
-  id: string;
-  changedBy: string;
-  changedAt: string;
-  action: 'created' | 'updated';
-  description: string;
-};
-
-export type RealizationEntity = {
-  id: string;
-  companyName: string;
-  contactPerson: string;
-  contactPhone?: string;
-  contactEmail?: string;
-  instructors: string[];
-  type: RealizationType;
-  logoUrl?: string;
-  offerPdfUrl?: string;
-  offerPdfName?: string;
-  scenarioId: string;
-  stationIds: string[];
-  scenarioStations: StationEntity[];
-  teamCount: number;
-  requiredDevicesCount: number;
-  peopleCount: number;
-  positionsCount: number;
-  status: RealizationStatus;
-  scheduledAt: string;
-  createdAt: string;
-  updatedAt: string;
-  logs: RealizationLog[];
-};
-
-export type CreateRealizationPayload = {
-  companyName?: string;
-  contactPerson?: string;
-  contactPhone?: string;
-  contactEmail?: string;
-  instructors?: unknown;
-  type?: RealizationType;
-  logoUrl?: string;
-  offerPdfUrl?: string;
-  offerPdfName?: string;
-  scenarioId?: string;
-  teamCount?: number;
-  peopleCount?: number;
-  positionsCount?: number;
-  status?: RealizationStatus;
-  scheduledAt?: string;
-  changedBy?: string;
-  scenarioStations?: unknown;
-};
-
-export type UpdateRealizationPayload = CreateRealizationPayload & {
-  id?: string;
-};
-
-type ScenarioStationDraftPayload = {
-  id?: string;
-  name?: string;
-  type?: StationType;
-  description?: string;
-  imageUrl?: string;
-  points?: number;
-  timeLimitSeconds?: number;
-  sourceTemplateId?: string;
-};
-
-const REALIZATION_TYPES: RealizationType[] = [
-  'outdoor-games',
-  'hotel-games',
-  'workshops',
-  'evening-attractions',
-  'dj',
-  'recreation',
-];
-
-const REALIZATION_STATUSES: RealizationStatus[] = [
-  'planned',
-  'in-progress',
-  'done',
-];
+export type { RealizationEntity, RealizationStatus, RealizationType } from './entities/realization.entity';
 
 @Injectable()
 export class RealizationService {
@@ -131,8 +58,8 @@ export class RealizationService {
     return mapped.filter((item) => item !== null) as RealizationEntity[];
   }
 
-  async createRealization(payload: CreateRealizationPayload) {
-    const validated = this.validatePayload(payload);
+  async createRealization(payload: CreateRealizationDto) {
+    const validated = validateRealizationPayload(payload);
     const realizationId = crypto.randomUUID();
     const clonedScenario = await this.scenarioService.cloneScenario(
       validated.scenarioId,
@@ -159,19 +86,19 @@ export class RealizationService {
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
         instructors: validated.instructors,
-        type: this.toPrismaType(validated.type),
+        type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: clonedScenario.id,
         teamCount: validated.teamCount,
-        requiredDevicesCount: this.calculateRequiredDevices(
+        requiredDevicesCount: calculateRequiredDevices(
           validated.teamCount,
         ),
         peopleCount: validated.peopleCount,
         positionsCount: validated.positionsCount,
-        status: this.toPrismaStatus(
-          this.resolveRealizationStatus(
+        status: toPrismaRealizationStatus(
+          resolveRealizationStatus(
             validated.status,
             validated.scheduledAt,
           ),
@@ -200,11 +127,8 @@ export class RealizationService {
     return entity;
   }
 
-  async updateRealization(payload: UpdateRealizationPayload) {
-    const realizationId = payload.id?.trim();
-    if (!realizationId) {
-      throw new BadRequestException('Invalid payload');
-    }
+  async updateRealization(payload: UpdateRealizationDto) {
+    const realizationId = requireRealizationId(payload);
 
     const current = await this.prisma.realization.findUnique({
       where: { id: realizationId },
@@ -213,7 +137,7 @@ export class RealizationService {
       throw new NotFoundException('Realization not found');
     }
 
-    const validated = this.validatePayload(payload);
+    const validated = validateRealizationPayload(payload);
     const requestedScenario = await this.scenarioService.findScenarioById(
       validated.scenarioId,
     );
@@ -246,19 +170,19 @@ export class RealizationService {
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
         instructors: validated.instructors,
-        type: this.toPrismaType(validated.type),
+        type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: scenario.id,
         teamCount: validated.teamCount,
-        requiredDevicesCount: this.calculateRequiredDevices(
+        requiredDevicesCount: calculateRequiredDevices(
           validated.teamCount,
         ),
         peopleCount: validated.peopleCount,
         positionsCount: validated.positionsCount,
-        status: this.toPrismaStatus(
-          this.resolveRealizationStatus(
+        status: toPrismaRealizationStatus(
+          resolveRealizationStatus(
             validated.status,
             validated.scheduledAt,
           ),
@@ -301,13 +225,19 @@ export class RealizationService {
       const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
         draft.timeLimitSeconds,
       );
+      const hasLatitude = typeof draft.latitude === 'number';
+      const hasLongitude = typeof draft.longitude === 'number';
+      const hasCoordinates = hasLatitude || hasLongitude;
+
       if (
         !draft.name?.trim() ||
         !draft.description?.trim() ||
         !this.isValidStationType(draft.type) ||
         typeof draft.points !== 'number' ||
         draft.points <= 0 ||
-        !parsedTimeLimit.ok
+        !parsedTimeLimit.ok ||
+        (hasCoordinates &&
+          !this.isValidStationCoordinate(draft.latitude, draft.longitude))
       ) {
         throw new BadRequestException('Invalid payload');
       }
@@ -319,6 +249,8 @@ export class RealizationService {
         imageUrl: draft.imageUrl?.trim() || undefined,
         points: Math.round(draft.points),
         timeLimitSeconds: parsedTimeLimit.value,
+        latitude: hasCoordinates ? draft.latitude : undefined,
+        longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,
       };
     });
@@ -391,152 +323,12 @@ export class RealizationService {
       orderBy: { createdAt: 'asc' },
     });
 
-    return {
-      id: realization.id,
-      companyName: realization.companyName,
-      contactPerson: realization.contactPerson,
-      contactPhone: realization.contactPhone || undefined,
-      contactEmail: realization.contactEmail || undefined,
-      instructors: Array.isArray(realization.instructors)
-        ? realization.instructors.filter(
-            (item): item is string => typeof item === 'string',
-          )
-        : [],
-      type: this.fromPrismaType(realization.type),
-      logoUrl: realization.logoUrl || undefined,
-      offerPdfUrl: realization.offerPdfUrl || undefined,
-      offerPdfName: realization.offerPdfName || undefined,
-      scenarioId: realization.scenarioId,
+    return buildRealizationEntity({
+      realization,
       stationIds: stations.map((item) => item.id),
       scenarioStations: stations,
-      teamCount: realization.teamCount,
-      requiredDevicesCount: realization.requiredDevicesCount,
-      peopleCount: realization.peopleCount,
-      positionsCount: realization.positionsCount,
-      status: this.resolveRealizationStatus(
-        this.fromPrismaStatus(realization.status),
-        realization.scheduledAt.toISOString(),
-      ),
-      scheduledAt: realization.scheduledAt.toISOString(),
-      createdAt: realization.createdAt.toISOString(),
-      updatedAt: realization.updatedAt.toISOString(),
-      logs: logsRaw.map((log) => {
-        const payload = (log.payload || {}) as Record<string, unknown>;
-        const changedBy =
-          typeof payload.changedBy === 'string' && payload.changedBy.trim()
-            ? payload.changedBy
-            : log.actorId;
-        const action = payload.action === 'created' ? 'created' : 'updated';
-        const description =
-          typeof payload.description === 'string' ? payload.description : '';
-
-        return {
-          id: log.id,
-          changedBy,
-          changedAt: log.createdAt.toISOString(),
-          action,
-          description,
-        };
-      }),
-    } satisfies RealizationEntity;
-  }
-
-  private validatePayload(payload: CreateRealizationPayload) {
-    const companyName = payload.companyName?.trim() || '';
-    const contactPerson = payload.contactPerson?.trim() || '';
-    const contactPhone = payload.contactPhone?.trim() || '';
-    const contactEmail = payload.contactEmail?.trim() || '';
-    const instructors = this.sanitizeInstructors(payload.instructors);
-    const teamCount = Math.round(Number(payload.teamCount));
-    const peopleCount = Math.round(Number(payload.peopleCount));
-    const positionsCount = Math.round(Number(payload.positionsCount));
-    const scenarioId = payload.scenarioId?.trim() || '';
-    const scheduledAtDate = payload.scheduledAt
-      ? new Date(payload.scheduledAt)
-      : null;
-    const scheduledAt =
-      scheduledAtDate && Number.isFinite(scheduledAtDate.getTime())
-        ? scheduledAtDate.toISOString()
-        : '';
-
-    if (
-      !companyName ||
-      !contactPerson ||
-      (!contactPhone && !contactEmail) ||
-      !this.isValidRealizationType(payload.type) ||
-      !this.isValidRealizationStatus(payload.status) ||
-      !scenarioId ||
-      !Number.isFinite(teamCount) ||
-      teamCount < 1 ||
-      !Number.isFinite(peopleCount) ||
-      peopleCount < 1 ||
-      !Number.isFinite(positionsCount) ||
-      positionsCount < 1 ||
-      !scheduledAt
-    ) {
-      throw new BadRequestException('Invalid payload');
-    }
-
-    let stationDrafts: ScenarioStationDraftPayload[] | undefined;
-    if (typeof payload.scenarioStations !== 'undefined') {
-      if (!Array.isArray(payload.scenarioStations)) {
-        throw new BadRequestException('Invalid payload');
-      }
-      stationDrafts = payload.scenarioStations.map(
-        (item) => (item || {}) as ScenarioStationDraftPayload,
-      );
-    }
-
-    return {
-      companyName,
-      contactPerson,
-      contactPhone: contactPhone || undefined,
-      contactEmail: contactEmail || undefined,
-      instructors,
-      type: payload.type,
-      logoUrl: payload.logoUrl?.trim() || undefined,
-      offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
-      offerPdfName: payload.offerPdfName?.trim() || undefined,
-      scenarioId,
-      teamCount,
-      peopleCount,
-      positionsCount,
-      status: payload.status,
-      scheduledAt,
-      changedBy: payload.changedBy?.trim() || 'admin@local',
-      stationDrafts,
-    };
-  }
-
-  private sanitizeInstructors(value: unknown) {
-    if (!Array.isArray(value)) {
-      return [] as string[];
-    }
-
-    return value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean)
-      .filter((item, index, list) => list.indexOf(item) === index);
-  }
-
-  private resolveRealizationStatus(
-    status: RealizationStatus,
-    scheduledAt: string,
-  ) {
-    const scheduledTimestamp = new Date(scheduledAt).getTime();
-
-    if (
-      Number.isFinite(scheduledTimestamp) &&
-      scheduledTimestamp < Date.now()
-    ) {
-      return 'done' as const;
-    }
-
-    return status;
-  }
-
-  private calculateRequiredDevices(teamCount: number) {
-    return teamCount + 2;
+      logs: mapRealizationLogs(logsRaw),
+    });
   }
 
   private async createLog(
@@ -598,49 +390,16 @@ export class RealizationService {
     return value === 'quiz' || value === 'time' || value === 'points';
   }
 
-  private isValidRealizationType(value: unknown): value is RealizationType {
+  private isValidStationCoordinate(latitude: unknown, longitude: unknown) {
     return (
-      typeof value === 'string' &&
-      REALIZATION_TYPES.includes(value as RealizationType)
+      typeof latitude === 'number' &&
+      Number.isFinite(latitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      typeof longitude === 'number' &&
+      Number.isFinite(longitude) &&
+      longitude >= -180 &&
+      longitude <= 180
     );
-  }
-
-  private isValidRealizationStatus(value: unknown): value is RealizationStatus {
-    return (
-      typeof value === 'string' &&
-      REALIZATION_STATUSES.includes(value as RealizationStatus)
-    );
-  }
-
-  private toPrismaType(type: RealizationType) {
-    if (type === 'outdoor-games') return PrismaRealizationType.OUTDOOR_GAMES;
-    if (type === 'hotel-games') return PrismaRealizationType.HOTEL_GAMES;
-    if (type === 'workshops') return PrismaRealizationType.WORKSHOPS;
-    if (type === 'evening-attractions')
-      return PrismaRealizationType.EVENING_ATTRACTIONS;
-    if (type === 'dj') return PrismaRealizationType.DJ;
-    return PrismaRealizationType.RECREATION;
-  }
-
-  private fromPrismaType(type: PrismaRealizationType): RealizationType {
-    if (type === PrismaRealizationType.OUTDOOR_GAMES) return 'outdoor-games';
-    if (type === PrismaRealizationType.HOTEL_GAMES) return 'hotel-games';
-    if (type === PrismaRealizationType.WORKSHOPS) return 'workshops';
-    if (type === PrismaRealizationType.EVENING_ATTRACTIONS)
-      return 'evening-attractions';
-    if (type === PrismaRealizationType.DJ) return 'dj';
-    return 'recreation';
-  }
-
-  private toPrismaStatus(status: RealizationStatus) {
-    if (status === 'planned') return PrismaRealizationStatus.PLANNED;
-    if (status === 'in-progress') return PrismaRealizationStatus.IN_PROGRESS;
-    return PrismaRealizationStatus.DONE;
-  }
-
-  private fromPrismaStatus(status: PrismaRealizationStatus): RealizationStatus {
-    if (status === PrismaRealizationStatus.PLANNED) return 'planned';
-    if (status === PrismaRealizationStatus.IN_PROGRESS) return 'in-progress';
-    return 'done';
   }
 }

@@ -8,44 +8,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { parseLoginDto } from './dto/auth.dto';
+import {
+  readSessionToken,
+  resolveCookieSameSite,
+  resolveCookieSecure,
+} from './auth.cookies';
 import { AuthService } from './auth.service';
-
-type LoginPayload = {
-  email?: string;
-  password?: string;
-};
-
-function resolveCookieSameSite(): 'lax' | 'strict' | 'none' {
-  const raw = process.env.AUTH_COOKIE_SAME_SITE?.toLowerCase();
-
-  if (raw === 'lax' || raw === 'strict' || raw === 'none') {
-    return raw;
-  }
-
-  return process.env.NODE_ENV === 'production' ? 'none' : 'lax';
-}
-
-function resolveCookieSecure() {
-  if (process.env.AUTH_COOKIE_SECURE === 'true') {
-    return true;
-  }
-
-  if (process.env.AUTH_COOKIE_SECURE === 'false') {
-    return false;
-  }
-
-  return process.env.NODE_ENV === 'production';
-}
-
-function readSessionToken(request: Request) {
-  const cookies = request.cookies as unknown;
-  if (!cookies || typeof cookies !== 'object') {
-    return undefined;
-  }
-
-  const value = (cookies as Record<string, unknown>).sq_session;
-  return typeof value === 'string' ? value : undefined;
-}
 
 @Controller('auth')
 export class AuthController {
@@ -53,13 +22,11 @@ export class AuthController {
 
   @Post('login')
   async login(
-    @Body() payload: LoginPayload,
+    @Body() payload: unknown,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.authService.login(
-      payload.email || '',
-      payload.password || '',
-    );
+    const dto = parseLoginDto(payload);
+    const result = await this.authService.login(dto.email, dto.password);
 
     if (!result) {
       throw new UnauthorizedException('Invalid credentials');

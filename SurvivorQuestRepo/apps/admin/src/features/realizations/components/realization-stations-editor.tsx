@@ -17,6 +17,8 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     imageUrl: "",
     points: 100,
     timeLimitSeconds: 0,
+    latitude: undefined,
+    longitude: undefined,
   };
 }
 
@@ -29,6 +31,8 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     imageUrl: station.imageUrl,
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
+    latitude: station.latitude,
+    longitude: station.longitude,
   };
 }
 
@@ -41,6 +45,8 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     imageUrl: station.imageUrl.trim(),
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
+    latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
+    longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   }));
 }
 
@@ -55,6 +61,21 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
     }
 
     if (!Number.isFinite(station.timeLimitSeconds) || station.timeLimitSeconds < 0 || station.timeLimitSeconds > 600) {
+      return true;
+    }
+
+    const hasLatitude = typeof station.latitude === "number" && Number.isFinite(station.latitude);
+    const hasLongitude = typeof station.longitude === "number" && Number.isFinite(station.longitude);
+
+    if (hasLatitude !== hasLongitude) {
+      return true;
+    }
+
+    if (hasLatitude && (station.latitude! < -90 || station.latitude! > 90)) {
+      return true;
+    }
+
+    if (hasLongitude && (station.longitude! < -180 || station.longitude! > 180)) {
       return true;
     }
 
@@ -143,7 +164,7 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                 <p className="text-sm font-medium text-zinc-100">{station.name.trim() || `Stanowisko ${index + 1}`}</p>
                 <p className="text-xs text-zinc-500">
                   {stationTypeLabelByValue.get(station.type) ?? "Quiz"} • {Number.isFinite(station.points) ? station.points : 0} pkt •{" "}
-                  {Number.isFinite(station.timeLimitSeconds) ? station.timeLimitSeconds : 0}s
+                  {Number.isFinite(station.timeLimitSeconds) ? station.timeLimitSeconds : 0}s • {typeof station.latitude === "number" && typeof station.longitude === "number" ? `${station.latitude.toFixed(5)}, ${station.longitude.toFixed(5)}` : "brak GPS"}
                 </p>
               </button>
 
@@ -237,6 +258,48 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                     />
                   </label>
                 </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-90}
+                      max={90}
+                      value={typeof station.latitude === "number" ? station.latitude : ""}
+                      onChange={(event) =>
+                        updateStation(index, {
+                          latitude: event.target.value === "" ? undefined : Number(event.target.value),
+                        })
+                      }
+                      placeholder="np. 52.22970"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-180}
+                      max={180}
+                      value={typeof station.longitude === "number" ? station.longitude : ""}
+                      onChange={(event) =>
+                        updateStation(index, {
+                          longitude: event.target.value === "" ? undefined : Number(event.target.value),
+                        })
+                      }
+                      placeholder="np. 21.01220"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                </div>
+
+                <p className="text-xs text-zinc-500">
+                  Jeśli uzupełnisz GPS, mobilka pokaże stanowisko w realnym miejscu zamiast generować pozycję zastępczą.
+                </p>
               </div>
             )}
           </div>

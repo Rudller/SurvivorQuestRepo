@@ -4,6 +4,7 @@ import {
   UserStatus as PrismaUserStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { hashPassword } from '../../shared/lib/password';
 
 export type UserRole = 'admin' | 'instructor';
 export type UserStatus = 'active' | 'invited' | 'blocked';
@@ -16,6 +17,7 @@ export type UserRecord = {
   role: UserRole;
   status: UserStatus;
   photoUrl: string;
+  hasPassword: boolean;
   lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +30,7 @@ export type CreateUserInput = {
   role: UserRole;
   status: UserStatus;
   photoUrl?: string;
+  password?: string;
 };
 
 export type UpdateUserInput = {
@@ -38,7 +41,54 @@ export type UpdateUserInput = {
   role?: UserRole;
   status?: UserStatus;
   photoUrl?: string;
+  password?: string;
 };
+
+function toPrismaUserRole(role: UserRole) {
+  return role === 'admin' ? PrismaUserRole.ADMIN : PrismaUserRole.INSTRUCTOR;
+}
+
+function toPrismaUserStatus(status: UserStatus) {
+  if (status === 'active') return PrismaUserStatus.ACTIVE;
+  if (status === 'blocked') return PrismaUserStatus.BLOCKED;
+  return PrismaUserStatus.INVITED;
+}
+
+function fromPrismaUserStatus(status: PrismaUserStatus): UserStatus {
+  if (status === PrismaUserStatus.ACTIVE) return 'active';
+  if (status === PrismaUserStatus.BLOCKED) return 'blocked';
+  return 'invited';
+}
+
+function mapUser(input: {
+  id: string;
+  displayName: string;
+  email: string;
+  phone: string | null;
+  role: PrismaUserRole;
+  status: PrismaUserStatus;
+  photoUrl: string | null;
+  passwordHash: string | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): UserRecord {
+  return {
+    id: input.id,
+    displayName: input.displayName,
+    email: input.email,
+    phone: input.phone || undefined,
+    role: input.role === PrismaUserRole.ADMIN ? 'admin' : 'instructor',
+    status: fromPrismaUserStatus(input.status),
+    photoUrl:
+      input.photoUrl ||
+      `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(input.email)}`,
+    hasPassword: Boolean(input.passwordHash),
+    lastLoginAt: input.lastLoginAt?.toISOString(),
+    createdAt: input.createdAt.toISOString(),
+    updatedAt: input.updatedAt.toISOString(),
+  };
+}
 
 @Injectable()
 export class UsersService {
@@ -49,27 +99,31 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return users.map((user) => this.mapUser(user));
+    return users.map((user) => mapUser(user));
   }
 
   async create(input: CreateUserInput) {
     const safeEmail = input.email.trim();
     const safeDisplayName = input.displayName.trim();
+    const passwordHash = input.password?.trim()
+      ? await hashPassword(input.password)
+      : null;
 
     const created = await this.prisma.user.create({
       data: {
         displayName: safeDisplayName,
         email: safeEmail,
         phone: input.phone?.trim() || null,
-        role: this.toPrismaRole(input.role),
-        status: this.toPrismaStatus(input.status),
+        role: toPrismaUserRole(input.role),
+        status: toPrismaUserStatus(input.status),
         photoUrl:
           input.photoUrl?.trim() ||
           `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(safeEmail)}`,
+        passwordHash,
       },
     });
 
-    return this.mapUser(created);
+    return mapUser(created);
   }
 
   async update(input: UpdateUserInput) {
@@ -82,67 +136,30 @@ export class UsersService {
     }
 
     const nextEmail = input.email?.trim() || current.email;
+    const nextPasswordHash =
+      typeof input.password === 'string'
+        ? input.password.trim()
+          ? await hashPassword(input.password)
+          : null
+        : current.passwordHash;
     const updated = await this.prisma.user.update({
       where: { id: input.id },
       data: {
         displayName: input.displayName?.trim() || current.displayName,
         email: nextEmail,
         phone: input.phone?.trim() || null,
-        role: input.role ? this.toPrismaRole(input.role) : current.role,
+        role: input.role ? toPrismaUserRole(input.role) : current.role,
         status: input.status
-          ? this.toPrismaStatus(input.status)
+          ? toPrismaUserStatus(input.status)
           : current.status,
         photoUrl:
           input.photoUrl?.trim() ||
           current.photoUrl ||
           `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(nextEmail)}`,
+        passwordHash: nextPasswordHash,
       },
     });
 
-    return this.mapUser(updated);
-  }
-
-  private mapUser(user: {
-    id: string;
-    displayName: string;
-    email: string;
-    phone: string | null;
-    role: PrismaUserRole;
-    status: PrismaUserStatus;
-    photoUrl: string | null;
-    lastLoginAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): UserRecord {
-    return {
-      id: user.id,
-      displayName: user.displayName,
-      email: user.email,
-      phone: user.phone || undefined,
-      role: user.role === PrismaUserRole.ADMIN ? 'admin' : 'instructor',
-      status: this.fromPrismaStatus(user.status),
-      photoUrl:
-        user.photoUrl ||
-        `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.email)}`,
-      lastLoginAt: user.lastLoginAt?.toISOString(),
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
-  }
-
-  private toPrismaRole(role: UserRole) {
-    return role === 'admin' ? PrismaUserRole.ADMIN : PrismaUserRole.INSTRUCTOR;
-  }
-
-  private toPrismaStatus(status: UserStatus) {
-    if (status === 'active') return PrismaUserStatus.ACTIVE;
-    if (status === 'blocked') return PrismaUserStatus.BLOCKED;
-    return PrismaUserStatus.INVITED;
-  }
-
-  private fromPrismaStatus(status: PrismaUserStatus): UserStatus {
-    if (status === PrismaUserStatus.ACTIVE) return 'active';
-    if (status === PrismaUserStatus.BLOCKED) return 'blocked';
-    return 'invited';
+    return mapUser(updated);
   }
 }

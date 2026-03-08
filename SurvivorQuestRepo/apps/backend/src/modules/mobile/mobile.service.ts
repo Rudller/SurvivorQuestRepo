@@ -8,6 +8,10 @@ import {
 import { EventActorType, Prisma, TaskStatus, TeamStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  getOpaqueTokenCandidates,
+  hashOpaqueToken,
+} from '../../shared/lib/opaque-token';
+import {
   RealizationService,
   type RealizationStatus,
 } from '../realization/realization.service';
@@ -148,13 +152,17 @@ export class MobileService {
       existingAssignment &&
       !this.isExpired(existingAssignment.expiresAt.toISOString())
     ) {
-      const refreshed = await this.touchAssignment(existingAssignment.id);
+      const rotatedSessionToken = this.generateSessionToken();
+      const refreshed = await this.touchAssignment(
+        existingAssignment.id,
+        rotatedSessionToken,
+      );
       if (!existingAssignment.team) {
         throw new NotFoundException('Team not found');
       }
 
       return {
-        sessionToken: existingAssignment.sessionToken,
+        sessionToken: rotatedSessionToken,
         realizationId: realization.id,
         team: {
           id: existingAssignment.team.id,
@@ -193,13 +201,14 @@ export class MobileService {
     }
 
     const now = new Date();
+    const sessionToken = this.generateSessionToken();
     const assignment = await this.prisma.teamAssignment.create({
       data: {
         realizationId: realization.id,
         teamId: selectedTeam.id,
         deviceId,
         memberName: input.memberName?.trim() || null,
-        sessionToken: this.generateSessionToken(),
+        sessionToken: hashOpaqueToken(sessionToken),
         expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
         lastSeenAt: now,
       },
@@ -225,7 +234,7 @@ export class MobileService {
     });
 
     return {
-      sessionToken: assignment.sessionToken,
+      sessionToken,
       realizationId: realization.id,
       team: {
         id: selectedTeam.id,
@@ -267,12 +276,33 @@ export class MobileService {
     return {
       realization: {
         id: realization.id,
+        companyName: realization.companyName,
+        contactPerson: realization.contactPerson,
+        contactPhone: realization.contactPhone,
+        contactEmail: realization.contactEmail,
+        logoUrl: realization.logoUrl,
+        type: realization.type,
+        teamCount: realization.teamCount,
+        peopleCount: realization.peopleCount,
+        positionsCount: realization.positionsCount,
+        instructors: realization.instructors,
         status: this.normalizeStatus(
           realization.status,
           realization.scheduledAt,
         ),
         locationRequired: realization.locationRequired,
         scheduledAt: realization.scheduledAt,
+        stations: realization.scenarioStations.map((station) => ({
+          id: station.id,
+          name: station.name,
+          type: station.type,
+          description: station.description,
+          imageUrl: station.imageUrl,
+          points: station.points,
+          timeLimitSeconds: station.timeLimitSeconds,
+          latitude: station.latitude,
+          longitude: station.longitude,
+        })),
       },
       team: {
         id: team.id,
@@ -900,8 +930,10 @@ export class MobileService {
       throw new UnauthorizedException('Missing session token');
     }
 
-    const assignment = await this.prisma.teamAssignment.findUnique({
-      where: { sessionToken: sessionToken.trim() },
+    const candidates = getOpaqueTokenCandidates(sessionToken);
+
+    const assignment = await this.prisma.teamAssignment.findFirst({
+      where: { sessionToken: { in: candidates } },
       include: { team: true },
     });
 
@@ -914,7 +946,11 @@ export class MobileService {
       throw new UnauthorizedException('Session expired');
     }
 
-    await this.touchAssignment(assignment.id);
+    const rawToken = sessionToken.trim();
+    await this.touchAssignment(
+      assignment.id,
+      assignment.sessionToken === rawToken ? rawToken : undefined,
+    );
     const realizations = await this.getRealizationsView();
     const realization = realizations.find(
       (item) => item.id === assignment.realizationId,
@@ -931,11 +967,17 @@ export class MobileService {
     };
   }
 
-  private async touchAssignment(assignmentId: string) {
+  private async touchAssignment(
+    assignmentId: string,
+    rawSessionToken?: string,
+  ) {
     const refreshed = new Date();
     await this.prisma.teamAssignment.update({
       where: { id: assignmentId },
       data: {
+        ...(rawSessionToken
+          ? { sessionToken: hashOpaqueToken(rawSessionToken) }
+          : {}),
         lastSeenAt: refreshed,
         expiresAt: new Date(Date.now() + SESSION_TTL_MS),
       },

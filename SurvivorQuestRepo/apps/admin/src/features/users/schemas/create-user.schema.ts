@@ -21,6 +21,12 @@ export const createUserSchema = z.object({
         .url("Podaj poprawny URL zdjęcia")
         .optional()
         .or(z.literal("")),
+    password: z
+        .string()
+        .trim()
+        .min(6, "Hasło musi mieć min. 6 znaków")
+        .optional()
+        .or(z.literal("")),
 });
 
 export type CreateUserFormValues = z.infer<typeof createUserSchema>;

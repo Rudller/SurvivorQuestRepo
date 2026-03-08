@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
 import { MobileService } from './mobile.service';
 
 type JoinSessionPayload = {
@@ -110,11 +111,13 @@ export class MobileController {
   }
 
   @Get('admin/realizations/current')
+  @UseGuards(AdminSessionGuard)
   async getMobileAdminCurrentRealizationOverview() {
     return this.mobileService.getMobileAdminRealizationOverview('current');
   }
 
   @Get('admin/realizations/:realizationId')
+  @UseGuards(AdminSessionGuard)
   async getMobileAdminRealizationOverview(
     @Param('realizationId') realizationId: string,
   ) {

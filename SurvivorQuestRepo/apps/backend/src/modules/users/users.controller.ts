@@ -1,33 +1,17 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   Post,
   Put,
+  UseGuards,
 } from '@nestjs/common';
-import { UsersService, type UserRole, type UserStatus } from './users.service';
-
-type CreateUserPayload = {
-  displayName?: string;
-  email?: string;
-  phone?: string;
-  role?: UserRole;
-  status?: UserStatus;
-  photoUrl?: string;
-};
-
-type UpdateUserPayload = {
-  id?: string;
-  displayName?: string;
-  email?: string;
-  phone?: string;
-  role?: UserRole;
-  status?: UserStatus;
-  photoUrl?: string;
-};
+import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { parseCreateUserDto, parseUpdateUserDto } from './dto/user.dto';
+import { UsersService } from './users.service';
 
 @Controller('users')
+@UseGuards(AdminSessionGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -37,40 +21,12 @@ export class UsersController {
   }
 
   @Post()
-  async createUser(@Body() payload: CreateUserPayload) {
-    if (
-      !payload.displayName?.trim() ||
-      !payload.email?.trim() ||
-      !payload.role ||
-      !payload.status
-    ) {
-      throw new BadRequestException('Invalid payload');
-    }
-
-    return this.usersService.create({
-      displayName: payload.displayName,
-      email: payload.email,
-      phone: payload.phone,
-      role: payload.role,
-      status: payload.status,
-      photoUrl: payload.photoUrl,
-    });
+  async createUser(@Body() payload: unknown) {
+    return this.usersService.create(parseCreateUserDto(payload));
   }
 
   @Put()
-  async updateUser(@Body() payload: UpdateUserPayload) {
-    if (!payload.id?.trim()) {
-      throw new BadRequestException('User id is required');
-    }
-
-    return this.usersService.update({
-      id: payload.id,
-      displayName: payload.displayName,
-      email: payload.email,
-      phone: payload.phone,
-      role: payload.role,
-      status: payload.status,
-      photoUrl: payload.photoUrl,
-    });
+  async updateUser(@Body() payload: unknown) {
+    return this.usersService.update(parseUpdateUserDto(payload));
   }
 }

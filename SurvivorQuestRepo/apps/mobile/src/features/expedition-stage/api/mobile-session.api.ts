@@ -1,36 +1,12 @@
-import type { ExpeditionSessionState, ExpeditionTaskStatus, PlayerLocation } from "../model/types";
+import type {
+  ExpeditionRealizationStation,
+  ExpeditionSessionState,
+  ExpeditionTaskStatus,
+  PlayerLocation,
+} from "../model/types";
 
 type UnknownRecord = Record<string, unknown>;
 type MobileApiError = { message?: string };
-
-export type MobileRealizationClientDetails = {
-  id: string;
-  companyName: string;
-  contactPerson: string;
-  contactPhone: string;
-  contactEmail: string;
-  logoUrl: string;
-  type: string;
-  teamCount: number;
-  peopleCount: number;
-  positionsCount: number;
-  instructors: string[];
-  stations: Array<{
-    id: string;
-    name: string;
-    type: string;
-  }>;
-};
-
-export type MobileStationCatalogItem = {
-  id: string;
-  name: string;
-  type: string;
-  description: string;
-  imageUrl: string;
-  points: number;
-  timeLimitSeconds: number;
-};
 
 function asRecord(value: unknown): UnknownRecord {
   return typeof value === "object" && value !== null ? (value as UnknownRecord) : {};
@@ -82,13 +58,52 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
   const realization = asRecord(source.realization);
   const team = asRecord(source.team);
   const meta = asRecord(source.meta);
+  const stations = asArray(realization.stations).map((stationItem) => {
+    const station = asRecord(stationItem);
+    const id = asString(station.id);
+    const name = asString(station.name, id || "Stanowisko");
+
+    return {
+      id,
+      name,
+      type: asString(station.type, "quiz"),
+      description: asString(station.description, "Opis stanowiska jest dostępny po skanie QR."),
+      imageUrl:
+        asString(station.imageUrl ?? station.image_url) ||
+        `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
+      points: Math.max(0, Math.round(asNumber(station.points, 0))),
+      timeLimitSeconds: Math.max(0, Math.round(asNumber(station.timeLimitSeconds ?? station.time_limit_seconds, 0))),
+      latitude: (() => {
+        const value = asNumber(station.latitude ?? station.lat, Number.NaN);
+        return Number.isFinite(value) ? value : undefined;
+      })(),
+      longitude: (() => {
+        const value = asNumber(station.longitude ?? station.lng, Number.NaN);
+        return Number.isFinite(value) ? value : undefined;
+      })(),
+    } satisfies ExpeditionRealizationStation;
+  });
 
   return {
     realization: {
       id: asString(realization.id, "unknown-realization"),
+      companyName: asString(realization.companyName ?? realization.company_name, "Realizacja terenowa"),
+      contactPerson: asString(realization.contactPerson ?? realization.contact_person),
+      contactPhone: asString(realization.contactPhone ?? realization.contact_phone) || undefined,
+      contactEmail: asString(realization.contactEmail ?? realization.contact_email) || undefined,
+      logoUrl: asString(realization.logoUrl ?? realization.logo_url) || undefined,
+      type: asString(realization.type) || undefined,
+      teamCount: Math.max(0, Math.round(asNumber(realization.teamCount ?? realization.team_count, 0))) || undefined,
+      peopleCount: Math.max(0, Math.round(asNumber(realization.peopleCount ?? realization.people_count, 0))) || undefined,
+      positionsCount:
+        Math.max(0, Math.round(asNumber(realization.positionsCount ?? realization.positions_count, 0))) || undefined,
+      instructors: asArray(realization.instructors)
+        .map((item) => asString(item))
+        .filter((value) => value.trim().length > 0),
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
+      stations,
     },
     team: {
       id: asString(team.id, "unknown-team"),
@@ -189,81 +204,4 @@ export async function postMobileCompleteTask(
       }),
     },
   );
-}
-
-export async function fetchMobileStationCatalog(apiBaseUrl: string) {
-  const result = await requestMobileApi<unknown>(apiBaseUrl, "/api/station");
-
-  return asArray(result)
-    .map((item) => {
-      const station = asRecord(item);
-      const id = asString(station.id);
-      const name = asString(station.name, id || "Stanowisko");
-
-      return {
-        id,
-        name,
-        type: asString(station.type, "quiz"),
-        description: asString(station.description, "Opis stanowiska jest dostępny po skanie QR."),
-        imageUrl:
-          asString(station.imageUrl ?? station.image_url) ||
-          `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
-        points: Math.max(0, Math.round(asNumber(station.points, 0))),
-        timeLimitSeconds: Math.max(0, Math.round(asNumber(station.timeLimitSeconds ?? station.time_limit_seconds, 0))),
-      } satisfies MobileStationCatalogItem;
-    })
-    .filter((station) => station.id.trim().length > 0);
-}
-
-export async function fetchMobileRealizationClientDetails(apiBaseUrl: string, realizationId: string) {
-  const normalizedRealizationId = realizationId.trim();
-
-  if (!normalizedRealizationId) {
-    return null;
-  }
-
-  let result: unknown;
-
-  try {
-    result = await requestMobileApi<unknown>(apiBaseUrl, "/realizations");
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "";
-
-    if (!/404|not found/i.test(errorMessage)) {
-      throw error;
-    }
-
-    result = await requestMobileApi<unknown>(apiBaseUrl, "/api/realizations");
-  }
-
-  const realizations = asArray(result).map((item) => asRecord(item));
-  const matched = realizations.find((item) => asString(item.id) === normalizedRealizationId);
-
-  if (!matched) {
-    return null;
-  }
-
-  return {
-    id: asString(matched.id),
-    companyName: asString(matched.companyName ?? matched.company_name),
-    contactPerson: asString(matched.contactPerson ?? matched.contact_person),
-    contactPhone: asString(matched.contactPhone ?? matched.contact_phone),
-    contactEmail: asString(matched.contactEmail ?? matched.contact_email),
-    logoUrl: asString(matched.logoUrl ?? matched.logo_url),
-    type: asString(matched.type),
-    teamCount: Math.max(0, Math.round(asNumber(matched.teamCount ?? matched.team_count, 0))),
-    peopleCount: Math.max(0, Math.round(asNumber(matched.peopleCount ?? matched.people_count, 0))),
-    positionsCount: Math.max(0, Math.round(asNumber(matched.positionsCount ?? matched.positions_count, 0))),
-    instructors: asArray(matched.instructors)
-      .map((item) => asString(item))
-      .filter((value) => value.trim().length > 0),
-    stations: asArray(matched.scenarioStations ?? matched.scenario_stations).map((item) => {
-      const station = asRecord(item);
-      return {
-        id: asString(station.id),
-        name: asString(station.name),
-        type: asString(station.type),
-      };
-    }),
-  } satisfies MobileRealizationClientDetails;
 }

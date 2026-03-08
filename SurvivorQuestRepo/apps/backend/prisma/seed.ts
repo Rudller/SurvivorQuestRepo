@@ -8,6 +8,7 @@ import {
   UserRole,
   UserStatus,
 } from '@prisma/client';
+import { hashPassword } from '../src/shared/lib/password';
 
 const prisma = new PrismaClient();
 
@@ -74,6 +75,8 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=640&q=80&auto=format&fit=crop',
     points: 100,
     timeLimitSeconds: 300,
+    latitude: 52.2298,
+    longitude: 21.0116,
     createdAt: atOffset(-14 * dayMs),
     updatedAt: atOffset(-14 * dayMs),
   },
@@ -87,6 +90,8 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?w=640&q=80&auto=format&fit=crop',
     points: 180,
     timeLimitSeconds: 420,
+    latitude: 52.2309,
+    longitude: 21.0152,
     createdAt: atOffset(-14 * dayMs),
     updatedAt: atOffset(-14 * dayMs),
   },
@@ -100,6 +105,8 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1502920514313-52581002a659?w=640&q=80&auto=format&fit=crop',
     points: 220,
     timeLimitSeconds: 0,
+    latitude: 52.2281,
+    longitude: 21.0189,
     createdAt: atOffset(-14 * dayMs),
     updatedAt: atOffset(-14 * dayMs),
   },
@@ -113,6 +120,8 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1526498460520-4c246339dccb?w=640&q=80&auto=format&fit=crop',
     points: 130,
     timeLimitSeconds: 240,
+    latitude: 52.2268,
+    longitude: 21.0131,
     createdAt: atOffset(-14 * dayMs),
     updatedAt: atOffset(-14 * dayMs),
   },
@@ -126,6 +135,8 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=640&q=80&auto=format&fit=crop',
     points: 160,
     timeLimitSeconds: 0,
+    latitude: 52.2314,
+    longitude: 21.0094,
     createdAt: atOffset(-14 * dayMs),
     updatedAt: atOffset(-14 * dayMs),
   },
@@ -305,7 +316,16 @@ async function main() {
   await prisma.chatMessage.deleteMany();
   await prisma.user.deleteMany();
 
-  await prisma.user.createMany({ data: users });
+  const seededUsers = await Promise.all(
+    users.map(async (user) => ({
+      ...user,
+      passwordHash: user.passwordHash
+        ? await hashPassword(user.passwordHash)
+        : user.passwordHash,
+    })),
+  );
+
+  await prisma.user.createMany({ data: seededUsers });
   await prisma.station.createMany({ data: stations });
   await prisma.scenario.createMany({ data: scenarios });
   await prisma.scenarioStation.createMany({ data: scenarioStations });
@@ -314,7 +334,7 @@ async function main() {
   await prisma.chatMessage.createMany({ data: chatMessages });
 
   console.log(
-    `Seed completed: ${users.length} users, ${stations.length} stations, ${scenarios.length} scenarios, ${realizations.length} realizations.`,
+    `Seed completed: ${seededUsers.length} users, ${stations.length} stations, ${scenarios.length} scenarios, ${realizations.length} realizations.`,
   );
 }
 

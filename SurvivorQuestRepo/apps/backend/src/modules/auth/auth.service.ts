@@ -1,12 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  getOpaqueTokenCandidates,
+  hashOpaqueToken,
+} from '../../shared/lib/opaque-token';
+import {
+  hashPassword,
+  isPasswordHash,
+  verifyPassword,
+} from '../../shared/lib/password';
 
-type AuthUser = {
+export type AuthUser = {
   id: string;
   email: string;
   role: 'admin' | 'instructor';
 };
+
+function mapAuthUser(id: string, email: string, role: UserRole): AuthUser {
+  return {
+    id,
+    email,
+    role: role === UserRole.ADMIN ? 'admin' : 'instructor',
+  };
+}
 
 @Injectable()
 export class AuthService {
@@ -16,12 +33,20 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: {
         email,
-        passwordHash: password,
       },
     });
 
-    if (!user) {
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
       return null;
+    }
+
+    if (user.passwordHash && !isPasswordHash(user.passwordHash)) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: await hashPassword(password),
+        },
+      });
     }
 
     const sessionToken = `sq_${crypto.randomUUID()}`;
@@ -29,25 +54,26 @@ export class AuthService {
     await this.prisma.authSession.create({
       data: {
         userId: user.id,
-        refreshTokenHash: sessionToken,
+        refreshTokenHash: hashOpaqueToken(sessionToken),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 
     return {
-      user: this.mapAuthUser(user.id, user.email, user.role),
+      user: mapAuthUser(user.id, user.email, user.role),
       sessionToken,
     };
   }
 
   async getUserBySession(sessionToken?: string) {
-    if (!sessionToken) {
+    const candidates = getOpaqueTokenCandidates(sessionToken);
+    if (candidates.length === 0) {
       return null;
     }
 
     const session = await this.prisma.authSession.findFirst({
       where: {
-        refreshTokenHash: sessionToken,
+        refreshTokenHash: { in: candidates },
         revokedAt: null,
         expiresAt: {
           gt: new Date(),
@@ -62,34 +88,33 @@ export class AuthService {
       return null;
     }
 
-    return this.mapAuthUser(
-      session.user.id,
-      session.user.email,
-      session.user.role,
-    );
+    const rawToken = sessionToken?.trim();
+    if (rawToken && session.refreshTokenHash === rawToken) {
+      await this.prisma.authSession.update({
+        where: { id: session.id },
+        data: {
+          refreshTokenHash: hashOpaqueToken(rawToken),
+        },
+      });
+    }
+
+    return mapAuthUser(session.user.id, session.user.email, session.user.role);
   }
 
   async logout(sessionToken?: string) {
-    if (!sessionToken) {
+    const candidates = getOpaqueTokenCandidates(sessionToken);
+    if (candidates.length === 0) {
       return;
     }
 
     await this.prisma.authSession.updateMany({
       where: {
-        refreshTokenHash: sessionToken,
+        refreshTokenHash: { in: candidates },
         revokedAt: null,
       },
       data: {
         revokedAt: new Date(),
       },
     });
-  }
-
-  private mapAuthUser(id: string, email: string, role: UserRole): AuthUser {
-    return {
-      id,
-      email,
-      role: role === UserRole.ADMIN ? 'admin' : 'instructor',
-    };
   }
 }

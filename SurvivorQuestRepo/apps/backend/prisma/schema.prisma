@@ -94,6 +94,8 @@ model Station {
   imageUrl         String?
   points           Int
   timeLimitSeconds Int                @default(0)
+  latitude         Float?
+  longitude        Float?
   sourceTemplateId String?
   scenarioInstanceId String?
   realizationId    String?

@@ -17,13 +17,17 @@ export function CreateUserForm() {
             role: "instructor",
             status: "invited",
             photoUrl: "",
+            password: "",
         },
     });
 
     const onSubmit = async (values: CreateUserFormValues) => {
         try {
-            await createUser(values).unwrap();
-            form.reset({ displayName: "", email: "", phone: "", role: "instructor", status: "invited", photoUrl: "" });
+            await createUser({
+                ...values,
+                password: values.password?.trim() || undefined,
+            }).unwrap();
+            form.reset({ displayName: "", email: "", phone: "", role: "instructor", status: "invited", photoUrl: "", password: "" });
         } catch (error) {
             console.error("Błąd podczas tworzenia użytkownika:", error);
         }
@@ -97,6 +101,16 @@ export function CreateUserForm() {
             />
             {form.formState.errors.photoUrl && (
                 <p className="text-sm text-red-300">{form.formState.errors.photoUrl.message}</p>
+            )}
+
+            <input
+                {...form.register("password")}
+                type="password"
+                placeholder="Hasło (opcjonalne, min. 6 znaków)"
+                className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-amber-400/80 focus:ring-2 focus:ring-amber-500/30"
+            />
+            {form.formState.errors.password && (
+                <p className="text-sm text-red-300">{form.formState.errors.password.message}</p>
             )}
 
             <button

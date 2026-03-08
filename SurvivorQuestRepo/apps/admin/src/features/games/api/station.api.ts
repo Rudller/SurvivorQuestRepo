@@ -10,6 +10,8 @@ type StationDto = {
   imageUrl?: string | null;
   points: number;
   timeLimitSeconds?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   sourceTemplateId?: string;
   scenarioInstanceId?: string;
   realizationId?: string;
@@ -61,6 +63,8 @@ function normalizeStation(station: StationDto): Station {
     imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
+    latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
+    longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
     sourceTemplateId: station.sourceTemplateId,
     scenarioInstanceId: station.scenarioInstanceId,
     realizationId: station.realizationId,

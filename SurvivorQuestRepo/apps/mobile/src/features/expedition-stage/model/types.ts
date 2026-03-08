@@ -15,9 +15,20 @@ export type PlayerLocation = MapCoordinate & {
 export type ExpeditionSessionState = {
   realization: {
     id: string;
+    companyName: string;
+    contactPerson: string;
+    contactPhone?: string;
+    contactEmail?: string;
+    logoUrl?: string;
+    type?: string;
+    teamCount?: number;
+    peopleCount?: number;
+    positionsCount?: number;
+    instructors: string[];
     status: "planned" | "in-progress" | "done";
     locationRequired: boolean;
     scheduledAt: string;
+    stations: ExpeditionRealizationStation[];
   };
   team: {
     id: string;
@@ -39,6 +50,18 @@ export type ExpeditionTask = {
   stationId: string;
   status: ExpeditionTaskStatus;
   pointsAwarded: number;
+};
+
+export type ExpeditionRealizationStation = {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  imageUrl: string;
+  points: number;
+  timeLimitSeconds: number;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type StationPinCustomization = {
@@ -78,9 +101,30 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
   return {
     realization: {
       id: session.realization?.id ?? session.realizationId ?? "offline-realization",
+      companyName: session.realization?.companyName ?? "Realizacja terenowa",
+      contactPerson: "",
+      contactPhone: undefined,
+      contactEmail: undefined,
+      logoUrl: undefined,
+      type: undefined,
+      teamCount: session.realization?.teamCount,
+      peopleCount: undefined,
+      positionsCount: undefined,
+      instructors: [],
       status: session.realization?.status ?? "in-progress",
       locationRequired: session.realization?.locationRequired ?? false,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      stations: stationIds.map((stationId) => ({
+        id: stationId,
+        name: `Stanowisko ${stationId}`,
+        type: "quiz",
+        description: "Opis stanowiska będzie dostępny po pełnym spięciu danych realizacji.",
+        imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationId)}`,
+        points: resolveDefaultStationPoints(stationId),
+        timeLimitSeconds: 0,
+        latitude: undefined,
+        longitude: undefined,
+      })),
     },
     team: {
       id: `team-slot-${session.team.slotNumber ?? 1}`,
