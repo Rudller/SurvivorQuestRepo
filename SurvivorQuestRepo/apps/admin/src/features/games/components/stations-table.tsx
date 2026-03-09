@@ -6,6 +6,7 @@ import type { Station } from "../types/station";
 import {
   getStationTypeLabel,
   formatTimeLimit,
+  isSvgImageUrl,
   type StationSortField,
   type SortDirection,
 } from "../station.utils";
@@ -73,7 +74,7 @@ export function StationsTable({
       {sortedGames.length === 0 && (
         <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
           <p className="text-sm font-medium text-zinc-200">Brak stanowisk</p>
-          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwsze stanowisko w formularzu powyżej.</p>
+          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwsze stanowisko przyciskiem Nowe stanowisko.</p>
         </div>
       )}
 
@@ -99,6 +100,7 @@ export function StationsTable({
                     alt={game.name}
                     width={72}
                     height={72}
+                    unoptimized={isSvgImageUrl(game.imageUrl)}
                     className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
                   />
                   <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>

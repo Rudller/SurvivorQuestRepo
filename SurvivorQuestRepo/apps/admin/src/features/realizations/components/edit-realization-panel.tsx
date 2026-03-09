@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Realization, RealizationStatus, RealizationType } from "../types/realization";
 import { realizationTypeOptions } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
-import { useUpdateRealizationMutation } from "../api/realization.api";
+import {
+  useUpdateRealizationMutation,
+  useUploadRealizationLogoMutation,
+  useUploadRealizationOfferMutation,
+} from "../api/realization.api";
 import {
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
-  calculateRequiredDevices,
-  readFileAsDataUrl,
 } from "../realization.utils";
 import {
   hasInvalidRealizationStationDrafts,
@@ -35,6 +37,8 @@ export function EditRealizationPanel({
   onClose,
 }: EditRealizationPanelProps) {
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
+  const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
+  const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
 
   const [editError, setEditError] = useState<string | null>(null);
   const [instructorInput, setInstructorInput] = useState("");
@@ -61,36 +65,25 @@ export function EditRealizationPanel({
     [scenarios],
   );
 
-  const editSelectedScenario = editValues.scenarioId ? scenarioById.get(editValues.scenarioId) : undefined;
-  const [scenarioStations, setScenarioStations] = useState(() =>
-    (realization.scenarioStations.length > 0
-      ? realization.scenarioStations
-      : (editSelectedScenario?.stationIds ?? [])
-          .map((stationId) => stations.find((station) => station.id === stationId))
-          .filter((station): station is NonNullable<typeof station> => Boolean(station))
-    ).map(toRealizationStationDraft),
-  );
-  const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const editRequiredDevicesCount = calculateRequiredDevices(editValues.teamCount);
-
-  useEffect(() => {
-    if (!editSelectedScenario) {
-      setScenarioStations([]);
-      return;
+  function mapScenarioStations(scenarioId: string) {
+    const scenario = scenarioById.get(scenarioId);
+    if (!scenario) {
+      return [];
     }
 
-    if (editSelectedScenario.id === realization.scenarioId && realization.scenarioStations.length > 0) {
-      setScenarioStations(realization.scenarioStations.map(toRealizationStationDraft));
-      return;
+    if (scenario.id === realization.scenarioId && realization.scenarioStations.length > 0) {
+      return realization.scenarioStations.map(toRealizationStationDraft);
     }
 
-    const mappedStations = (editSelectedScenario.stationIds ?? [])
+    return (scenario.stationIds ?? [])
       .map((stationId) => stations.find((station) => station.id === stationId))
       .filter((station): station is NonNullable<typeof station> => Boolean(station))
       .map(toRealizationStationDraft);
+  }
 
-    setScenarioStations(mappedStations);
-  }, [editSelectedScenario, realization.scenarioId, realization.scenarioStations, stations]);
+  const [scenarioStations, setScenarioStations] = useState(() => mapScenarioStations(realization.scenarioId));
+  const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
+  const isBusy = isUpdating || isUploadingLogo || isUploadingOffer;
 
   function addInstructor() {
     const name = instructorInput.trim();
@@ -263,6 +256,7 @@ export function EditRealizationPanel({
                 <div className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
                   {editValues.logoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={editValues.logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
                   )}
                   <input
@@ -270,13 +264,23 @@ export function EditRealizationPanel({
                     accept="image/*"
                     onChange={async (event) => {
                       const file = event.target.files?.[0];
-                      if (file) {
-                        const url = await readFileAsDataUrl(file);
-                        setEditValues((prev) => ({ ...prev, logoUrl: url }));
+                      if (!file) {
+                        return;
+                      }
+
+                      try {
+                        const uploaded = await uploadRealizationLogo(file).unwrap();
+                        setEditValues((prev) => ({ ...prev, logoUrl: uploaded.url }));
+                        setEditError(null);
+                      } catch {
+                        setEditError("Nie udało się przesłać logo klienta.");
+                      } finally {
+                        event.currentTarget.value = "";
                       }
                     }}
                     className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                   />
+                  {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
                   {editValues.logoUrl && (
                     <button type="button" onClick={() => setEditValues((prev) => ({ ...prev, logoUrl: undefined }))} className="text-xs text-red-400 hover:text-red-300">
                       Usuń logo
@@ -400,7 +404,11 @@ export function EditRealizationPanel({
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz</span>
                   <select
                     value={editValues.scenarioId}
-                    onChange={(event) => setEditValues((prev) => ({ ...prev, scenarioId: event.target.value }))}
+                    onChange={(event) => {
+                      const nextScenarioId = event.target.value;
+                      setEditValues((prev) => ({ ...prev, scenarioId: nextScenarioId }));
+                      setScenarioStations(mapScenarioStations(nextScenarioId));
+                    }}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   >
                     <option value="">Wybierz scenariusz</option>
@@ -424,13 +432,23 @@ export function EditRealizationPanel({
                     accept="application/pdf"
                     onChange={async (event) => {
                       const file = event.target.files?.[0];
-                      if (file) {
-                        const url = await readFileAsDataUrl(file);
-                        setEditValues((prev) => ({ ...prev, offerPdfUrl: url, offerPdfName: file.name }));
+                      if (!file) {
+                        return;
+                      }
+
+                      try {
+                        const uploaded = await uploadRealizationOffer(file).unwrap();
+                        setEditValues((prev) => ({ ...prev, offerPdfUrl: uploaded.url, offerPdfName: file.name }));
+                        setEditError(null);
+                      } catch {
+                        setEditError("Nie udało się przesłać oferty PDF.");
+                      } finally {
+                        event.currentTarget.value = "";
                       }
                     }}
                     className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                   />
+                  {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
                   {editValues.offerPdfUrl && (
                     <button
                       type="button"
@@ -455,7 +473,8 @@ export function EditRealizationPanel({
                   : "-"}
               </p>
               <p>
-                <span className="text-zinc-500">Wymagane urządzenia:</span> {editRequiredDevicesCount}
+                <span className="text-zinc-500">Kod dołączenia:</span>{" "}
+                <span className="font-mono text-zinc-200">{realization.joinCode}</span>
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}
@@ -478,10 +497,14 @@ export function EditRealizationPanel({
               </button>
               <button
                 type="submit"
-                disabled={isUpdating}
+                disabled={isBusy}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
               >
-                {isUpdating ? "Zapisywanie..." : "Zapisz"}
+                {isUpdating
+                  ? "Zapisywanie..."
+                  : isUploadingLogo || isUploadingOffer
+                    ? "Przesyłanie plików..."
+                    : "Zapisz"}
               </button>
             </div>
           </form>

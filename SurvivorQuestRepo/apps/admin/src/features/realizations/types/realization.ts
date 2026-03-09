@@ -41,8 +41,8 @@ export type Realization = {
   scenarioId: string;
   stationIds: string[];
   scenarioStations: Station[];
+  joinCode: string;
   teamCount: number;
-  requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
   status: RealizationStatus;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Realization, RealizationType } from "../types/realization";
+import type { Realization } from "../types/realization";
 import { realizationTypeOptions } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
@@ -92,7 +92,7 @@ export function RealizationsTable({
       {sortedRealizations.length === 0 && (
         <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
           <p className="text-sm font-medium text-zinc-200">Brak realizacji</p>
-          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszą realizację w panelu po prawej.</p>
+          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszą realizację przyciskiem Nowa realizacja.</p>
         </div>
       )}
 
@@ -109,7 +109,7 @@ export function RealizationsTable({
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Scenariusz</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Drużyny</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Urządzenia</th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Kod dołączenia</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Osoby</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Stanowiska</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ostatnia zmiana</th>
@@ -157,7 +157,7 @@ export function RealizationsTable({
                       </td>
                       <td className="px-3 py-2 font-medium text-amber-300">{totalPoints}</td>
                       <td className="px-3 py-2 text-zinc-300">{realization.teamCount}</td>
-                      <td className="px-3 py-2 text-zinc-300">{realization.requiredDevicesCount}</td>
+                      <td className="px-3 py-2 font-mono text-zinc-200">{realization.joinCode}</td>
                       <td className="px-3 py-2 text-zinc-300">{realization.peopleCount}</td>
                       <td className="px-3 py-2 text-zinc-300">{realization.positionsCount}</td>
                       <td className="px-3 py-2 text-zinc-500">

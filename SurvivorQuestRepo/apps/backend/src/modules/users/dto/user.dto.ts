@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import type {
   CreateUserInput,
+  DeleteUserInput,
   UpdateUserInput,
   UserRole,
   UserStatus,
@@ -90,5 +91,23 @@ export function parseUpdateUserDto(payload: unknown): UpdateUserInput {
     status: ensureStatus(body.status, false),
     photoUrl: ensureTrimmedString(body.photoUrl, false),
     password: ensureTrimmedString(body.password, false),
+  };
+}
+
+export function parseDeleteUserDto(payload: unknown): DeleteUserInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const body = payload as Record<string, unknown>;
+  const id = ensureTrimmedString(body.id);
+  const confirmEmail = ensureTrimmedString(body.confirmEmail);
+  if (!id || !confirmEmail) {
+    throw new BadRequestException('User id and confirmEmail are required');
+  }
+
+  return {
+    id,
+    confirmEmail,
   };
 }

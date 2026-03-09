@@ -43,6 +43,11 @@ type DeleteStationPayload = {
   confirmName: string;
 };
 
+type UploadStationImageResponse = {
+  key: string;
+  url: string;
+};
+
 function getFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
 }
@@ -106,6 +111,17 @@ export const stationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Station"],
     }),
+    uploadStationImage: build.mutation<UploadStationImageResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath("/station/upload-image"),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
   }),
 });
 
@@ -114,4 +130,5 @@ export const {
   useCreateStationMutation,
   useUpdateStationMutation,
   useDeleteStationMutation,
+  useUploadStationImageMutation,
 } = stationApi;

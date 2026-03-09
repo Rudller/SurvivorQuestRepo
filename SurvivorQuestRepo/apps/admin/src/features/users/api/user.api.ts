@@ -23,9 +23,13 @@ type UpdateUserPayload = {
   password?: string;
 };
 
+type DeleteUserPayload = {
+  id: string;
+  confirmEmail: string;
+};
+
 export const userApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    // /api/users endpoint temporarily implemented in route handler for testing purposes, will be replaced with real database logic later
     getUsers: build.query<User[], void>({
       query: () => buildApiPath("/users"),
       providesTags: ["User"],
@@ -46,7 +50,20 @@ export const userApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["User"],
     }),
+    deleteUser: build.mutation<{ ok: true }, DeleteUserPayload>({
+      query: (body) => ({
+        url: buildApiPath("/users"),
+        method: "DELETE",
+        body,
+      }),
+      invalidatesTags: ["User"],
+    }),
   }),
 });
 
-export const { useGetUsersQuery, useCreateUserMutation, useUpdateUserMutation } = userApi;
+export const {
+  useGetUsersQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+} = userApi;

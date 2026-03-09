@@ -31,8 +31,8 @@ export type RealizationEntity = {
   scenarioId: string;
   stationIds: string[];
   scenarioStations: StationEntity[];
+  joinCode: string;
   teamCount: number;
-  requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
   status: RealizationStatus;

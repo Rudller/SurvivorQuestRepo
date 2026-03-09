@@ -30,3 +30,42 @@ export const createUserSchema = z.object({
 });
 
 export type CreateUserFormValues = z.infer<typeof createUserSchema>;
+
+export const createUserWithPasswordConfirmationSchema = createUserSchema
+  .extend({
+    confirmPassword: z.string().trim().optional().or(z.literal("")),
+  })
+  .superRefine((values, context) => {
+    const password = values.password?.trim() ?? "";
+    const confirmPassword = values.confirmPassword?.trim() ?? "";
+
+    if (password && !confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Potwierdź hasło",
+      });
+      return;
+    }
+
+    if (!password && confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message: "Najpierw podaj hasło",
+      });
+      return;
+    }
+
+    if (password && confirmPassword && password !== confirmPassword) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Hasła nie są takie same",
+      });
+    }
+  });
+
+export type CreateUserWithPasswordConfirmationFormValues = z.infer<
+  typeof createUserWithPasswordConfirmationSchema
+>;

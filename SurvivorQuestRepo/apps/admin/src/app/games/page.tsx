@@ -19,6 +19,7 @@ function isUnauthorized(error: unknown) {
 
 export default function StationPage() {
   const router = useRouter();
+  const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
 
   const { data: meData, isLoading: isMeLoading, isError: isMeError, error: meError } = useMeQuery();
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
@@ -57,38 +58,46 @@ export default function StationPage() {
       />
 
       <div className="min-h-screen pl-72">
-        <section className="space-y-5 p-6 lg:space-y-6 lg:p-8">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,1fr)] xl:items-start">
-            <CreateStationForm />
-
-            <div className="space-y-5 xl:order-1">
-              {isGamesLoading && <p className="text-zinc-400">Ładowanie stanowisk...</p>}
-
-              {isError && (
-                <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-                  <p>Nie udało się pobrać stanowisk.</p>
-                  <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(error, null, 2)}</pre>
-                  <button onClick={() => refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
-                    Spróbuj ponownie
-                  </button>
-                </div>
-              )}
-
-              {!isGamesLoading && !isError && (
-                <StationsTable
-                  stations={games ?? []}
-                  sortField={sortField}
-                  sortDirection={sortDirection}
-                  onSortFieldChange={setSortField}
-                  onSortDirectionChange={setSortDirection}
-                  onEdit={setEditingGame}
-                />
-              )}
-            </div>
+        <section className="space-y-4 p-6 lg:p-8">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-zinc-100">Stanowiska</h1>
+            <button
+              type="button"
+              onClick={() => setIsCreatePanelOpen(true)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+            >
+              Nowe stanowisko
+            </button>
           </div>
+
+          {isGamesLoading && <p className="text-zinc-400">Ładowanie stanowisk...</p>}
+
+          {isError && (
+            <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              <p>Nie udało się pobrać stanowisk.</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(error, null, 2)}</pre>
+              <button onClick={() => refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
+                Spróbuj ponownie
+              </button>
+            </div>
+          )}
+
+          {!isGamesLoading && !isError && (
+            <StationsTable
+              stations={games ?? []}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSortFieldChange={setSortField}
+              onSortDirectionChange={setSortDirection}
+              onEdit={setEditingGame}
+            />
+          )}
         </section>
       </div>
 
+      {isCreatePanelOpen && (
+        <CreateStationForm onClose={() => setIsCreatePanelOpen(false)} />
+      )}
       {editingGame && (
         <EditStationModal
           station={editingGame}

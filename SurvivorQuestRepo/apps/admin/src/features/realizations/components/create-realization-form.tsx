@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { RealizationStatus, RealizationType } from "../types/realization";
 import { realizationTypeOptions } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
-import { useCreateRealizationMutation } from "../api/realization.api";
+import {
+  useCreateRealizationMutation,
+  useUploadRealizationLogoMutation,
+  useUploadRealizationOfferMutation,
+} from "../api/realization.api";
 import {
   hasInvalidRealizationStationDrafts,
   normalizeRealizationStationDrafts,
@@ -16,18 +20,19 @@ import {
   getStatusLabel,
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
-  calculateRequiredDevices,
-  readFileAsDataUrl,
 } from "../realization.utils";
 
 interface CreateRealizationFormProps {
   scenarios: Scenario[];
   stations: Station[];
   userEmail?: string;
+  onClose: () => void;
 }
 
-export function CreateRealizationForm({ scenarios, stations, userEmail }: CreateRealizationFormProps) {
+export function CreateRealizationForm({ scenarios, stations, userEmail, onClose }: CreateRealizationFormProps) {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
+  const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
+  const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
 
   const [companyName, setCompanyName] = useState("");
   const [contactPerson, setContactPerson] = useState("");
@@ -52,29 +57,22 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
     [scenarios],
   );
 
-  const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
-  const [scenarioStations, setScenarioStations] = useState(() =>
-    (selectedScenario?.stationIds ?? [])
-      .map((stationId) => stations.find((station) => station.id === stationId))
-      .filter((station): station is NonNullable<typeof station> => Boolean(station))
-      .map(toRealizationStationDraft),
-  );
-  const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const requiredDevicesCount = calculateRequiredDevices(teamCount);
-
-  useEffect(() => {
-    if (!selectedScenario) {
-      setScenarioStations([]);
-      return;
+  function mapScenarioStations(scenarioId: string) {
+    const scenario = scenarioById.get(scenarioId);
+    if (!scenario) {
+      return [];
     }
 
-    const mappedStations = (selectedScenario.stationIds ?? [])
+    return (scenario.stationIds ?? [])
       .map((stationId) => stations.find((station) => station.id === stationId))
       .filter((station): station is NonNullable<typeof station> => Boolean(station))
       .map(toRealizationStationDraft);
+  }
 
-    setScenarioStations(mappedStations);
-  }, [selectedScenario, stations]);
+  const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
+  const [scenarioStations, setScenarioStations] = useState(() => [] as ReturnType<typeof mapScenarioStations>);
+  const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
+  const isBusy = isCreating || isUploadingLogo || isUploadingOffer;
 
   function addInstructor() {
     const name = instructorInput.trim();
@@ -97,9 +95,17 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
   }
 
   return (
-    <form
-      className="grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 xl:order-2 xl:sticky xl:top-6"
-      onSubmit={async (event) => {
+    <>
+      <button
+        type="button"
+        aria-label="Zamknij panel tworzenia realizacji"
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-zinc-950/70"
+      />
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
+        <form
+          className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
+          onSubmit={async (event) => {
         event.preventDefault();
         setFormError(null);
 
@@ -167,16 +173,23 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
           setOfferPdfName(undefined);
           setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
           setScenarioStations([]);
+          onClose();
         } catch {
           setFormError("Nie udało się dodać realizacji.");
         }
-      }}
-    >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Nowa realizacja</h2>
-          <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300">Robocza</span>
-        </div>
+          }}
+        >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Nowa realizacja</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+            >
+              Zamknij
+            </button>
+          </div>
 
         {/* ── Klient i kontakt ── */}
         <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
@@ -243,6 +256,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
           <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
             {logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
             )}
             <input
@@ -250,10 +264,23 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
               accept="image/*"
               onChange={async (event) => {
                 const file = event.target.files?.[0];
-                if (file) setLogoUrl(await readFileAsDataUrl(file));
+                if (!file) {
+                  return;
+                }
+
+                try {
+                  const uploaded = await uploadRealizationLogo(file).unwrap();
+                  setLogoUrl(uploaded.url);
+                  setFormError(null);
+                } catch {
+                  setFormError("Nie udało się przesłać logo klienta.");
+                } finally {
+                  event.currentTarget.value = "";
+                }
               }}
               className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
             />
+            {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
             {logoUrl && (
               <button type="button" onClick={() => setLogoUrl(undefined)} className="text-xs text-red-400 hover:text-red-300">
                 Usuń logo
@@ -377,7 +404,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
             <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz (szablon)</span>
             <select
               value={selectedScenarioId}
-              onChange={(event) => setSelectedScenarioId(event.target.value)}
+              onChange={(event) => {
+                const nextScenarioId = event.target.value;
+                setSelectedScenarioId(nextScenarioId);
+                setScenarioStations(mapScenarioStations(nextScenarioId));
+              }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             >
               <option value="">Wybierz scenariusz</option>
@@ -406,13 +437,24 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
               accept="application/pdf"
               onChange={async (event) => {
                 const file = event.target.files?.[0];
-                if (file) {
-                  setOfferPdfUrl(await readFileAsDataUrl(file));
+                if (!file) {
+                  return;
+                }
+
+                try {
+                  const uploaded = await uploadRealizationOffer(file).unwrap();
+                  setOfferPdfUrl(uploaded.url);
                   setOfferPdfName(file.name);
+                  setFormError(null);
+                } catch {
+                  setFormError("Nie udało się przesłać oferty PDF.");
+                } finally {
+                  event.currentTarget.value = "";
                 }
               }}
               className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
             />
+            {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
             {offerPdfUrl && (
               <button
                 type="button"
@@ -430,13 +472,26 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
 
-        <button
-          type="submit"
-          disabled={isCreating}
-          className="inline-flex w-fit items-center rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-        >
-          {isCreating ? "Dodawanie..." : "Dodaj realizację"}
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
+          >
+            Anuluj
+          </button>
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+          >
+            {isCreating
+              ? "Dodawanie..."
+              : isUploadingLogo || isUploadingOffer
+                ? "Przesyłanie plików..."
+                : "Dodaj realizację"}
+          </button>
+        </div>
       </div>
 
       <aside className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -463,9 +518,6 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
             <span className="text-zinc-500">Drużyny:</span> {teamCount}
           </p>
           <p>
-            <span className="text-zinc-500">Wymagane urządzenia:</span> {requiredDevicesCount}
-          </p>
-          <p>
             <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
           </p>
           <p>
@@ -480,6 +532,8 @@ export function CreateRealizationForm({ scenarios, stations, userEmail }: Create
           </p>
         </div>
       </aside>
-    </form>
+        </form>
+      </aside>
+    </>
   );
 }

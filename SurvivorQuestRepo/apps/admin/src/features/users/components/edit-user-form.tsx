@@ -3,69 +3,62 @@
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useCreateUserMutation } from "../api/user.api";
-import {
-  createUserWithPasswordConfirmationSchema,
-  type CreateUserWithPasswordConfirmationFormValues,
-} from "../schemas/create-user.schema";
+import { useDeleteUserMutation, useUpdateUserMutation } from "../api/user.api";
+import { createUserSchema, type CreateUserFormValues } from "../schemas/create-user.schema";
+import type { User } from "../types/user";
 import { UserSidePanel } from "./user-side-panel";
 
-type CreateUserFormProps = {
+type EditUserFormProps = {
+  user: User;
   onClose: () => void;
 };
 
-export function CreateUserForm({ onClose }: CreateUserFormProps) {
-  const [createUser, { isLoading }] = useCreateUserMutation();
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-  const form = useForm<CreateUserWithPasswordConfirmationFormValues>({
-    resolver: zodResolver(createUserWithPasswordConfirmationSchema),
+export function EditUserForm({ user, onClose }: EditUserFormProps) {
+  const [updateUser, { isLoading }] = useUpdateUserMutation();
+  const [deleteUser, { isLoading: isDeleting }] = useDeleteUserMutation();
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const form = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
     defaultValues: {
-      displayName: "",
-      email: "",
-      phone: "",
-      role: "instructor",
-      status: "invited",
-      photoUrl: "",
+      displayName: user.displayName,
+      email: user.email,
+      phone: user.phone || "",
+      role: user.role,
+      status: user.status,
+      photoUrl: user.photoUrl,
       password: "",
-      confirmPassword: "",
     },
   });
 
-  const onSubmit = async (values: CreateUserWithPasswordConfirmationFormValues) => {
+  const onSubmit = async (values: CreateUserFormValues) => {
     form.clearErrors("root");
     try {
-      await createUser({
-        displayName: values.displayName,
-        email: values.email,
-        phone: values.phone,
+      await updateUser({
+        id: user.id,
+        displayName: values.displayName.trim(),
+        email: values.email.trim(),
+        phone: values.phone?.trim() || undefined,
         role: values.role,
         status: values.status,
-        photoUrl: values.photoUrl,
+        photoUrl: values.photoUrl?.trim() || undefined,
         password: values.password?.trim() || undefined,
       }).unwrap();
       onClose();
-      form.reset({
-        displayName: "",
-        email: "",
-        phone: "",
-        role: "instructor",
-        status: "invited",
-        photoUrl: "",
-        password: "",
-        confirmPassword: "",
-      });
-      setIsPasswordVisible(false);
     } catch {
       form.setError("root", {
         type: "server",
-        message: "Nie udało się utworzyć użytkownika.",
+        message: "Nie udało się zapisać zmian użytkownika.",
       });
     }
   };
 
   return (
-    <UserSidePanel title="Utwórz użytkownika" description="Dodaj nowego użytkownika panelu." onClose={onClose}>
+    <UserSidePanel
+      title="Edytuj użytkownika"
+      description={`Zmieniasz dane: ${user.email}`}
+      onClose={onClose}
+    >
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
@@ -152,43 +145,18 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
         )}
 
         <label className="block space-y-1.5">
-          <span className="text-xs uppercase tracking-wider text-zinc-400">Hasło (opcjonalne)</span>
-          <div className="relative">
-            <input
-              {...form.register("password")}
-              type={isPasswordVisible ? "text" : "password"}
-              placeholder="Min. 6 znaków"
-              disabled={isLoading}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 pr-20 text-zinc-100 outline-none transition focus:border-amber-400/80"
-            />
-            <button
-              type="button"
-              onClick={() => setIsPasswordVisible((prev) => !prev)}
-              disabled={isLoading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-medium transition hover:bg-zinc-800 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label={isPasswordVisible ? "Ukryj hasło" : "Pokaż hasło"}
-              aria-pressed={isPasswordVisible}
-            >
-              {isPasswordVisible ? "Ukryj" : "Pokaż"}
-            </button>
-          </div>
-        </label>
-        {form.formState.errors.password && (
-          <p className="text-sm text-red-300">{form.formState.errors.password.message}</p>
-        )}
-
-        <label className="block space-y-1.5">
-          <span className="text-xs uppercase tracking-wider text-zinc-400">Potwierdź hasło</span>
+          <span className="text-xs uppercase tracking-wider text-zinc-400">
+            Nowe hasło (opcjonalne)
+          </span>
           <input
-            {...form.register("confirmPassword")}
-            type={isPasswordVisible ? "text" : "password"}
-            placeholder="Wpisz hasło ponownie"
-            disabled={isLoading}
+            {...form.register("password")}
+            type="password"
+            placeholder={user.hasPassword ? "Pozostaw puste bez zmiany" : "Min. 6 znaków"}
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-amber-400/80"
           />
         </label>
-        {form.formState.errors.confirmPassword && (
-          <p className="text-sm text-red-300">{form.formState.errors.confirmPassword.message}</p>
+        {form.formState.errors.password && (
+          <p className="text-sm text-red-300">{form.formState.errors.password.message}</p>
         )}
 
         {form.formState.errors.root?.message && (
@@ -208,10 +176,53 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
             disabled={isLoading}
             className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isLoading ? "Tworzenie..." : "Utwórz użytkownika"}
+            {isLoading ? "Zapisywanie..." : "Zapisz zmiany"}
           </button>
         </div>
       </form>
+
+      <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+        <h3 className="text-sm font-semibold text-red-200">Usuń użytkownika</h3>
+        <p className="text-xs text-red-200/90">
+          Aby usunąć użytkownika, wpisz dokładnie jego email:{" "}
+          <span className="font-semibold">{user.email}</span>
+        </p>
+        <input
+          value={deleteConfirmEmail}
+          onChange={(event) => {
+            setDeleteConfirmEmail(event.target.value);
+            setDeleteError(null);
+          }}
+          placeholder="Wpisz email użytkownika do potwierdzenia"
+          className="w-full rounded-lg border border-red-400/40 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-red-300"
+        />
+        <button
+          type="button"
+          disabled={isDeleting || deleteConfirmEmail.trim() !== user.email}
+          onClick={async () => {
+            setDeleteError(null);
+
+            if (deleteConfirmEmail.trim() !== user.email) {
+              setDeleteError("Email użytkownika nie zgadza się z potwierdzeniem.");
+              return;
+            }
+
+            try {
+              await deleteUser({
+                id: user.id,
+                confirmEmail: deleteConfirmEmail.trim(),
+              }).unwrap();
+              onClose();
+            } catch {
+              setDeleteError("Nie udało się usunąć użytkownika.");
+            }
+          }}
+          className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isDeleting ? "Usuwanie..." : "Usuń użytkownika"}
+        </button>
+        {deleteError && <p className="text-sm text-red-200">{deleteError}</p>}
+      </section>
     </UserSidePanel>
   );
 }

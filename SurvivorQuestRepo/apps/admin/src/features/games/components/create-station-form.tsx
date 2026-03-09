@@ -1,79 +1,107 @@
 "use client";
 
-import Image from "next/image";
-import { useState } from "react";
+import { useState, type ClipboardEvent } from "react";
 import type { StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
-import { useCreateStationMutation } from "../api/station.api";
+import { useCreateStationMutation, useUploadStationImageMutation } from "../api/station.api";
 import {
   imageModeOptions,
   type ImageInputMode,
-  getStationTypeLabel,
+  looksLikeUrl,
   clampTimeLimitSeconds,
   formatTimeLimit,
   handleImageFile,
-  handleImagePaste,
 } from "../station.utils";
 
-export function CreateStationForm() {
+type CreateStationFormProps = {
+  onClose: () => void;
+};
+
+export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
+  const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
 
   const [name, setName] = useState("");
   const [type, setType] = useState<StationType>("quiz");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [points, setPoints] = useState(100);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [createImageMode, setCreateImageMode] = useState<ImageInputMode>("upload");
 
-  const previewName = name.trim() || "Nowe stanowisko";
-  const previewDescription = description.trim() || "Krótki opis stanowiska pojawi się tutaj.";
-  const previewImage = imageUrl.trim() || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(previewName)}`;
+  const previewImage = imageUrl.trim();
+  const isBusy = isCreating || isUploadingImage;
 
   return (
-    <form
-      className="grid gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5 xl:order-2 xl:sticky xl:top-6"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        setFormError(null);
+    <>
+      <button
+        type="button"
+        aria-label="Zamknij panel tworzenia stanowiska"
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-zinc-950/70"
+      />
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
+        <form
+          className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setFormError(null);
 
-        if (!name.trim() || !description.trim() || points <= 0) {
-          setFormError("Uzupełnij nazwę, opis i poprawną liczbę punktów.");
-          return;
-        }
+            if (!name.trim() || points <= 0) {
+              setFormError("Uzupełnij nazwę i poprawną liczbę punktów.");
+              return;
+            }
 
-        if (!Number.isFinite(timeLimitSeconds) || timeLimitSeconds < 0) {
-          setFormError("Podaj poprawny limit czasu w sekundach.");
-          return;
-        }
+            if (!Number.isFinite(timeLimitSeconds) || timeLimitSeconds < 0) {
+              setFormError("Podaj poprawny limit czasu w sekundach.");
+              return;
+            }
 
-        try {
-          await createStation({
-            name: name.trim(),
-            type,
-            description: description.trim(),
-            imageUrl: imageUrl.trim() || undefined,
-            points,
-            timeLimitSeconds: clampTimeLimitSeconds(timeLimitSeconds),
-          }).unwrap();
-          setName("");
-          setType("quiz");
-          setDescription("");
-          setImageUrl("");
-          setPoints(100);
-          setTimeLimitSeconds(0);
-          setCreateImageMode("upload");
-        } catch {
-          setFormError("Nie udało się utworzyć stanowiska.");
-        }
-      }}
-    >
+            try {
+              let nextImageUrl = imageUrl.trim();
+
+              if (createImageMode !== "url" && imageFile) {
+                const uploaded = await uploadStationImage(imageFile).unwrap();
+                nextImageUrl = uploaded.url;
+              } else if (nextImageUrl.startsWith("data:image/")) {
+                nextImageUrl = "";
+              }
+
+              await createStation({
+                name: name.trim(),
+                type,
+                description: description.trim(),
+                imageUrl: nextImageUrl || undefined,
+                points,
+                timeLimitSeconds: clampTimeLimitSeconds(timeLimitSeconds),
+              }).unwrap();
+              setName("");
+              setType("quiz");
+              setDescription("");
+              setImageUrl("");
+              setImageFile(null);
+              setPoints(100);
+              setTimeLimitSeconds(0);
+              setCreateImageMode("upload");
+              onClose();
+            } catch {
+              setFormError("Nie udało się utworzyć stanowiska.");
+            }
+          }}
+        >
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Nowe stanowisko</h2>
-          <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300">Robocza</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+          >
+            Zamknij
+          </button>
         </div>
 
         <div className="grid gap-4">
@@ -103,7 +131,7 @@ export function CreateStationForm() {
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
+            <span className="text-xs uppercase tracking-wider text-zinc-400">Opis (opcjonalny)</span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
@@ -115,13 +143,43 @@ export function CreateStationForm() {
 
           <label className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska (URL opcjonalny)</span>
-            <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3">
-              <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+            <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
+                  <div className="flex h-40 items-center justify-center bg-zinc-900">
+                  {previewImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewImage} alt="Podgląd obrazu stanowiska" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="h-full w-full" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-zinc-800 bg-zinc-950 px-3 py-2">
+                  <p className="truncate text-xs text-zinc-300">
+                    {imageFile ? `Wybrano plik: ${imageFile.name}` : previewImage ? "Podgląd URL obrazu" : "Czeka na wybór obrazu"}
+                  </p>
+                  {imageFile && (
+                    <span className="rounded-full border border-amber-300/50 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                      Wyślemy przy zapisie
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-center">
+                <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
                 {imageModeOptions.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => setCreateImageMode(option.value)}
+                    onClick={() => {
+                      setCreateImageMode(option.value);
+                      if (option.value === "url") {
+                        setImageFile(null);
+                        if (imageUrl.trim().startsWith("data:image/")) {
+                          setImageUrl("");
+                        }
+                      }
+                    }}
                     className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                       createImageMode === option.value
                         ? "bg-amber-400 text-zinc-950"
@@ -131,19 +189,22 @@ export function CreateStationForm() {
                     {option.label}
                   </button>
                 ))}
+                </div>
               </div>
 
               {createImageMode === "upload" && (
-                <div className="space-y-2">
-                  <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                <div className="mx-auto w-full max-w-md space-y-2 text-center">
+                  <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
                     Wybierz plik obrazu
                     <input
                       type="file"
                       accept="image/*"
                       className="hidden"
                       onChange={(event) => {
+                        const selectedFile = event.target.files?.[0] ?? null;
+                        setImageFile(selectedFile);
                         void handleImageFile(
-                          event.target.files?.[0] ?? null,
+                          selectedFile,
                           (url) => { setImageUrl(url); setImageError(null); },
                           setImageError,
                         );
@@ -158,13 +219,38 @@ export function CreateStationForm() {
               {createImageMode === "paste" && (
                 <div
                   onPaste={(event) => {
-                    void handleImagePaste(
-                      event,
-                      (url) => { setImageUrl(url); setImageError(null); },
-                      setImageError,
-                    );
+                    const handlePaste = async (clipboardEvent: ClipboardEvent<HTMLDivElement>) => {
+                      const fileItem = Array.from(clipboardEvent.clipboardData.items).find((item) =>
+                        item.type.startsWith("image/"),
+                      );
+
+                      if (fileItem) {
+                        clipboardEvent.preventDefault();
+                        const pastedFile = fileItem.getAsFile();
+                        setImageFile(pastedFile);
+                        await handleImageFile(
+                          pastedFile,
+                          (url) => { setImageUrl(url); setImageError(null); },
+                          setImageError,
+                        );
+                        return;
+                      }
+
+                      const text = clipboardEvent.clipboardData.getData("text");
+                      if (text && looksLikeUrl(text)) {
+                        clipboardEvent.preventDefault();
+                        setImageFile(null);
+                        setImageUrl(text.trim());
+                        setImageError(null);
+                        return;
+                      }
+
+                      setImageError("Wklej obraz lub poprawny URL.");
+                    };
+
+                    void handlePaste(event);
                   }}
-                  className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-xs text-zinc-400"
+                  className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
                 >
                   Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
                 </div>
@@ -175,22 +261,30 @@ export function CreateStationForm() {
                   type="url"
                   value={imageUrl}
                   onChange={(event) => {
+                    setImageFile(null);
                     setImageUrl(event.target.value);
                     setImageError(null);
                   }}
                   placeholder="https://..."
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                 />
               )}
 
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-xs text-zinc-500">
-                  {imageUrl.trim() ? "Obraz ustawiony" : "Brak wybranego obrazu"}
+                  {imageFile
+                    ? "Obraz wybrany (zostanie wysłany przy dodawaniu stanowiska)"
+                    : imageUrl.trim()
+                      ? "Obraz ustawiony"
+                      : ""}
                 </p>
                 {imageUrl.trim() && (
                   <button
                     type="button"
-                    onClick={() => setImageUrl("")}
+                    onClick={() => {
+                      setImageUrl("");
+                      setImageFile(null);
+                    }}
                     className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
                   >
                     Wyczyść
@@ -199,6 +293,7 @@ export function CreateStationForm() {
               </div>
 
               {imageError && <p className="text-xs text-red-300">{imageError}</p>}
+              {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
             </div>
           </label>
 
@@ -266,36 +361,25 @@ export function CreateStationForm() {
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
 
-        <button
-          type="submit"
-          disabled={isCreating}
-          className="inline-flex w-fit items-center rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-        >
-          {isCreating ? "Dodawanie..." : "Dodaj stanowisko"}
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
+          >
+            Anuluj
+          </button>
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+          >
+            {isCreating ? "Dodawanie..." : isUploadingImage ? "Przesyłanie obrazu..." : "Dodaj stanowisko"}
+          </button>
+        </div>
       </div>
-
-      <aside className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-        <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Podgląd mobilki</p>
-        <article className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-          <Image
-            src={previewImage}
-            alt={previewName}
-            width={640}
-            height={256}
-            className="mb-3 h-36 w-full rounded-lg border border-zinc-800 object-cover"
-          />
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-zinc-100">{previewName}</h3>
-            <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-              {getStationTypeLabel(type)}
-            </span>
-          </div>
-          <p className="mt-1 line-clamp-3 text-sm text-zinc-400">{previewDescription}</p>
-          <p className="mt-2 text-sm font-medium text-amber-300">Punkty: {points}</p>
-          <p className="mt-1 text-xs text-zinc-400">Czas: {formatTimeLimit(timeLimitSeconds)}</p>
-        </article>
+        </form>
       </aside>
-    </form>
+    </>
   );
 }

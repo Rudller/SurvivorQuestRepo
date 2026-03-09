@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
@@ -38,6 +39,10 @@ import {
 } from '../station/station.service';
 
 export type { RealizationEntity, RealizationStatus, RealizationType } from './entities/realization.entity';
+
+const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const JOIN_CODE_LENGTH = 6;
+const STORED_JOIN_CODE_VERSION_PREFIX = 'v2';
 
 @Injectable()
 export class RealizationService {
@@ -105,10 +110,7 @@ export class RealizationService {
         ),
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
-        joinCode: await this.createUniqueJoinCode(
-          validated.companyName,
-          realizationId,
-        ),
+        joinCode: (await this.createUniqueJoinCode(realizationId)).storedCode,
       },
     });
 
@@ -322,9 +324,16 @@ export class RealizationService {
       where: { realizationId },
       orderBy: { createdAt: 'asc' },
     });
+    const publicJoinCode = this.resolvePublicJoinCode(
+      realization.id,
+      realization.joinCode,
+    );
 
     return buildRealizationEntity({
-      realization,
+      realization: {
+        ...realization,
+        joinCode: publicJoinCode,
+      },
       stationIds: stations.map((item) => item.id),
       scenarioStations: stations,
       logs: mapRealizationLogs(logsRaw),
@@ -352,38 +361,93 @@ export class RealizationService {
     });
   }
 
-  private generateJoinCode(companyName: string, realizationId: string) {
-    const letters = companyName
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .toUpperCase()
-      .slice(0, 8);
-    const suffix = realizationId.replace(/-/g, '').toUpperCase().slice(0, 4);
-    return `${letters}${suffix}`.slice(0, 12) || `SQ${suffix}`;
+  private generateJoinCode(realizationId: string, attempt: number) {
+    const seed = `${realizationId}:${attempt}:${this.getJoinCodePepper()}`;
+    const hash = this.hashJoinCode(seed);
+    const bytes = Buffer.from(hash, 'hex');
+    let code = '';
+
+    for (let index = 0; index < JOIN_CODE_LENGTH; index += 1) {
+      code += JOIN_CODE_ALPHABET[bytes[index] % JOIN_CODE_ALPHABET.length];
+    }
+
+    return code;
   }
 
-  private async createUniqueJoinCode(
-    companyName: string,
-    realizationId: string,
-  ) {
-    const base = this.generateJoinCode(companyName, realizationId);
-    let candidate = base;
-    let index = 0;
+  private hashJoinCode(value: string) {
+    return createHash('sha256').update(value).digest('hex');
+  }
 
-    while (index < 100) {
-      const existing = await this.prisma.realization.findUnique({
-        where: { joinCode: candidate },
+  private getJoinCodePepper() {
+    return process.env.JOIN_CODE_PEPPER?.trim() || 'survivorquest-join-code';
+  }
+
+  private parseStoredJoinCode(stored: string) {
+    const normalized = stored.trim();
+    const parts = normalized.split(':');
+
+    if (
+      parts.length === 3 &&
+      parts[0] === STORED_JOIN_CODE_VERSION_PREFIX &&
+      /^\d+$/.test(parts[1]) &&
+      /^[a-f0-9]{64}$/i.test(parts[2])
+    ) {
+      return {
+        attempt: Number(parts[1]),
+        hash: parts[2].toLowerCase(),
+      };
+    }
+
+    return null;
+  }
+
+  private async createUniqueJoinCode(realizationId: string) {
+    let attempt = 0;
+
+    while (attempt < 100) {
+      const publicCode = this.generateJoinCode(realizationId, attempt);
+      const hashedCode = this.hashJoinCode(publicCode);
+      const storedCode = `${STORED_JOIN_CODE_VERSION_PREFIX}:${attempt}:${hashedCode}`;
+
+      const existing = await this.prisma.realization.findFirst({
+        where: {
+          OR: [
+            { joinCode: storedCode },
+            { joinCode: publicCode },
+            { joinCode: hashedCode },
+            { joinCode: { endsWith: `:${hashedCode}` } },
+          ],
+        },
         select: { id: true },
       });
 
       if (!existing) {
-        return candidate;
+        return {
+          publicCode,
+          storedCode,
+        };
       }
 
-      index += 1;
-      candidate = `${base.slice(0, 10)}${String(index).padStart(2, '0')}`;
+      attempt += 1;
     }
 
-    return `${realizationId.replace(/-/g, '').toUpperCase().slice(0, 12)}`;
+    throw new BadRequestException('Failed to generate unique join code');
+  }
+
+  resolvePublicJoinCode(realizationId: string, storedJoinCode: string) {
+    const parsed = this.parseStoredJoinCode(storedJoinCode);
+    if (!parsed) {
+      return storedJoinCode;
+    }
+
+    const publicCode = this.generateJoinCode(realizationId, parsed.attempt);
+    const publicCodeHash = this.hashJoinCode(publicCode);
+
+    if (publicCodeHash === parsed.hash) {
+      return publicCode;
+    }
+
+    return '------';
   }
 
   private isValidStationType(value: unknown): value is StationType {

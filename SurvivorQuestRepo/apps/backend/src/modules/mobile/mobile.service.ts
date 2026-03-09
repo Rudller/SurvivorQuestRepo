@@ -805,7 +805,6 @@ export class MobileService {
     const realizationRows = await this.prisma.realization.findMany({
       select: {
         id: true,
-        joinCode: true,
         locationRequired: true,
       },
     });
@@ -823,7 +822,7 @@ export class MobileService {
       joinCode:
         primary?.id === item.id
           ? TEST_JOIN_CODE
-          : rowById.get(item.id)?.joinCode || TEST_JOIN_CODE,
+          : item.joinCode || TEST_JOIN_CODE,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
       createdAt: item.createdAt,

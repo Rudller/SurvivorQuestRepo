@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   UserRole as PrismaUserRole,
   UserStatus as PrismaUserStatus,
@@ -42,6 +46,11 @@ export type UpdateUserInput = {
   status?: UserStatus;
   photoUrl?: string;
   password?: string;
+};
+
+export type DeleteUserInput = {
+  id: string;
+  confirmEmail: string;
 };
 
 function toPrismaUserRole(role: UserRole) {
@@ -161,5 +170,25 @@ export class UsersService {
     });
 
     return mapUser(updated);
+  }
+
+  async remove(input: DeleteUserInput) {
+    const current = await this.prisma.user.findUnique({
+      where: { id: input.id },
+    });
+
+    if (!current) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (current.email !== input.confirmEmail.trim()) {
+      throw new BadRequestException('Confirmation email does not match user email');
+    }
+
+    await this.prisma.user.delete({
+      where: { id: input.id },
+    });
+
+    return { ok: true as const };
   }
 }

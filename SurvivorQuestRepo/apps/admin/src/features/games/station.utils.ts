@@ -5,6 +5,7 @@ import { stationTypeOptions } from "./types/station";
 export type ImageInputMode = "upload" | "paste" | "url";
 export type StationSortField = "name" | "type";
 export type SortDirection = "asc" | "desc";
+export type UploadImageFileFn = (file: File) => Promise<string>;
 
 export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
   { value: "upload", label: "Upload" },
@@ -14,6 +15,13 @@ export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
 
 export function looksLikeUrl(value: string) {
   return /^https?:\/\//i.test(value.trim()) || value.trim().startsWith("data:image/");
+}
+
+export function isSvgImageUrl(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith("data:image/svg+xml")) return true;
+  return normalized.includes("/svg?") || normalized.includes(".svg");
 }
 
 export function readFileAsDataUrl(file: File) {
@@ -46,6 +54,7 @@ export async function handleImageFile(
   file: File | null,
   onSuccess: (dataUrl: string) => void,
   onError: (msg: string) => void,
+  uploadFile?: UploadImageFileFn,
 ) {
   if (!file) return;
   if (!file.type.startsWith("image/")) {
@@ -53,10 +62,16 @@ export async function handleImageFile(
     return;
   }
   try {
+    if (uploadFile) {
+      const uploadedUrl = await uploadFile(file);
+      onSuccess(uploadedUrl);
+      return;
+    }
+
     const dataUrl = await readFileAsDataUrl(file);
     onSuccess(dataUrl);
   } catch {
-    onError("Nie udało się odczytać pliku obrazu.");
+    onError(uploadFile ? "Nie udało się przesłać pliku obrazu." : "Nie udało się odczytać pliku obrazu.");
   }
 }
 
@@ -64,11 +79,12 @@ export async function handleImagePaste(
   event: ClipboardEvent<HTMLDivElement>,
   onSuccess: (value: string) => void,
   onError: (msg: string) => void,
+  uploadFile?: UploadImageFileFn,
 ) {
   const fileItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"));
   if (fileItem) {
     event.preventDefault();
-    await handleImageFile(fileItem.getAsFile(), onSuccess, onError);
+    await handleImageFile(fileItem.getAsFile(), onSuccess, onError, uploadFile);
     return;
   }
   const text = event.clipboardData.getData("text");

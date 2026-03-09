@@ -39,7 +39,7 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
       {!isLoading && scenarios.length === 0 && (
         <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
           <p className="text-sm font-medium text-zinc-200">Brak scenariuszy</p>
-          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszy scenariusz w formularzu po prawej stronie.</p>
+          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszy scenariusz przyciskiem Nowy scenariusz.</p>
         </div>
       )}
 

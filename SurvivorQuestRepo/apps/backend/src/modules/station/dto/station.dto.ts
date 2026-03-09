@@ -45,6 +45,14 @@ function ensureTrimmedString(value: unknown) {
   return value.trim();
 }
 
+function ensureStringAllowingEmpty(value: unknown) {
+  if (typeof value !== 'string') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value.trim();
+}
+
 function ensurePositiveNumber(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     throw new BadRequestException('Invalid payload');
@@ -63,7 +71,7 @@ function ensureStationBody(payload: unknown): CreateStationDto {
   return {
     name: ensureTrimmedString(body.name),
     type: ensureStationType(body.type),
-    description: ensureTrimmedString(body.description),
+    description: ensureStringAllowingEmpty(body.description),
     imageUrl:
       typeof body.imageUrl === 'string' && body.imageUrl.trim()
         ? body.imageUrl.trim()

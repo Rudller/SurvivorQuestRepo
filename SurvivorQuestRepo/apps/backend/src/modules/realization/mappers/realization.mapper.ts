@@ -103,6 +103,7 @@ export function buildRealizationEntity(input: {
     offerPdfUrl: string | null;
     offerPdfName: string | null;
     scenarioId: string;
+    joinCode: string;
     teamCount: number;
     requiredDevicesCount: number;
     peopleCount: number;
@@ -136,8 +137,8 @@ export function buildRealizationEntity(input: {
     scenarioId: realization.scenarioId,
     stationIds: input.stationIds,
     scenarioStations: input.scenarioStations,
+    joinCode: realization.joinCode,
     teamCount: realization.teamCount,
-    requiredDevicesCount: realization.requiredDevicesCount,
     peopleCount: realization.peopleCount,
     positionsCount: realization.positionsCount,
     status: resolveRealizationStatus(

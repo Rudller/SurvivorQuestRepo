@@ -1,14 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 import type { Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
-import { useUpdateStationMutation, useDeleteStationMutation } from "../api/station.api";
+import { useUpdateStationMutation, useDeleteStationMutation, useUploadStationImageMutation } from "../api/station.api";
 import {
   imageModeOptions,
   type ImageInputMode,
-  getStationTypeLabel,
   clampTimeLimitSeconds,
   formatTimeLimit,
   handleImageFile,
@@ -23,6 +21,7 @@ interface EditStationModalProps {
 export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
+  const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
 
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [editImageError, setEditImageError] = useState<string | null>(null);
@@ -38,11 +37,6 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
   });
-
-  const editPreviewName = editValues.name.trim() || "Nazwa stanowiska";
-  const editPreviewDescription = editValues.description.trim() || "Opis stanowiska pojawi się tutaj.";
-  const editPreviewImage =
-    editValues.imageUrl.trim() || `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(editPreviewName)}`;
 
   return (
     <>
@@ -67,28 +61,6 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             >
               Zamknij
             </button>
-          </div>
-
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-            <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Podgląd mobilki</p>
-            <article className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
-              <Image
-                src={editPreviewImage}
-                alt={editPreviewName}
-                width={640}
-                height={256}
-                className="mb-3 h-40 w-full rounded-lg border border-zinc-800 object-cover"
-              />
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="font-semibold text-zinc-100">{editPreviewName}</h3>
-                <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                  {getStationTypeLabel(editValues.type)}
-                </span>
-              </div>
-              <p className="mt-1 line-clamp-3 text-sm text-zinc-400">{editPreviewDescription}</p>
-              <p className="mt-2 text-sm font-medium text-amber-300">Punkty: {editValues.points}</p>
-              <p className="mt-1 text-xs text-zinc-400">Czas: {formatTimeLimit(editValues.timeLimitSeconds)}</p>
-            </article>
           </div>
 
           <form
@@ -161,8 +133,29 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
 
             <div className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
-              <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3">
-                <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+              <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
+                  <div className="flex h-40 items-center justify-center bg-zinc-900">
+                    {editValues.imageUrl.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={editValues.imageUrl}
+                        alt="Podgląd obrazu stanowiska"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="h-full w-full" />
+                    )}
+                  </div>
+                  <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2">
+                    <p className="truncate text-xs text-zinc-300">
+                      {editValues.imageUrl.trim() ? "Podgląd aktualnego obrazu stanowiska" : "Czeka na wybór obrazu"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
                   {imageModeOptions.map((option) => (
                     <button
                       key={option.value}
@@ -177,11 +170,12 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       {option.label}
                     </button>
                   ))}
+                  </div>
                 </div>
 
                 {editImageMode === "upload" && (
-                  <div className="space-y-2">
-                    <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                  <div className="mx-auto w-full max-w-md space-y-2 text-center">
+                    <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
                       Wybierz plik obrazu
                       <input
                         type="file"
@@ -192,6 +186,10 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                             event.target.files?.[0] ?? null,
                             (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
                             setEditImageError,
+                            async (file) => {
+                              const uploaded = await uploadStationImage(file).unwrap();
+                              return uploaded.url;
+                            },
                           );
                           event.currentTarget.value = "";
                         }}
@@ -208,9 +206,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                         event,
                         (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
                         setEditImageError,
+                        async (file) => {
+                          const uploaded = await uploadStationImage(file).unwrap();
+                          return uploaded.url;
+                        },
                       );
                     }}
-                    className="rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-xs text-zinc-400"
+                    className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
                   >
                     Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
                   </div>
@@ -225,13 +227,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       setEditImageError(null);
                     }}
                     placeholder="https://..."
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 )}
 
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate text-xs text-zinc-500">
-                    {editValues.imageUrl.trim() ? "Obraz ustawiony" : "Brak wybranego obrazu"}
+                    {editValues.imageUrl.trim() ? "Obraz ustawiony" : ""}
                   </p>
                   {editValues.imageUrl.trim() && (
                     <button
@@ -245,6 +247,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 </div>
 
                 {editImageError && <p className="text-sm text-red-300">{editImageError}</p>}
+                {isUploadingImage && <p className="text-sm text-amber-300">Przesyłanie obrazu...</p>}
               </div>
             </div>
 
@@ -303,10 +306,10 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </button>
               <button
                 type="submit"
-                disabled={isUpdating}
+                disabled={isUpdating || isUploadingImage}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
               >
-                {isUpdating ? "Zapisywanie..." : "Zapisz"}
+                {isUpdating ? "Zapisywanie..." : isUploadingImage ? "Przesyłanie obrazu..." : "Zapisz"}
               </button>
             </div>
 

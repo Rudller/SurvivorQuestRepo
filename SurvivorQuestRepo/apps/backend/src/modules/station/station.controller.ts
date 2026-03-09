@@ -7,8 +7,12 @@ import {
   NotFoundException,
   Post,
   Put,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Express } from 'express';
 import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
 import {
   parseCreateStationDto,
@@ -17,12 +21,24 @@ import {
   toCreateStationEntity,
   toUpdateStationEntity,
 } from './dto/station.dto';
+import { StationStorageService } from './station-storage.service';
 import { StationService } from './station.service';
+
+const MAX_IMAGE_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/svg+xml',
+]);
 
 @Controller(['station', 'api/station'])
 @UseGuards(AdminSessionGuard)
 export class StationController {
-  constructor(private readonly stationService: StationService) {}
+  constructor(
+    private readonly stationService: StationService,
+    private readonly stationStorageService: StationStorageService,
+  ) {}
 
   @Get()
   async getStations() {
@@ -43,6 +59,28 @@ export class StationController {
     return this.stationService.addTemplateStation(
       toCreateStationEntity(dto, parsedTimeLimit.value),
     );
+  }
+
+  @Post('upload-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_IMAGE_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadStationImage(@UploadedFile() file: Express.Multer.File | undefined) {
+    if (!file) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Unsupported image type');
+    }
+
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      throw new BadRequestException('Invalid image file');
+    }
+
+    return this.stationStorageService.uploadStationImage(file);
   }
 
   @Put()

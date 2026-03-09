@@ -19,7 +19,7 @@ function isUnauthorized(error: unknown) {
 
 export default function ScenarioPage() {
   const router = useRouter();
-
+  const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
 
   const {
@@ -69,10 +69,19 @@ export default function ScenarioPage() {
       />
 
       <div className="min-h-screen pl-72">
-        <section className="space-y-5 p-6 lg:space-y-6 lg:p-8">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,1fr)] xl:items-start">
-            <CreateScenarioForm stations={stations} isStationsLoading={isStationsLoading} />
+        <section className="space-y-4 p-6 lg:p-8">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-zinc-100">Scenariusze</h1>
+            <button
+              type="button"
+              onClick={() => setIsCreatePanelOpen(true)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+            >
+              Nowy scenariusz
+            </button>
+          </div>
 
+          {!isScenariosError && (
             <ScenariosTable
               scenarios={scenarios}
               stations={stations}
@@ -80,10 +89,27 @@ export default function ScenarioPage() {
               onEdit={setEditingScenario}
               onRefetch={() => void refetch()}
             />
-          </div>
+          )}
+
+          {isScenariosError && !isUnauthorized(scenariosError) && (
+            <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              <p>Nie udało się pobrać scenariuszy.</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(scenariosError, null, 2)}</pre>
+              <button onClick={() => void refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
+                Spróbuj ponownie
+              </button>
+            </div>
+          )}
         </section>
       </div>
 
+      {isCreatePanelOpen && (
+        <CreateScenarioForm
+          stations={stations}
+          isStationsLoading={isStationsLoading}
+          onClose={() => setIsCreatePanelOpen(false)}
+        />
+      )}
       {editingScenario && (
         <EditScenarioModal
           scenario={editingScenario}

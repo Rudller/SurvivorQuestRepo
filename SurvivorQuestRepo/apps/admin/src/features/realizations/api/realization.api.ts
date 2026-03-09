@@ -32,10 +32,10 @@ type RealizationDto = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  joinCode?: string;
   stationIds?: string[];
   scenarioStations?: StationDto[];
   teamCount: number;
-  requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
   status: RealizationStatus;
@@ -84,6 +84,11 @@ type UpdateRealizationPayload = {
   scheduledAt: string;
   changedBy?: string;
   scenarioStations?: RealizationStationDraft[];
+};
+
+type UploadRealizationAssetResponse = {
+  key: string;
+  url: string;
 };
 
 type MobileAdminRealizationOverview = {
@@ -164,10 +169,10 @@ function normalizeRealization(dto: RealizationDto): Realization {
     offerPdfUrl: dto.offerPdfUrl,
     offerPdfName: dto.offerPdfName,
     scenarioId: dto.scenarioId,
+    joinCode: dto.joinCode?.trim() || "------",
     stationIds: dto.stationIds ?? scenarioStations.map((station) => station.id),
     scenarioStations,
     teamCount: dto.teamCount,
-    requiredDevicesCount: dto.requiredDevicesCount,
     peopleCount: dto.peopleCount,
     positionsCount: dto.positionsCount,
     status: dto.status,
@@ -233,6 +238,28 @@ export const realizationApi = baseApi.injectEndpoints({
       transformResponse: (response: RealizationDto) => normalizeRealization(response),
       invalidatesTags: ["Realization"],
     }),
+    uploadRealizationLogo: build.mutation<UploadRealizationAssetResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath("/realizations/upload-logo"),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
+    uploadRealizationOffer: build.mutation<UploadRealizationAssetResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath("/realizations/upload-offer"),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
     getMobileAdminRealizationOverview: build.query<MobileAdminRealizationOverview, string>({
       query: (realizationId) => buildApiPath(`/mobile/admin/realizations/${realizationId}`),
     }),
@@ -243,5 +270,7 @@ export const {
   useGetRealizationsQuery,
   useCreateRealizationMutation,
   useUpdateRealizationMutation,
+  useUploadRealizationLogoMutation,
+  useUploadRealizationOfferMutation,
   useGetMobileAdminRealizationOverviewQuery,
 } = realizationApi;
