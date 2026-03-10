@@ -12,16 +12,10 @@ import {
   type CreateRealizationDto,
   type UpdateRealizationDto,
 } from './dto/realization.dto';
-import type {
-  RealizationEntity,
-  RealizationStatus,
-  RealizationType,
-  ScenarioStationDraftPayload,
-} from './entities/realization.entity';
+import type { ScenarioStationDraftPayload } from './entities/realization.entity';
 import {
   buildRealizationEntity,
   calculateRequiredDevices,
-  fromPrismaRealizationStatus,
   mapRealizationLogs,
   resolveRealizationStatus,
   toPrismaRealizationStatus,
@@ -38,7 +32,11 @@ import {
   type StationType,
 } from '../station/station.service';
 
-export type { RealizationEntity, RealizationStatus, RealizationType } from './entities/realization.entity';
+export type {
+  RealizationEntity,
+  RealizationStatus,
+  RealizationType,
+} from './entities/realization.entity';
 
 const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const JOIN_CODE_LENGTH = 6;
@@ -60,7 +58,7 @@ export class RealizationService {
     const mapped = await Promise.all(
       realizations.map((item) => this.toEntity(item.id)),
     );
-    return mapped.filter((item) => item !== null) as RealizationEntity[];
+    return mapped.filter((item) => item !== null);
   }
 
   async createRealization(payload: CreateRealizationDto) {
@@ -87,6 +85,7 @@ export class RealizationService {
       data: {
         id: realizationId,
         companyName: validated.companyName,
+        location: validated.location,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -97,16 +96,11 @@ export class RealizationService {
         offerPdfName: validated.offerPdfName,
         scenarioId: clonedScenario.id,
         teamCount: validated.teamCount,
-        requiredDevicesCount: calculateRequiredDevices(
-          validated.teamCount,
-        ),
+        requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
         positionsCount: validated.positionsCount,
         status: toPrismaRealizationStatus(
-          resolveRealizationStatus(
-            validated.status,
-            validated.scheduledAt,
-          ),
+          resolveRealizationStatus(validated.status, validated.scheduledAt),
         ),
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
@@ -168,6 +162,7 @@ export class RealizationService {
       where: { id: realizationId },
       data: {
         companyName: validated.companyName,
+        location: validated.location,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -178,16 +173,11 @@ export class RealizationService {
         offerPdfName: validated.offerPdfName,
         scenarioId: scenario.id,
         teamCount: validated.teamCount,
-        requiredDevicesCount: calculateRequiredDevices(
-          validated.teamCount,
-        ),
+        requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
         positionsCount: validated.positionsCount,
         status: toPrismaRealizationStatus(
-          resolveRealizationStatus(
-            validated.status,
-            validated.scheduledAt,
-          ),
+          resolveRealizationStatus(validated.status, validated.scheduledAt),
         ),
         scheduledAt: new Date(validated.scheduledAt),
       },

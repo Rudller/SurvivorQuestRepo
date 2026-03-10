@@ -49,6 +49,8 @@ function normalizePlayerLocation(value: unknown): PlayerLocation | null {
     latitude: lat,
     longitude: lng,
     accuracy: Number.isFinite(asNumber(parsed.accuracy, Number.NaN)) ? asNumber(parsed.accuracy) : undefined,
+    speed: Number.isFinite(asNumber(parsed.speed, Number.NaN)) ? asNumber(parsed.speed) : undefined,
+    heading: Number.isFinite(asNumber(parsed.heading, Number.NaN)) ? asNumber(parsed.heading) : undefined,
     at: asString(parsed.at, new Date().toISOString()),
   };
 }
@@ -169,22 +171,39 @@ export async function fetchMobileSessionState(apiBaseUrl: string, sessionToken: 
 
 export async function postMobileTeamLocation(
   apiBaseUrl: string,
-  payload: { sessionToken: string; latitude: number; longitude: number; accuracy?: number; at?: string },
+  payload: {
+    sessionToken: string;
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    speed?: number;
+    heading?: number;
+    at?: string;
+  },
 ) {
-  const result = await requestMobileApi<{ ok: boolean; lastLocationAt: string }>(apiBaseUrl, "/api/mobile/team/location", {
+  const result = await requestMobileApi<{
+    ok: boolean;
+    deduplicated?: boolean;
+    lastLocationAt: string;
+    serverReceivedAt?: string;
+  }>(apiBaseUrl, "/api/mobile/team/location", {
     method: "POST",
     body: JSON.stringify({
       sessionToken: payload.sessionToken,
       lat: payload.latitude,
       lng: payload.longitude,
       accuracy: payload.accuracy,
+      speed: payload.speed,
+      heading: payload.heading,
       at: payload.at,
     }),
   });
 
   return {
     ok: Boolean(result.ok),
+    deduplicated: Boolean(result.deduplicated),
     lastLocationAt: asString(result.lastLocationAt, new Date().toISOString()),
+    serverReceivedAt: asString(result.serverReceivedAt, new Date().toISOString()),
   };
 }
 

@@ -35,6 +35,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
 
   const [companyName, setCompanyName] = useState("");
+  const [location, setLocation] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -142,6 +143,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
         try {
           await createRealization({
             companyName: companyName.trim(),
+            location: location.trim() || undefined,
             contactPerson: contactPerson.trim(),
             contactPhone: contactPhone.trim() || undefined,
             contactEmail: contactEmail.trim() || undefined,
@@ -160,6 +162,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             changedBy: userEmail,
           }).unwrap();
           setCompanyName("");
+          setLocation("");
           setContactPerson("");
           setContactPhone("");
           setContactEmail("");
@@ -227,6 +230,16 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 value={contactPerson}
                 onChange={(event) => setContactPerson(event.target.value)}
                 placeholder="Imię i nazwisko"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
+              <input
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                placeholder="np. Warszawa, Pole Mokotowskie"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
@@ -502,6 +515,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           </p>
           <p>
             <span className="text-zinc-500">Kontakt:</span> {contactPerson.trim() || "-"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Lokalizacja:</span> {location.trim() || "-"}
           </p>
           <p>
             <span className="text-zinc-500">Dane kontaktowe:</span>{" "}

@@ -24,6 +24,7 @@ const REALIZATION_STATUSES: RealizationStatus[] = [
 
 export type CreateRealizationDto = {
   companyName?: string;
+  location?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -75,6 +76,7 @@ export function validateRealizationPayload(
   payload: CreateRealizationDto,
 ): ValidatedRealizationPayload {
   const companyName = payload.companyName?.trim() || '';
+  const location = payload.location?.trim() || '';
   const contactPerson = payload.contactPerson?.trim() || '';
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
@@ -122,6 +124,7 @@ export function validateRealizationPayload(
 
   return {
     companyName,
+    location: location || undefined,
     contactPerson,
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,

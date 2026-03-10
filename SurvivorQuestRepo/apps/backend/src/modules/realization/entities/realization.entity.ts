@@ -20,6 +20,7 @@ export type RealizationLog = {
 export type RealizationEntity = {
   id: string;
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -57,6 +58,7 @@ export type ScenarioStationDraftPayload = {
 
 export type ValidatedRealizationPayload = {
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;

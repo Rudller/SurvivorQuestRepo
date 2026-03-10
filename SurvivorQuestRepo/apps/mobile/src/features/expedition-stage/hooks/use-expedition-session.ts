@@ -14,6 +14,13 @@ import {
 } from "../model/types";
 
 const SESSION_POLLING_INTERVAL_MS = 15_000;
+const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function isOfflineSession(session: OnboardingSession) {
   return !session.apiBaseUrl?.trim();
@@ -181,13 +188,40 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       try {
-        const result = await postMobileTeamLocation(apiBaseUrl, {
-          sessionToken: session.sessionToken,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          accuracy: location.accuracy,
-          at: locationAt,
-        });
+        let result:
+          | {
+              ok: boolean;
+              deduplicated: boolean;
+              lastLocationAt: string;
+              serverReceivedAt: string;
+            }
+          | null = null;
+        let lastError: unknown = null;
+
+        for (let attempt = 0; attempt <= LOCATION_SYNC_RETRY_DELAYS_MS.length; attempt += 1) {
+          try {
+            result = await postMobileTeamLocation(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              accuracy: location.accuracy,
+              speed: location.speed,
+              heading: location.heading,
+              at: locationAt,
+            });
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt >= LOCATION_SYNC_RETRY_DELAYS_MS.length) {
+              throw error;
+            }
+            await wait(LOCATION_SYNC_RETRY_DELAYS_MS[attempt]);
+          }
+        }
+
+        if (!result) {
+          throw lastError ?? new Error("Brak odpowiedzi serwera dla lokalizacji.");
+        }
 
         setSessionState((current) => ({
           ...current,

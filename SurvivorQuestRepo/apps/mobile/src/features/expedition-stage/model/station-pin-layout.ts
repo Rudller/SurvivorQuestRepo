@@ -1,8 +1,8 @@
 import type { MapCoordinate } from "./types";
 
 export const DEFAULT_MAP_ANCHOR: MapCoordinate = {
-  latitude: 52.2297,
-  longitude: 21.0122,
+  latitude: 52.4376,
+  longitude: 20.7218,
 };
 
 function hashString(value: string) {

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import type { OnboardingSession } from "../../onboarding/model/types";
 import {
@@ -15,9 +16,7 @@ import {
   type StationTestViewModel,
 } from "../components/station-test-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
-import { useExpeditionSession } from "../hooks/use-expedition-session";
-import { usePlayerLocation } from "../hooks/use-player-location";
-import { useRealizationCountdown } from "../hooks/use-realization-countdown";
+import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { buildStationPinCoordinates, DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import { DEFAULT_STATION_PIN_CUSTOMIZATION, resolveDefaultStationPoints, type MapCoordinate } from "../model/types";
 
@@ -25,6 +24,17 @@ type ExpeditionStageScreenProps = {
   session: OnboardingSession;
   onRestart?: () => void;
 };
+
+const LOCATION_SYNC_THROTTLE_MS = 10_000;
+
+type TransientPopup = {
+  id: number;
+  message: string;
+  tone: "error" | "success";
+};
+const POPUP_MIN_DURATION_MS = 6_500;
+const POPUP_MAX_DURATION_MS = 12_000;
+const POPUP_MS_PER_CHAR = 45;
 
 const MOBILE_TEST_STATION_DEFINITIONS: Array<{
   stationId: string;
@@ -148,7 +158,28 @@ function formatTimeLimitLabel(timeLimitSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function resolveGpsStatusLabel(permissionState: "pending" | "granted" | "denied" | "error") {
+  if (permissionState === "granted") {
+    return "GPS aktywny";
+  }
+  if (permissionState === "denied") {
+    return "Brak zgody GPS";
+  }
+  if (permissionState === "error") {
+    return "Błąd GPS";
+  }
+  return "Uruchamianie GPS";
+}
+
+function formatLocationCoordinate(value: number | undefined) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return (value as number).toFixed(6);
+}
+
 export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScreenProps) {
+  const insets = useSafeAreaInsets();
   const {
     sessionState,
     isLoading,
@@ -158,16 +189,50 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [focusedStationId, setFocusedStationId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isCameraActivating, setIsCameraActivating] = useState(false);
+  const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
+  const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
+  const lastPopupSourceValuesRef = useRef<{
+    errorMessage: string | null;
+    locationError: string | null;
+    actionError: string | null;
+    actionMessage: string | null;
+  }>({
+    errorMessage: null,
+    locationError: null,
+    actionError: null,
+    actionMessage: null,
+  });
 
-  const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation(
+  const showTransientPopup = useCallback((message: string, tone: "error" | "success") => {
+    const popupId = Date.now();
+    setTransientPopup({ id: popupId, message, tone });
+
+    if (popupTimeoutRef.current) {
+      clearTimeout(popupTimeoutRef.current);
+    }
+
+    const popupDurationMs = Math.max(
+      POPUP_MIN_DURATION_MS,
+      Math.min(POPUP_MAX_DURATION_MS, message.length * POPUP_MS_PER_CHAR),
+    );
+
+    popupTimeoutRef.current = setTimeout(() => {
+      setTransientPopup((current) => (current?.id === popupId ? null : current));
+    }, popupDurationMs);
+  }, []);
+
+  const { playerLocation, permissionState, locationError, requestCurrentLocation } = usePlayerLocation(
     sessionState.team.lastLocation ? toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude) : null,
   );
+  const mapPlayerLocation = playerLocation ?? sessionState.team.lastLocation ?? null;
 
   const stationMetadataMap = useMemo(
     () =>
@@ -243,6 +308,14 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     setSelectedStationId(stationIds[0] ?? null);
   }, [selectedStationId, stationIds]);
 
+  useEffect(() => {
+    if (focusedStationId && stationIds.includes(focusedStationId)) {
+      return;
+    }
+
+    setFocusedStationId(null);
+  }, [focusedStationId, stationIds]);
+
   const fallbackStationIds = useMemo(
     () => stationIds.filter((stationId) => !realStationCoordinates[stationId]),
     [realStationCoordinates, stationIds],
@@ -260,7 +333,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
     const nowTimestamp = Date.now();
 
-    if (nowTimestamp - autoLocationSyncTimestampRef.current < 15_000) {
+    if (nowTimestamp - autoLocationSyncTimestampRef.current < LOCATION_SYNC_THROTTLE_MS) {
       return;
     }
 
@@ -272,6 +345,70 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
       }
     });
   }, [playerLocation, syncTeamLocation]);
+
+  useEffect(() => {
+    return () => {
+      if (popupTimeoutRef.current) {
+        clearTimeout(popupTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!errorMessage) {
+      lastPopupSourceValuesRef.current.errorMessage = null;
+      return;
+    }
+
+    if (lastPopupSourceValuesRef.current.errorMessage === errorMessage) {
+      return;
+    }
+
+    lastPopupSourceValuesRef.current.errorMessage = errorMessage;
+    showTransientPopup(errorMessage, "error");
+  }, [errorMessage, showTransientPopup]);
+
+  useEffect(() => {
+    if (!locationError) {
+      lastPopupSourceValuesRef.current.locationError = null;
+      return;
+    }
+
+    if (lastPopupSourceValuesRef.current.locationError === locationError) {
+      return;
+    }
+
+    lastPopupSourceValuesRef.current.locationError = locationError;
+    showTransientPopup(locationError, "error");
+  }, [locationError, showTransientPopup]);
+
+  useEffect(() => {
+    if (!actionError) {
+      lastPopupSourceValuesRef.current.actionError = null;
+      return;
+    }
+
+    if (lastPopupSourceValuesRef.current.actionError === actionError) {
+      return;
+    }
+
+    lastPopupSourceValuesRef.current.actionError = actionError;
+    showTransientPopup(actionError, "error");
+  }, [actionError, showTransientPopup]);
+
+  useEffect(() => {
+    if (!actionMessage) {
+      lastPopupSourceValuesRef.current.actionMessage = null;
+      return;
+    }
+
+    if (lastPopupSourceValuesRef.current.actionMessage === actionMessage) {
+      return;
+    }
+
+    lastPopupSourceValuesRef.current.actionMessage = actionMessage;
+    showTransientPopup(actionMessage, "success");
+  }, [actionMessage, showTransientPopup]);
 
   const stationCoordinates = useMemo(
     () => ({
@@ -303,8 +440,8 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   const selectedStationLabel = selectedStationId
     ? stationPins.find((pin) => pin.stationId === selectedStationId)?.label ?? `Stanowisko ${selectedStationId}`
     : null;
-  const selectedStationCoordinate =
-    selectedStationId && stationCoordinates[selectedStationId] ? stationCoordinates[selectedStationId] : null;
+  const focusedStationCoordinate =
+    focusedStationId && stationCoordinates[focusedStationId] ? stationCoordinates[focusedStationId] : null;
 
   const completedTasks = sessionState.tasks.filter((task) => task.status === "done").length;
   const taskTotal = sessionState.tasks.length;
@@ -456,9 +593,39 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     }
   }
 
+  async function handleGpsRefresh() {
+    setActionError(null);
+    setActionMessage(null);
+    setIsGpsRefreshing(true);
+
+    try {
+      const nextLocation = await requestCurrentLocation();
+      const syncError = await syncTeamLocation(nextLocation);
+
+      if (syncError) {
+        setActionError(syncError);
+        return;
+      }
+
+      setActionMessage(
+        `GPS odświeżony: ${formatLocationCoordinate(nextLocation.latitude)}, ${formatLocationCoordinate(nextLocation.longitude)}`,
+      );
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "Nie udało się odświeżyć GPS."));
+    } finally {
+      setIsGpsRefreshing(false);
+    }
+  }
+
+  function handleSelectStationFromMap(stationId: string) {
+    setSelectedStationId(stationId);
+    setFocusedStationId(stationId);
+  }
+
   function handleEnterStationTest(stationId: string) {
     if (stationIds.includes(stationId)) {
       setSelectedStationId(stationId);
+      setFocusedStationId(stationId);
     }
     setActiveStationTestId(stationId);
     setIsStationTestMenuOpen(false);
@@ -477,16 +644,16 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         ) : (
           <ExpeditionMap
             centerCoordinate={mapAnchor ?? DEFAULT_MAP_ANCHOR}
-            playerLocation={playerLocation}
+            playerLocation={mapPlayerLocation}
             pins={stationPins}
             selectedStationId={selectedStationId}
-            focusCoordinate={selectedStationCoordinate}
-            onSelectStation={setSelectedStationId}
+            focusCoordinate={focusedStationCoordinate}
+            onSelectStation={handleSelectStationFromMap}
           />
         )}
       </View>
 
-      <View className="absolute left-3 right-3 top-3">
+      <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <TopRealizationPanel
           companyName={sessionState.realization.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`}
           scheduledAt={sessionState.realization.scheduledAt}
@@ -542,10 +709,42 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
               Menu testowe
             </Text>
           </Pressable>
+
+          <View
+            className="mt-2 w-56 rounded-2xl border px-3 py-2"
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
+          >
+            <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+              GPS debug
+            </Text>
+            <Text className="mt-1 text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              {resolveGpsStatusLabel(permissionState)}
+            </Text>
+            <Text className="mt-1 text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
+              lat: {formatLocationCoordinate(mapPlayerLocation?.latitude)}
+            </Text>
+            <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
+              lng: {formatLocationCoordinate(mapPlayerLocation?.longitude)}
+            </Text>
+            <Pressable
+              className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
+              style={{
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: "rgba(15, 23, 42, 0.32)",
+                opacity: isGpsRefreshing ? 0.7 : 1,
+              }}
+              onPress={() => void handleGpsRefresh()}
+              disabled={isGpsRefreshing}
+            >
+              <Text className="text-[11px] font-semibold text-center" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                {isGpsRefreshing ? "Odświeżanie..." : "Odśwież GPS"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
-      <View className="absolute bottom-4 left-3 right-3 items-center">
+      <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 12 }}>
         {selectedStationLabel ? (
           <View
             className="mb-2 rounded-full border px-3 py-1"
@@ -566,35 +765,26 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             isCameraActivating={isCameraActivating}
           />
         </View>
-
-        {(errorMessage || locationError || actionError || actionMessage) && (
-          <View
-            className="mt-2 w-full max-w-[560px] rounded-2xl border px-3 py-2"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.88)" }}
-          >
-            {errorMessage && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
-                {errorMessage}
-              </Text>
-            )}
-            {locationError && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
-                {locationError}
-              </Text>
-            )}
-            {actionError && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.danger }}>
-                {actionError}
-              </Text>
-            )}
-            {actionMessage && (
-              <Text className="text-xs text-center" style={{ color: EXPEDITION_THEME.accentStrong }}>
-                {actionMessage}
-              </Text>
-            )}
-          </View>
-        )}
       </View>
+
+      {transientPopup ? (
+        <View pointerEvents="none" className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 114 }}>
+          <View
+            className="w-full max-w-[560px] rounded-2xl border px-3 py-2"
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: transientPopup.tone === "error" ? "rgba(127, 29, 29, 0.9)" : "rgba(22, 41, 33, 0.94)",
+            }}
+          >
+            <Text
+              className="text-center text-xs font-semibold"
+              style={{ color: transientPopup.tone === "error" ? "#fecaca" : EXPEDITION_THEME.accentStrong }}
+            >
+              {transientPopup.message}
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       <StationTestMenuOverlay
         visible={isStationTestMenuOpen}
@@ -607,8 +797,12 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
       {onRestart ? (
         <Pressable
-          className="absolute right-3 top-3 rounded-full border px-3 py-2 active:opacity-90"
-          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.88)" }}
+          className="absolute right-3 rounded-full border px-3 py-2 active:opacity-90"
+          style={{
+            top: insets.top + 12,
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: "rgba(22, 41, 33, 0.88)",
+          }}
           onPress={onRestart}
         >
           <Text className="text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>

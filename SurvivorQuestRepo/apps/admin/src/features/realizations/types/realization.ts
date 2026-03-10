@@ -30,6 +30,7 @@ export type RealizationLog = {
 export type Realization = {
   id: string;
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;

@@ -48,6 +48,7 @@ type ValidScenarioStationDraft = {
 type Realization = {
   id: string;
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -602,6 +603,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = (await req.json()) as {
     companyName?: string;
+    location?: string;
     contactPerson?: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -622,6 +624,7 @@ export async function POST(req: Request) {
 
   const scheduledTimestamp = body.scheduledAt ? new Date(body.scheduledAt).getTime() : NaN;
   const stationDraftsResult = readScenarioStationDrafts(body.scenarioStations);
+  const sanitizedLocation = typeof body.location === "string" ? body.location.trim() : "";
   const sanitizedContactPerson = typeof body.contactPerson === "string" ? body.contactPerson.trim() : "";
   const sanitizedContactPhone = typeof body.contactPhone === "string" ? body.contactPhone.trim() : "";
   const sanitizedContactEmail = typeof body.contactEmail === "string" ? body.contactEmail.trim() : "";
@@ -683,6 +686,7 @@ export async function POST(req: Request) {
   const newRealization: Realization = {
     id: realizationId,
     companyName: body.companyName.trim(),
+    location: sanitizedLocation || undefined,
     contactPerson: sanitizedContactPerson,
     contactPhone: sanitizedContactPhone || undefined,
     contactEmail: sanitizedContactEmail || undefined,
@@ -713,6 +717,7 @@ export async function PUT(req: Request) {
   const body = (await req.json()) as {
     id?: string;
     companyName?: string;
+    location?: string;
     contactPerson?: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -733,6 +738,7 @@ export async function PUT(req: Request) {
 
   const scheduledTimestamp = body.scheduledAt ? new Date(body.scheduledAt).getTime() : NaN;
   const stationDraftsResult = readScenarioStationDrafts(body.scenarioStations);
+  const sanitizedLocation = typeof body.location === "string" ? body.location.trim() : "";
   const sanitizedContactPerson = typeof body.contactPerson === "string" ? body.contactPerson.trim() : "";
   const sanitizedContactPhone = typeof body.contactPhone === "string" ? body.contactPhone.trim() : "";
   const sanitizedContactEmail = typeof body.contactEmail === "string" ? body.contactEmail.trim() : "";
@@ -859,6 +865,10 @@ export async function PUT(req: Request) {
     changes.push("oferta PDF");
   }
 
+  if ((current.location ?? "") !== sanitizedLocation) {
+    changes.push("lokalizacja");
+  }
+
   const currentStationIds = current.stationIds.join("|");
   const nextStationIds = syncResult.stations.map((station) => station.id).join("|");
 
@@ -869,6 +879,7 @@ export async function PUT(req: Request) {
   const updatedRealization: Realization = {
     ...current,
     companyName: body.companyName.trim(),
+    location: sanitizedLocation || undefined,
     contactPerson: sanitizedContactPerson,
     contactPhone: sanitizedContactPhone || undefined,
     contactEmail: sanitizedContactEmail || undefined,

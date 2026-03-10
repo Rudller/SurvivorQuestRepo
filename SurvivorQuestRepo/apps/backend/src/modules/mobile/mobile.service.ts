@@ -80,6 +80,10 @@ const FUNNY_TEAM_NAMES = [
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const TEST_JOIN_CODE = 'TEST';
+const LOCATION_DEDUP_MIN_INTERVAL_MS = 4_000;
+const LOCATION_DEDUP_MIN_DISTANCE_METERS = 3;
+const LOCATION_MAX_ACCURACY_METERS = 10_000;
+const LOCATION_MAX_SPEED_MPS = 120;
 
 @Injectable()
 export class MobileService {
@@ -538,15 +542,36 @@ export class MobileService {
     lat: number;
     lng: number;
     accuracy?: number;
+    speed?: number;
+    heading?: number;
     at?: string;
   }) {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
 
-    if (!this.isFiniteNumber(input.lat) || !this.isFiniteNumber(input.lng)) {
+    if (!this.isLatitude(input.lat) || !this.isLongitude(input.lng)) {
       throw new BadRequestException('Invalid coordinates');
     }
+
+    const accuracy = this.parseOptionalNumberInRange({
+      value: input.accuracy,
+      min: 0,
+      max: LOCATION_MAX_ACCURACY_METERS,
+      field: 'accuracy',
+    });
+    const speed = this.parseOptionalNumberInRange({
+      value: input.speed,
+      min: 0,
+      max: LOCATION_MAX_SPEED_MPS,
+      field: 'speed',
+    });
+    const heading = this.parseOptionalNumberInRange({
+      value: input.heading,
+      min: 0,
+      max: 360,
+      field: 'heading',
+    });
 
     const locationAt = this.parseIsoOrNow(input.at);
 
@@ -554,14 +579,28 @@ export class MobileService {
       throw new BadRequestException('Invalid payload');
     }
 
+    const serverReceivedAt = new Date().toISOString();
+    const deduplicated = this.shouldSkipLocationUpdate(team, {
+      lat: input.lat,
+      lng: input.lng,
+      at: locationAt,
+    });
+
+    if (deduplicated) {
+      return {
+        ok: true,
+        deduplicated: true,
+        lastLocationAt: team.lastLocationAt?.toISOString() || locationAt,
+        serverReceivedAt,
+      };
+    }
+
     await this.prisma.team.update({
       where: { id: team.id },
       data: {
         lastLocationLat: input.lat,
         lastLocationLng: input.lng,
-        lastLocationAccuracy: this.isFiniteNumber(input.accuracy)
-          ? input.accuracy
-          : null,
+        lastLocationAccuracy: accuracy ?? null,
         lastLocationAt: new Date(locationAt),
       },
     });
@@ -575,14 +614,19 @@ export class MobileService {
       payload: {
         lat: input.lat,
         lng: input.lng,
-        accuracy: input.accuracy,
+        accuracy: accuracy ?? null,
+        speed: speed ?? null,
+        heading: heading ?? null,
         at: locationAt,
+        serverReceivedAt,
       },
     });
 
     return {
       ok: true,
+      deduplicated: false,
       lastLocationAt: locationAt,
+      serverReceivedAt,
     };
   }
 
@@ -677,16 +721,8 @@ export class MobileService {
   }
 
   async getMobileAdminRealizationOverview(realizationId: string) {
-    const requestedId = realizationId.trim();
-    const realizations = await this.getRealizationsView();
     const realization =
-      requestedId && requestedId !== 'current'
-        ? realizations.find((item) => item.id === requestedId)
-        : this.resolveCurrentMobileRealization(realizations);
-
-    if (!realization) {
-      throw new NotFoundException('Realization not found');
-    }
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
 
     const teams = await this.prisma.team.findMany({
       where: { realizationId: realization.id },
@@ -798,6 +834,80 @@ export class MobileService {
         eventCount: logs.length,
       },
     };
+  }
+
+  async getMobileAdminRealizationLocations(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const teams = await this.prisma.team.findMany({
+      where: { realizationId: realization.id },
+      orderBy: { slotNumber: 'asc' },
+      select: {
+        id: true,
+        slotNumber: true,
+        name: true,
+        color: true,
+        status: true,
+        lastLocationLat: true,
+        lastLocationLng: true,
+        lastLocationAccuracy: true,
+        lastLocationAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const serverTime = new Date();
+
+    return {
+      serverTime: serverTime.toISOString(),
+      realization: {
+        id: realization.id,
+        companyName: realization.companyName,
+        status: realization.status,
+        scheduledAt: realization.scheduledAt,
+        locationRequired: realization.locationRequired,
+        joinCode: realization.joinCode,
+        updatedAt: realization.updatedAt,
+      },
+      teams: teams.map((team) => {
+        const location = this.toLastLocation(team);
+        const locationAgeSeconds = team.lastLocationAt
+          ? Math.max(
+              0,
+              Math.round(
+                (serverTime.getTime() - team.lastLocationAt.getTime()) / 1000,
+              ),
+            )
+          : null;
+
+        return {
+          id: team.id,
+          slotNumber: team.slotNumber,
+          name: team.name,
+          color: team.color,
+          status: this.fromTeamStatus(team.status),
+          hasLocation: Boolean(location),
+          locationAgeSeconds,
+          lastLocation: location,
+          updatedAt: team.updatedAt.toISOString(),
+        };
+      }),
+    };
+  }
+
+  private async resolveMobileAdminRealizationOrThrow(realizationId: string) {
+    const requestedId = realizationId.trim();
+    const realizations = await this.getRealizationsView();
+    const realization =
+      requestedId && requestedId !== 'current'
+        ? realizations.find((item) => item.id === requestedId)
+        : this.resolveCurrentMobileRealization(realizations);
+
+    if (!realization) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    return realization;
   }
 
   private async getRealizationsView() {
@@ -1071,6 +1181,98 @@ export class MobileService {
 
   private isFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value);
+  }
+
+  private isLatitude(value: unknown): value is number {
+    return this.isFiniteNumber(value) && value >= -90 && value <= 90;
+  }
+
+  private isLongitude(value: unknown): value is number {
+    return this.isFiniteNumber(value) && value >= -180 && value <= 180;
+  }
+
+  private parseOptionalNumberInRange(input: {
+    value: unknown;
+    min: number;
+    max: number;
+    field: string;
+  }) {
+    if (input.value === null || typeof input.value === 'undefined') {
+      return undefined;
+    }
+
+    if (
+      !this.isFiniteNumber(input.value) ||
+      input.value < input.min ||
+      input.value > input.max
+    ) {
+      throw new BadRequestException(`Invalid ${input.field}`);
+    }
+
+    return input.value;
+  }
+
+  private shouldSkipLocationUpdate(
+    team: {
+      lastLocationLat: number | null;
+      lastLocationLng: number | null;
+      lastLocationAt: Date | null;
+    },
+    next: {
+      lat: number;
+      lng: number;
+      at: string;
+    },
+  ) {
+    if (
+      typeof team.lastLocationLat !== 'number' ||
+      typeof team.lastLocationLng !== 'number' ||
+      !team.lastLocationAt
+    ) {
+      return false;
+    }
+
+    const nextTimestamp = new Date(next.at).getTime();
+    if (!Number.isFinite(nextTimestamp)) {
+      return false;
+    }
+
+    const elapsedMs = Math.abs(nextTimestamp - team.lastLocationAt.getTime());
+    const distanceMeters = this.getDistanceMetersBetweenCoordinates(
+      team.lastLocationLat,
+      team.lastLocationLng,
+      next.lat,
+      next.lng,
+    );
+
+    return (
+      elapsedMs < LOCATION_DEDUP_MIN_INTERVAL_MS &&
+      distanceMeters < LOCATION_DEDUP_MIN_DISTANCE_METERS
+    );
+  }
+
+  private getDistanceMetersBetweenCoordinates(
+    fromLat: number,
+    fromLng: number,
+    toLat: number,
+    toLng: number,
+  ) {
+    const earthRadiusMeters = 6_371_000;
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+
+    const latDelta = toRadians(toLat - fromLat);
+    const lngDelta = toRadians(toLng - fromLng);
+    const startLatRad = toRadians(fromLat);
+    const endLatRad = toRadians(toLat);
+
+    const haversine =
+      Math.sin(latDelta / 2) ** 2 +
+      Math.cos(startLatRad) *
+        Math.cos(endLatRad) *
+        Math.sin(lngDelta / 2) ** 2;
+    const centralAngle = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+    return earthRadiusMeters * centralAngle;
   }
 
   private parseIsoOrNow(value?: string) {

@@ -41,9 +41,11 @@ export function EditRealizationPanel({
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
 
   const [editError, setEditError] = useState<string | null>(null);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const [instructorInput, setInstructorInput] = useState("");
   const [editValues, setEditValues] = useState({
     companyName: realization.companyName,
+    location: realization.location ?? "",
     contactPerson: realization.contactPerson ?? "",
     contactPhone: realization.contactPhone ?? "",
     contactEmail: realization.contactEmail ?? "",
@@ -111,6 +113,16 @@ export function EditRealizationPanel({
     }));
   }
 
+  async function copyJoinCode() {
+    try {
+      await navigator.clipboard.writeText(realization.joinCode);
+      setJoinCodeCopied(true);
+      window.setTimeout(() => setJoinCodeCopied(false), 1500);
+    } catch {
+      setEditError("Nie udało się skopiować kodu dołączenia.");
+    }
+  }
+
   return (
     <>
       <button
@@ -170,6 +182,7 @@ export function EditRealizationPanel({
                 await updateRealization({
                   id: realization.id,
                   companyName: editValues.companyName.trim(),
+                  location: editValues.location.trim() || undefined,
                   contactPerson: editValues.contactPerson.trim(),
                   contactPhone: editValues.contactPhone.trim() || undefined,
                   contactEmail: editValues.contactEmail.trim() || undefined,
@@ -195,6 +208,33 @@ export function EditRealizationPanel({
             className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
           >
             <div className="space-y-4">
+              <section className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">ID realizacji</p>
+                  <p className="break-all font-mono text-xs text-zinc-300">{realization.id}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">Kod dołączenia</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-sm font-semibold tracking-wider text-zinc-100">{realization.joinCode}</p>
+                    <button
+                      type="button"
+                      onClick={() => void copyJoinCode()}
+                      className="rounded-md border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 transition hover:border-zinc-500"
+                    >
+                      {joinCodeCopied ? "Skopiowano" : "Kopiuj"}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">Daty</p>
+                  <p className="text-xs text-zinc-400">
+                    Utworzono: {new Date(realization.createdAt).toLocaleString("pl-PL")} • Ostatnia zmiana:{" "}
+                    {new Date(realization.updatedAt).toLocaleString("pl-PL")}
+                  </p>
+                </div>
+              </section>
+
               {/* ── Klient ── */}
               <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
                 <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Klient</legend>
@@ -224,6 +264,15 @@ export function EditRealizationPanel({
                 </label>
 
                 <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5 sm:col-span-2">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
+                    <input
+                      value={editValues.location}
+                      onChange={(event) => setEditValues((prev) => ({ ...prev, location: event.target.value }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Osoba kontaktowa</span>
                     <input
@@ -465,6 +514,9 @@ export function EditRealizationPanel({
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-300">
               <p>
                 <span className="text-zinc-500">Kontakt:</span> {editValues.contactPerson || "-"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Lokalizacja:</span> {editValues.location.trim() || "-"}
               </p>
               <p>
                 <span className="text-zinc-500">Dane kontaktowe:</span>{" "}

@@ -139,6 +139,7 @@ model ScenarioStation {
 model Realization {
   id                  String             @id @default(uuid())
   companyName         String
+  location            String?
   contactPerson       String
   contactPhone        String?
   contactEmail        String?

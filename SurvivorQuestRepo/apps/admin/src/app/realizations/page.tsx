@@ -32,6 +32,7 @@ export default function RealizationsPage() {
 
   const [sortField, setSortField] = useState<RealizationSortField>("scheduledAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
 
   useEffect(() => {
@@ -89,8 +90,10 @@ export default function RealizationsPage() {
               realizations={realizations ?? []}
               scenarios={scenarios ?? []}
               stations={stations ?? []}
+              hideCompleted={hideCompleted}
               sortField={sortField}
               sortDirection={sortDirection}
+              onHideCompletedChange={setHideCompleted}
               onSortFieldChange={setSortField}
               onSortDirectionChange={setSortDirection}
               onEdit={setEditingRealization}

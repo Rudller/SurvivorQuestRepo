@@ -23,6 +23,7 @@ type StationDto = {
 type RealizationDto = {
   id: string;
   companyName: string;
+  location?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -47,6 +48,7 @@ type RealizationDto = {
 
 type CreateRealizationPayload = {
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -68,6 +70,7 @@ type CreateRealizationPayload = {
 type UpdateRealizationPayload = {
   id: string;
   companyName: string;
+  location?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -160,6 +163,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
   return {
     id: dto.id,
     companyName: dto.companyName,
+    location: dto.location?.trim() || undefined,
     contactPerson: dto.contactPerson?.trim() || "",
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,

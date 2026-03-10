@@ -14,10 +14,11 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
+import { DEFAULT_REALIZATION_CODE, EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
 import type { OnboardingSession, Screen, TeamColor } from "../model/types";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
+type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
 
 type MobileBootstrapRealization = {
   id: string;
@@ -238,10 +239,17 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
   const [isTeamPickerOpen, setIsTeamPickerOpen] = useState(false);
   const [teamPickerError, setTeamPickerError] = useState<string | null>(null);
 
-  const [realizationCode, setRealizationCode] = useState("");
+  const [realizationCode, setRealizationCode] = useState(DEFAULT_REALIZATION_CODE);
   const [apiBaseUrl, setApiBaseUrl] = useState<string | null>(null);
   const [activeRealization, setActiveRealization] = useState<MobileBootstrapRealization | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [apiConnectionStatus, setApiConnectionStatus] = useState<ApiConnectionStatus>(() =>
+    resolveApiBaseUrlCandidates().length > 0 ? "checking" : "config-missing",
+  );
+  const [apiConnectionTarget, setApiConnectionTarget] = useState<string | null>(() => {
+    const candidates = resolveApiBaseUrlCandidates();
+    return candidates.length > 0 ? candidates[0] : null;
+  });
 
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("Drużyna");
@@ -264,6 +272,60 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
     () => Array.from({ length: activeRealization?.teamCount ?? 0 }, (_, index) => index + 1),
     [activeRealization?.teamCount],
   );
+  const apiStatusIndicatorColor =
+    apiConnectionStatus === "connected"
+      ? "#34d399"
+      : apiConnectionStatus === "checking"
+        ? "#fbbf24"
+        : apiConnectionStatus === "config-missing"
+          ? "#71717a"
+          : EXPEDITION_THEME.danger;
+
+  useEffect(() => {
+    const baseUrlCandidates = resolveApiBaseUrlCandidates();
+
+    if (baseUrlCandidates.length === 0) {
+      setApiConnectionStatus("config-missing");
+      setApiConnectionTarget(null);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const probeConnection = async () => {
+      setApiConnectionStatus("checking");
+      setApiConnectionTarget(baseUrlCandidates[0]);
+
+      for (const candidate of baseUrlCandidates) {
+        if (isCancelled) {
+          return;
+        }
+
+        setApiConnectionTarget(candidate);
+
+        try {
+          await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
+
+          if (!isCancelled) {
+            setApiConnectionStatus("connected");
+          }
+          return;
+        } catch {
+          // try next candidate
+        }
+      }
+
+      if (!isCancelled) {
+        setApiConnectionStatus("disconnected");
+      }
+    };
+
+    void probeConnection();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
     onComplete?.({
@@ -384,6 +446,8 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
     const baseUrlCandidates = resolveApiBaseUrlCandidates();
 
     if (baseUrlCandidates.length === 0) {
+      setApiConnectionStatus("config-missing");
+      setApiConnectionTarget(null);
       setSetupState("error");
       setSetupMessage("Brakuje EXPO_PUBLIC_API_BASE_URL. Ustaw adres API admina w .env.local.");
       return;
@@ -393,8 +457,11 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
       let resolvedBaseUrl: string | null = null;
       let bootstrap: MobileBootstrapResponse | null = null;
       let bootstrapError: unknown = null;
+      setApiConnectionStatus("checking");
 
       for (const candidate of baseUrlCandidates) {
+        setApiConnectionTarget(candidate);
+
         try {
           bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
           resolvedBaseUrl = candidate;
@@ -405,8 +472,10 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
       }
 
       if (!resolvedBaseUrl || !bootstrap) {
+        setApiConnectionStatus("disconnected");
         throw bootstrapError ?? new Error("Nie udało się połączyć z backendem.");
       }
+      setApiConnectionStatus("connected");
 
       const join = await requestMobileApi<MobileJoinResponse>(resolvedBaseUrl, "/api/mobile/session/join", {
         method: "POST",
@@ -755,6 +824,30 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
               >
                 <Text className="text-center text-base font-semibold text-zinc-950">Aktywuj realizację</Text>
               </Pressable>
+
+              <View
+                className="mt-4 rounded-2xl border px-4 py-3"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                }}
+              >
+                <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Połączenie API
+                </Text>
+                <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+                  Serwer: {apiConnectionTarget ?? "Brak konfiguracji (EXPO_PUBLIC_API_BASE_URL)"}
+                </Text>
+                <View className="mt-1.5 flex-row items-center gap-2">
+                  <View
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: apiStatusIndicatorColor }}
+                  />
+                  <Text className="text-sm font-medium" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                    Status: {apiConnectionStatus}
+                  </Text>
+                </View>
+              </View>
 
               {setupState === "loading" && (
                 <View

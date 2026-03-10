@@ -9,6 +9,8 @@ export type MapCoordinate = {
 
 export type PlayerLocation = MapCoordinate & {
   accuracy?: number;
+  speed?: number;
+  heading?: number;
   at: string;
 };
 

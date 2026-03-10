@@ -94,6 +94,7 @@ export function buildRealizationEntity(input: {
   realization: {
     id: string;
     companyName: string;
+    location: string | null;
     contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
@@ -122,6 +123,7 @@ export function buildRealizationEntity(input: {
   return {
     id: realization.id,
     companyName: realization.companyName,
+    location: realization.location || undefined,
     contactPerson: realization.contactPerson,
     contactPhone: realization.contactPhone || undefined,
     contactEmail: realization.contactEmail || undefined,

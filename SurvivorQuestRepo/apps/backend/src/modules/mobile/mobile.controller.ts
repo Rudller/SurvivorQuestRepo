@@ -30,6 +30,8 @@ type LocationPayload = {
   lat?: number;
   lng?: number;
   accuracy?: number;
+  speed?: number;
+  heading?: number;
   at?: string;
 };
 
@@ -96,6 +98,8 @@ export class MobileController {
       lat: Number(payload.lat),
       lng: Number(payload.lng),
       accuracy: payload.accuracy,
+      speed: payload.speed,
+      heading: payload.heading,
       at: payload.at,
     });
   }
@@ -116,11 +120,25 @@ export class MobileController {
     return this.mobileService.getMobileAdminRealizationOverview('current');
   }
 
+  @Get('admin/realizations/current/locations')
+  @UseGuards(AdminSessionGuard)
+  async getMobileAdminCurrentRealizationLocations() {
+    return this.mobileService.getMobileAdminRealizationLocations('current');
+  }
+
   @Get('admin/realizations/:realizationId')
   @UseGuards(AdminSessionGuard)
   async getMobileAdminRealizationOverview(
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminRealizationOverview(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/locations')
+  @UseGuards(AdminSessionGuard)
+  async getMobileAdminRealizationLocations(
+    @Param('realizationId') realizationId: string,
+  ) {
+    return this.mobileService.getMobileAdminRealizationLocations(realizationId);
   }
 }

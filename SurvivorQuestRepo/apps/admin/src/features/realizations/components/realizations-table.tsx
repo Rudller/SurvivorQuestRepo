@@ -17,8 +17,10 @@ interface RealizationsTableProps {
   realizations: Realization[];
   scenarios: Scenario[];
   stations: Station[];
+  hideCompleted: boolean;
   sortField: RealizationSortField;
   sortDirection: SortDirection;
+  onHideCompletedChange: (value: boolean) => void;
   onSortFieldChange: (field: RealizationSortField) => void;
   onSortDirectionChange: (direction: SortDirection) => void;
   onEdit: (realization: Realization) => void;
@@ -28,8 +30,10 @@ export function RealizationsTable({
   realizations,
   scenarios,
   stations,
+  hideCompleted,
   sortField,
   sortDirection,
+  onHideCompletedChange,
   onSortFieldChange,
   onSortDirectionChange,
   onEdit,
@@ -39,8 +43,13 @@ export function RealizationsTable({
     [scenarios],
   );
 
+  const filteredRealizations = useMemo(
+    () => (hideCompleted ? realizations.filter((realization) => realization.status !== "done") : realizations),
+    [hideCompleted, realizations],
+  );
+
   const sortedRealizations = useMemo(() => {
-    const list = [...realizations];
+    const list = [...filteredRealizations];
 
     list.sort((left, right) => {
       if (sortField === "company") {
@@ -60,13 +69,22 @@ export function RealizationsTable({
     });
 
     return list;
-  }, [realizations, sortField, sortDirection]);
+  }, [filteredRealizations, sortField, sortDirection]);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
         <h3 className="text-sm font-medium text-zinc-200">Lista realizacji</h3>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={(event) => onHideCompletedChange(event.target.checked)}
+              className="h-3.5 w-3.5 accent-amber-400"
+            />
+            Ukryj zrealizowane
+          </label>
           <label className="text-xs text-zinc-400">Sortuj po</label>
           <select
             value={sortField}
@@ -91,8 +109,14 @@ export function RealizationsTable({
 
       {sortedRealizations.length === 0 && (
         <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
-          <p className="text-sm font-medium text-zinc-200">Brak realizacji</p>
-          <p className="mt-1 text-sm text-zinc-400">Dodaj pierwszą realizację przyciskiem Nowa realizacja.</p>
+          <p className="text-sm font-medium text-zinc-200">
+            {hideCompleted ? "Brak aktywnych realizacji" : "Brak realizacji"}
+          </p>
+          <p className="mt-1 text-sm text-zinc-400">
+            {hideCompleted
+              ? "Wyłącz filtr, aby zobaczyć też zakończone realizacje."
+              : "Dodaj pierwszą realizację przyciskiem Nowa realizacja."}
+          </p>
         </div>
       )}
 
@@ -103,6 +127,8 @@ export function RealizationsTable({
               <thead className="bg-zinc-900 text-zinc-300">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Firma</th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Lokalizacja</th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Kontakt</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Typ</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Termin</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status</th>
@@ -132,6 +158,15 @@ export function RealizationsTable({
                   return (
                     <tr key={realization.id} className="border-t border-zinc-800 bg-zinc-900/70">
                       <td className="px-3 py-2 font-medium text-zinc-100">{realization.companyName}</td>
+                      <td className="px-3 py-2 text-zinc-300">{realization.location?.trim() || "-"}</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        <p>{realization.contactPerson || "-"}</p>
+                        <p className="text-xs text-zinc-500">
+                          {realization.contactPhone || realization.contactEmail
+                            ? `${realization.contactPhone || "-"} / ${realization.contactEmail || "-"}`
+                            : "-"}
+                        </p>
+                      </td>
                       <td className="px-3 py-2 text-zinc-300">
                         {realizationTypeOptions.find((opt) => opt.value === realization.type)?.label ?? realization.type}
                       </td>
