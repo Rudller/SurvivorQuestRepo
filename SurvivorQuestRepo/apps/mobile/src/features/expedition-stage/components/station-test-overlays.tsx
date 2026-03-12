@@ -190,7 +190,7 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
           </View>
 
           <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 14 }} showsVerticalScrollIndicator={false}>
-            <Image source={{ uri: station.imageUrl }} className="h-44 w-full rounded-2xl" resizeMode="cover" />
+            <Image source={{ uri: station.imageUrl }} style={{ height: 176, width: "100%", borderRadius: 16 }} resizeMode="cover" />
 
             <View className="mt-3 flex-row items-start justify-between gap-2">
               <Text className="flex-1 text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>

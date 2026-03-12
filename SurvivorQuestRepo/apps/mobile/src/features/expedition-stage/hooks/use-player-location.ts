@@ -8,8 +8,9 @@ const INITIAL_FIX_ACCURACY = Location.Accuracy.Low;
 const LIVE_TRACKING_ACCURACY = Location.Accuracy.Balanced;
 const LIVE_TRACKING_TIME_INTERVAL_MS = 4_000;
 const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 3;
+const ONE_SHOT_FIX_TIMEOUT_MS = 6_500;
 const LOCATION_UNAVAILABLE_FALLBACK_MESSAGE =
-  "Emulator nie zwrócił bieżącej lokalizacji. Ustaw punkt w Extended controls > Location i spróbuj ponownie.";
+  "Emulator nie zwrócił bieżącej lokalizacji. Ustaw punkt w Extended controls > Location i spróbuj ponownie albo użyj ADB geo fix.";
 
 function toPlayerLocation(
   coords: {
@@ -50,6 +51,51 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
       throw new Error("Usługa lokalizacji jest wyłączona w urządzeniu/emulatorze.");
     }
 
+    await Location.enableNetworkProviderAsync().catch(() => undefined);
+
+    const getOneShotWatchFix = async () => {
+      return new Promise<PlayerLocation>((resolve, reject) => {
+        let settled = false;
+        let subscription: Location.LocationSubscription | null = null;
+        const timeout = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          subscription?.remove();
+          reject(new Error("Location timeout"));
+        }, ONE_SHOT_FIX_TIMEOUT_MS);
+
+        Location.watchPositionAsync(
+          {
+            accuracy: LIVE_TRACKING_ACCURACY,
+            timeInterval: 1_000,
+            distanceInterval: 1,
+          },
+          (update) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timeout);
+            subscription?.remove();
+            resolve(toPlayerLocation(update.coords, update.timestamp));
+          },
+        )
+          .then((nextSubscription) => {
+            subscription = nextSubscription;
+          })
+          .catch((error: unknown) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timeout);
+            reject(error);
+          });
+      });
+    };
+
     try {
       const current = await Location.getCurrentPositionAsync({
         accuracy: INITIAL_FIX_ACCURACY,
@@ -58,6 +104,14 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
       setPlayerLocation(normalized);
       return normalized;
     } catch (error) {
+      try {
+        const oneShotLocation = await getOneShotWatchFix();
+        setPlayerLocation(oneShotLocation);
+        return oneShotLocation;
+      } catch (oneShotError) {
+        void oneShotError;
+      }
+
       const lastKnown = await Location.getLastKnownPositionAsync();
       if (lastKnown) {
         const normalized = toPlayerLocation(lastKnown.coords, lastKnown.timestamp);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import type { OnboardingSession } from "../../onboarding/model/types";
@@ -35,6 +35,10 @@ type TransientPopup = {
 const POPUP_MIN_DURATION_MS = 6_500;
 const POPUP_MAX_DURATION_MS = 12_000;
 const POPUP_MS_PER_CHAR = 45;
+const EMULATOR_TEST_LOCATION = {
+  latitude: 52.43,
+  longitude: 20.716,
+} as const;
 
 const MOBILE_TEST_STATION_DEFINITIONS: Array<{
   stationId: string;
@@ -232,7 +236,30 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   const { playerLocation, permissionState, locationError, requestCurrentLocation } = usePlayerLocation(
     sessionState.team.lastLocation ? toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude) : null,
   );
-  const mapPlayerLocation = playerLocation ?? sessionState.team.lastLocation ?? null;
+  const mapPlayerLocation = useMemo(() => {
+    const localLocation = playerLocation ?? null;
+    const syncedLocation = sessionState.team.lastLocation ?? null;
+
+    if (!localLocation) {
+      return syncedLocation;
+    }
+
+    if (!syncedLocation) {
+      return localLocation;
+    }
+
+    const localAt = new Date(localLocation.at).getTime();
+    const syncedAt = new Date(syncedLocation.at).getTime();
+
+    if (!Number.isFinite(localAt)) {
+      return syncedLocation;
+    }
+    if (!Number.isFinite(syncedAt)) {
+      return localLocation;
+    }
+
+    return localAt >= syncedAt ? localLocation : syncedLocation;
+  }, [playerLocation, sessionState.team.lastLocation]);
 
   const stationMetadataMap = useMemo(
     () =>
@@ -568,10 +595,9 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         }
       }
 
-      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-
-      if (!cameraPermission.granted) {
-        setActionError("Brak dostępu do kamery. Włącz uprawnienie kamery w ustawieniach systemu.");
+      const cameraPermissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!cameraPermissionResult.granted) {
+        setActionError("Brak dostępu do kamery. Włącz uprawnienie kamery w ustawieniach systemu i spróbuj ponownie.");
         return;
       }
 
@@ -611,10 +637,37 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         `GPS odświeżony: ${formatLocationCoordinate(nextLocation.latitude)}, ${formatLocationCoordinate(nextLocation.longitude)}`,
       );
     } catch (error) {
-      setActionError(getApiErrorMessage(error, "Nie udało się odświeżyć GPS."));
+      if (mapPlayerLocation) {
+        setActionMessage(
+          `Brak świeżego fixa GPS. Używam ostatniej znanej pozycji: ${formatLocationCoordinate(mapPlayerLocation.latitude)}, ${formatLocationCoordinate(mapPlayerLocation.longitude)}`,
+        );
+        return;
+      }
+      setActionError(getApiErrorMessage(error, "Nie udało się odświeżyć GPS. Sprawdź logi ADB i ustawienia lokalizacji emulatora."));
     } finally {
       setIsGpsRefreshing(false);
     }
+  }
+
+  async function handleUseEmulatorTestLocation() {
+    setActionError(null);
+    setActionMessage(null);
+
+    const testLocation = {
+      latitude: EMULATOR_TEST_LOCATION.latitude,
+      longitude: EMULATOR_TEST_LOCATION.longitude,
+      at: new Date().toISOString(),
+    };
+    const syncError = await syncTeamLocation(testLocation);
+
+    if (syncError) {
+      setActionError(syncError);
+      return;
+    }
+
+    setActionMessage(
+      `Ustawiono punkt testowy emulatora: ${formatLocationCoordinate(testLocation.latitude)}, ${formatLocationCoordinate(testLocation.longitude)}`,
+    );
   }
 
   function handleSelectStationFromMap(stationId: string) {
@@ -726,6 +779,9 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
               lng: {formatLocationCoordinate(mapPlayerLocation?.longitude)}
             </Text>
+            <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
+              źródło: {playerLocation && mapPlayerLocation?.at === playerLocation.at ? "device" : "server/fallback"}
+            </Text>
             <Pressable
               className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
               style={{
@@ -740,6 +796,20 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                 {isGpsRefreshing ? "Odświeżanie..." : "Odśwież GPS"}
               </Text>
             </Pressable>
+            {Platform.OS === "android" ? (
+              <Pressable
+                className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: "rgba(15, 23, 42, 0.32)",
+                }}
+                onPress={() => void handleUseEmulatorTestLocation()}
+              >
+                <Text className="text-[11px] font-semibold text-center" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  Ustaw punkt testowy (NDM)
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </View>
