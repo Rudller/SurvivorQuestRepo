@@ -433,11 +433,14 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             </select>
           </label>
 
-          <details className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <details open className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
             <summary className="cursor-pointer text-xs uppercase tracking-wider text-zinc-400">
               Stanowiska realizacji ({scenarioStations.length}) • {selectedStationsPoints} pkt
             </summary>
             <div className="mt-3">
+              <p className="mb-2 text-xs text-zinc-500">
+                Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
+              </p>
               <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} />
             </div>
           </details>

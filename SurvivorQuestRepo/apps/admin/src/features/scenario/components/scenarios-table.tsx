@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { Scenario } from "../types/scenario";
 import type { Station } from "@/features/games/types/station";
+import { isCompletionCodeRequired } from "@/features/games/station.utils";
 
 interface ScenariosTableProps {
   scenarios: Scenario[];
@@ -17,6 +18,23 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
     () => new Map(stations.map((station) => [station.id, station])),
     [stations],
   );
+  const getCodeCoverage = (stationIds: string[]) => {
+    let required = 0;
+    let configured = 0;
+
+    stationIds.forEach((stationId) => {
+      const station = stationById.get(stationId);
+      if (!station || !isCompletionCodeRequired(station.type)) {
+        return;
+      }
+      required += 1;
+      if (station.completionCode?.trim()) {
+        configured += 1;
+      }
+    });
+
+    return { required, configured };
+  };
 
   return (
     <div className="space-y-5 xl:order-1">
@@ -45,16 +63,17 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
 
       {!isLoading && scenarios.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
-          <div className="grid grid-cols-[1.2fr_2fr_1fr_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+          <div className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
             <span>Nazwa</span>
             <span>Stanowiska / aktywności</span>
+            <span>Kody</span>
             <span>Aktualizacja</span>
             <span>Akcje</span>
           </div>
 
           <div className="divide-y divide-zinc-800">
             {scenarios.map((scenario) => (
-              <div key={scenario.id} className="grid grid-cols-[1.2fr_2fr_1fr_120px] gap-3 px-4 py-3">
+              <div key={scenario.id} className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-zinc-100">{scenario.name}</p>
                   <p className="mt-1 text-xs text-zinc-400">{scenario.description || "Brak opisu scenariusza."}</p>
@@ -85,6 +104,16 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
                   {scenario.stationIds.length > 3 && (
                     <p className="text-xs text-zinc-500">+{scenario.stationIds.length - 3} więcej...</p>
                   )}
+                </div>
+
+                <div className="text-xs text-zinc-300">
+                  {(() => {
+                    const coverage = getCodeCoverage(scenario.stationIds);
+                    if (coverage.required === 0) {
+                      return "Niewymagane";
+                    }
+                    return `${coverage.configured}/${coverage.required}`;
+                  })()}
                 </div>
 
                 <div className="text-xs text-zinc-400">

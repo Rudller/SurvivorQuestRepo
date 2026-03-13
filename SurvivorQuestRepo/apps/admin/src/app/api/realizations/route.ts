@@ -31,6 +31,7 @@ type ScenarioStationDraftPayload = {
   imageUrl?: string;
   points?: number;
   timeLimitSeconds?: number;
+  completionCode?: string;
   sourceTemplateId?: string;
 };
 
@@ -42,6 +43,7 @@ type ValidScenarioStationDraft = {
   imageUrl?: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
   sourceTemplateId?: string;
 };
 
@@ -89,6 +91,8 @@ type SyncScenarioStationsResult =
   | { ok: true; scenario: ScenarioEntity; stations: StationEntity[] }
   | { ok: false; message: string };
 
+const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+
 function resolveRealizationStatus(status: RealizationStatus, scheduledAt: string) {
   const scheduledTimestamp = new Date(scheduledAt).getTime();
 
@@ -132,6 +136,14 @@ function isValidStationType(value: unknown): value is StationType {
   return value === "quiz" || value === "time" || value === "points";
 }
 
+function isCompletionCodeRequired(stationType: StationType) {
+  return stationType === "time" || stationType === "points";
+}
+
+function normalizeCompletionCode(value: string | undefined) {
+  return value?.trim().toUpperCase() || "";
+}
+
 function readScenarioStationDrafts(value: unknown): ScenarioStationDraftsResult {
   if (typeof value === "undefined") {
     return { provided: false, drafts: [] };
@@ -154,6 +166,7 @@ function readScenarioStationDrafts(value: unknown): ScenarioStationDraftsResult 
         imageUrl: typeof draft.imageUrl === "string" ? draft.imageUrl : undefined,
         points: typeof draft.points === "number" ? draft.points : undefined,
         timeLimitSeconds: typeof draft.timeLimitSeconds === "number" ? draft.timeLimitSeconds : undefined,
+        completionCode: typeof draft.completionCode === "string" ? draft.completionCode : undefined,
         sourceTemplateId:
           typeof draft.sourceTemplateId === "string" ? draft.sourceTemplateId.trim() || undefined : undefined,
       };
@@ -177,6 +190,14 @@ function validateScenarioStationDrafts(drafts: ScenarioStationDraftPayload[]): V
       return null;
     }
 
+    const normalizedCompletionCode = normalizeCompletionCode(draft.completionCode);
+    if (
+      (isCompletionCodeRequired(draft.type) && !COMPLETION_CODE_REGEX.test(normalizedCompletionCode)) ||
+      (!isCompletionCodeRequired(draft.type) && normalizedCompletionCode.length > 0)
+    ) {
+      return null;
+    }
+
     return {
       id: draft.id,
       name: draft.name.trim(),
@@ -185,6 +206,7 @@ function validateScenarioStationDrafts(drafts: ScenarioStationDraftPayload[]): V
       imageUrl: draft.imageUrl?.trim() || undefined,
       points: Math.round(draft.points),
       timeLimitSeconds: parsedTimeLimit.value,
+      completionCode: isCompletionCodeRequired(draft.type) ? normalizedCompletionCode : undefined,
       sourceTemplateId: draft.sourceTemplateId,
     };
   });
@@ -278,6 +300,7 @@ function syncScenarioStations(
         imageUrl: draft.imageUrl,
         points: draft.points,
         timeLimitSeconds: draft.timeLimitSeconds,
+        completionCode: draft.completionCode,
         sourceTemplateId: draft.sourceTemplateId,
       });
 
@@ -298,6 +321,7 @@ function syncScenarioStations(
         imageUrl: draft.imageUrl,
         points: draft.points,
         timeLimitSeconds: draft.timeLimitSeconds,
+        completionCode: draft.completionCode,
         sourceTemplateId: draft.sourceTemplateId,
       },
       { scenarioInstanceId: scenario.id, realizationId },

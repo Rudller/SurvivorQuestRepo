@@ -469,6 +469,9 @@ export function EditRealizationPanel({
                   </select>
                 </label>
 
+                <p className="text-xs text-zinc-500">
+                  Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
+                </p>
                 <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} />
 
                 <div className="space-y-1.5">

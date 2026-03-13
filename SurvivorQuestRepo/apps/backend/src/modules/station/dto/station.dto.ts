@@ -18,6 +18,7 @@ export type CreateStationDto = {
   imageUrl?: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
 };
 
 export type UpdateStationDto = CreateStationDto & {
@@ -61,16 +62,37 @@ function ensurePositiveNumber(value: unknown) {
   return Math.round(value);
 }
 
+function ensureCompletionCode(
+  value: unknown,
+  type: StationType,
+): string | undefined {
+  if (type === 'quiz') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return normalized;
+}
+
 function ensureStationBody(payload: unknown): CreateStationDto {
   if (!payload || typeof payload !== 'object') {
     throw new BadRequestException('Invalid payload');
   }
 
   const body = payload as Record<string, unknown>;
+  const type = ensureStationType(body.type);
 
   return {
     name: ensureTrimmedString(body.name),
-    type: ensureStationType(body.type),
+    type,
     description: ensureStringAllowingEmpty(body.description),
     imageUrl:
       typeof body.imageUrl === 'string' && body.imageUrl.trim()
@@ -79,6 +101,7 @@ function ensureStationBody(payload: unknown): CreateStationDto {
     points: ensurePositiveNumber(body.points),
     timeLimitSeconds:
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
+    completionCode: ensureCompletionCode(body.completionCode, type),
   };
 }
 
@@ -133,6 +156,7 @@ export function toCreateStationEntity(
     imageUrl: dto.imageUrl || buildStationFallbackImage(dto.name),
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    completionCode: dto.completionCode,
     createdAt: now,
     updatedAt: now,
   };
@@ -151,6 +175,7 @@ export function toUpdateStationEntity(
     imageUrl: dto.imageUrl || buildStationFallbackImage(dto.name),
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    completionCode: dto.completionCode,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -166,5 +191,6 @@ export function toStationDraftInput(
     imageUrl: dto.imageUrl,
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    completionCode: dto.completionCode,
   };
 }

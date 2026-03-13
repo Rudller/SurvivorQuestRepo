@@ -5,6 +5,7 @@ import type { Realization } from "../types/realization";
 import { realizationTypeOptions } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
+import { isCompletionCodeRequired } from "@/features/games/station.utils";
 import {
   getStatusLabel,
   getStatusClass,
@@ -138,6 +139,7 @@ export function RealizationsTable({
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Kod dołączenia</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Osoby</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Stanowiska</th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Kody</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ostatnia zmiana</th>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
                 </tr>
@@ -154,6 +156,10 @@ export function RealizationsTable({
 
                   const totalPoints = realizationStations.reduce((sum, station) => sum + station.points, 0);
                   const stationCount = realizationStations.length;
+                  const codeRequired = realizationStations.filter((station) => isCompletionCodeRequired(station.type)).length;
+                  const codeConfigured = realizationStations.filter(
+                    (station) => isCompletionCodeRequired(station.type) && Boolean(station.completionCode?.trim()),
+                  ).length;
 
                   return (
                     <tr key={realization.id} className="border-t border-zinc-800 bg-zinc-900/70">
@@ -195,6 +201,9 @@ export function RealizationsTable({
                       <td className="px-3 py-2 font-mono text-zinc-200">{realization.joinCode}</td>
                       <td className="px-3 py-2 text-zinc-300">{realization.peopleCount}</td>
                       <td className="px-3 py-2 text-zinc-300">{realization.positionsCount}</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {codeRequired > 0 ? `${codeConfigured}/${codeRequired}` : "Niewymagane"}
+                      </td>
                       <td className="px-3 py-2 text-zinc-500">
                         {new Date(realization.updatedAt).toLocaleString("pl-PL")}
                       </td>

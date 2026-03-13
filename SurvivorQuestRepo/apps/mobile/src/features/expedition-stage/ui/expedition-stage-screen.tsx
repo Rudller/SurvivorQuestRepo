@@ -188,6 +188,8 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     sessionState,
     isLoading,
     errorMessage,
+    startStationTask,
+    completeStationTask,
     syncTeamLocation,
   } = useExpeditionSession(session);
 
@@ -511,8 +513,10 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                   stationCatalog.imageUrl?.trim() ||
                   `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: stationCatalog.points ?? resolveDefaultStationPoints(stationCatalog.id),
+                timeLimitSeconds: stationCatalog.timeLimitSeconds ?? 0,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 status: task?.status ?? "todo",
+                startedAt: task?.startedAt ?? null,
               } satisfies StationTestViewModel;
             })
           : sessionState.tasks.map((task) => {
@@ -529,8 +533,10 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                 description: "Docelowo szczegóły stanowiska będą odczytywane po skanie kodu QR.",
                 imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: resolveDefaultStationPoints(stationId),
+                timeLimitSeconds: 0,
                 timeLimitLabel: "Brak limitu czasu",
                 status: task.status,
+                startedAt: task.startedAt,
               } satisfies StationTestViewModel;
             });
 
@@ -545,8 +551,10 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             description: definition.description,
             imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(definition.name)}`,
             points: definition.points,
+            timeLimitSeconds: definition.timeLimitSeconds,
             timeLimitLabel: formatTimeLimitLabel(definition.timeLimitSeconds),
             status: "todo",
+            startedAt: null,
           }) satisfies StationTestViewModel,
       );
 
@@ -683,6 +691,40 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     setActiveStationTestId(stationId);
     setIsStationTestMenuOpen(false);
   }
+
+  const handleStartStationTestTask = useCallback(
+    async (stationId: string) => {
+      setActionError(null);
+      setActionMessage(null);
+
+      const result = await startStationTask(stationId, new Date().toISOString());
+      if (result) {
+        setActionError(result);
+        return result;
+      }
+
+      setActionMessage("Licznik zadania uruchomiony.");
+      return null;
+    },
+    [startStationTask],
+  );
+
+  const handleCompleteStationTestTask = useCallback(
+    async (stationId: string, completionCode: string, startedAt?: string) => {
+      setActionError(null);
+      setActionMessage(null);
+
+      const result = await completeStationTask(stationId, completionCode, startedAt);
+      if (result) {
+        setActionError(result);
+        return result;
+      }
+
+      setActionMessage("Zadanie zaliczone.");
+      return null;
+    },
+    [completeStationTask],
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
@@ -863,7 +905,12 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         onEnterStation={handleEnterStationTest}
       />
 
-      <StationPreviewOverlay station={activeStationTest} onClose={() => setActiveStationTestId(null)} />
+      <StationPreviewOverlay
+        station={activeStationTest}
+        onClose={() => setActiveStationTestId(null)}
+        onStartTask={handleStartStationTestTask}
+        onCompleteTask={handleCompleteStationTestTask}
+      />
 
       {onRestart ? (
         <Pressable

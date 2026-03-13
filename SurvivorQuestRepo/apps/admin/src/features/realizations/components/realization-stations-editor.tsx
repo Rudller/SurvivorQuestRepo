@@ -1,15 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
 import { useUploadStationImageMutation } from "@/features/games/api/station.api";
 import {
   clampTimeLimitSeconds,
+  isCompletionCodeRequired,
+  isValidCompletionCode,
   formatTimeLimit,
   handleImageFile,
   handleImagePaste,
   imageModeOptions,
+  normalizeCompletionCode,
   type ImageInputMode,
 } from "@/features/games/station.utils";
 import type { RealizationStationDraft } from "../types/realization";
@@ -39,6 +42,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     imageUrl: "",
     points: 100,
     timeLimitSeconds: 0,
+    completionCode: "",
     latitude: undefined,
     longitude: undefined,
   };
@@ -53,6 +57,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     imageUrl: station.imageUrl,
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
+    completionCode: station.completionCode ?? "",
     latitude: station.latitude,
     longitude: station.longitude,
   };
@@ -67,6 +72,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     imageUrl: station.imageUrl.trim(),
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
+    completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   }));
@@ -83,6 +89,10 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
     }
 
     if (!Number.isFinite(station.timeLimitSeconds) || station.timeLimitSeconds < 0 || station.timeLimitSeconds > 600) {
+      return true;
+    }
+
+    if (isCompletionCodeRequired(station.type) && !isValidCompletionCode(station.completionCode ?? "")) {
       return true;
     }
 
@@ -121,6 +131,20 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
 
   const activeExpandedStationIndex =
     expandedStationIndex !== null && expandedStationIndex < stations.length ? expandedStationIndex : null;
+
+  useEffect(() => {
+    setExpandedStationIndex((current) => {
+      if (stations.length === 0) {
+        return null;
+      }
+
+      if (current === null || current >= stations.length) {
+        return 0;
+      }
+
+      return current;
+    });
+  }, [stations.length]);
 
   function updateStation(index: number, patch: Partial<RealizationStationDraft>) {
     onChange(stations.map((station, currentIndex) => (currentIndex === index ? { ...station, ...patch } : station)));
@@ -318,7 +342,7 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
 
           return (
             <div key={station.id ?? `new-${index}`} className="rounded-lg border border-zinc-700 bg-zinc-950/70">
-              <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="flex items-start justify-between gap-2 px-3 py-2">
                 <button
                   type="button"
                   onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
@@ -334,21 +358,32 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                   </p>
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
-                    className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
-                  >
-                    {activeExpandedStationIndex === index ? "Zwiń" : "Rozwiń"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeStation(index)}
-                    className="rounded-md border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400 hover:text-red-200"
-                  >
-                    Usuń
-                  </button>
+                <div className="flex flex-col items-end gap-2">
+                  {isCompletionCodeRequired(station.type) && activeExpandedStationIndex !== index ? (
+                    <input
+                      value={station.completionCode ?? ""}
+                      onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
+                      placeholder="Kod zaliczenia"
+                      className="w-44 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  ) : null}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
+                    >
+                      {activeExpandedStationIndex === index ? "Zwiń" : "Rozwiń"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStation(index)}
+                      className="rounded-md border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400 hover:text-red-200"
+                    >
+                      Usuń
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -368,7 +403,13 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Typ stanowiska</span>
                       <select
                         value={station.type}
-                        onChange={(event) => updateStation(index, { type: event.target.value as RealizationStationDraft["type"] })}
+                        onChange={(event) => {
+                          const nextType = event.target.value as RealizationStationDraft["type"];
+                          updateStation(index, {
+                            type: nextType,
+                            completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
+                          });
+                        }}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       >
                         {stationTypeOptions.map((option) => (
@@ -379,6 +420,19 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       </select>
                     </label>
                   </div>
+
+                  {isCompletionCodeRequired(station.type) ? (
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
+                      <input
+                        value={station.completionCode ?? ""}
+                        onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
+                        placeholder="Np. TIME-2048"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                      <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
+                    </label>
+                  ) : null}
 
                   <label className="block space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>

@@ -52,6 +52,8 @@ export type ExpeditionTask = {
   stationId: string;
   status: ExpeditionTaskStatus;
   pointsAwarded: number;
+  startedAt: string | null;
+  finishedAt: string | null;
 };
 
 export type ExpeditionRealizationStation = {
@@ -141,6 +143,8 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       stationId,
       status: "todo",
       pointsAwarded: 0,
+      startedAt: null,
+      finishedAt: null,
     })),
     meta: {
       sessionExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),

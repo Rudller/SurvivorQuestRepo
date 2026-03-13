@@ -11,6 +11,16 @@ import {
   type StationType,
 } from "./_store";
 
+const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+
+function isCompletionCodeRequired(stationType: StationType) {
+  return stationType === "time" || stationType === "points";
+}
+
+function normalizeCompletionCode(value: string | undefined) {
+  return value?.trim().toUpperCase() || "";
+}
+
 export async function GET() {
   return NextResponse.json(listTemplateStations());
 }
@@ -23,6 +33,7 @@ export async function POST(req: Request) {
     imageUrl?: string;
     points?: number;
     timeLimitSeconds?: number;
+    completionCode?: string;
   };
 
   const parsedTimeLimit = parseTimeLimitSeconds(body.timeLimitSeconds);
@@ -39,6 +50,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
   }
 
+  const normalizedCompletionCode = normalizeCompletionCode(body.completionCode);
+  if (
+    (isCompletionCodeRequired(body.type) && !COMPLETION_CODE_REGEX.test(normalizedCompletionCode)) ||
+    (!isCompletionCodeRequired(body.type) && normalizedCompletionCode.length > 0)
+  ) {
+    return NextResponse.json({ message: "Invalid completion code" }, { status: 400 });
+  }
+
   const now = new Date().toISOString();
 
   const newGame: StationEntity = {
@@ -51,6 +70,7 @@ export async function POST(req: Request) {
       `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(body.name)}`,
     points: body.points,
     timeLimitSeconds: parsedTimeLimit.value,
+    completionCode: isCompletionCodeRequired(body.type) ? normalizedCompletionCode : undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -67,6 +87,7 @@ export async function PUT(req: Request) {
     imageUrl?: string;
     points?: number;
     timeLimitSeconds?: number;
+    completionCode?: string;
   };
 
   const parsedTimeLimit = parseTimeLimitSeconds(body.timeLimitSeconds);
@@ -82,6 +103,14 @@ export async function PUT(req: Request) {
     !parsedTimeLimit.ok
   ) {
     return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+  }
+
+  const normalizedCompletionCode = normalizeCompletionCode(body.completionCode);
+  if (
+    (isCompletionCodeRequired(body.type) && !COMPLETION_CODE_REGEX.test(normalizedCompletionCode)) ||
+    (!isCompletionCodeRequired(body.type) && normalizedCompletionCode.length > 0)
+  ) {
+    return NextResponse.json({ message: "Invalid completion code" }, { status: 400 });
   }
 
   const currentGame = findStationById(body.id);
@@ -100,6 +129,7 @@ export async function PUT(req: Request) {
       `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(body.name)}`,
     points: body.points,
     timeLimitSeconds: parsedTimeLimit.value,
+    completionCode: isCompletionCodeRequired(body.type) ? normalizedCompletionCode : undefined,
     updatedAt: new Date().toISOString(),
   };
 

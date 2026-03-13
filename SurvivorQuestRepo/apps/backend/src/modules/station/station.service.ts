@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, StationType as PrismaStationType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -17,6 +21,7 @@ export type StationEntity = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -35,6 +40,7 @@ export type StationDraftInput = {
   imageUrl?: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -47,6 +53,8 @@ export type ParseTimeLimitResult =
 function buildStationFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
 }
+
+const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 
 function deriveStationKind(input: {
   scenarioInstanceId: string | null;
@@ -83,6 +91,7 @@ function mapStation(input: {
   imageUrl: string | null;
   points: number;
   timeLimitSeconds: number;
+  completionCode: string | null;
   latitude: number | null;
   longitude: number | null;
   sourceTemplateId: string | null;
@@ -101,6 +110,7 @@ function mapStation(input: {
     imageUrl: input.imageUrl || buildStationFallbackImage(input.name),
     points: input.points,
     timeLimitSeconds: input.timeLimitSeconds,
+    completionCode: input.completionCode || undefined,
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
     longitude: typeof input.longitude === 'number' ? input.longitude : undefined,
     sourceTemplateId: input.sourceTemplateId || undefined,
@@ -187,6 +197,7 @@ export class StationService {
         imageUrl: station.imageUrl,
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
+        completionCode: station.completionCode,
         latitude: station.latitude,
         longitude: station.longitude,
         sourceTemplateId: station.id,
@@ -206,6 +217,7 @@ export class StationService {
         imageUrl: updatedStation.imageUrl,
         points: updatedStation.points,
         timeLimitSeconds: updatedStation.timeLimitSeconds,
+        completionCode: updatedStation.completionCode,
         latitude: updatedStation.latitude,
         longitude: updatedStation.longitude,
       },
@@ -253,6 +265,7 @@ export class StationService {
           imageUrl: source.imageUrl,
           points: source.points,
           timeLimitSeconds: source.timeLimitSeconds,
+          completionCode: source.completionCode,
           latitude: source.latitude,
           longitude: source.longitude,
           sourceTemplateId: source.sourceTemplateId ?? source.id,
@@ -271,17 +284,19 @@ export class StationService {
     input: StationDraftInput,
     context: { scenarioInstanceId: string; realizationId?: string },
   ) {
-    const normalized = this.normalizeStationDraft(input, crypto.randomUUID());
+    const stationId = crypto.randomUUID();
+    const normalized = this.normalizeStationDraft(input, stationId);
 
     const created = await this.prisma.station.create({
       data: {
-        id: crypto.randomUUID(),
+        id: stationId,
         name: normalized.name,
         type: toPrismaStationType(normalized.type),
         description: normalized.description,
         imageUrl: normalized.imageUrl,
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
+        completionCode: normalized.completionCode,
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId: normalized.sourceTemplateId,
@@ -309,6 +324,7 @@ export class StationService {
         imageUrl: normalized.imageUrl,
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
+        completionCode: normalized.completionCode,
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId:
@@ -325,6 +341,10 @@ export class StationService {
 
   private normalizeStationDraft(input: StationDraftInput, currentId: string) {
     const normalizedName = input.name.trim() || 'Untitled station';
+    const normalizedCompletionCode = this.normalizeCompletionCode(
+      input.completionCode,
+      input.type,
+    );
 
     return {
       name: normalizedName,
@@ -336,6 +356,7 @@ export class StationService {
       ),
       points: Math.round(input.points),
       timeLimitSeconds: Math.round(input.timeLimitSeconds),
+      completionCode: normalizedCompletionCode,
       latitude:
         typeof input.latitude === 'number' && Number.isFinite(input.latitude)
           ? input.latitude
@@ -346,5 +367,21 @@ export class StationService {
           : undefined,
       sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
     };
+  }
+
+  private normalizeCompletionCode(
+    completionCode: string | undefined,
+    stationType: StationType,
+  ) {
+    if (stationType === 'quiz') {
+      return undefined;
+    }
+
+    const normalized = completionCode?.trim().toUpperCase() ?? '';
+    if (!COMPLETION_CODE_REGEX.test(normalized)) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    return normalized;
   }
 }

@@ -270,6 +270,8 @@ export class MobileService {
         stationId,
         status: this.fromTaskStatus(progress?.status) || 'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
+        startedAt: progress?.startedAt?.toISOString() || null,
+        finishedAt: progress?.finishedAt?.toISOString() || null,
       };
     });
 
@@ -630,21 +632,105 @@ export class MobileService {
     };
   }
 
+  async startMobileTask(input: {
+    sessionToken: string;
+    stationId: string;
+    startedAt?: string;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+
+    if (!input.stationId?.trim()) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    if (!realization.stationIds.includes(input.stationId)) {
+      throw new BadRequestException(
+        'Station not available in this realization',
+      );
+    }
+
+    const station = await this.stationService.findStationById(input.stationId);
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
+
+    const startedAt = this.parseIsoOrNow(input.startedAt);
+    if (!startedAt) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const existingProgress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+    });
+
+    if (existingProgress?.status === TaskStatus.DONE) {
+      throw new ConflictException('Task already completed');
+    }
+
+    const startedAtIso =
+      existingProgress?.startedAt?.toISOString() || new Date(startedAt).toISOString();
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.IN_PROGRESS,
+          startedAt: existingProgress.startedAt || new Date(startedAt),
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+          status: TaskStatus.IN_PROGRESS,
+          startedAt: new Date(startedAt),
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: assignment.deviceId,
+      eventType: 'task_started',
+      payload: {
+        stationId: input.stationId,
+        stationType: station.type,
+        startedAt: startedAtIso,
+      },
+    });
+
+    return {
+      teamId: team.id,
+      stationId: input.stationId,
+      taskStatus: 'in-progress' as const,
+      startedAt: startedAtIso,
+    };
+  }
+
   async completeMobileTask(input: {
     sessionToken: string;
     stationId: string;
-    pointsAwarded: number;
+    completionCode?: string;
+    startedAt?: string;
     finishedAt?: string;
   }) {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
 
-    if (
-      !input.stationId?.trim() ||
-      !this.isFiniteNumber(input.pointsAwarded) ||
-      input.pointsAwarded < 0
-    ) {
+    if (!input.stationId?.trim()) {
       throw new BadRequestException('Invalid payload');
     }
 
@@ -660,44 +746,108 @@ export class MobileService {
       );
     }
 
-    const existingDone = await this.prisma.teamTaskProgress.findFirst({
-      where: {
-        realizationId: realization.id,
-        teamId: team.id,
-        stationId: input.stationId,
-        status: TaskStatus.DONE,
-      },
-    });
-
-    if (existingDone) {
-      throw new ConflictException('Task already completed');
-    }
-
     const finishedAt = this.parseIsoOrNow(input.finishedAt);
     if (!finishedAt) {
       throw new BadRequestException('Invalid payload');
     }
 
-    const defaultPoints = await this.getDefaultPointsForStation(
-      input.stationId,
-    );
-    const awardedPoints = Math.round(input.pointsAwarded ?? defaultPoints);
+    const station = await this.stationService.findStationById(input.stationId);
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
 
-    await this.prisma.teamTaskProgress.create({
-      data: {
-        realizationId: realization.id,
-        teamId: team.id,
-        stationId: input.stationId,
-        status: TaskStatus.DONE,
-        pointsAwarded: awardedPoints,
-        finishedAt: new Date(finishedAt),
+    const existingProgress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
       },
     });
 
-    const pointsTotal = await this.recalculateTeamPoints(
-      team.id,
-      realization.id,
-    );
+    if (existingProgress?.status === TaskStatus.DONE) {
+      throw new ConflictException('Task already completed');
+    }
+
+    const requiresCompletionCode = this.isCodeProtectedStationType(station.type);
+    if (requiresCompletionCode) {
+      const expectedCode = this.parseCompletionCode(station.completionCode);
+      const inputCode = this.parseCompletionCode(input.completionCode);
+      if (!expectedCode || !inputCode || expectedCode !== inputCode) {
+        throw new BadRequestException('Invalid completion code');
+      }
+    }
+
+    const startedAtIso = this.parseIsoOrNow(input.startedAt);
+    if (input.startedAt && !startedAtIso) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const startedAtSource =
+      existingProgress?.startedAt?.toISOString() || startedAtIso || null;
+
+    if (station.type === 'time' && !startedAtSource) {
+      throw new BadRequestException('Task timer not started');
+    }
+
+    const awardedPoints =
+      station.type === 'time'
+        ? this.computeLinearTimePoints({
+            basePoints: station.points,
+            timeLimitSeconds: station.timeLimitSeconds,
+            startedAtIso: startedAtSource || finishedAt,
+            finishedAtIso: finishedAt,
+          })
+        : Math.max(0, Math.round(station.points));
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.DONE,
+          pointsAwarded: awardedPoints,
+          startedAt: existingProgress.startedAt
+            ? existingProgress.startedAt
+            : startedAtSource
+              ? new Date(startedAtSource)
+              : null,
+          finishedAt: new Date(finishedAt),
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+          status: TaskStatus.DONE,
+          pointsAwarded: awardedPoints,
+          startedAt: startedAtSource ? new Date(startedAtSource) : null,
+          finishedAt: new Date(finishedAt),
+        },
+      });
+    }
+
+    const scoringMeta =
+      station.type === 'time'
+        ? {
+            mode: 'time-linear',
+            basePoints: station.points,
+            timeLimitSeconds: station.timeLimitSeconds,
+            elapsedSeconds: Math.max(
+              0,
+              Math.round(
+                (new Date(finishedAt).getTime() -
+                  new Date(startedAtSource || finishedAt).getTime()) /
+                  1000,
+              ),
+            ),
+          }
+        : {
+            mode: 'fixed',
+            basePoints: station.points,
+          };
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -707,15 +857,24 @@ export class MobileService {
       eventType: 'task_completed',
       payload: {
         stationId: input.stationId,
+        stationType: station.type,
         pointsAwarded: awardedPoints,
+        startedAt: startedAtSource,
         finishedAt,
+        scoring: scoringMeta,
       },
     });
+
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
 
     return {
       teamId: team.id,
       stationId: input.stationId,
       pointsTotal,
+      pointsAwarded: awardedPoints,
       taskStatus: 'done' as const,
     };
   }
@@ -1131,6 +1290,57 @@ export class MobileService {
   private async getDefaultPointsForStation(stationId: string) {
     const station = await this.stationService.findStationById(stationId);
     return station?.points ?? 0;
+  }
+
+  private isCodeProtectedStationType(stationType: string) {
+    return stationType === 'time' || stationType === 'points';
+  }
+
+  private parseCompletionCode(value?: string | null) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private computeLinearTimePoints(input: {
+    basePoints: number;
+    timeLimitSeconds: number;
+    startedAtIso: string;
+    finishedAtIso: string;
+  }) {
+    const safeBasePoints = Math.max(0, Math.round(input.basePoints));
+    const safeLimit = Math.max(0, Math.round(input.timeLimitSeconds));
+    if (safeBasePoints === 0) {
+      return 0;
+    }
+
+    if (safeLimit === 0) {
+      return safeBasePoints;
+    }
+
+    const startedAtMs = new Date(input.startedAtIso).getTime();
+    const finishedAtMs = new Date(input.finishedAtIso).getTime();
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const elapsedSeconds = Math.max(
+      0,
+      Math.round((finishedAtMs - startedAtMs) / 1000),
+    );
+    if (elapsedSeconds >= safeLimit) {
+      return 0;
+    }
+
+    const ratio = Math.max(0, 1 - elapsedSeconds / safeLimit);
+    return Math.max(0, Math.round(safeBasePoints * ratio));
   }
 
   private parseTeamColor(color: string): TeamColor {

@@ -13,8 +13,10 @@ export type StationTestViewModel = {
   description: string;
   imageUrl: string;
   points: number;
+  timeLimitSeconds: number;
   timeLimitLabel: string;
   status: ExpeditionTaskStatus;
+  startedAt: string | null;
 };
 
 type StationTestMenuOverlayProps = {
@@ -27,6 +29,8 @@ type StationTestMenuOverlayProps = {
 type StationPreviewOverlayProps = {
   station: StationTestViewModel | null;
   onClose: () => void;
+  onStartTask?: (stationId: string) => Promise<string | null>;
+  onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
 };
 
 function getStatusLabel(status: ExpeditionTaskStatus) {
@@ -136,11 +140,24 @@ export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStat
   );
 }
 
-export function StationPreviewOverlay({ station, onClose }: StationPreviewOverlayProps) {
+function formatRemainingTimeLabel(seconds: number) {
+  if (seconds <= 0) {
+    return "00:00";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+export function StationPreviewOverlay({ station, onClose, onStartTask, onCompleteTask }: StationPreviewOverlayProps) {
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [codeResult, setCodeResult] = useState<string | null>(null);
+  const [isStartingTask, setIsStartingTask] = useState(false);
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const quizOptions = useMemo(
     () => [
       "Sprawdzam komunikację i plan zespołu.",
@@ -156,7 +173,24 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
     setQuizResult(null);
     setVerificationCode("");
     setCodeResult(null);
+    setIsStartingTask(false);
+    setIsSubmittingCode(false);
+    setNowMs(Date.now());
   }, [station?.stationId]);
+
+  useEffect(() => {
+    if (!station || station.stationType !== "time" || !station.startedAt || station.status === "done") {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [station]);
 
   if (!station) {
     return null;
@@ -164,6 +198,22 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
 
   const isQuizStation = station.stationType === "quiz";
   const requiresCode = station.stationType === "time" || station.stationType === "points";
+  const isTimeStation = station.stationType === "time";
+  const hasTimerStarted = Boolean(station.startedAt);
+  const remainingTimeLabel = (() => {
+    if (!isTimeStation || !hasTimerStarted || station.timeLimitSeconds <= 0 || !station.startedAt) {
+      return null;
+    }
+
+    const startedMs = new Date(station.startedAt).getTime();
+    if (!Number.isFinite(startedMs)) {
+      return null;
+    }
+
+    const elapsedSeconds = Math.max(0, Math.round((nowMs - startedMs) / 1000));
+    const remainingSeconds = Math.max(0, station.timeLimitSeconds - elapsedSeconds);
+    return formatRemainingTimeLabel(remainingSeconds);
+  })();
 
   return (
     <View className="absolute inset-0 z-50" style={{ backgroundColor: "rgba(2, 7, 5, 0.9)" }}>
@@ -217,6 +267,11 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
               <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
                 Czas: {station.timeLimitLabel}
               </Text>
+              {isTimeStation ? (
+                <Text className="mt-1 text-xs font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                  Licznik: {remainingTimeLabel ?? (hasTimerStarted ? "w toku" : "nieuruchomiony")}
+                </Text>
+              ) : null}
               <Text className="mt-1 text-xs" style={{ color: getStatusColor(station.status) }}>
                 Status drużyny: {getStatusLabel(station.status)}
               </Text>
@@ -290,6 +345,35 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
                   Wpisz kod i zatwierdź stanowisko.
                 </Text>
 
+                {isTimeStation && station.status !== "done" ? (
+                  <Pressable
+                    className="mt-2 items-center rounded-xl py-2.5 active:opacity-90"
+                    style={{ backgroundColor: hasTimerStarted ? "rgba(120, 113, 108, 0.6)" : EXPEDITION_THEME.accent }}
+                    disabled={hasTimerStarted || isStartingTask}
+                    onPress={async () => {
+                      if (!onStartTask) {
+                        setCodeResult("Start timera dostępny po podpięciu API.");
+                        return;
+                      }
+
+                      setIsStartingTask(true);
+                      const error = await onStartTask(station.stationId);
+                      setIsStartingTask(false);
+
+                      if (error) {
+                        setCodeResult(error);
+                        return;
+                      }
+
+                      setCodeResult("Licznik zadania uruchomiony.");
+                    }}
+                  >
+                    <Text className="text-sm font-semibold text-zinc-950">
+                      {hasTimerStarted ? "Licznik uruchomiony" : isStartingTask ? "Uruchamianie..." : "Start zadania"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+
                 <TextInput
                   className="mt-2 rounded-xl border px-3 py-2 text-sm"
                   style={{
@@ -302,6 +386,7 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={verificationCode}
+                  editable={station.status !== "done" && (!isTimeStation || hasTimerStarted)}
                   onChangeText={(value) => {
                     setVerificationCode(value);
                     setCodeResult(null);
@@ -310,17 +395,39 @@ export function StationPreviewOverlay({ station, onClose }: StationPreviewOverla
 
                 <Pressable
                   className="mt-3 items-center rounded-xl py-2.5 active:opacity-90"
-                  style={{ backgroundColor: EXPEDITION_THEME.accent }}
-                  onPress={() => {
+                  style={{
+                    backgroundColor:
+                      station.status === "done" || (isTimeStation && !hasTimerStarted)
+                        ? "rgba(120, 113, 108, 0.6)"
+                        : EXPEDITION_THEME.accent,
+                  }}
+                  disabled={station.status === "done" || isSubmittingCode || (isTimeStation && !hasTimerStarted)}
+                  onPress={async () => {
                     if (!verificationCode.trim()) {
                       setCodeResult("Wpisz kod, aby zatwierdzić stanowisko.");
                       return;
                     }
 
-                    setCodeResult("Kod zatwierdzony (tryb testowy).");
+                    if (!onCompleteTask) {
+                      setCodeResult("Kod zatwierdzony (tryb testowy).");
+                      return;
+                    }
+
+                    setIsSubmittingCode(true);
+                    const error = await onCompleteTask(station.stationId, verificationCode, station.startedAt ?? undefined);
+                    setIsSubmittingCode(false);
+
+                    if (error) {
+                      setCodeResult(error);
+                      return;
+                    }
+
+                    setCodeResult("Kod zatwierdzony.");
                   }}
                 >
-                  <Text className="text-sm font-semibold text-zinc-950">Zatwierdź kod</Text>
+                  <Text className="text-sm font-semibold text-zinc-950">
+                    {isSubmittingCode ? "Zatwierdzanie..." : "Zatwierdź kod"}
+                  </Text>
                 </Pressable>
 
                 {codeResult ? (

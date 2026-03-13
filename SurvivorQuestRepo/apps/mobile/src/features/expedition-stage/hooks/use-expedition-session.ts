@@ -4,6 +4,7 @@ import {
   fetchMobileSessionState,
   getApiErrorMessage,
   postMobileCompleteTask,
+  postMobileStartTask,
   postMobileTeamLocation,
 } from "../api/mobile-session.api";
 import {
@@ -24,6 +25,33 @@ function wait(ms: number) {
 
 function isOfflineSession(session: OnboardingSession) {
   return !session.apiBaseUrl?.trim();
+}
+
+function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, startedAt: string, finishedAt: string) {
+  const safeBasePoints = Math.max(0, Math.round(basePoints));
+  const safeLimit = Math.max(0, Math.round(timeLimitSeconds));
+
+  if (safeBasePoints === 0) {
+    return 0;
+  }
+
+  if (safeLimit === 0) {
+    return safeBasePoints;
+  }
+
+  const startedAtMs = new Date(startedAt).getTime();
+  const finishedAtMs = new Date(finishedAt).getTime();
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+    return 0;
+  }
+
+  const elapsedSeconds = Math.max(0, Math.round((finishedAtMs - startedAtMs) / 1000));
+  if (elapsedSeconds >= safeLimit) {
+    return 0;
+  }
+
+  const ratio = Math.max(0, 1 - elapsedSeconds / safeLimit);
+  return Math.max(0, Math.round(safeBasePoints * ratio));
 }
 
 export function useExpeditionSession(session: OnboardingSession) {
@@ -90,19 +118,79 @@ export function useExpeditionSession(session: OnboardingSession) {
     };
   }, [offlineMode, refreshSessionState]);
 
-  const completeStationTask = useCallback(
-    async (stationId: string, pointsAwarded?: number) => {
+  const startStationTask = useCallback(
+    async (stationId: string, startedAt?: string) => {
       const normalizedStationId = stationId.trim();
 
       if (!normalizedStationId) {
         return "Nieprawidłowe stanowisko.";
       }
 
-      const awardedPoints = Math.max(0, Math.round(pointsAwarded ?? resolveDefaultStationPoints(normalizedStationId)));
+      const startedAtIso = startedAt?.trim() || new Date().toISOString();
+
+      if (offlineMode) {
+        setSessionState((current) => {
+          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+            if (task.stationId !== normalizedStationId || task.status === "done") {
+              return task;
+            }
+
+            return {
+              ...task,
+              status: "in-progress",
+              startedAt: task.startedAt || startedAtIso,
+            };
+          });
+
+          return {
+            ...current,
+            tasks: nextTasks,
+          };
+        });
+        return null;
+      }
+
+      const apiBaseUrl = session.apiBaseUrl?.trim();
+
+      if (!apiBaseUrl) {
+        return "Brakuje konfiguracji API.";
+      }
+
+      try {
+        await postMobileStartTask(apiBaseUrl, {
+          sessionToken: session.sessionToken,
+          stationId: normalizedStationId,
+          startedAt: startedAtIso,
+        });
+      } catch (error) {
+        return getApiErrorMessage(error, "Nie udało się uruchomić zadania.");
+      }
+
+      return refreshSessionState();
+    },
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+  );
+
+  const completeStationTask = useCallback(
+    async (stationId: string, completionCode: string, startedAt?: string) => {
+      const normalizedStationId = stationId.trim();
+      const normalizedCode = completionCode.trim().toUpperCase();
+
+      if (!normalizedStationId || !normalizedCode) {
+        return "Nieprawidłowe dane zadania.";
+      }
 
       if (offlineMode) {
         setSessionState((current) => {
           const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
+          const station = current.realization.stations.find((item) => item.id === normalizedStationId);
+          const basePoints = station?.points ?? resolveDefaultStationPoints(normalizedStationId);
+          const finishedAt = new Date().toISOString();
+          const effectiveStartedAt = existingTask?.startedAt ?? startedAt ?? finishedAt;
+          const awardedPoints =
+            station?.type === "time"
+              ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
+              : Math.max(0, Math.round(basePoints));
 
           if (existingTask?.status === "done") {
             return current;
@@ -117,6 +205,8 @@ export function useExpeditionSession(session: OnboardingSession) {
               ...task,
               status: "done" as const,
               pointsAwarded: awardedPoints,
+              startedAt: task.startedAt ?? effectiveStartedAt,
+              finishedAt,
             };
           });
 
@@ -147,7 +237,9 @@ export function useExpeditionSession(session: OnboardingSession) {
         await postMobileCompleteTask(apiBaseUrl, {
           sessionToken: session.sessionToken,
           stationId: normalizedStationId,
-          pointsAwarded: awardedPoints,
+          completionCode: normalizedCode,
+          startedAt,
+          finishedAt: new Date().toISOString(),
         });
       } catch (error) {
         return getApiErrorMessage(error, "Nie udało się ukończyć zadania.");
@@ -250,6 +342,7 @@ export function useExpeditionSession(session: OnboardingSession) {
     offlineMode,
     lastLocationSyncAt,
     refreshSessionState,
+    startStationTask,
     completeStationTask,
     syncTeamLocation,
   };

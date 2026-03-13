@@ -51,6 +51,7 @@ export type ScenarioStationDraftPayload = {
   imageUrl?: string;
   points?: number;
   timeLimitSeconds?: number;
+  completionCode?: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

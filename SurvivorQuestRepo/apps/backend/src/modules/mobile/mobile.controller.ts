@@ -38,8 +38,15 @@ type LocationPayload = {
 type CompleteTaskPayload = {
   sessionToken?: string;
   stationId?: string;
-  pointsAwarded?: number;
+  completionCode?: string;
+  startedAt?: string;
   finishedAt?: string;
+};
+
+type StartTaskPayload = {
+  sessionToken?: string;
+  stationId?: string;
+  startedAt?: string;
 };
 
 @Controller(['mobile', 'api/mobile'])
@@ -109,8 +116,18 @@ export class MobileController {
     return this.mobileService.completeMobileTask({
       sessionToken: payload.sessionToken || '',
       stationId: payload.stationId || '',
-      pointsAwarded: Number(payload.pointsAwarded),
+      completionCode: payload.completionCode,
+      startedAt: payload.startedAt,
       finishedAt: payload.finishedAt,
+    });
+  }
+
+  @Post('task/start')
+  async startMobileTask(@Body() payload: StartTaskPayload) {
+    return this.mobileService.startMobileTask({
+      sessionToken: payload.sessionToken || '',
+      stationId: payload.stationId || '',
+      startedAt: payload.startedAt,
     });
   }
 

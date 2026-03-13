@@ -1,3 +1,4 @@
+import { findStationById } from "../games/_store";
 import { getRealizationsMobileSnapshot, type RealizationMobileSnapshot } from "../realizations/route";
 
 type RealizationStatus = "planned" | "in-progress" | "done";
@@ -126,8 +127,15 @@ type LocationInput = {
 type CompleteTaskInput = {
   sessionToken: string;
   stationId: string;
-  pointsAwarded: number;
+  completionCode?: string;
+  startedAt?: string;
   finishedAt?: string;
+};
+
+type StartTaskInput = {
+  sessionToken: string;
+  stationId: string;
+  startedAt?: string;
 };
 
 const TEAM_COLORS: TeamColor[] = [
@@ -173,14 +181,6 @@ const FUNNY_TEAM_NAMES = [
   "Oddział Chrupka",
   "Ekipa Bez GPS",
 ];
-
-const STATION_POINTS: Record<string, number> = {
-  "g-1": 100,
-  "g-2": 180,
-  "g-3": 220,
-  "g-4": 130,
-  "g-5": 160,
-};
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -229,6 +229,78 @@ function parseTeamColor(color: string): TeamColor {
   }
 
   return color as TeamColor;
+}
+
+function parseIsoOrNow(value?: string) {
+  if (!value) {
+    return nowIso();
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
+function normalizeCompletionCode(value?: string | null) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function resolveStationForTask(stationId: string, realizationId: string) {
+  const station = findStationById(stationId);
+
+  if (!station || station.realizationId !== realizationId) {
+    throw new MobileApiError(404, "Station not found");
+  }
+
+  return station;
+}
+
+function requiresCompletionCode(stationType: string) {
+  return stationType === "time" || stationType === "points";
+}
+
+function computeLinearTimePoints(input: {
+  basePoints: number;
+  timeLimitSeconds: number;
+  startedAt: string;
+  finishedAt: string;
+}) {
+  const safeBasePoints = Math.max(0, Math.round(input.basePoints));
+  const safeLimit = Math.max(0, Math.round(input.timeLimitSeconds));
+
+  if (safeBasePoints === 0) {
+    return 0;
+  }
+
+  if (safeLimit === 0) {
+    return safeBasePoints;
+  }
+
+  const startedMs = new Date(input.startedAt).getTime();
+  const finishedMs = new Date(input.finishedAt).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(finishedMs)) {
+    throw new MobileApiError(400, "Invalid payload");
+  }
+
+  const elapsedSeconds = Math.max(0, Math.round((finishedMs - startedMs) / 1000));
+  if (elapsedSeconds >= safeLimit) {
+    return 0;
+  }
+
+  const ratio = Math.max(0, 1 - elapsedSeconds / safeLimit);
+  return Math.max(0, Math.round(safeBasePoints * ratio));
 }
 
 function emitEvent(log: Omit<EventLog, "id" | "createdAt">) {
@@ -566,6 +638,8 @@ export function getMobileSessionState(sessionToken: string) {
       stationId,
       status: (progress?.status || "todo") as TaskStatus,
       pointsAwarded: progress?.pointsAwarded || 0,
+      startedAt: progress?.startedAt || null,
+      finishedAt: progress?.finishedAt || null,
     };
   });
 
@@ -833,10 +907,82 @@ export function updateMobileTeamLocation(input: LocationInput) {
   };
 }
 
+export function startMobileTask(input: StartTaskInput) {
+  const { assignment, team, realization } = requireSession(input.sessionToken);
+
+  if (!input.stationId?.trim()) {
+    throw new MobileApiError(400, "Invalid payload");
+  }
+
+  if (!realization.stationIds.includes(input.stationId)) {
+    throw new MobileApiError(400, "Station not available in this realization");
+  }
+
+  const station = resolveStationForTask(input.stationId, realization.id);
+  const startedAt = parseIsoOrNow(input.startedAt);
+  if (!startedAt) {
+    throw new MobileApiError(400, "Invalid payload");
+  }
+
+  const existingProgress = taskProgresses.find(
+    (progress) =>
+      progress.realizationId === realization.id &&
+      progress.teamId === team.id &&
+      progress.stationId === input.stationId,
+  );
+
+  if (existingProgress?.status === "done") {
+    throw new MobileApiError(409, "Task already completed");
+  }
+
+  const startedAtIso = existingProgress?.startedAt || startedAt;
+
+  if (existingProgress) {
+    existingProgress.status = "in-progress";
+    existingProgress.startedAt = existingProgress.startedAt || startedAtIso;
+    existingProgress.updatedAt = nowIso();
+  } else {
+    taskProgresses = [
+      ...taskProgresses,
+      {
+        id: crypto.randomUUID(),
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        status: "in-progress",
+        pointsAwarded: 0,
+        startedAt: startedAtIso,
+        finishedAt: null,
+        updatedAt: nowIso(),
+      },
+    ];
+  }
+
+  emitEvent({
+    realizationId: realization.id,
+    teamId: team.id,
+    actorType: "mobile-device",
+    actorId: assignment.deviceId,
+    eventType: "task_started",
+    payload: {
+      stationId: input.stationId,
+      stationType: station.type,
+      startedAt: startedAtIso,
+    },
+  });
+
+  return {
+    teamId: team.id,
+    stationId: input.stationId,
+    taskStatus: "in-progress" as const,
+    startedAt: startedAtIso,
+  };
+}
+
 export function completeMobileTask(input: CompleteTaskInput) {
   const { assignment, team, realization } = requireSession(input.sessionToken);
 
-  if (!input.stationId?.trim() || !isFiniteNumber(input.pointsAwarded) || input.pointsAwarded < 0) {
+  if (!input.stationId?.trim()) {
     throw new MobileApiError(400, "Invalid payload");
   }
 
@@ -848,34 +994,68 @@ export function completeMobileTask(input: CompleteTaskInput) {
     throw new MobileApiError(400, "Location update is required for this realization");
   }
 
-  const existingDone = taskProgresses.find(
+  const station = resolveStationForTask(input.stationId, realization.id);
+  const existingProgress = taskProgresses.find(
     (progress) =>
       progress.realizationId === realization.id &&
       progress.teamId === team.id &&
-        progress.stationId === input.stationId &&
-      progress.status === "done",
+      progress.stationId === input.stationId,
   );
 
-  if (existingDone) {
+  if (existingProgress?.status === "done") {
     throw new MobileApiError(409, "Task already completed");
   }
 
-  const finishedAt = input.finishedAt ? new Date(input.finishedAt).toISOString() : nowIso();
-  const defaultPoints = STATION_POINTS[input.stationId] ?? 0;
+  if (requiresCompletionCode(station.type)) {
+    const expectedCode = normalizeCompletionCode(station.completionCode);
+    const inputCode = normalizeCompletionCode(input.completionCode);
+    if (!expectedCode || !inputCode || expectedCode !== inputCode) {
+      throw new MobileApiError(400, "Invalid completion code");
+    }
+  }
 
-  const progress: TeamTaskProgress = {
-    id: crypto.randomUUID(),
-    realizationId: realization.id,
-    teamId: team.id,
-    stationId: input.stationId,
-    status: "done",
-    pointsAwarded: Math.round(input.pointsAwarded || defaultPoints),
-    startedAt: null,
-    finishedAt,
-    updatedAt: nowIso(),
-  };
+  const finishedAt = parseIsoOrNow(input.finishedAt);
+  if (!finishedAt) {
+    throw new MobileApiError(400, "Invalid payload");
+  }
 
-  taskProgresses = [...taskProgresses, progress];
+  const startedAt = existingProgress?.startedAt || parseIsoOrNow(input.startedAt) || null;
+  if (station.type === "time" && !startedAt) {
+    throw new MobileApiError(400, "Task timer not started");
+  }
+
+  const awardedPoints =
+    station.type === "time"
+      ? computeLinearTimePoints({
+          basePoints: station.points,
+          timeLimitSeconds: station.timeLimitSeconds,
+          startedAt: startedAt || finishedAt,
+          finishedAt,
+        })
+      : Math.max(0, Math.round(station.points));
+
+  if (existingProgress) {
+    existingProgress.status = "done";
+    existingProgress.pointsAwarded = awardedPoints;
+    existingProgress.startedAt = existingProgress.startedAt || startedAt;
+    existingProgress.finishedAt = finishedAt;
+    existingProgress.updatedAt = nowIso();
+  } else {
+    taskProgresses = [
+      ...taskProgresses,
+      {
+        id: crypto.randomUUID(),
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        status: "done",
+        pointsAwarded: awardedPoints,
+        startedAt,
+        finishedAt,
+        updatedAt: nowIso(),
+      },
+    ];
+  }
 
   recalculateTeamPoints(team.id);
 
@@ -887,7 +1067,9 @@ export function completeMobileTask(input: CompleteTaskInput) {
     eventType: "task_completed",
     payload: {
       stationId: input.stationId,
-      pointsAwarded: progress.pointsAwarded,
+      stationType: station.type,
+      pointsAwarded: awardedPoints,
+      startedAt,
       finishedAt,
     },
   });
@@ -908,6 +1090,7 @@ export function completeMobileTask(input: CompleteTaskInput) {
     teamId: team.id,
     stationId: input.stationId,
     pointsTotal: team.points,
+    pointsAwarded: awardedPoints,
     taskStatus: "done" as const,
   };
 }
@@ -987,7 +1170,7 @@ export function getMobileAdminRealizationOverview(realizationId: string) {
       stationIds: realization.stationIds,
       stations: realization.stationIds.map((stationId) => ({
         stationId,
-        defaultPoints: STATION_POINTS[stationId] ?? 0,
+        defaultPoints: findStationById(stationId)?.points ?? 0,
       })),
       updatedAt: realization.updatedAt,
     },

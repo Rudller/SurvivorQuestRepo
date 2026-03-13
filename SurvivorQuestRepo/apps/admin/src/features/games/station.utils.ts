@@ -6,6 +6,7 @@ export type ImageInputMode = "upload" | "paste" | "url";
 export type StationSortField = "name" | "type";
 export type SortDirection = "asc" | "desc";
 export type UploadImageFileFn = (file: File) => Promise<string>;
+export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 
 export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
   { value: "upload", label: "Upload" },
@@ -48,6 +49,18 @@ export function formatTimeLimit(seconds: number) {
   const remainingSeconds = seconds % 60;
   const paddedSeconds = String(remainingSeconds).padStart(2, "0");
   return `${minutes}:${paddedSeconds}`;
+}
+
+export function isCompletionCodeRequired(stationType: StationType) {
+  return stationType === "time" || stationType === "points";
+}
+
+export function normalizeCompletionCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+export function isValidCompletionCode(value: string) {
+  return COMPLETION_CODE_REGEX.test(normalizeCompletionCode(value));
 }
 
 export async function handleImageFile(

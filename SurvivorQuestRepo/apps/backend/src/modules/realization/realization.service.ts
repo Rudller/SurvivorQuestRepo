@@ -220,6 +220,12 @@ export class RealizationService {
       const hasLatitude = typeof draft.latitude === 'number';
       const hasLongitude = typeof draft.longitude === 'number';
       const hasCoordinates = hasLatitude || hasLongitude;
+      const requiresCompletionCode =
+        draft.type === 'time' || draft.type === 'points';
+      const normalizedCompletionCode =
+        typeof draft.completionCode === 'string'
+          ? draft.completionCode.trim().toUpperCase()
+          : '';
 
       if (
         !draft.name?.trim() ||
@@ -228,6 +234,8 @@ export class RealizationService {
         typeof draft.points !== 'number' ||
         draft.points <= 0 ||
         !parsedTimeLimit.ok ||
+        (requiresCompletionCode &&
+          !/^[A-Z0-9-]{3,32}$/.test(normalizedCompletionCode)) ||
         (hasCoordinates &&
           !this.isValidStationCoordinate(draft.latitude, draft.longitude))
       ) {
@@ -241,6 +249,9 @@ export class RealizationService {
         imageUrl: draft.imageUrl?.trim() || undefined,
         points: Math.round(draft.points),
         timeLimitSeconds: parsedTimeLimit.value,
+        completionCode: requiresCompletionCode
+          ? normalizedCompletionCode
+          : undefined,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,

@@ -6,6 +6,7 @@ import type { Station } from "../types/station";
 import {
   getStationTypeLabel,
   formatTimeLimit,
+  isCompletionCodeRequired,
   isSvgImageUrl,
   type StationSortField,
   type SortDirection,
@@ -80,13 +81,14 @@ export function StationsTable({
 
       {sortedGames.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
-          <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+          <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
             <span>Obraz</span>
             <span>Nazwa</span>
             <span>Typ</span>
             <span>Opis</span>
             <span>Punkty</span>
             <span>Czas</span>
+            <span>Kod</span>
             <span>Aktualizacja</span>
             <span>Akcje</span>
           </div>
@@ -94,7 +96,7 @@ export function StationsTable({
           <div className="divide-y divide-zinc-800">
             {sortedGames.map((game) => (
               <div key={game.id} className="px-4 py-3">
-                <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_120px_120px] items-center gap-3">
+                <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] items-center gap-3">
                   <Image
                     src={game.imageUrl}
                     alt={game.name}
@@ -110,6 +112,9 @@ export function StationsTable({
                   <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
                   <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
                   <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
+                  <p className="text-xs text-zinc-300">
+                    {isCompletionCodeRequired(game.type) ? (game.completionCode ? "Skonfigurowany" : "Brak") : "Niewymagany"}
+                  </p>
                   <p className="text-xs text-zinc-500">{new Date(game.updatedAt).toLocaleDateString("pl-PL")}</p>
                   <div>
                     <button

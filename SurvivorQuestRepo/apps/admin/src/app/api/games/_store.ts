@@ -8,6 +8,7 @@ export type StationEntity = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
   sourceTemplateId?: string;
   scenarioInstanceId?: string;
   realizationId?: string;
@@ -22,8 +23,30 @@ export type StationDraftInput = {
   imageUrl?: string;
   points: number;
   timeLimitSeconds: number;
+  completionCode?: string;
   sourceTemplateId?: string;
 };
+
+const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+
+function isCompletionCodeRequired(stationType: StationType) {
+  return stationType === "time" || stationType === "points";
+}
+
+function normalizeCompletionCode(value: string | undefined) {
+  return value?.trim().toUpperCase() || "";
+}
+
+function resolveCompletionCode(type: StationType, rawValue: string | undefined) {
+  const normalized = normalizeCompletionCode(rawValue);
+  if (!isCompletionCodeRequired(type)) {
+    return undefined;
+  }
+  if (!COMPLETION_CODE_REGEX.test(normalized)) {
+    throw new Error("INVALID_COMPLETION_CODE");
+  }
+  return normalized;
+}
 
 function getFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
@@ -35,6 +58,7 @@ function resolveImageUrl(imageUrl: string | undefined, seed: string) {
 
 function normalizeStationDraft(input: StationDraftInput, currentId: string) {
   const normalizedName = input.name.trim() || "Untitled station";
+  const completionCode = resolveCompletionCode(input.type, input.completionCode);
 
   return {
     name: normalizedName,
@@ -43,6 +67,7 @@ function normalizeStationDraft(input: StationDraftInput, currentId: string) {
     imageUrl: resolveImageUrl(input.imageUrl, normalizedName || currentId),
     points: Math.round(input.points),
     timeLimitSeconds: Math.round(input.timeLimitSeconds),
+    completionCode,
     sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
   };
 }
@@ -77,6 +102,7 @@ let stations: StationEntity[] = [
     imageUrl: "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?w=640&q=80&auto=format&fit=crop",
     points: 180,
     timeLimitSeconds: 420,
+    completionCode: "TIME-2048",
     createdAt: now,
     updatedAt: now,
   },
@@ -88,6 +114,7 @@ let stations: StationEntity[] = [
     imageUrl: "https://images.unsplash.com/photo-1502920514313-52581002a659?w=640&q=80&auto=format&fit=crop",
     points: 220,
     timeLimitSeconds: 0,
+    completionCode: "POINTS-900",
     createdAt: now,
     updatedAt: now,
   },
@@ -110,6 +137,7 @@ let stations: StationEntity[] = [
     imageUrl: "https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=640&q=80&auto=format&fit=crop",
     points: 160,
     timeLimitSeconds: 0,
+    completionCode: "TACTIC-700",
     createdAt: now,
     updatedAt: now,
   },

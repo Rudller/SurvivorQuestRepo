@@ -122,6 +122,8 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         stationId: asString(task.stationId ?? task.station_id),
         status: normalizeTaskStatus(task.status),
         pointsAwarded: Math.max(0, Math.round(asNumber(task.pointsAwarded ?? task.points_awarded, 0))),
+        startedAt: asString(task.startedAt ?? task.started_at) || null,
+        finishedAt: asString(task.finishedAt ?? task.finished_at) || null,
       };
     }),
     meta: {
@@ -209,9 +211,15 @@ export async function postMobileTeamLocation(
 
 export async function postMobileCompleteTask(
   apiBaseUrl: string,
-  payload: { sessionToken: string; stationId: string; pointsAwarded: number },
+  payload: {
+    sessionToken: string;
+    stationId: string;
+    completionCode: string;
+    startedAt?: string;
+    finishedAt?: string;
+  },
 ) {
-  return requestMobileApi<{ teamId: string; stationId: string; pointsTotal: number; taskStatus: "done" }>(
+  return requestMobileApi<{ teamId: string; stationId: string; pointsTotal: number; pointsAwarded: number; taskStatus: "done" }>(
     apiBaseUrl,
     "/api/mobile/task/complete",
     {
@@ -219,7 +227,27 @@ export async function postMobileCompleteTask(
       body: JSON.stringify({
         sessionToken: payload.sessionToken,
         stationId: payload.stationId,
-        pointsAwarded: payload.pointsAwarded,
+        completionCode: payload.completionCode,
+        startedAt: payload.startedAt,
+        finishedAt: payload.finishedAt,
+      }),
+    },
+  );
+}
+
+export async function postMobileStartTask(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; stationId: string; startedAt?: string },
+) {
+  return requestMobileApi<{ teamId: string; stationId: string; taskStatus: "in-progress"; startedAt: string }>(
+    apiBaseUrl,
+    "/api/mobile/task/start",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        sessionToken: payload.sessionToken,
+        stationId: payload.stationId,
+        startedAt: payload.startedAt,
       }),
     },
   );

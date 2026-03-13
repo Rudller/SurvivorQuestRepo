@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
-import { completeMobileTask, toApiError } from "../../_store";
+import { startMobileTask, toApiError } from "../../_store";
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       sessionToken?: string;
       stationId?: string;
-      completionCode?: string;
       startedAt?: string;
-      finishedAt?: string;
     };
 
-    const result = completeMobileTask({
+    const result = startMobileTask({
       sessionToken: body.sessionToken || "",
       stationId: body.stationId || "",
-      completionCode: body.completionCode,
       startedAt: body.startedAt,
-      finishedAt: body.finishedAt,
     });
 
     return NextResponse.json(result);
