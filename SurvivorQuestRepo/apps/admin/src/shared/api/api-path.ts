@@ -1,28 +1,13 @@
-const useMockApi = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false";
+const DEFAULT_BACKEND_API_URL = "http://localhost:3001";
 
 export function buildApiPath(path: string) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const prefix = useMockApi ? "/api" : "";
-  return `${prefix}${normalizedPath}`;
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 export function getApiConnectionLabel() {
-  if (useMockApi) {
-    return "Mock API (lokalne /api)";
-  }
-
-  const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!configuredApiUrl) {
-    return "Backend API (brak NEXT_PUBLIC_API_URL)";
-  }
-
-  return configuredApiUrl;
-}
-
-export function isMockApiEnabled() {
-  return useMockApi;
+  return getConfiguredApiUrl();
 }
 
 export function getConfiguredApiUrl() {
-  return process.env.NEXT_PUBLIC_API_URL?.trim() ?? "";
+  return process.env.NEXT_PUBLIC_API_URL?.trim() || DEFAULT_BACKEND_API_URL;
 }

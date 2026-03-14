@@ -11,12 +11,17 @@ const toPathRegex = (value) =>
 const backendDistPath = path.resolve(__dirname, "../backend/dist");
 const adminNextPath = path.resolve(__dirname, "../admin/.next");
 const adminOutPath = path.resolve(__dirname, "../admin/out");
+const mobilePnpmPath = path.resolve(__dirname, "node_modules/.pnpm");
+const mobilePnpmTempPathRegex = new RegExp(
+  `^${escapeForRegex(mobilePnpmPath).replace(/\\\\/g, "[\\\\/]")}(?:[\\\\/].*)?[\\\\/][^\\\\/]*_tmp_[^\\\\/]*(?:[\\\\/].*)?$`
+);
 
 config.resolver.blockList = [
   ...(config.resolver.blockList ?? []),
   toPathRegex(backendDistPath),
   toPathRegex(adminNextPath),
   toPathRegex(adminOutPath),
+  mobilePnpmTempPathRegex,
 ];
 
 module.exports = withNativeWind(config, {

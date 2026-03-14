@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
@@ -21,6 +22,18 @@ interface EditStationModalProps {
   onClose: () => void;
 }
 
+const RealizationLocationPickerMap = dynamic(
+  () => import("../../realizations/components/realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-64 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-500">
+        Ładowanie mapy...
+      </div>
+    ),
+  },
+);
+
 export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
@@ -40,7 +53,12 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
+    longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
+  const hasLatitude = typeof editValues.latitude === "number" && Number.isFinite(editValues.latitude);
+  const hasLongitude = typeof editValues.longitude === "number" && Number.isFinite(editValues.longitude);
+  const hasCoordinates = hasLatitude && hasLongitude;
 
   return (
     <>
@@ -87,6 +105,30 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 return;
               }
 
+              const nextLatitude =
+                typeof editValues.latitude === "number" && Number.isFinite(editValues.latitude)
+                  ? editValues.latitude
+                  : undefined;
+              const nextLongitude =
+                typeof editValues.longitude === "number" && Number.isFinite(editValues.longitude)
+                  ? editValues.longitude
+                  : undefined;
+
+              if ((nextLatitude === undefined) !== (nextLongitude === undefined)) {
+                setEditFormError("Uzupełnij jednocześnie szerokość i długość geograficzną albo wyczyść oba pola.");
+                return;
+              }
+
+              if (nextLatitude !== undefined && (nextLatitude < -90 || nextLatitude > 90)) {
+                setEditFormError("Szerokość geograficzna musi mieścić się w zakresie od -90 do 90.");
+                return;
+              }
+
+              if (nextLongitude !== undefined && (nextLongitude < -180 || nextLongitude > 180)) {
+                setEditFormError("Długość geograficzna musi mieścić się w zakresie od -180 do 180.");
+                return;
+              }
+
               try {
                 await updateStation({
                   id: station.id,
@@ -99,6 +141,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   completionCode: isCompletionCodeRequired(editValues.type)
                     ? normalizeCompletionCode(editValues.completionCode)
                     : undefined,
+                  latitude: nextLatitude,
+                  longitude: nextLongitude,
                 }).unwrap();
                 onClose();
               } catch {
@@ -330,6 +374,73 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 />
                 <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
               </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
+                {hasCoordinates && (
+                  <button
+                    type="button"
+                    onClick={() => setEditValues((prev) => ({ ...prev, latitude: undefined, longitude: undefined }))}
+                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                  >
+                    Wyczyść współrzędne
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-zinc-500">
+                To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
+                realizacji.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min={-90}
+                    max={90}
+                    value={hasLatitude ? editValues.latitude : ""}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({
+                        ...prev,
+                        latitude: event.target.value === "" ? undefined : Number(event.target.value),
+                      }))
+                    }
+                    placeholder="np. 52.22970"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min={-180}
+                    max={180}
+                    value={hasLongitude ? editValues.longitude : ""}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({
+                        ...prev,
+                        longitude: event.target.value === "" ? undefined : Number(event.target.value),
+                      }))
+                    }
+                    placeholder="np. 21.01220"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+              </div>
+
+              <RealizationLocationPickerMap
+                latitude={editValues.latitude}
+                longitude={editValues.longitude}
+                onPick={({ latitude, longitude }) => {
+                  setEditValues((prev) => ({ ...prev, latitude, longitude }));
+                }}
+              />
+              <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
             </div>
 
             <div className="flex items-center justify-end gap-2">

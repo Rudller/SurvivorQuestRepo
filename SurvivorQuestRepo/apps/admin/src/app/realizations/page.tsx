@@ -12,6 +12,7 @@ import { AdminSidebar } from "@/shared/components/admin-sidebar";
 import { RealizationsTable } from "@/features/realizations/components/realizations-table";
 import { CreateRealizationForm } from "@/features/realizations/components/create-realization-form";
 import { EditRealizationPanel } from "@/features/realizations/components/edit-realization-panel";
+import { RealizationStationQrPanel } from "@/features/realizations/components/realization-station-qr-panel";
 import type { RealizationSortField, SortDirection } from "@/features/realizations/realization.utils";
 
 function isUnauthorized(error: unknown) {
@@ -34,6 +35,7 @@ export default function RealizationsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [hideCompleted, setHideCompleted] = useState(false);
   const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
+  const [qrRealization, setQrRealization] = useState<Realization | null>(null);
 
   useEffect(() => {
     if (isMeError && isUnauthorized(meError)) {
@@ -97,6 +99,7 @@ export default function RealizationsPage() {
               onSortFieldChange={setSortField}
               onSortDirectionChange={setSortDirection}
               onEdit={setEditingRealization}
+              onShowStationQrs={setQrRealization}
             />
           )}
         </section>
@@ -117,6 +120,12 @@ export default function RealizationsPage() {
           stations={stations ?? []}
           userEmail={meData?.user.email}
           onClose={() => setEditingRealization(null)}
+        />
+      )}
+      {qrRealization && (
+        <RealizationStationQrPanel
+          realization={qrRealization}
+          onClose={() => setQrRealization(null)}
         />
       )}
 

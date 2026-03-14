@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
@@ -9,6 +8,7 @@ import {
 } from "../api/mobile-session.api";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
+import { QrScannerOverlay } from "../components/qr-scanner-overlay";
 import {
   StationPreviewOverlay,
   StationTestMenuOverlay,
@@ -182,6 +182,24 @@ function formatLocationCoordinate(value: number | undefined) {
   return (value as number).toFixed(6);
 }
 
+function extractStationQrToken(rawValue: string) {
+  const normalized = rawValue.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const tokenFromQuery = normalized.match(/(?:^|[?&])token=([^&]+)/i)?.[1];
+  if (tokenFromQuery?.trim()) {
+    try {
+      return decodeURIComponent(tokenFromQuery.trim());
+    } catch {
+      return tokenFromQuery.trim();
+    }
+  }
+
+  return normalized;
+}
+
 export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const {
@@ -191,6 +209,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     startStationTask,
     completeStationTask,
     syncTeamLocation,
+    resolveStationQrToken,
   } = useExpeditionSession(session);
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
@@ -199,6 +218,8 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isCameraActivating, setIsCameraActivating] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [isQrResolving, setIsQrResolving] = useState(false);
   const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
@@ -602,30 +623,52 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
           setActionError(syncError);
         }
       }
-
-      const cameraPermissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!cameraPermissionResult.granted) {
-        setActionError("Brak dostępu do kamery. Włącz uprawnienie kamery w ustawieniach systemu i spróbuj ponownie.");
-        return;
-      }
-
-      const cameraResult = await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images"],
-        quality: 0.85,
-      });
-
-      if (cameraResult.canceled) {
-        setActionMessage("Uruchomienie kamery anulowane.");
-        return;
-      }
-
-      setActionMessage("Zdjęcie wykonane.");
+      setIsQrScannerOpen(true);
+      setActionMessage("Skaner QR gotowy.");
     } catch (error) {
       setActionError(getApiErrorMessage(error, "Nie udało się uruchomić kamery."));
     } finally {
       setIsCameraActivating(false);
     }
   }
+
+  const handleQrDetected = useCallback(
+    async (rawValue: string) => {
+      if (isQrResolving) {
+        return;
+      }
+
+      setActionError(null);
+      setActionMessage(null);
+      setIsQrResolving(true);
+
+      try {
+        const token = extractStationQrToken(rawValue);
+        if (!token) {
+          setActionError("Nie udało się odczytać tokenu z kodu QR.");
+          return;
+        }
+
+        const result = await resolveStationQrToken(token);
+        if (typeof result === "string") {
+          setActionError(result);
+          return;
+        }
+
+        const scannedStationId = result.station.id;
+        setSelectedStationId(scannedStationId);
+        setFocusedStationId(scannedStationId);
+        setActiveStationTestId(scannedStationId);
+        setIsQrScannerOpen(false);
+        setActionMessage(`Zeskanowano stanowisko: ${result.station.name}`);
+      } catch (error) {
+        setActionError(getApiErrorMessage(error, "Nie udało się przetworzyć kodu QR."));
+      } finally {
+        setIsQrResolving(false);
+      }
+    },
+    [isQrResolving, resolveStationQrToken],
+  );
 
   async function handleGpsRefresh() {
     setActionError(null);
@@ -910,6 +953,16 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         onClose={() => setActiveStationTestId(null)}
         onStartTask={handleStartStationTestTask}
         onCompleteTask={handleCompleteStationTestTask}
+      />
+
+      <QrScannerOverlay
+        visible={isQrScannerOpen}
+        isResolving={isQrResolving}
+        onDetected={(value) => void handleQrDetected(value)}
+        onClose={() => {
+          setIsQrScannerOpen(false);
+          setActionMessage((current) => current || "Skanowanie QR anulowane.");
+        }}
       />
 
       {onRestart ? (

@@ -34,8 +34,10 @@ export type RealizationEntity = {
   scenarioStations: StationEntity[];
   joinCode: string;
   teamCount: number;
+  requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
+  locationRequired: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;

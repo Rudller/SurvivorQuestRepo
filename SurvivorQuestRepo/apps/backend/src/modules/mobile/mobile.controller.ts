@@ -49,6 +49,11 @@ type StartTaskPayload = {
   startedAt?: string;
 };
 
+type ResolveStationQrPayload = {
+  sessionToken?: string;
+  token?: string;
+};
+
 @Controller(['mobile', 'api/mobile'])
 export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
@@ -131,6 +136,14 @@ export class MobileController {
     });
   }
 
+  @Post('station/resolve-qr')
+  async resolveMobileStationQr(@Body() payload: ResolveStationQrPayload) {
+    return this.mobileService.resolveMobileStationQr({
+      sessionToken: payload.sessionToken || '',
+      token: payload.token || '',
+    });
+  }
+
   @Get('admin/realizations/current')
   @UseGuards(AdminSessionGuard)
   async getMobileAdminCurrentRealizationOverview() {
@@ -157,5 +170,21 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminRealizationLocations(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/station-qr')
+  @UseGuards(AdminSessionGuard)
+  async getMobileAdminRealizationStationQrs(
+    @Param('realizationId') realizationId: string,
+    @Query('ttlSeconds') ttlSeconds?: string,
+  ) {
+    const ttlCandidate =
+      typeof ttlSeconds === 'string' && ttlSeconds.trim().length > 0
+        ? Number(ttlSeconds)
+        : undefined;
+    return this.mobileService.getMobileAdminStationQrs(
+      realizationId,
+      ttlCandidate,
+    );
   }
 }

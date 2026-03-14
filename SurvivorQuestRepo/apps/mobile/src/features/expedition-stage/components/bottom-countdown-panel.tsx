@@ -66,7 +66,7 @@ export function BottomCountdownPanel({
         </View>
       </View>
       <Text className="mt-2 text-center text-[11px]" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        {isCameraActivating ? "Uruchamianie kamery..." : "Kamera QR / Foto"}
+        {isCameraActivating ? "Uruchamianie skanera..." : "Skaner QR"}
       </Text>
     </View>
   );

@@ -5,38 +5,23 @@ import {
   buildApiPath,
   getApiConnectionLabel,
   getConfiguredApiUrl,
-  isMockApiEnabled,
 } from "@/shared/api/api-path";
 
-type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
+type ApiConnectionStatus = "checking" | "connected" | "disconnected";
 type ApiConnectionStatusBadgeProps = {
   inline?: boolean;
 };
 
 function getProbeUrl() {
-  if (isMockApiEnabled()) {
-    return buildApiPath("/auth/me");
-  }
-
   const apiUrl = getConfiguredApiUrl();
-  if (!apiUrl) {
-    return null;
-  }
-
   return `${apiUrl.replace(/\/+$/, "")}${buildApiPath("/auth/me")}`;
 }
 
 export function ApiConnectionStatusBadge({ inline = false }: ApiConnectionStatusBadgeProps) {
   const probeUrl = useMemo(() => getProbeUrl(), []);
-  const [status, setStatus] = useState<ApiConnectionStatus>(
-    probeUrl ? "checking" : "config-missing",
-  );
+  const [status, setStatus] = useState<ApiConnectionStatus>("checking");
 
   useEffect(() => {
-    if (!probeUrl) {
-      return;
-    }
-
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 5000);
 
@@ -67,9 +52,7 @@ export function ApiConnectionStatusBadge({ inline = false }: ApiConnectionStatus
       ? "bg-emerald-400"
       : status === "checking"
         ? "bg-amber-300"
-        : status === "config-missing"
-          ? "bg-zinc-500"
-          : "bg-red-400";
+        : "bg-red-400";
 
   return (
     <div

@@ -19,6 +19,8 @@ export type CreateStationDto = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type UpdateStationDto = CreateStationDto & {
@@ -62,6 +64,40 @@ function ensurePositiveNumber(value: unknown) {
   return Math.round(value);
 }
 
+function ensureCoordinate(value: unknown, min: number, max: number) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value;
+}
+
+function ensureCoordinates(body: Record<string, unknown>) {
+  const hasLatitude = body.latitude !== undefined;
+  const hasLongitude = body.longitude !== undefined;
+
+  if (hasLatitude !== hasLongitude) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  if (!hasLatitude) {
+    return {
+      latitude: undefined,
+      longitude: undefined,
+    };
+  }
+
+  return {
+    latitude: ensureCoordinate(body.latitude, -90, 90),
+    longitude: ensureCoordinate(body.longitude, -180, 180),
+  };
+}
+
 function ensureCompletionCode(
   value: unknown,
   type: StationType,
@@ -89,6 +125,7 @@ function ensureStationBody(payload: unknown): CreateStationDto {
 
   const body = payload as Record<string, unknown>;
   const type = ensureStationType(body.type);
+  const { latitude, longitude } = ensureCoordinates(body);
 
   return {
     name: ensureTrimmedString(body.name),
@@ -102,6 +139,8 @@ function ensureStationBody(payload: unknown): CreateStationDto {
     timeLimitSeconds:
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
     completionCode: ensureCompletionCode(body.completionCode, type),
+    latitude,
+    longitude,
   };
 }
 
@@ -157,6 +196,8 @@ export function toCreateStationEntity(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    latitude: dto.latitude,
+    longitude: dto.longitude,
     createdAt: now,
     updatedAt: now,
   };
@@ -176,6 +217,8 @@ export function toUpdateStationEntity(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    latitude: dto.latitude,
+    longitude: dto.longitude,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -192,5 +235,7 @@ export function toStationDraftInput(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    latitude: dto.latitude,
+    longitude: dto.longitude,
   };
 }

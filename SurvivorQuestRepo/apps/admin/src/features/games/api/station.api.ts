@@ -1,6 +1,6 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { Station, StationType } from "../types/station";
+import type { Station, StationKind, StationType } from "../types/station";
 
 type StationDto = {
   id: string;
@@ -16,6 +16,8 @@ type StationDto = {
   sourceTemplateId?: string;
   scenarioInstanceId?: string;
   realizationId?: string;
+  kind?: StationKind;
+  isTemplate?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -28,6 +30,8 @@ type CreateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 type UpdateStationPayload = {
@@ -39,6 +43,8 @@ type UpdateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 type DeleteStationPayload = {
@@ -55,6 +61,22 @@ function getFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
 }
 
+function deriveStationKind(station: StationDto): StationKind {
+  if (station.kind) {
+    return station.kind;
+  }
+
+  if (station.realizationId) {
+    return "realization-instance";
+  }
+
+  if (station.scenarioInstanceId) {
+    return "scenario-instance";
+  }
+
+  return "template";
+}
+
 function normalizeStation(station: StationDto): Station {
   const trimmedName = station.name?.trim() || "Untitled station";
   const safePoints = Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
@@ -62,6 +84,7 @@ function normalizeStation(station: StationDto): Station {
     Number.isFinite(station.timeLimitSeconds) && (station.timeLimitSeconds ?? -1) >= 0
       ? Math.round(station.timeLimitSeconds as number)
       : 0;
+  const kind = deriveStationKind(station);
 
   return {
     id: station.id,
@@ -77,6 +100,8 @@ function normalizeStation(station: StationDto): Station {
     sourceTemplateId: station.sourceTemplateId,
     scenarioInstanceId: station.scenarioInstanceId,
     realizationId: station.realizationId,
+    kind,
+    isTemplate: typeof station.isTemplate === "boolean" ? station.isTemplate : kind === "template",
     createdAt: station.createdAt,
     updatedAt: station.updatedAt,
   };

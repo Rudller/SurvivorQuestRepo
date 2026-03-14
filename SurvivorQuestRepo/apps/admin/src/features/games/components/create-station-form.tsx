@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, type ClipboardEvent } from "react";
 import type { StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
@@ -20,6 +21,18 @@ type CreateStationFormProps = {
   onClose: () => void;
 };
 
+const RealizationLocationPickerMap = dynamic(
+  () => import("../../realizations/components/realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-64 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-500">
+        Ładowanie mapy...
+      </div>
+    ),
+  },
+);
+
 export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
@@ -32,12 +45,17 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [points, setPoints] = useState(100);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [completionCode, setCompletionCode] = useState("");
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [formError, setFormError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [createImageMode, setCreateImageMode] = useState<ImageInputMode>("upload");
 
   const previewImage = imageUrl.trim();
   const isBusy = isCreating || isUploadingImage;
+  const hasLatitude = typeof latitude === "number" && Number.isFinite(latitude);
+  const hasLongitude = typeof longitude === "number" && Number.isFinite(longitude);
+  const hasCoordinates = hasLatitude && hasLongitude;
 
   return (
     <>
@@ -69,6 +87,24 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               return;
             }
 
+            const nextLatitude = typeof latitude === "number" && Number.isFinite(latitude) ? latitude : undefined;
+            const nextLongitude = typeof longitude === "number" && Number.isFinite(longitude) ? longitude : undefined;
+
+            if ((nextLatitude === undefined) !== (nextLongitude === undefined)) {
+              setFormError("Uzupełnij jednocześnie szerokość i długość geograficzną albo wyczyść oba pola.");
+              return;
+            }
+
+            if (nextLatitude !== undefined && (nextLatitude < -90 || nextLatitude > 90)) {
+              setFormError("Szerokość geograficzna musi mieścić się w zakresie od -90 do 90.");
+              return;
+            }
+
+            if (nextLongitude !== undefined && (nextLongitude < -180 || nextLongitude > 180)) {
+              setFormError("Długość geograficzna musi mieścić się w zakresie od -180 do 180.");
+              return;
+            }
+
             try {
               let nextImageUrl = imageUrl.trim();
 
@@ -87,6 +123,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 points,
                 timeLimitSeconds: clampTimeLimitSeconds(timeLimitSeconds),
                 completionCode: isCompletionCodeRequired(type) ? normalizeCompletionCode(completionCode) : undefined,
+                latitude: nextLatitude,
+                longitude: nextLongitude,
               }).unwrap();
               setName("");
               setType("quiz");
@@ -96,6 +134,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setPoints(100);
               setTimeLimitSeconds(0);
               setCompletionCode("");
+              setLatitude(undefined);
+              setLongitude(undefined);
               setCreateImageMode("upload");
               onClose();
             } catch {
@@ -386,6 +426,73 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               />
               <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
+              {hasCoordinates && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLatitude(undefined);
+                    setLongitude(undefined);
+                  }}
+                  className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                >
+                  Wyczyść współrzędne
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-zinc-500">
+              To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
+              realizacji.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
+                <input
+                  type="number"
+                  step="any"
+                  min={-90}
+                  max={90}
+                  value={hasLatitude ? latitude : ""}
+                  onChange={(event) => {
+                    setLatitude(event.target.value === "" ? undefined : Number(event.target.value));
+                  }}
+                  placeholder="np. 52.22970"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
+                <input
+                  type="number"
+                  step="any"
+                  min={-180}
+                  max={180}
+                  value={hasLongitude ? longitude : ""}
+                  onChange={(event) => {
+                    setLongitude(event.target.value === "" ? undefined : Number(event.target.value));
+                  }}
+                  placeholder="np. 21.01220"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+              </label>
+            </div>
+
+            <RealizationLocationPickerMap
+              latitude={latitude}
+              longitude={longitude}
+              onPick={({ latitude: pickedLatitude, longitude: pickedLongitude }) => {
+                setLatitude(pickedLatitude);
+                setLongitude(pickedLongitude);
+              }}
+            />
+            <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
           </div>
         </div>
 

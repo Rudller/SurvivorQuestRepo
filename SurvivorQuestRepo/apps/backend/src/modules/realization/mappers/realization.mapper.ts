@@ -109,6 +109,7 @@ export function buildRealizationEntity(input: {
     requiredDevicesCount: number;
     peopleCount: number;
     positionsCount: number;
+    locationRequired: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     createdAt: Date;
@@ -141,8 +142,10 @@ export function buildRealizationEntity(input: {
     scenarioStations: input.scenarioStations,
     joinCode: realization.joinCode,
     teamCount: realization.teamCount,
+    requiredDevicesCount: realization.requiredDevicesCount,
     peopleCount: realization.peopleCount,
     positionsCount: realization.positionsCount,
+    locationRequired: realization.locationRequired,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),

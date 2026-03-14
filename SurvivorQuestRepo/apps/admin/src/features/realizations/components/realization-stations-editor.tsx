@@ -134,15 +134,11 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
 
   useEffect(() => {
     setExpandedStationIndex((current) => {
-      if (stations.length === 0) {
+      if (current === null) {
         return null;
       }
 
-      if (current === null || current >= stations.length) {
-        return 0;
-      }
-
-      return current;
+      return current < stations.length ? current : null;
     });
   }, [stations.length]);
 
@@ -307,6 +303,34 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
     });
   }
 
+  function moveStation(index: number, direction: "up" | "down") {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= stations.length) {
+      return;
+    }
+
+    const reorderedStations = [...stations];
+    [reorderedStations[index], reorderedStations[targetIndex]] = [reorderedStations[targetIndex], reorderedStations[index]];
+    onChange(reorderedStations);
+
+    setExpandedStationIndex((currentIndex) => {
+      if (currentIndex === null) {
+        return null;
+      }
+
+      if (currentIndex === index) {
+        return targetIndex;
+      }
+
+      if (currentIndex === targetIndex) {
+        return index;
+      }
+
+      return currentIndex;
+    });
+  }
+
   return (
     <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
       <div className="flex items-center justify-between">
@@ -348,7 +372,12 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                   onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
                   className="flex-1 text-left"
                 >
-                  <p className="text-sm font-medium text-zinc-100">{station.name.trim() || `Stanowisko ${index + 1}`}</p>
+                  <p className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                    <span className="inline-flex min-w-9 justify-center rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-zinc-300">
+                      #{index + 1}
+                    </span>
+                    <span>{station.name.trim() || `Stanowisko ${index + 1}`}</span>
+                  </p>
                   <p className="text-xs text-zinc-500">
                     {stationTypeLabelByValue.get(station.type) ?? "Quiz"} • {Number.isFinite(station.points) ? station.points : 0} pkt •{" "}
                     {Number.isFinite(station.timeLimitSeconds) ? station.timeLimitSeconds : 0}s •{" "}
@@ -359,16 +388,25 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                 </button>
 
                 <div className="flex flex-col items-end gap-2">
-                  {isCompletionCodeRequired(station.type) && activeExpandedStationIndex !== index ? (
-                    <input
-                      value={station.completionCode ?? ""}
-                      onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
-                      placeholder="Kod zaliczenia"
-                      className="w-44 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
-                    />
-                  ) : null}
-
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveStation(index, "up")}
+                      disabled={index === 0}
+                      title="Przesuń w górę"
+                      className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveStation(index, "down")}
+                      disabled={index === stations.length - 1}
+                      title="Przesuń w dół"
+                      className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ↓
+                    </button>
                     <button
                       type="button"
                       onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}

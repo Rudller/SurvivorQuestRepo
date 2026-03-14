@@ -252,3 +252,43 @@ export async function postMobileStartTask(
     },
   );
 }
+
+export async function postMobileResolveStationQr(
+  apiBaseUrl: string,
+  payload: {
+    sessionToken: string;
+    token: string;
+  },
+) {
+  return requestMobileApi<{
+    realizationId: string;
+    station: {
+      id: string;
+      name: string;
+      type: "quiz" | "time" | "points";
+      description: string;
+      imageUrl: string;
+      points: number;
+      timeLimitSeconds: number;
+      latitude?: number;
+      longitude?: number;
+    };
+    task: {
+      stationId: string;
+      status: "todo" | "in-progress" | "done";
+      pointsAwarded: number;
+      startedAt: string | null;
+      finishedAt: string | null;
+    };
+    qr: {
+      issuedAt: string;
+      expiresAt: string;
+    };
+  }>(apiBaseUrl, "/api/mobile/station/resolve-qr", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionToken: payload.sessionToken,
+      token: payload.token,
+    }),
+  });
+}

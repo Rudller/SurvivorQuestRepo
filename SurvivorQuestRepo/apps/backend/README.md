@@ -75,9 +75,11 @@ To wystarcza do lokalnego developmentu i stagingu, ale przed produkcja nadal war
   - `POST /mobile/session/join`
   - `GET /mobile/session/state`
   - `POST /mobile/team/claim|select|randomize|location`
+  - `POST /mobile/station/resolve-qr`
   - `POST /mobile/task/complete`
   - `GET /mobile/admin/realizations/current`
   - `GET /mobile/admin/realizations/:realizationId`
+  - `GET /mobile/admin/realizations/:realizationId/station-qr`
   - oraz aliasy `GET/POST /api/mobile/...`
 
 ### Dostep i autoryzacja
@@ -114,6 +116,8 @@ Najwazniejsze zmienne:
 - `CORS_ORIGIN_ALLOWLIST` - lista originow frontendow rozdzielona przecinkami
 - `AUTH_COOKIE_SAME_SITE` - `lax` / `strict` / `none`
 - `AUTH_COOKIE_SECURE` - `true` dla HTTPS, `false` dla lokalnego HTTP
+- `STATION_QR_SECRET` - sekret HMAC do podpisywania tokenow QR stanowisk
+- `MOBILE_QR_ENTRY_BASE_URL` - bazowy deeplink/URL kodowany do QR (domyslnie `sq://station-entry`)
 
 ## 6. Szybki start (lokalnie)
 

@@ -35,22 +35,17 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## Data source mode (mock -> backend)
+## Data source mode (backend only)
 
 Admin uses RTK Query with a shared API path builder.
 
-- Default mode is `mock` and requests go to Next route handlers under `/api/*`.
-- To switch to backend, set `NEXT_PUBLIC_USE_MOCK_API=false` and `NEXT_PUBLIC_API_URL`.
+Admin uses backend API directly. Set `NEXT_PUBLIC_API_URL` to your backend base URL.
+If missing, frontend falls back to `http://localhost:3001` in development.
 
 ### Example `.env.local`
 
 ```bash
-# mock-first (default behavior)
-NEXT_PUBLIC_USE_MOCK_API=true
-
-# backend mode
-# NEXT_PUBLIC_USE_MOCK_API=false
-# NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 When switching mode, restart the dev server.

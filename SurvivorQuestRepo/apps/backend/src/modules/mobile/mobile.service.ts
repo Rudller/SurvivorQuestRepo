@@ -5,12 +5,18 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import { EventActorType, Prisma, TaskStatus, TeamStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   getOpaqueTokenCandidates,
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
+import {
+  signStationQrToken,
+  verifyStationQrToken,
+  type VerifyStationQrTokenResult,
+} from '../../shared/lib/station-qr-token';
 import {
   RealizationService,
   type RealizationStatus,
@@ -84,6 +90,15 @@ const LOCATION_DEDUP_MIN_INTERVAL_MS = 4_000;
 const LOCATION_DEDUP_MIN_DISTANCE_METERS = 3;
 const LOCATION_MAX_ACCURACY_METERS = 10_000;
 const LOCATION_MAX_SPEED_MPS = 120;
+const DEFAULT_STATION_QR_TTL_SECONDS = 12 * 60 * 60;
+const MIN_STATION_QR_TTL_SECONDS = 5 * 60;
+const MAX_STATION_QR_TTL_SECONDS = 24 * 60 * 60;
+const STATIC_STATION_QR_VALIDITY_YEARS = 20;
+const STATIC_STATION_QR_NONCE_LENGTH = 24;
+type StationQrRejectReason = Exclude<
+  VerifyStationQrTokenResult,
+  { ok: true }
+>['reason'];
 
 @Injectable()
 export class MobileService {
@@ -879,6 +894,181 @@ export class MobileService {
     };
   }
 
+  async getMobileAdminStationQrs(
+    realizationId: string,
+    ttlSeconds?: number,
+  ) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    this.resolveStationQrTtlSeconds(ttlSeconds);
+    const stationQrSecret = this.getStationQrSecret();
+    const { issuedAtMs, expiresAtMs, tokenTtlSeconds } =
+      this.resolveStaticStationQrWindow(realization.createdAt);
+    const stationById = new Map(
+      realization.scenarioStations.map((station) => [station.id, station]),
+    );
+
+    return {
+      realizationId: realization.id,
+      issuedAt: new Date(issuedAtMs).toISOString(),
+      expiresAt: new Date(expiresAtMs).toISOString(),
+      tokenTtlSeconds,
+      entries: realization.stationIds.map((stationId) => {
+        const station = stationById.get(stationId);
+        const qrToken = signStationQrToken(
+          {
+            realizationId: realization.id,
+            stationId,
+            issuedAtMs,
+            expiresAtMs,
+            nonce: this.buildDeterministicStationQrNonce(
+              realization.id,
+              stationId,
+              stationQrSecret,
+            ),
+          },
+          stationQrSecret,
+        );
+
+        return {
+          stationId,
+          stationName: station?.name || `Station ${stationId}`,
+          stationType: station?.type || 'quiz',
+          qrToken,
+          entryUrl: this.buildStationQrEntryUrl(qrToken),
+        };
+      }),
+    };
+  }
+
+  async resolveMobileStationQr(input: { sessionToken: string; token: string }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+    const normalizedToken = input.token?.trim();
+    if (!normalizedToken) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const verified = verifyStationQrToken(
+      normalizedToken,
+      this.getStationQrSecret(),
+    );
+    if (!verified.ok) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'station_qr_rejected',
+        payload: { reason: verified.reason },
+      });
+      throw new BadRequestException(
+        this.toStationQrRejectedMessage(verified.reason),
+      );
+    }
+
+    if (verified.payload.realizationId !== realization.id) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'station_qr_rejected',
+        payload: {
+          reason: 'realization_mismatch',
+          stationId: verified.payload.stationId,
+          qrRealizationId: verified.payload.realizationId,
+        },
+      });
+      throw new BadRequestException('QR is not valid for this realization');
+    }
+
+    if (!realization.stationIds.includes(verified.payload.stationId)) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'station_qr_rejected',
+        payload: {
+          reason: 'station_not_in_realization',
+          stationId: verified.payload.stationId,
+        },
+      });
+      throw new BadRequestException(
+        'Station from QR is not available in this realization',
+      );
+    }
+
+    const station = await this.stationService.findStationById(
+      verified.payload.stationId,
+    );
+    if (!station || station.realizationId !== realization.id) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'station_qr_rejected',
+        payload: {
+          reason: 'station_not_found',
+          stationId: verified.payload.stationId,
+        },
+      });
+      throw new NotFoundException('Station not found');
+    }
+
+    const progress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: station.id,
+        },
+      },
+    });
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: assignment.deviceId,
+      eventType: 'station_qr_resolved',
+      payload: {
+        stationId: station.id,
+        stationType: station.type,
+        expiresAt: new Date(verified.payload.exp).toISOString(),
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      station: {
+        id: station.id,
+        name: station.name,
+        type: station.type,
+        description: station.description,
+        imageUrl: station.imageUrl,
+        points: station.points,
+        timeLimitSeconds: station.timeLimitSeconds,
+        latitude: station.latitude,
+        longitude: station.longitude,
+      },
+      task: {
+        stationId: station.id,
+        status: this.fromTaskStatus(progress?.status) || 'todo',
+        pointsAwarded: progress?.pointsAwarded || 0,
+        startedAt: progress?.startedAt?.toISOString() || null,
+        finishedAt: progress?.finishedAt?.toISOString() || null,
+      },
+      qr: {
+        issuedAt: new Date(verified.payload.iat).toISOString(),
+        expiresAt: new Date(verified.payload.exp).toISOString(),
+      },
+    };
+  }
+
   async getMobileAdminRealizationOverview(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
@@ -1290,6 +1480,72 @@ export class MobileService {
   private async getDefaultPointsForStation(stationId: string) {
     const station = await this.stationService.findStationById(stationId);
     return station?.points ?? 0;
+  }
+
+  private resolveStationQrTtlSeconds(ttlSeconds?: number) {
+    if (!Number.isFinite(ttlSeconds)) {
+      return DEFAULT_STATION_QR_TTL_SECONDS;
+    }
+
+    const normalized = Math.round(ttlSeconds as number);
+    return Math.min(
+      MAX_STATION_QR_TTL_SECONDS,
+      Math.max(MIN_STATION_QR_TTL_SECONDS, normalized),
+    );
+  }
+
+  private resolveStaticStationQrWindow(createdAtIso: string) {
+    const parsedCreatedAt = new Date(createdAtIso).getTime();
+    const issuedAtMs = Number.isFinite(parsedCreatedAt)
+      ? Math.round(parsedCreatedAt)
+      : Date.UTC(2024, 0, 1);
+    const tokenTtlSeconds =
+      STATIC_STATION_QR_VALIDITY_YEARS * 365 * 24 * 60 * 60;
+    const expiresAtMs = issuedAtMs + tokenTtlSeconds * 1000;
+
+    return {
+      issuedAtMs,
+      expiresAtMs,
+      tokenTtlSeconds,
+    };
+  }
+
+  private buildDeterministicStationQrNonce(
+    realizationId: string,
+    stationId: string,
+    secret: string,
+  ) {
+    return createHmac('sha256', secret)
+      .update(`${realizationId.trim()}:${stationId.trim()}`)
+      .digest('base64url')
+      .slice(0, STATIC_STATION_QR_NONCE_LENGTH);
+  }
+
+  private getStationQrSecret() {
+    return process.env.STATION_QR_SECRET?.trim() || 'survivorquest-station-qr';
+  }
+
+  private buildStationQrEntryUrl(token: string) {
+    const base =
+      process.env.MOBILE_QR_ENTRY_BASE_URL?.trim() || 'sq://station-entry';
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}token=${encodeURIComponent(token)}`;
+  }
+
+  private toStationQrRejectedMessage(reason: StationQrRejectReason) {
+    if (reason === 'expired_token') {
+      return 'QR expired';
+    }
+
+    if (reason === 'invalid_signature') {
+      return 'Invalid QR signature';
+    }
+
+    if (reason === 'invalid_payload') {
+      return 'Invalid QR payload';
+    }
+
+    return 'Invalid QR token format';
   }
 
   private isCodeProtectedStationType(stationType: string) {

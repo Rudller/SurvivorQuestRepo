@@ -4,6 +4,7 @@ import {
   fetchMobileSessionState,
   getApiErrorMessage,
   postMobileCompleteTask,
+  postMobileResolveStationQr,
   postMobileStartTask,
   postMobileTeamLocation,
 } from "../api/mobile-session.api";
@@ -334,6 +335,36 @@ export function useExpeditionSession(session: OnboardingSession) {
     [offlineMode, session.apiBaseUrl, session.sessionToken],
   );
 
+  const resolveStationQrToken = useCallback(
+    async (token: string) => {
+      const normalizedToken = token.trim();
+      if (!normalizedToken) {
+        return "Nieprawidłowy kod QR.";
+      }
+
+      if (offlineMode) {
+        return "Skanowanie QR wymaga połączenia z backendem.";
+      }
+
+      const apiBaseUrl = session.apiBaseUrl?.trim();
+      if (!apiBaseUrl) {
+        return "Brakuje konfiguracji API.";
+      }
+
+      try {
+        const response = await postMobileResolveStationQr(apiBaseUrl, {
+          sessionToken: session.sessionToken,
+          token: normalizedToken,
+        });
+        await refreshSessionState();
+        return response;
+      } catch (error) {
+        return getApiErrorMessage(error, "Nie udało się zweryfikować kodu QR.");
+      }
+    },
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+  );
+
   return {
     sessionState,
     isLoading,
@@ -345,5 +376,6 @@ export function useExpeditionSession(session: OnboardingSession) {
     startStationTask,
     completeStationTask,
     syncTeamLocation,
+    resolveStationQrToken,
   };
 }

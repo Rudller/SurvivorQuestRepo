@@ -25,6 +25,7 @@ interface RealizationsTableProps {
   onSortFieldChange: (field: RealizationSortField) => void;
   onSortDirectionChange: (direction: SortDirection) => void;
   onEdit: (realization: Realization) => void;
+  onShowStationQrs: (realization: Realization) => void;
 }
 
 export function RealizationsTable({
@@ -38,6 +39,7 @@ export function RealizationsTable({
   onSortFieldChange,
   onSortDirectionChange,
   onEdit,
+  onShowStationQrs,
 }: RealizationsTableProps) {
   const scenarioById = useMemo(
     () => new Map(scenarios.map((scenario) => [scenario.id, scenario])),
@@ -208,13 +210,22 @@ export function RealizationsTable({
                         {new Date(realization.updatedAt).toLocaleString("pl-PL")}
                       </td>
                       <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(realization)}
-                          className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                        >
-                          Edytuj
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onShowStationQrs(realization)}
+                            className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                          >
+                            Kody QR
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onEdit(realization)}
+                            className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                          >
+                            Edytuj
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
