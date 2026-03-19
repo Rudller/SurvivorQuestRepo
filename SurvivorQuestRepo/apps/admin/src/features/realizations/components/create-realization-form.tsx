@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { RealizationStatus, RealizationType } from "../types/realization";
-import { realizationTypeOptions } from "../types/realization";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { RealizationLanguage, RealizationStatus, RealizationType } from "../types/realization";
+import {
+  getRealizationLanguageLabel,
+  realizationLanguageOptions,
+  realizationTypeOptions,
+} from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
 import {
@@ -29,6 +33,21 @@ interface CreateRealizationFormProps {
   onClose: () => void;
 }
 
+type DateTimeInputElement = HTMLInputElement & {
+  showPicker?: () => void;
+};
+
+function CalendarInputIcon() {
+  return (
+    // Icon based on Heroicons (MIT) calendar style.
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+      <path d="M8 2v3M16 2v3M3 10h18" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="3" y="5" width="18" height="16" rx="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function CreateRealizationForm({ scenarios, stations, userEmail, onClose }: CreateRealizationFormProps) {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
@@ -39,19 +58,22 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
   const [contactPerson, setContactPerson] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
+  const [customLanguage, setCustomLanguage] = useState("");
   const [instructors, setInstructors] = useState<string[]>([]);
   const [instructorInput, setInstructorInput] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
-  const [logoUrl, setLogoUrl] = useState<string | undefined>();
-  const [offerPdfUrl, setOfferPdfUrl] = useState<string | undefined>();
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [offerPdfFile, setOfferPdfFile] = useState<File | null>(null);
   const [offerPdfName, setOfferPdfName] = useState<string | undefined>();
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [teamCount, setTeamCount] = useState(2);
   const [peopleCount, setPeopleCount] = useState(10);
-  const [positionsCount, setPositionsCount] = useState(2);
+  const [durationMinutes, setDurationMinutes] = useState(120);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
+  const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
 
   const scenarioById = useMemo(
     () => new Map(scenarios.map((s) => [s.id, s])),
@@ -72,8 +94,21 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
 
   const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
   const [scenarioStations, setScenarioStations] = useState(() => [] as ReturnType<typeof mapScenarioStations>);
+  const positionsCount = scenarioStations.length;
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isCreating || isUploadingLogo || isUploadingOffer;
+  const logoPreviewUrl = useMemo(
+    () => (logoFile ? URL.createObjectURL(logoFile) : undefined),
+    [logoFile],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+      }
+    };
+  }, [logoPreviewUrl]);
 
   function addInstructor() {
     const name = instructorInput.trim();
@@ -95,6 +130,21 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
     setInstructors((current) => current.filter((name) => name !== nameToRemove));
   }
 
+  function openScheduledAtPicker() {
+    const input = scheduledAtInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  }
+
   return (
     <>
       <button
@@ -110,55 +160,88 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
         event.preventDefault();
         setFormError(null);
 
-        if (!companyName.trim() || !selectedScenarioId) {
-          setFormError("Uzupełnij nazwę firmy i wybierz scenariusz.");
+        const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
+        const hasIncompleteFields =
+          !companyName.trim() ||
+          !selectedScenarioId ||
+          !contactPerson.trim() ||
+          (!contactPhone.trim() && !contactEmail.trim()) ||
+          (selectedLanguage === "other" && !customLanguage.trim()) ||
+          !scheduledAt ||
+          !Number.isFinite(durationMinutes) ||
+          durationMinutes < 1 ||
+          scenarioStations.length === 0 ||
+          hasInvalidScenarioStations;
+
+        if (
+          hasIncompleteFields &&
+          !window.confirm("Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?")
+        ) {
           return;
         }
 
-        if (!contactPerson.trim()) {
-          setFormError("Uzupełnij osobę kontaktową.");
+        const fallbackScenarioId =
+          selectedScenarioId || scenarios.find((scenario) => !scenario.sourceTemplateId)?.id || scenarios[0]?.id || "";
+        if (!fallbackScenarioId) {
+          setFormError("Brak dostępnego scenariusza do utworzenia realizacji.");
           return;
         }
 
-        if (!contactPhone.trim() && !contactEmail.trim()) {
-          setFormError("Podaj telefon lub e-mail kontaktowy.");
-          return;
-        }
-
-        if (!scheduledAt) {
-          setFormError("Uzupełnij termin (data i godzina).");
-          return;
-        }
-
-        if (scenarioStations.length === 0) {
-          setFormError("Dodaj przynajmniej jedno stanowisko realizacji.");
-          return;
-        }
-
-        if (hasInvalidRealizationStationDrafts(scenarioStations)) {
-          setFormError("Uzupełnij nazwę, opis i poprawne parametry wszystkich stanowisk.");
-          return;
-        }
+        const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStations);
+        const useCustomScenarioStations = scenarioStations.length > 0 && !hasInvalidScenarioStations;
+        const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
+        const positionsCountForSubmit = Math.max(
+          1,
+          useCustomScenarioStations ? normalizedScenarioStations.length : fallbackScenarioStations.length,
+        );
+        const normalizedCompanyName = companyName.trim() || "Nowa realizacja";
+        const normalizedContactPerson = contactPerson.trim() || "Brak osoby kontaktowej";
+        const normalizedContactEmail = contactEmail.trim() || undefined;
+        const normalizedContactPhone = contactPhone.trim() || (normalizedContactEmail ? undefined : "Nie podano");
+        const normalizedCustomLanguage =
+          selectedLanguage === "other" ? customLanguage.trim() || "Nieokreślony" : undefined;
+        const normalizedScheduledAt = toIsoFromDateTimeLocal(scheduledAt) || new Date().toISOString();
+        const normalizedTeamCount = Math.max(1, Math.round(teamCount) || 1);
+        const normalizedPeopleCount = Math.max(1, Math.round(peopleCount) || 1);
+        const normalizedDurationMinutes = Math.max(1, Math.round(durationMinutes) || 120);
 
         try {
+          let logoUrl: string | undefined;
+          let offerPdfUrl: string | undefined;
+          let nextOfferPdfName: string | undefined;
+
+          if (logoFile) {
+            const uploadedLogo = await uploadRealizationLogo(logoFile).unwrap();
+            logoUrl = uploadedLogo.url;
+          }
+
+          if (offerPdfFile) {
+            const uploadedOffer = await uploadRealizationOffer(offerPdfFile).unwrap();
+            offerPdfUrl = uploadedOffer.url;
+            nextOfferPdfName = offerPdfFile.name;
+          }
+
           await createRealization({
-            companyName: companyName.trim(),
+            companyName: normalizedCompanyName,
             location: location.trim() || undefined,
-            contactPerson: contactPerson.trim(),
-            contactPhone: contactPhone.trim() || undefined,
-            contactEmail: contactEmail.trim() || undefined,
+            language: selectedLanguage,
+            customLanguage: normalizedCustomLanguage,
+            contactPerson: normalizedContactPerson,
+            contactPhone: normalizedContactPhone,
+            contactEmail: normalizedContactEmail,
             instructors,
             type: selectedType,
             logoUrl,
             offerPdfUrl,
-            offerPdfName,
-            scenarioId: selectedScenarioId,
-            teamCount,
-            peopleCount,
-            positionsCount,
+            offerPdfName: nextOfferPdfName,
+            scenarioId: fallbackScenarioId,
+            teamCount: normalizedTeamCount,
+            peopleCount: normalizedPeopleCount,
+            positionsCount: positionsCountForSubmit,
+            durationMinutes: normalizedDurationMinutes,
             status,
-            scheduledAt: toIsoFromDateTimeLocal(scheduledAt),
-            scenarioStations: normalizeRealizationStationDrafts(scenarioStations),
+            scheduledAt: normalizedScheduledAt,
+            scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
             changedBy: userEmail,
           }).unwrap();
           setCompanyName("");
@@ -166,13 +249,16 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           setContactPerson("");
           setContactPhone("");
           setContactEmail("");
+          setSelectedLanguage("polish");
+          setCustomLanguage("");
           setInstructors([]);
           setInstructorInput("");
           setStatus("planned");
           setSelectedScenarioId("");
           setTeamCount(2);
-          setLogoUrl(undefined);
-          setOfferPdfUrl(undefined);
+          setDurationMinutes(120);
+          setLogoFile(null);
+          setOfferPdfFile(null);
           setOfferPdfName(undefined);
           setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
           setScenarioStations([]);
@@ -235,6 +321,39 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             </label>
 
             <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
+              <select
+                value={selectedLanguage}
+                onChange={(event) => {
+                  const nextLanguage = event.target.value as RealizationLanguage;
+                  setSelectedLanguage(nextLanguage);
+                  if (nextLanguage !== "other") {
+                    setCustomLanguage("");
+                  }
+                }}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              >
+                {realizationLanguageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedLanguage === "other" && (
+              <label className="space-y-1.5 md:col-span-2">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
+                <input
+                  value={customLanguage}
+                  onChange={(event) => setCustomLanguage(event.target.value)}
+                  placeholder="Np. Hiszpański"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+              </label>
+            )}
+
+            <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
               <input
                 value={location}
@@ -268,34 +387,28 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
 
           <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
-            {logoUrl && (
+            {logoPreviewUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
+              <img src={logoPreviewUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
             )}
             <input
               type="file"
               accept="image/*"
-              onChange={async (event) => {
+              onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) {
                   return;
                 }
 
-                try {
-                  const uploaded = await uploadRealizationLogo(file).unwrap();
-                  setLogoUrl(uploaded.url);
-                  setFormError(null);
-                } catch {
-                  setFormError("Nie udało się przesłać logo klienta.");
-                } finally {
-                  event.currentTarget.value = "";
-                }
+                setLogoFile(file);
+                setFormError(null);
+                event.currentTarget.value = "";
               }}
               className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
             />
             {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
-            {logoUrl && (
-              <button type="button" onClick={() => setLogoUrl(undefined)} className="text-xs text-red-400 hover:text-red-300">
+            {logoFile && (
+              <button type="button" onClick={() => setLogoFile(null)} className="text-xs text-red-400 hover:text-red-300">
                 Usuń logo
               </button>
             )}
@@ -309,12 +422,23 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
-              <input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(event) => setScheduledAt(event.target.value)}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
+              <div className="relative">
+                <input
+                  ref={scheduledAtInputRef}
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(event) => setScheduledAt(event.target.value)}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <button
+                  type="button"
+                  onClick={openScheduledAtPicker}
+                  aria-label="Otwórz kalendarz terminu realizacji"
+                  className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                >
+                  <CalendarInputIcon />
+                </button>
+              </div>
             </label>
 
             <label className="space-y-1.5">
@@ -353,15 +477,16 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             </label>
 
             <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Czas trwania (min)</span>
               <input
                 type="number"
                 min={1}
-                value={positionsCount}
-                onChange={(event) => setPositionsCount(Number(event.target.value))}
+                value={durationMinutes}
+                onChange={(event) => setDurationMinutes(Number(event.target.value))}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
+
           </div>
         </fieldset>
 
@@ -451,31 +576,25 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             <input
               type="file"
               accept="application/pdf"
-              onChange={async (event) => {
+              onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) {
                   return;
                 }
 
-                try {
-                  const uploaded = await uploadRealizationOffer(file).unwrap();
-                  setOfferPdfUrl(uploaded.url);
-                  setOfferPdfName(file.name);
-                  setFormError(null);
-                } catch {
-                  setFormError("Nie udało się przesłać oferty PDF.");
-                } finally {
-                  event.currentTarget.value = "";
-                }
+                setOfferPdfFile(file);
+                setOfferPdfName(file.name);
+                setFormError(null);
+                event.currentTarget.value = "";
               }}
               className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
             />
             {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
-            {offerPdfUrl && (
+            {offerPdfFile && (
               <button
                 type="button"
                 onClick={() => {
-                  setOfferPdfUrl(undefined);
+                  setOfferPdfFile(null);
                   setOfferPdfName(undefined);
                 }}
                 className="text-xs text-red-400 hover:text-red-300"
@@ -523,6 +642,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             <span className="text-zinc-500">Lokalizacja:</span> {location.trim() || "-"}
           </p>
           <p>
+            <span className="text-zinc-500">Język realizacji:</span>{" "}
+            {selectedLanguage === "other"
+              ? customLanguage.trim() || "Inne"
+              : getRealizationLanguageLabel(selectedLanguage)}
+          </p>
+          <p>
             <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
             {contactPhone.trim() || contactEmail.trim() ? `${contactPhone.trim() || "-"} / ${contactEmail.trim() || "-"}` : "-"}
           </p>
@@ -532,6 +657,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           </p>
           <p>
             <span className="text-zinc-500">Status:</span> {getStatusLabel(status)}
+          </p>
+          <p>
+            <span className="text-zinc-500">Czas trwania:</span> {Math.max(1, Math.round(durationMinutes) || 120)} min
           </p>
           <p>
             <span className="text-zinc-500">Drużyny:</span> {teamCount}

@@ -1,0 +1,2 @@
+ALTER TABLE "Realization"
+ADD COLUMN "durationMinutes" INTEGER NOT NULL DEFAULT 120;

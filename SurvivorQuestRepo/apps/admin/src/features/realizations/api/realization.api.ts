@@ -1,7 +1,14 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
 import type { Station, StationKind, StationType } from "@/features/games/types/station";
-import type { Realization, RealizationStatus, RealizationStationDraft, RealizationType } from "../types/realization";
+import { normalizeStationQuiz } from "@/features/games/station.utils";
+import type {
+  Realization,
+  RealizationLanguage,
+  RealizationStatus,
+  RealizationStationDraft,
+  RealizationType,
+} from "../types/realization";
 
 type StationDto = {
   id: string;
@@ -12,6 +19,13 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  quiz?:
+    | {
+        question?: string;
+        answers?: string[];
+        correctAnswerIndex?: number;
+      }
+    | null;
   latitude?: number | null;
   longitude?: number | null;
   sourceTemplateId?: string;
@@ -27,6 +41,8 @@ type RealizationDto = {
   id: string;
   companyName: string;
   location?: string;
+  language?: RealizationLanguage;
+  customLanguage?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -43,6 +59,7 @@ type RealizationDto = {
   requiredDevicesCount?: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes?: number;
   locationRequired?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -54,6 +71,8 @@ type RealizationDto = {
 type CreateRealizationPayload = {
   companyName: string;
   location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -66,6 +85,7 @@ type CreateRealizationPayload = {
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes: number;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -76,6 +96,8 @@ type UpdateRealizationPayload = {
   id: string;
   companyName: string;
   location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -88,6 +110,7 @@ type UpdateRealizationPayload = {
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes: number;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -183,6 +206,9 @@ function normalizeRealization(dto: RealizationDto): Realization {
     id: dto.id,
     companyName: dto.companyName,
     location: dto.location?.trim() || undefined,
+    language: dto.language ?? "polish",
+    customLanguage:
+      dto.language === "other" ? dto.customLanguage?.trim() || undefined : undefined,
     contactPerson: dto.contactPerson?.trim() || "",
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,
@@ -204,6 +230,12 @@ function normalizeRealization(dto: RealizationDto): Realization {
         : dto.teamCount + 2,
     peopleCount: dto.peopleCount,
     positionsCount: dto.positionsCount,
+    durationMinutes:
+      typeof dto.durationMinutes === "number" &&
+      Number.isFinite(dto.durationMinutes) &&
+      dto.durationMinutes >= 1
+        ? Math.round(dto.durationMinutes)
+        : 120,
     locationRequired: typeof dto.locationRequired === "boolean" ? dto.locationRequired : false,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
@@ -251,6 +283,14 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    quiz:
+      station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
+        ? normalizeStationQuiz({
+            question: station.quiz.question,
+            answers: station.quiz.answers,
+            correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
+          }) ?? undefined
+        : undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
     longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
     sourceTemplateId: station.sourceTemplateId,
@@ -277,7 +317,7 @@ export const realizationApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: (response: RealizationDto) => normalizeRealization(response),
-      invalidatesTags: ["Realization"],
+      invalidatesTags: ["Realization", "Scenario"],
     }),
     updateRealization: build.mutation<Realization, UpdateRealizationPayload>({
       query: (body) => ({
@@ -286,7 +326,7 @@ export const realizationApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: (response: RealizationDto) => normalizeRealization(response),
-      invalidatesTags: ["Realization"],
+      invalidatesTags: ["Realization", "Scenario"],
     }),
     uploadRealizationLogo: build.mutation<UploadRealizationAssetResponse, File>({
       query: (file) => {

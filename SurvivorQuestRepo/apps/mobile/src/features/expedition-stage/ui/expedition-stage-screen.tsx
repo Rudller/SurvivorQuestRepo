@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import type { OnboardingSession } from "../../onboarding/model/types";
@@ -10,6 +10,7 @@ import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
 import { QrScannerOverlay } from "../components/qr-scanner-overlay";
 import {
+  QuizPrestartOverlay,
   StationPreviewOverlay,
   StationTestMenuOverlay,
   type StationTestType,
@@ -22,7 +23,6 @@ import { DEFAULT_STATION_PIN_CUSTOMIZATION, resolveDefaultStationPoints, type Ma
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
-  onRestart?: () => void;
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
@@ -35,10 +35,6 @@ type TransientPopup = {
 const POPUP_MIN_DURATION_MS = 6_500;
 const POPUP_MAX_DURATION_MS = 12_000;
 const POPUP_MS_PER_CHAR = 45;
-const EMULATOR_TEST_LOCATION = {
-  latitude: 52.43,
-  longitude: 20.716,
-} as const;
 
 const MOBILE_TEST_STATION_DEFINITIONS: Array<{
   stationId: string;
@@ -47,6 +43,9 @@ const MOBILE_TEST_STATION_DEFINITIONS: Array<{
   description: string;
   points: number;
   timeLimitSeconds: number;
+  quizQuestion?: string;
+  quizAnswers?: [string, string, string, string];
+  quizCorrectAnswerIndex?: number;
 }> = [
   {
     stationId: "mobile-test-quiz",
@@ -55,6 +54,14 @@ const MOBILE_TEST_STATION_DEFINITIONS: Array<{
     description: "Przykładowe stanowisko quizowe do testu UI wyboru jednej z 4 odpowiedzi.",
     points: 100,
     timeLimitSeconds: 300,
+    quizQuestion: "Jak powinna działać drużyna na stanowisku testowym?",
+    quizAnswers: [
+      "Sprawdzam komunikację i plan zespołu.",
+      "Działam bez konsultacji z drużyną.",
+      "Ignoruję zasady bezpieczeństwa.",
+      "Rozdzielam zespół i tracę kontakt.",
+    ],
+    quizCorrectAnswerIndex: 0,
   },
   {
     stationId: "mobile-test-time",
@@ -162,26 +169,6 @@ function formatTimeLimitLabel(timeLimitSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function resolveGpsStatusLabel(permissionState: "pending" | "granted" | "denied" | "error") {
-  if (permissionState === "granted") {
-    return "GPS aktywny";
-  }
-  if (permissionState === "denied") {
-    return "Brak zgody GPS";
-  }
-  if (permissionState === "error") {
-    return "Błąd GPS";
-  }
-  return "Uruchamianie GPS";
-}
-
-function formatLocationCoordinate(value: number | undefined) {
-  if (!Number.isFinite(value)) {
-    return "--";
-  }
-  return (value as number).toFixed(6);
-}
-
 function extractStationQrToken(rawValue: string) {
   const normalized = rawValue.trim();
   if (!normalized) {
@@ -200,7 +187,7 @@ function extractStationQrToken(rawValue: string) {
   return normalized;
 }
 
-export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScreenProps) {
+export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const {
     sessionState,
@@ -214,15 +201,15 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [focusedStationId, setFocusedStationId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isCameraActivating, setIsCameraActivating] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isQrResolving, setIsQrResolving] = useState(false);
-  const [isGpsRefreshing, setIsGpsRefreshing] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
+  const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
+  const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
@@ -256,7 +243,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     }, popupDurationMs);
   }, []);
 
-  const { playerLocation, permissionState, locationError, requestCurrentLocation } = usePlayerLocation(
+  const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation(
     sessionState.team.lastLocation ? toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude) : null,
   );
   const mapPlayerLocation = useMemo(() => {
@@ -357,14 +344,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
     setSelectedStationId(stationIds[0] ?? null);
   }, [selectedStationId, stationIds]);
-
-  useEffect(() => {
-    if (focusedStationId && stationIds.includes(focusedStationId)) {
-      return;
-    }
-
-    setFocusedStationId(null);
-  }, [focusedStationId, stationIds]);
 
   const fallbackStationIds = useMemo(
     () => stationIds.filter((stationId) => !realStationCoordinates[stationId]),
@@ -490,8 +469,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
   const selectedStationLabel = selectedStationId
     ? stationPins.find((pin) => pin.stationId === selectedStationId)?.label ?? `Stanowisko ${selectedStationId}`
     : null;
-  const focusedStationCoordinate =
-    focusedStationId && stationCoordinates[focusedStationId] ? stationCoordinates[focusedStationId] : null;
 
   const completedTasks = sessionState.tasks.filter((task) => task.status === "done").length;
   const taskTotal = sessionState.tasks.length;
@@ -527,15 +504,16 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                 stationType: normalizeStationType(stationType),
                 name: stationName,
                 typeLabel: resolveStationTypeLabel(stationType),
-                description:
-                  stationCatalog.description?.trim() ||
-                  "Docelowo szczegóły stanowiska będą odczytywane po skanie kodu QR.",
+                description: stationCatalog.description?.trim() || "",
                 imageUrl:
                   stationCatalog.imageUrl?.trim() ||
                   `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: stationCatalog.points ?? resolveDefaultStationPoints(stationCatalog.id),
                 timeLimitSeconds: stationCatalog.timeLimitSeconds ?? 0,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
+                quizQuestion: stationCatalog.quiz?.question,
+                quizAnswers: stationCatalog.quiz?.answers,
+                quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 status: task?.status ?? "todo",
                 startedAt: task?.startedAt ?? null,
               } satisfies StationTestViewModel;
@@ -551,11 +529,14 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                 stationType: normalizeStationType(stationType),
                 name: stationName,
                 typeLabel: resolveStationTypeLabel(stationType),
-                description: "Docelowo szczegóły stanowiska będą odczytywane po skanie kodu QR.",
+                description: "",
                 imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: resolveDefaultStationPoints(stationId),
                 timeLimitSeconds: 0,
                 timeLimitLabel: "Brak limitu czasu",
+                quizQuestion: undefined,
+                quizAnswers: undefined,
+                quizCorrectAnswerIndex: undefined,
                 status: task.status,
                 startedAt: task.startedAt,
               } satisfies StationTestViewModel;
@@ -574,6 +555,9 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             points: definition.points,
             timeLimitSeconds: definition.timeLimitSeconds,
             timeLimitLabel: formatTimeLimitLabel(definition.timeLimitSeconds),
+            quizQuestion: definition.quizQuestion,
+            quizAnswers: definition.quizAnswers,
+            quizCorrectAnswerIndex: definition.quizCorrectAnswerIndex,
             status: "todo",
             startedAt: null,
           }) satisfies StationTestViewModel,
@@ -588,6 +572,10 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     () => stationTestEntries.find((item) => item.stationId === activeStationTestId) ?? null,
     [activeStationTestId, stationTestEntries],
   );
+  const pendingQuizStartStation = useMemo(
+    () => stationTestEntries.find((item) => item.stationId === pendingQuizStartStationId) ?? null,
+    [pendingQuizStartStationId, stationTestEntries],
+  );
 
   useEffect(() => {
     if (!activeStationTestId) {
@@ -601,12 +589,33 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     setActiveStationTestId(null);
   }, [activeStationTestId, stationTestEntries]);
 
+  useEffect(() => {
+    if (!pendingQuizStartStationId) {
+      return;
+    }
+
+    if (stationTestEntries.some((item) => item.stationId === pendingQuizStartStationId)) {
+      return;
+    }
+
+    setPendingQuizStartStationId(null);
+  }, [pendingQuizStartStationId, stationTestEntries]);
+
+  useEffect(() => {
+    if (!pendingQuizStartStationId) {
+      setIsStartingPendingQuiz(false);
+    }
+  }, [pendingQuizStartStationId]);
+
   const teamColor = TEAM_COLORS.find((color) => color.key === sessionState.team.color) ?? null;
   const teamColorHex = teamColor?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
   const teamName = sessionState.team.name?.trim() || session.team.name || "Drużyna";
   const teamIcon = session.team.icon.trim().length > 0 ? session.team.icon : "🏁";
-  const countdown = useRealizationCountdown(sessionState.realization.scheduledAt);
+  const countdown = useRealizationCountdown(
+    sessionState.realization.scheduledAt,
+    sessionState.realization.durationMinutes,
+  );
 
   async function handleCameraActivation() {
     setActionError(null);
@@ -657,8 +666,13 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
 
         const scannedStationId = result.station.id;
         setSelectedStationId(scannedStationId);
-        setFocusedStationId(scannedStationId);
-        setActiveStationTestId(scannedStationId);
+        if (result.station.type === "quiz") {
+          setPendingQuizStartStationId(scannedStationId);
+          setActiveStationTestId(null);
+        } else {
+          setPendingQuizStartStationId(null);
+          setActiveStationTestId(scannedStationId);
+        }
         setIsQrScannerOpen(false);
         setActionMessage(`Zeskanowano stanowisko: ${result.station.name}`);
       } catch (error) {
@@ -670,68 +684,22 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
     [isQrResolving, resolveStationQrToken],
   );
 
-  async function handleGpsRefresh() {
-    setActionError(null);
-    setActionMessage(null);
-    setIsGpsRefreshing(true);
-
-    try {
-      const nextLocation = await requestCurrentLocation();
-      const syncError = await syncTeamLocation(nextLocation);
-
-      if (syncError) {
-        setActionError(syncError);
-        return;
-      }
-
-      setActionMessage(
-        `GPS odświeżony: ${formatLocationCoordinate(nextLocation.latitude)}, ${formatLocationCoordinate(nextLocation.longitude)}`,
-      );
-    } catch (error) {
-      if (mapPlayerLocation) {
-        setActionMessage(
-          `Brak świeżego fixa GPS. Używam ostatniej znanej pozycji: ${formatLocationCoordinate(mapPlayerLocation.latitude)}, ${formatLocationCoordinate(mapPlayerLocation.longitude)}`,
-        );
-        return;
-      }
-      setActionError(getApiErrorMessage(error, "Nie udało się odświeżyć GPS. Sprawdź logi ADB i ustawienia lokalizacji emulatora."));
-    } finally {
-      setIsGpsRefreshing(false);
-    }
-  }
-
-  async function handleUseEmulatorTestLocation() {
-    setActionError(null);
-    setActionMessage(null);
-
-    const testLocation = {
-      latitude: EMULATOR_TEST_LOCATION.latitude,
-      longitude: EMULATOR_TEST_LOCATION.longitude,
-      at: new Date().toISOString(),
-    };
-    const syncError = await syncTeamLocation(testLocation);
-
-    if (syncError) {
-      setActionError(syncError);
-      return;
-    }
-
-    setActionMessage(
-      `Ustawiono punkt testowy emulatora: ${formatLocationCoordinate(testLocation.latitude)}, ${formatLocationCoordinate(testLocation.longitude)}`,
-    );
-  }
-
   function handleSelectStationFromMap(stationId: string) {
     setSelectedStationId(stationId);
-    setFocusedStationId(stationId);
   }
 
   function handleEnterStationTest(stationId: string) {
+    const selectedStation = stationTestEntries.find((item) => item.stationId === stationId) ?? null;
     if (stationIds.includes(stationId)) {
       setSelectedStationId(stationId);
-      setFocusedStationId(stationId);
     }
-    setActiveStationTestId(stationId);
+    if (selectedStation?.stationType === "quiz") {
+      setPendingQuizStartStationId(stationId);
+      setActiveStationTestId(null);
+    } else {
+      setPendingQuizStartStationId(null);
+      setActiveStationTestId(stationId);
+    }
     setIsStationTestMenuOpen(false);
   }
 
@@ -785,7 +753,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             playerLocation={mapPlayerLocation}
             pins={stationPins}
             selectedStationId={selectedStationId}
-            focusCoordinate={focusedStationCoordinate}
+            focusCoordinate={null}
             onSelectStation={handleSelectStationFromMap}
           />
         )}
@@ -794,12 +762,7 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <TopRealizationPanel
           companyName={sessionState.realization.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`}
-          scheduledAt={sessionState.realization.scheduledAt}
           logoUrl={sessionState.realization.logoUrl}
-          clientType={sessionState.realization.type}
-          teamCount={sessionState.realization.teamCount ?? session.realization?.teamCount}
-          peopleCount={sessionState.realization.peopleCount}
-          locationRequired={sessionState.realization.locationRequired}
           teamName={teamName}
           teamSlot={sessionState.team.slotNumber ?? session.team.slotNumber}
           teamColorHex={teamColorHex}
@@ -827,7 +790,14 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
                         backgroundColor: item.done ? "rgba(52, 211, 153, 0.2)" : "rgba(15, 23, 42, 0.2)",
                       }}
                     >
-                      {item.done ? <Text className="text-[10px] font-bold text-emerald-300">✓</Text> : null}
+                      {item.done ? (
+                        <Text
+                          className="text-[10px] font-bold text-emerald-300"
+                          style={{ lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                        >
+                          ✓
+                        </Text>
+                      ) : null}
                     </View>
                     <Text className="flex-1 text-xs" style={{ color: EXPEDITION_THEME.textPrimary }} numberOfLines={1}>
                       {item.label}
@@ -848,54 +818,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
             </Text>
           </Pressable>
 
-          <View
-            className="mt-2 w-56 rounded-2xl border px-3 py-2"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
-          >
-            <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-              GPS debug
-            </Text>
-            <Text className="mt-1 text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {resolveGpsStatusLabel(permissionState)}
-            </Text>
-            <Text className="mt-1 text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
-              lat: {formatLocationCoordinate(mapPlayerLocation?.latitude)}
-            </Text>
-            <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
-              lng: {formatLocationCoordinate(mapPlayerLocation?.longitude)}
-            </Text>
-            <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
-              źródło: {playerLocation && mapPlayerLocation?.at === playerLocation.at ? "device" : "server/fallback"}
-            </Text>
-            <Pressable
-              className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
-              style={{
-                borderColor: EXPEDITION_THEME.border,
-                backgroundColor: "rgba(15, 23, 42, 0.32)",
-                opacity: isGpsRefreshing ? 0.7 : 1,
-              }}
-              onPress={() => void handleGpsRefresh()}
-              disabled={isGpsRefreshing}
-            >
-              <Text className="text-[11px] font-semibold text-center" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {isGpsRefreshing ? "Odświeżanie..." : "Odśwież GPS"}
-              </Text>
-            </Pressable>
-            {Platform.OS === "android" ? (
-              <Pressable
-                className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
-                style={{
-                  borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: "rgba(15, 23, 42, 0.32)",
-                }}
-                onPress={() => void handleUseEmulatorTestLocation()}
-              >
-                <Text className="text-[11px] font-semibold text-center" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Ustaw punkt testowy (NDM)
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
         </View>
       </View>
 
@@ -955,6 +877,34 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         onCompleteTask={handleCompleteStationTestTask}
       />
 
+      <QuizPrestartOverlay
+        visible={Boolean(pendingQuizStartStation)}
+        stationName={pendingQuizStartStation?.name ?? null}
+        isStarting={isStartingPendingQuiz}
+        onClose={() => {
+          setPendingQuizStartStationId(null);
+          setIsStartingPendingQuiz(false);
+        }}
+        onStart={async () => {
+          if (!pendingQuizStartStationId) {
+            return;
+          }
+          setIsStartingPendingQuiz(true);
+          setActionError(null);
+          setActionMessage(null);
+
+          const startError = await handleStartStationTestTask(pendingQuizStartStationId);
+          if (startError) {
+            setIsStartingPendingQuiz(false);
+            return;
+          }
+
+          setActiveStationTestId(pendingQuizStartStationId);
+          setPendingQuizStartStationId(null);
+          setIsStartingPendingQuiz(false);
+        }}
+      />
+
       <QrScannerOverlay
         visible={isQrScannerOpen}
         isResolving={isQrResolving}
@@ -965,21 +915,6 @@ export function ExpeditionStageScreen({ session, onRestart }: ExpeditionStageScr
         }}
       />
 
-      {onRestart ? (
-        <Pressable
-          className="absolute right-3 rounded-full border px-3 py-2 active:opacity-90"
-          style={{
-            top: insets.top + 12,
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: "rgba(22, 41, 33, 0.88)",
-          }}
-          onPress={onRestart}
-        >
-          <Text className="text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-            ↺
-          </Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }

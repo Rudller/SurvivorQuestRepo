@@ -31,8 +31,8 @@ export function buildStationPinCoordinates(stationIds: string[], anchor: MapCoor
   return stationIds.reduce<Record<string, MapCoordinate>>((accumulator, stationId, index) => {
     const seed = hashString(stationId);
     const angle = (((seed % 360) + index * 37) * Math.PI) / 180;
-    const ringStep = 120 + (index % 4) * 85;
-    const noise = seed % 45;
+    const ringStep = 45 + (index % 4) * 30;
+    const noise = seed % 18;
     const distance = ringStep + noise;
 
     accumulator[stationId] = offsetCoordinate(anchor, angle, distance);

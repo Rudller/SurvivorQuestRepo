@@ -15,6 +15,10 @@ import {
   isCompletionCodeRequired,
   isValidCompletionCode,
   normalizeCompletionCode,
+  generateSampleCompletionCode,
+  createEmptyQuizAnswers,
+  normalizeStationQuiz,
+  QUIZ_ANSWER_COUNT,
 } from "../station.utils";
 
 interface EditStationModalProps {
@@ -53,6 +57,9 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    quizQuestion: station.quiz?.question ?? "",
+    quizAnswers: station.quiz?.answers?.length === QUIZ_ANSWER_COUNT ? station.quiz.answers : createEmptyQuizAnswers(),
+    quizCorrectAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
@@ -105,6 +112,20 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 return;
               }
 
+              const quizConfig =
+                editValues.type === "quiz"
+                  ? normalizeStationQuiz({
+                      question: editValues.quizQuestion,
+                      answers: editValues.quizAnswers,
+                      correctAnswerIndex: editValues.quizCorrectAnswerIndex,
+                    })
+                  : null;
+
+              if (editValues.type === "quiz" && !quizConfig) {
+                setEditFormError("Dla stanowiska Quiz uzupełnij pytanie, 4 odpowiedzi i wskaż jedną poprawną.");
+                return;
+              }
+
               const nextLatitude =
                 typeof editValues.latitude === "number" && Number.isFinite(editValues.latitude)
                   ? editValues.latitude
@@ -141,6 +162,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   completionCode: isCompletionCodeRequired(editValues.type)
                     ? normalizeCompletionCode(editValues.completionCode)
                     : undefined,
+                  quiz: editValues.type === "quiz" ? quizConfig ?? undefined : undefined,
                   latitude: nextLatitude,
                   longitude: nextLongitude,
                 }).unwrap();
@@ -188,16 +210,73 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             {isCompletionCodeRequired(editValues.type) ? (
               <label className="space-y-1.5">
                 <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
-                <input
-                  value={editValues.completionCode}
-                  onChange={(event) =>
-                    setEditValues((prev) => ({ ...prev, completionCode: event.target.value.toUpperCase() }))
-                  }
-                  placeholder="Np. POINTS-2048"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={editValues.completionCode}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({ ...prev, completionCode: event.target.value.toUpperCase() }))
+                    }
+                    placeholder="Np. POINTS-2048"
+                    className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditValues((prev) => ({ ...prev, completionCode: generateSampleCompletionCode() }))
+                    }
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Wygeneruj
+                  </button>
+                </div>
                 <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
               </label>
+            ) : null}
+
+            {editValues.type === "quiz" ? (
+              <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Pytanie i odpowiedzi</h3>
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
+                  <textarea
+                    value={editValues.quizQuestion}
+                    onChange={(event) => setEditValues((prev) => ({ ...prev, quizQuestion: event.target.value }))}
+                    rows={2}
+                    placeholder="Wpisz pytanie quizowe"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  {editValues.quizAnswers.map((answer, index) => (
+                    <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                      <input
+                        type="radio"
+                        name={`quiz-correct-answer-${station.id}`}
+                        checked={editValues.quizCorrectAnswerIndex === index}
+                        onChange={() => setEditValues((prev) => ({ ...prev, quizCorrectAnswerIndex: index }))}
+                        className="h-4 w-4 accent-amber-400"
+                      />
+                      <input
+                        value={answer}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                              answerIndex === index ? event.target.value : item,
+                            ),
+                          }))
+                        }
+                        placeholder={`Odpowiedź ${index + 1}`}
+                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
+                </p>
+              </div>
             ) : null}
 
             <label className="space-y-1.5">

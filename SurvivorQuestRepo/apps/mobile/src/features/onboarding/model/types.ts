@@ -1,4 +1,4 @@
-export type Screen = "code" | "team" | "customize";
+export type Screen = "api" | "code" | "team";
 
 export type TeamColor =
   | "red"
@@ -37,6 +37,7 @@ export type OnboardingRealizationSummary = {
   companyName: string;
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
+  durationMinutes: number;
   joinCode: string;
   teamCount: number;
   stationIds: string[];

@@ -4,7 +4,7 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
 
-const OSM_ATTRIBUTION_LABEL = "Map data © OpenStreetMap contributors";
+const OSM_ATTRIBUTION_LABEL = "© OpenStreetMap contributors";
 const DEFAULT_ZOOM = 14;
 
 type ExpeditionMapProps = {
@@ -75,7 +75,8 @@ function buildLeafletHtml(initialPayloadJson: string) {
 
         function buildPinHtml(color, isSelected, isDone) {
           const strokeColor = isSelected ? "#f0c977" : isDone ? "#34d399" : "#0f172a";
-          return '<div class="station-pin"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="46" viewBox="0 0 32 46"><path d="M16 2C8.3 2 2 8.2 2 16c0 11.4 12.1 26.1 12.6 26.8.4.5 1.2.5 1.6 0C17.9 42.1 30 27.4 30 16 30 8.2 23.7 2 16 2z" fill="' + color + '" stroke="' + strokeColor + '" stroke-width="2"/><circle cx="16" cy="16" r="5.3" fill="#ffffff"/></svg></div>';
+          const pinOpacity = isDone ? "0.55" : "1";
+          return '<div class="station-pin" style="opacity:' + pinOpacity + ';"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="46" viewBox="0 0 32 46"><path d="M16 2C8.3 2 2 8.2 2 16c0 11.4 12.1 26.1 12.6 26.8.4.5 1.2.5 1.6 0C17.9 42.1 30 27.4 30 16 30 8.2 23.7 2 16 2z" fill="' + color + '" stroke="' + strokeColor + '" stroke-width="2"/><circle cx="16" cy="16" r="5.3" fill="#ffffff"/></svg></div>';
         }
 
         function buildPlayerPinHtml() {
@@ -151,13 +152,6 @@ function buildLeafletHtml(initialPayloadJson: string) {
             marker.on("click", function () {
               post({ type: "selectStation", stationId: pin.stationId });
             });
-            marker.bindPopup(
-              '<div style="min-width:220px;"><strong style="font-size:14px;">' +
-                (pin.label || "Stanowisko") +
-                "</strong><div style='margin-top:4px;font-size:12px;'>Status: " +
-                (pin.status === "done" ? "Ukończone" : pin.status === "in-progress" ? "W trakcie" : "Do zrobienia") +
-                "</div></div>",
-            );
             stationLayer.addLayer(marker);
           });
 
@@ -303,15 +297,18 @@ export function ExpeditionMap({
         pointerEvents="none"
         style={{
           position: "absolute",
-          right: 10,
-          bottom: 10,
-          borderRadius: 10,
-          backgroundColor: "rgba(17, 24, 39, 0.82)",
-          paddingHorizontal: 10,
-          paddingVertical: 6,
+          right: 8,
+          bottom: 8,
+          maxWidth: 112,
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: "rgba(244, 244, 245, 0.2)",
+          backgroundColor: "rgba(17, 24, 39, 0.36)",
+          paddingHorizontal: 6,
+          paddingVertical: 3,
         }}
       >
-        <Text style={{ fontSize: 11, color: "#f4f4f5" }}>{OSM_ATTRIBUTION_LABEL}</Text>
+        <Text style={{ fontSize: 9, lineHeight: 11, color: "rgba(244, 244, 245, 0.74)" }}>{OSM_ATTRIBUTION_LABEL}</Text>
       </View>
     </View>
   );

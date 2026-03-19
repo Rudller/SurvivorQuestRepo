@@ -39,6 +39,14 @@ enum RealizationType {
   RECREATION
 }
 
+enum RealizationLanguage {
+  POLISH
+  ENGLISH
+  UKRAINIAN
+  RUSSIAN
+  OTHER
+}
+
 enum TeamStatus {
   UNASSIGNED
   ACTIVE
@@ -95,6 +103,7 @@ model Station {
   points           Int
   timeLimitSeconds Int                @default(0)
   completionCode   String?
+  quizData         Json?
   latitude         Float?
   longitude        Float?
   sourceTemplateId String?
@@ -141,6 +150,8 @@ model Realization {
   id                  String             @id @default(uuid())
   companyName         String
   location            String?
+  language            RealizationLanguage @default(POLISH)
+  customLanguage      String?
   contactPerson       String
   contactPhone        String?
   contactEmail        String?
@@ -154,6 +165,7 @@ model Realization {
   requiredDevicesCount Int
   peopleCount         Int
   positionsCount      Int
+  durationMinutes     Int                @default(120)
   status              RealizationStatus
   scheduledAt         DateTime
   locationRequired    Boolean            @default(true)

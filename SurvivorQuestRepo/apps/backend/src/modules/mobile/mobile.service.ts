@@ -95,6 +95,8 @@ const MIN_STATION_QR_TTL_SECONDS = 5 * 60;
 const MAX_STATION_QR_TTL_SECONDS = 24 * 60 * 60;
 const STATIC_STATION_QR_VALIDITY_YEARS = 20;
 const STATIC_STATION_QR_NONCE_LENGTH = 24;
+const MINUTES_TO_MS = 60_000;
+const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
 type StationQrRejectReason = Exclude<
   VerifyStationQrTokenResult,
   { ok: true }
@@ -121,8 +123,10 @@ export class MobileService {
         status: this.normalizeStatus(
           realization.status,
           realization.scheduledAt,
+          realization.durationMinutes,
         ),
         scheduledAt: realization.scheduledAt,
+        durationMinutes: realization.durationMinutes,
         joinCode: realization.joinCode,
         locationRequired: realization.locationRequired,
         teamCount: realization.teamCount,
@@ -150,7 +154,10 @@ export class MobileService {
     }
 
     const realizations = await this.getRealizationsView();
-    const realization = this.findRealizationByJoinCode(realizations, joinCode);
+    const realization =
+      joinCode.toUpperCase() === TEST_JOIN_CODE
+        ? this.resolveCurrentMobileRealization(realizations)
+        : this.findRealizationByJoinCode(realizations, joinCode);
 
     if (!realization) {
       throw new NotFoundException('Invalid join code');
@@ -310,9 +317,11 @@ export class MobileService {
         status: this.normalizeStatus(
           realization.status,
           realization.scheduledAt,
+          realization.durationMinutes,
         ),
         locationRequired: realization.locationRequired,
         scheduledAt: realization.scheduledAt,
+        durationMinutes: realization.durationMinutes,
         stations: realization.scenarioStations.map((station) => ({
           id: station.id,
           name: station.name,
@@ -321,6 +330,14 @@ export class MobileService {
           imageUrl: station.imageUrl,
           points: station.points,
           timeLimitSeconds: station.timeLimitSeconds,
+          quiz:
+            station.quiz && Array.isArray(station.quiz.answers)
+              ? {
+                  question: station.quiz.question,
+                  answers: station.quiz.answers,
+                  correctAnswerIndex: station.quiz.correctAnswerIndex,
+                }
+              : undefined,
           latitude: station.latitude,
           longitude: station.longitude,
         })),
@@ -1052,6 +1069,14 @@ export class MobileService {
         imageUrl: station.imageUrl,
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
+        quiz:
+          station.quiz && Array.isArray(station.quiz.answers)
+            ? {
+                question: station.quiz.question,
+                answers: station.quiz.answers,
+                correctAnswerIndex: station.quiz.correctAnswerIndex,
+              }
+            : undefined,
         latitude: station.latitude,
         longitude: station.longitude,
       },
@@ -1148,6 +1173,7 @@ export class MobileService {
         companyName: realization.companyName,
         status: realization.status,
         scheduledAt: realization.scheduledAt,
+        durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
@@ -1214,6 +1240,7 @@ export class MobileService {
         companyName: realization.companyName,
         status: realization.status,
         scheduledAt: realization.scheduledAt,
+        durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
         joinCode: realization.joinCode,
         updatedAt: realization.updatedAt,
@@ -1268,20 +1295,21 @@ export class MobileService {
       },
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
-    const primary = this.resolveCurrentMobileRealization(items);
 
     return items.map((item) => ({
       ...item,
       id: item.id,
       companyName: item.companyName,
-      status: this.normalizeStatus(item.status, item.scheduledAt),
+      status: this.normalizeStatus(
+        item.status,
+        item.scheduledAt,
+        item.durationMinutes,
+      ),
       scheduledAt: item.scheduledAt,
+      durationMinutes: item.durationMinutes,
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
-      joinCode:
-        primary?.id === item.id
-          ? TEST_JOIN_CODE
-          : item.joinCode || TEST_JOIN_CODE,
+      joinCode: item.joinCode || TEST_JOIN_CODE,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
       createdAt: item.createdAt,
@@ -1627,10 +1655,17 @@ export class MobileService {
     });
   }
 
-  private normalizeStatus(status: RealizationStatus, scheduledAt: string) {
+  private normalizeStatus(
+    status: RealizationStatus,
+    scheduledAt: string,
+    durationMinutes: number,
+  ) {
     const timestamp = new Date(scheduledAt).getTime();
+    const safeDurationMinutes = Math.max(1, Math.round(durationMinutes));
+    const autoDoneTimestamp =
+      timestamp + safeDurationMinutes * MINUTES_TO_MS + AUTO_DONE_GRACE_MS;
 
-    if (Number.isFinite(timestamp) && timestamp < Date.now()) {
+    if (Number.isFinite(timestamp) && autoDoneTimestamp < Date.now()) {
       return 'done' as const;
     }
 

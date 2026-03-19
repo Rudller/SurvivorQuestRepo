@@ -1,0 +1,2 @@
+ALTER TABLE "Station"
+ADD COLUMN "quizData" JSONB;

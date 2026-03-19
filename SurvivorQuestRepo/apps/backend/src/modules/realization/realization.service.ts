@@ -18,6 +18,7 @@ import {
   calculateRequiredDevices,
   mapRealizationLogs,
   resolveRealizationStatus,
+  toPrismaRealizationLanguage,
   toPrismaRealizationStatus,
   toPrismaRealizationType,
 } from './mappers/realization.mapper';
@@ -29,11 +30,13 @@ import {
   StationService,
   type StationDraftInput,
   type StationEntity,
+  type StationQuiz,
   type StationType,
 } from '../station/station.service';
 
 export type {
   RealizationEntity,
+  RealizationLanguage,
   RealizationStatus,
   RealizationType,
 } from './entities/realization.entity';
@@ -41,6 +44,7 @@ export type {
 const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const JOIN_CODE_LENGTH = 6;
 const STORED_JOIN_CODE_VERSION_PREFIX = 'v2';
+const QUIZ_ANSWER_COUNT = 4;
 
 @Injectable()
 export class RealizationService {
@@ -86,6 +90,8 @@ export class RealizationService {
         id: realizationId,
         companyName: validated.companyName,
         location: validated.location,
+        language: toPrismaRealizationLanguage(validated.language),
+        customLanguage: validated.customLanguage,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -98,9 +104,14 @@ export class RealizationService {
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
-        positionsCount: validated.positionsCount,
+        positionsCount: finalStations.length,
+        durationMinutes: validated.durationMinutes,
         status: toPrismaRealizationStatus(
-          resolveRealizationStatus(validated.status, validated.scheduledAt),
+          resolveRealizationStatus(
+            validated.status,
+            validated.scheduledAt,
+            validated.durationMinutes,
+          ),
         ),
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
@@ -163,6 +174,8 @@ export class RealizationService {
       data: {
         companyName: validated.companyName,
         location: validated.location,
+        language: toPrismaRealizationLanguage(validated.language),
+        customLanguage: validated.customLanguage,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -175,9 +188,14 @@ export class RealizationService {
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
-        positionsCount: validated.positionsCount,
+        positionsCount: finalStations.length,
+        durationMinutes: validated.durationMinutes,
         status: toPrismaRealizationStatus(
-          resolveRealizationStatus(validated.status, validated.scheduledAt),
+          resolveRealizationStatus(
+            validated.status,
+            validated.scheduledAt,
+            validated.durationMinutes,
+          ),
         ),
         scheduledAt: new Date(validated.scheduledAt),
       },
@@ -226,6 +244,10 @@ export class RealizationService {
         typeof draft.completionCode === 'string'
           ? draft.completionCode.trim().toUpperCase()
           : '';
+      const normalizedQuiz = this.normalizeStationQuizDraft(
+        draft.quiz,
+        draft.type,
+      );
 
       if (
         !draft.name?.trim() ||
@@ -234,6 +256,7 @@ export class RealizationService {
         typeof draft.points !== 'number' ||
         draft.points <= 0 ||
         !parsedTimeLimit.ok ||
+        (draft.type === 'quiz' && !normalizedQuiz) ||
         (requiresCompletionCode &&
           !/^[A-Z0-9-]{3,32}$/.test(normalizedCompletionCode)) ||
         (hasCoordinates &&
@@ -252,6 +275,7 @@ export class RealizationService {
         completionCode: requiresCompletionCode
           ? normalizedCompletionCode
           : undefined,
+        quiz: normalizedQuiz,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,
@@ -466,5 +490,41 @@ export class RealizationService {
       longitude >= -180 &&
       longitude <= 180
     );
+  }
+
+  private normalizeStationQuizDraft(
+    quiz: StationQuiz | undefined,
+    stationType: StationType | undefined,
+  ): StationQuiz | undefined {
+    if (stationType !== 'quiz') {
+      return undefined;
+    }
+
+    if (!quiz) {
+      return undefined;
+    }
+
+    const question = quiz.question?.trim();
+    const answers = quiz.answers?.map((answer) => answer.trim());
+    const correctAnswerIndex = Math.round(quiz.correctAnswerIndex);
+
+    if (
+      typeof question !== 'string' ||
+      !question ||
+      !Array.isArray(answers) ||
+      answers.length !== QUIZ_ANSWER_COUNT ||
+      answers.some((answer) => !answer) ||
+      !Number.isInteger(correctAnswerIndex) ||
+      correctAnswerIndex < 0 ||
+      correctAnswerIndex >= QUIZ_ANSWER_COUNT
+    ) {
+      return undefined;
+    }
+
+    return {
+      question,
+      answers: [answers[0], answers[1], answers[2], answers[3]],
+      correctAnswerIndex,
+    };
   }
 }

@@ -1,5 +1,5 @@
 import type { ClipboardEvent } from "react";
-import type { StationType } from "./types/station";
+import type { StationQuiz, StationType } from "./types/station";
 import { stationTypeOptions } from "./types/station";
 
 export type ImageInputMode = "upload" | "paste" | "url";
@@ -7,6 +7,8 @@ export type StationSortField = "name" | "type";
 export type SortDirection = "asc" | "desc";
 export type UploadImageFileFn = (file: File) => Promise<string>;
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+const COMPLETION_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+export const QUIZ_ANSWER_COUNT = 4;
 
 export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
   { value: "upload", label: "Upload" },
@@ -55,12 +57,64 @@ export function isCompletionCodeRequired(stationType: StationType) {
   return stationType === "time" || stationType === "points";
 }
 
+export function createEmptyQuizAnswers() {
+  return Array.from({ length: QUIZ_ANSWER_COUNT }, () => "");
+}
+
+export type StationQuizInput = {
+  question: string;
+  answers: string[];
+  correctAnswerIndex: number;
+};
+
+export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | null {
+  const question = input.question.trim();
+  const answers = input.answers.map((answer) => answer.trim());
+  const correctAnswerIndex = Math.round(input.correctAnswerIndex);
+
+  if (!question) {
+    return null;
+  }
+
+  if (answers.length !== QUIZ_ANSWER_COUNT || answers.some((answer) => !answer)) {
+    return null;
+  }
+
+  if (!Number.isInteger(correctAnswerIndex) || correctAnswerIndex < 0 || correctAnswerIndex >= QUIZ_ANSWER_COUNT) {
+    return null;
+  }
+
+  return {
+    question,
+    answers,
+    correctAnswerIndex,
+  };
+}
+
 export function normalizeCompletionCode(value: string) {
   return value.trim().toUpperCase();
 }
 
 export function isValidCompletionCode(value: string) {
   return COMPLETION_CODE_REGEX.test(normalizeCompletionCode(value));
+}
+
+function getRandomCompletionCodeChar() {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    return COMPLETION_CODE_ALPHABET[random[0] % COMPLETION_CODE_ALPHABET.length];
+  }
+  return COMPLETION_CODE_ALPHABET[Math.floor(Math.random() * COMPLETION_CODE_ALPHABET.length)];
+}
+
+function generateCompletionCodeSuffix(length: number) {
+  return Array.from({ length }, () => getRandomCompletionCodeChar()).join("");
+}
+
+export function generateSampleCompletionCode(length = 8) {
+  const normalizedLength = Math.min(32, Math.max(3, Math.round(length)));
+  return generateCompletionCodeSuffix(normalizedLength);
 }
 
 export async function handleImageFile(

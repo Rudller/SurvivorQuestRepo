@@ -32,6 +32,34 @@ function normalizeTaskStatus(value: unknown): ExpeditionTaskStatus {
   return value === "done" || value === "in-progress" ? value : "todo";
 }
 
+function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["quiz"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = asRecord(value);
+  const question = asString(parsed.question).trim();
+  const answers = asArray(parsed.answers).map((item) => asString(item).trim());
+  const correctAnswerIndex = Math.round(asNumber(parsed.correctAnswerIndex, Number.NaN));
+
+  if (
+    !question ||
+    answers.length !== 4 ||
+    answers.some((answer) => answer.length === 0) ||
+    !Number.isInteger(correctAnswerIndex) ||
+    correctAnswerIndex < 0 ||
+    correctAnswerIndex >= 4
+  ) {
+    return undefined;
+  }
+
+  return {
+    question,
+    answers: [answers[0], answers[1], answers[2], answers[3]],
+    correctAnswerIndex,
+  };
+}
+
 function normalizePlayerLocation(value: unknown): PlayerLocation | null {
   if (!value) {
     return null;
@@ -75,6 +103,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
       points: Math.max(0, Math.round(asNumber(station.points, 0))),
       timeLimitSeconds: Math.max(0, Math.round(asNumber(station.timeLimitSeconds ?? station.time_limit_seconds, 0))),
+      quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       latitude: (() => {
         const value = asNumber(station.latitude ?? station.lat, Number.NaN);
         return Number.isFinite(value) ? value : undefined;
@@ -105,6 +134,8 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
+      durationMinutes:
+        Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,
       stations,
     },
     team: {
@@ -270,6 +301,11 @@ export async function postMobileResolveStationQr(
       imageUrl: string;
       points: number;
       timeLimitSeconds: number;
+      quiz?: {
+        question: string;
+        answers: [string, string, string, string];
+        correctAnswerIndex: number;
+      };
       latitude?: number;
       longitude?: number;
     };

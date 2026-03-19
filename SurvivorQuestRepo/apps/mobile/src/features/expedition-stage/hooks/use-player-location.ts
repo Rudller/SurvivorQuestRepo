@@ -10,7 +10,7 @@ const LIVE_TRACKING_TIME_INTERVAL_MS = 4_000;
 const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 3;
 const ONE_SHOT_FIX_TIMEOUT_MS = 6_500;
 const LOCATION_UNAVAILABLE_FALLBACK_MESSAGE =
-  "Emulator nie zwrócił bieżącej lokalizacji. Ustaw punkt w Extended controls > Location i spróbuj ponownie albo użyj ADB geo fix.";
+  "Nie udało się pobrać bieżącej lokalizacji. Sprawdź, czy lokalizacja jest włączona, i spróbuj ponownie.";
 
 function toPlayerLocation(
   coords: {

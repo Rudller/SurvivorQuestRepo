@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type {
+  RealizationLanguage,
   RealizationEntity,
   RealizationStatus,
   RealizationType,
@@ -22,9 +23,19 @@ const REALIZATION_STATUSES: RealizationStatus[] = [
   'done',
 ];
 
+const REALIZATION_LANGUAGES: RealizationLanguage[] = [
+  'polish',
+  'english',
+  'ukrainian',
+  'russian',
+  'other',
+];
+
 export type CreateRealizationDto = {
   companyName?: string;
   location?: string;
+  language?: RealizationLanguage;
+  customLanguage?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -37,6 +48,7 @@ export type CreateRealizationDto = {
   teamCount?: number;
   peopleCount?: number;
   positionsCount?: number;
+  durationMinutes?: number;
   status?: RealizationStatus;
   scheduledAt?: string;
   changedBy?: string;
@@ -72,11 +84,21 @@ function isValidRealizationStatus(value: unknown): value is RealizationStatus {
   );
 }
 
+function isValidRealizationLanguage(
+  value: unknown,
+): value is RealizationLanguage {
+  return (
+    typeof value === 'string' &&
+    REALIZATION_LANGUAGES.includes(value as RealizationLanguage)
+  );
+}
+
 export function validateRealizationPayload(
   payload: CreateRealizationDto,
 ): ValidatedRealizationPayload {
   const companyName = payload.companyName?.trim() || '';
   const location = payload.location?.trim() || '';
+  const customLanguage = payload.customLanguage?.trim() || '';
   const contactPerson = payload.contactPerson?.trim() || '';
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
@@ -84,6 +106,7 @@ export function validateRealizationPayload(
   const teamCount = Math.round(Number(payload.teamCount));
   const peopleCount = Math.round(Number(payload.peopleCount));
   const positionsCount = Math.round(Number(payload.positionsCount));
+  const durationMinutes = Math.round(Number(payload.durationMinutes));
   const scenarioId = payload.scenarioId?.trim() || '';
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
@@ -95,19 +118,26 @@ export function validateRealizationPayload(
 
   if (
     !companyName ||
-    !contactPerson ||
-    (!contactPhone && !contactEmail) ||
-    !isValidRealizationType(payload.type) ||
-    !isValidRealizationStatus(payload.status) ||
-    !scenarioId ||
+      !contactPerson ||
+      (!contactPhone && !contactEmail) ||
+      !isValidRealizationType(payload.type) ||
+      !isValidRealizationLanguage(payload.language) ||
+      !isValidRealizationStatus(payload.status) ||
+      !scenarioId ||
     !Number.isFinite(teamCount) ||
     teamCount < 1 ||
     !Number.isFinite(peopleCount) ||
     peopleCount < 1 ||
     !Number.isFinite(positionsCount) ||
     positionsCount < 1 ||
+    !Number.isFinite(durationMinutes) ||
+    durationMinutes < 1 ||
     !scheduledAt
   ) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  if (payload.language === 'other' && !customLanguage) {
     throw new BadRequestException('Invalid payload');
   }
 
@@ -125,6 +155,8 @@ export function validateRealizationPayload(
   return {
     companyName,
     location: location || undefined,
+    language: payload.language,
+    customLanguage: payload.language === 'other' ? customLanguage : undefined,
     contactPerson,
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,
@@ -137,6 +169,7 @@ export function validateRealizationPayload(
     teamCount,
     peopleCount,
     positionsCount,
+    durationMinutes,
     status: payload.status,
     scheduledAt,
     changedBy: payload.changedBy?.trim() || 'admin@local',

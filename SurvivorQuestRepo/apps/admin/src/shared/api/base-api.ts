@@ -1,13 +1,34 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { buildApiUrl } from "./api-path";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001';
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: "",
+  credentials: "include",
+});
+
+const dynamicBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = (
+  args,
+  api,
+  extraOptions,
+) => {
+  if (typeof args === "string") {
+    return rawBaseQuery(buildApiUrl(args), api, extraOptions);
+  }
+
+  return rawBaseQuery(
+    {
+      ...args,
+      url: buildApiUrl(args.url),
+    },
+    api,
+    extraOptions,
+  );
+};
 
 export const baseApi = createApi({
-    reducerPath: 'baseApi',
-    baseQuery: fetchBaseQuery({
-        baseUrl: apiBaseUrl,
-        credentials: 'include',
-    }),
-    tagTypes: ["User", "Auth", "Station", "Realization", "Scenario", "Chat"],
-    endpoints: () => ({}),
+  reducerPath: "baseApi",
+  baseQuery: dynamicBaseQuery,
+  tagTypes: ["User", "Auth", "Station", "Realization", "Scenario", "Chat"],
+  endpoints: () => ({}),
 });

@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type {
   StationDraftInput,
   StationEntity,
+  StationQuiz,
   StationType,
 } from '../station.service';
 
@@ -10,6 +11,7 @@ function buildStationFallbackImage(seed: string) {
 }
 
 const STATION_TYPES: StationType[] = ['quiz', 'time', 'points'];
+const QUIZ_ANSWER_COUNT = 4;
 
 export type CreateStationDto = {
   name: string;
@@ -19,6 +21,7 @@ export type CreateStationDto = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
 };
@@ -118,6 +121,43 @@ function ensureCompletionCode(
   return normalized;
 }
 
+function ensureStationQuiz(
+  value: unknown,
+  type: StationType,
+): StationQuiz | undefined {
+  if (type !== 'quiz') {
+    return undefined;
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const quiz = value as Record<string, unknown>;
+  const question = ensureTrimmedString(quiz.question);
+
+  if (!Array.isArray(quiz.answers) || quiz.answers.length !== QUIZ_ANSWER_COUNT) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const answers = quiz.answers.map((answer) => ensureTrimmedString(answer));
+  const correctAnswerIndex = Math.round(Number(quiz.correctAnswerIndex));
+
+  if (
+    !Number.isInteger(correctAnswerIndex) ||
+    correctAnswerIndex < 0 ||
+    correctAnswerIndex >= QUIZ_ANSWER_COUNT
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return {
+    question,
+    answers: [answers[0], answers[1], answers[2], answers[3]],
+    correctAnswerIndex,
+  };
+}
+
 function ensureStationBody(payload: unknown): CreateStationDto {
   if (!payload || typeof payload !== 'object') {
     throw new BadRequestException('Invalid payload');
@@ -139,6 +179,7 @@ function ensureStationBody(payload: unknown): CreateStationDto {
     timeLimitSeconds:
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
     completionCode: ensureCompletionCode(body.completionCode, type),
+    quiz: ensureStationQuiz(body.quiz, type),
     latitude,
     longitude,
   };
@@ -196,6 +237,7 @@ export function toCreateStationEntity(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    quiz: dto.quiz,
     latitude: dto.latitude,
     longitude: dto.longitude,
     createdAt: now,
@@ -217,6 +259,7 @@ export function toUpdateStationEntity(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    quiz: dto.quiz,
     latitude: dto.latitude,
     longitude: dto.longitude,
     updatedAt: new Date().toISOString(),
@@ -235,6 +278,7 @@ export function toStationDraftInput(
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
     completionCode: dto.completionCode,
+    quiz: dto.quiz,
     latitude: dto.latitude,
     longitude: dto.longitude,
   };

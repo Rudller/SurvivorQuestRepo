@@ -1,13 +1,18 @@
 import {
+  RealizationLanguage as PrismaRealizationLanguage,
   RealizationStatus as PrismaRealizationStatus,
   RealizationType as PrismaRealizationType,
 } from '@prisma/client';
 import type {
   RealizationEntity,
+  RealizationLanguage,
   RealizationLog,
   RealizationStatus,
   RealizationType,
 } from '../entities/realization.entity';
+
+const MINUTES_TO_MS = 60_000;
+const DAY_TO_MS = 24 * 60 * 60 * 1000;
 
 export function fromPrismaRealizationType(
   type: PrismaRealizationType,
@@ -31,6 +36,24 @@ export function toPrismaRealizationType(type: RealizationType) {
   return PrismaRealizationType.RECREATION;
 }
 
+export function fromPrismaRealizationLanguage(
+  language: PrismaRealizationLanguage,
+): RealizationLanguage {
+  if (language === PrismaRealizationLanguage.POLISH) return 'polish';
+  if (language === PrismaRealizationLanguage.ENGLISH) return 'english';
+  if (language === PrismaRealizationLanguage.UKRAINIAN) return 'ukrainian';
+  if (language === PrismaRealizationLanguage.RUSSIAN) return 'russian';
+  return 'other';
+}
+
+export function toPrismaRealizationLanguage(language: RealizationLanguage) {
+  if (language === 'polish') return PrismaRealizationLanguage.POLISH;
+  if (language === 'english') return PrismaRealizationLanguage.ENGLISH;
+  if (language === 'ukrainian') return PrismaRealizationLanguage.UKRAINIAN;
+  if (language === 'russian') return PrismaRealizationLanguage.RUSSIAN;
+  return PrismaRealizationLanguage.OTHER;
+}
+
 export function toPrismaRealizationStatus(status: RealizationStatus) {
   if (status === 'planned') return PrismaRealizationStatus.PLANNED;
   if (status === 'in-progress') return PrismaRealizationStatus.IN_PROGRESS;
@@ -48,10 +71,13 @@ export function fromPrismaRealizationStatus(
 export function resolveRealizationStatus(
   status: RealizationStatus,
   scheduledAt: string,
+  durationMinutes: number,
 ) {
   const scheduledTimestamp = new Date(scheduledAt).getTime();
+  const safeDurationMinutes = Math.max(1, Math.round(durationMinutes));
+  const autoDoneTimestamp = scheduledTimestamp + safeDurationMinutes * MINUTES_TO_MS + DAY_TO_MS;
 
-  if (Number.isFinite(scheduledTimestamp) && scheduledTimestamp < Date.now()) {
+  if (Number.isFinite(scheduledTimestamp) && autoDoneTimestamp < Date.now()) {
     return 'done' as const;
   }
 
@@ -93,9 +119,11 @@ export function mapRealizationLogs(
 export function buildRealizationEntity(input: {
   realization: {
     id: string;
-    companyName: string;
-    location: string | null;
-    contactPerson: string;
+      companyName: string;
+      location: string | null;
+      language: PrismaRealizationLanguage;
+      customLanguage: string | null;
+      contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
     instructors: unknown;
@@ -109,6 +137,7 @@ export function buildRealizationEntity(input: {
     requiredDevicesCount: number;
     peopleCount: number;
     positionsCount: number;
+    durationMinutes: number;
     locationRequired: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
@@ -125,6 +154,8 @@ export function buildRealizationEntity(input: {
     id: realization.id,
     companyName: realization.companyName,
     location: realization.location || undefined,
+    language: fromPrismaRealizationLanguage(realization.language),
+    customLanguage: realization.customLanguage || undefined,
     contactPerson: realization.contactPerson,
     contactPhone: realization.contactPhone || undefined,
     contactEmail: realization.contactEmail || undefined,
@@ -145,10 +176,12 @@ export function buildRealizationEntity(input: {
     requiredDevicesCount: realization.requiredDevicesCount,
     peopleCount: realization.peopleCount,
     positionsCount: realization.positionsCount,
+    durationMinutes: realization.durationMinutes,
     locationRequired: realization.locationRequired,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),
+      realization.durationMinutes,
     ),
     scheduledAt: realization.scheduledAt.toISOString(),
     createdAt: realization.createdAt.toISOString(),

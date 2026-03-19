@@ -54,7 +54,7 @@ export function AdminSidebar({ userEmail, isLoggingOut, onLogout }: AdminSidebar
         <div className="mt-auto space-y-3 border-t border-zinc-800 pt-4">
           <p className="text-xs text-zinc-400">Zalogowany</p>
           <p className="truncate text-sm text-zinc-200">{userEmail ?? "-"}</p>
-          <ApiConnectionStatusBadge inline />
+          <ApiConnectionStatusBadge inline allowServerEdit={false} />
           <button
             onClick={() => void onLogout()}
             disabled={isLoggingOut}

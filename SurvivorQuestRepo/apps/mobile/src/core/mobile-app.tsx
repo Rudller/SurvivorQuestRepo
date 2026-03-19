@@ -49,11 +49,6 @@ export function MobileApp() {
     await AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
   }
 
-  async function handleRestart() {
-    setOnboardingSession(null);
-    await AsyncStorage.removeItem(ONBOARDING_SESSION_STORAGE_KEY);
-  }
-
   return (
     <SafeAreaProvider>
       <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
@@ -62,7 +57,7 @@ export function MobileApp() {
             <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
           </View>
         ) : onboardingSession ? (
-          <ExpeditionStageScreen session={onboardingSession} onRestart={() => void handleRestart()} />
+          <ExpeditionStageScreen session={onboardingSession} />
         ) : (
           <RealizationOnboardingScreen onComplete={(session) => void handleComplete(session)} />
         )}

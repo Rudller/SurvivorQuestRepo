@@ -6,6 +6,9 @@ import { stationTypeOptions, type Station } from "@/features/games/types/station
 import { useUploadStationImageMutation } from "@/features/games/api/station.api";
 import {
   clampTimeLimitSeconds,
+  createEmptyQuizAnswers,
+  normalizeStationQuiz,
+  QUIZ_ANSWER_COUNT,
   isCompletionCodeRequired,
   isValidCompletionCode,
   formatTimeLimit,
@@ -13,6 +16,7 @@ import {
   handleImagePaste,
   imageModeOptions,
   normalizeCompletionCode,
+  generateSampleCompletionCode,
   type ImageInputMode,
 } from "@/features/games/station.utils";
 import type { RealizationStationDraft } from "../types/realization";
@@ -43,6 +47,11 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     points: 100,
     timeLimitSeconds: 0,
     completionCode: "",
+    quiz: {
+      question: "",
+      answers: createEmptyQuizAnswers(),
+      correctAnswerIndex: 0,
+    },
     latitude: undefined,
     longitude: undefined,
   };
@@ -58,6 +67,17 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    quiz: station.quiz
+      ? {
+          question: station.quiz.question,
+          answers: station.quiz.answers,
+          correctAnswerIndex: station.quiz.correctAnswerIndex,
+        }
+      : {
+          question: "",
+          answers: createEmptyQuizAnswers(),
+          correctAnswerIndex: 0,
+        },
     latitude: station.latitude,
     longitude: station.longitude,
   };
@@ -73,6 +93,10 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
     completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
+    quiz:
+      station.type === "quiz" && station.quiz
+        ? normalizeStationQuiz(station.quiz) ?? undefined
+        : undefined,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   }));
@@ -94,6 +118,12 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
 
     if (isCompletionCodeRequired(station.type) && !isValidCompletionCode(station.completionCode ?? "")) {
       return true;
+    }
+
+    if (station.type === "quiz") {
+      if (!station.quiz || !normalizeStationQuiz(station.quiz)) {
+        return true;
+      }
     }
 
     const hasLatitude = typeof station.latitude === "number" && Number.isFinite(station.latitude);
@@ -446,6 +476,14 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                           updateStation(index, {
                             type: nextType,
                             completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
+                            quiz:
+                              nextType === "quiz"
+                                ? station.quiz ?? {
+                                    question: "",
+                                    answers: createEmptyQuizAnswers(),
+                                    correctAnswerIndex: 0,
+                                  }
+                                : station.quiz,
                           });
                         }}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -462,14 +500,90 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                   {isCompletionCodeRequired(station.type) ? (
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
-                      <input
-                        value={station.completionCode ?? ""}
-                        onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
-                        placeholder="Np. TIME-2048"
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          value={station.completionCode ?? ""}
+                          onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
+                          placeholder="Np. TIME-2048"
+                          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateStation(index, { completionCode: generateSampleCompletionCode() })}
+                          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                        >
+                          Wygeneruj
+                        </button>
+                      </div>
                       <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
                     </label>
+                  ) : null}
+
+                  {station.type === "quiz" ? (
+                    <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-900/70 p-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Pytanie i odpowiedzi</h3>
+                      <label className="space-y-1.5">
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
+                        <textarea
+                          rows={2}
+                          value={station.quiz?.question ?? ""}
+                          onChange={(event) =>
+                            updateStation(index, {
+                              quiz: {
+                                question: event.target.value,
+                                answers: station.quiz?.answers ?? createEmptyQuizAnswers(),
+                                correctAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
+                              },
+                            })
+                          }
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                      </label>
+
+                      <div className="space-y-2">
+                        {(station.quiz?.answers ?? createEmptyQuizAnswers()).map((answer, answerIndex) => (
+                          <label
+                            key={answerIndex}
+                            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 p-2"
+                          >
+                            <input
+                              type="radio"
+                              name={`realization-station-quiz-correct-${stationKey}`}
+                              checked={(station.quiz?.correctAnswerIndex ?? 0) === answerIndex}
+                              onChange={() =>
+                                updateStation(index, {
+                                  quiz: {
+                                    question: station.quiz?.question ?? "",
+                                    answers: station.quiz?.answers ?? createEmptyQuizAnswers(),
+                                    correctAnswerIndex: answerIndex,
+                                  },
+                                })
+                              }
+                              className="h-4 w-4 accent-amber-400"
+                            />
+                            <input
+                              value={answer}
+                              onChange={(event) =>
+                                updateStation(index, {
+                                  quiz: {
+                                    question: station.quiz?.question ?? "",
+                                    answers: (station.quiz?.answers ?? createEmptyQuizAnswers()).map((item, idx) =>
+                                      idx === answerIndex ? event.target.value : item,
+                                    ),
+                                    correctAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
+                                  },
+                                })
+                              }
+                              placeholder={`Odpowiedź ${answerIndex + 1}`}
+                              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
+                      </p>
+                    </div>
                   ) : null}
 
                   <label className="block space-y-1.5">

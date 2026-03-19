@@ -1,4 +1,8 @@
-import type { StationEntity, StationType } from '../../station/station.service';
+import type {
+  StationEntity,
+  StationQuiz,
+  StationType,
+} from '../../station/station.service';
 
 export type RealizationStatus = 'planned' | 'in-progress' | 'done';
 export type RealizationType =
@@ -8,6 +12,12 @@ export type RealizationType =
   | 'evening-attractions'
   | 'dj'
   | 'recreation';
+export type RealizationLanguage =
+  | 'polish'
+  | 'english'
+  | 'ukrainian'
+  | 'russian'
+  | 'other';
 
 export type RealizationLog = {
   id: string;
@@ -21,6 +31,8 @@ export type RealizationEntity = {
   id: string;
   companyName: string;
   location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -37,6 +49,7 @@ export type RealizationEntity = {
   requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes: number;
   locationRequired: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -54,6 +67,7 @@ export type ScenarioStationDraftPayload = {
   points?: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -62,6 +76,8 @@ export type ScenarioStationDraftPayload = {
 export type ValidatedRealizationPayload = {
   companyName: string;
   location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -74,6 +90,7 @@ export type ValidatedRealizationPayload = {
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes: number;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

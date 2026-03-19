@@ -15,6 +15,10 @@ import {
   isCompletionCodeRequired,
   isValidCompletionCode,
   normalizeCompletionCode,
+  generateSampleCompletionCode,
+  createEmptyQuizAnswers,
+  normalizeStationQuiz,
+  QUIZ_ANSWER_COUNT,
 } from "../station.utils";
 
 type CreateStationFormProps = {
@@ -45,6 +49,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [points, setPoints] = useState(100);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [completionCode, setCompletionCode] = useState("");
+  const [quizQuestion, setQuizQuestion] = useState("");
+  const [quizAnswers, setQuizAnswers] = useState<string[]>(() => createEmptyQuizAnswers());
+  const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [formError, setFormError] = useState<string | null>(null);
@@ -87,6 +94,20 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               return;
             }
 
+            const quizConfig =
+              type === "quiz"
+                ? normalizeStationQuiz({
+                    question: quizQuestion,
+                    answers: quizAnswers,
+                    correctAnswerIndex: quizCorrectAnswerIndex,
+                  })
+                : null;
+
+            if (type === "quiz" && !quizConfig) {
+              setFormError("Dla stanowiska Quiz uzupełnij pytanie, 4 odpowiedzi i wskaż jedną poprawną.");
+              return;
+            }
+
             const nextLatitude = typeof latitude === "number" && Number.isFinite(latitude) ? latitude : undefined;
             const nextLongitude = typeof longitude === "number" && Number.isFinite(longitude) ? longitude : undefined;
 
@@ -123,6 +144,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 points,
                 timeLimitSeconds: clampTimeLimitSeconds(timeLimitSeconds),
                 completionCode: isCompletionCodeRequired(type) ? normalizeCompletionCode(completionCode) : undefined,
+                quiz: type === "quiz" ? quizConfig ?? undefined : undefined,
                 latitude: nextLatitude,
                 longitude: nextLongitude,
               }).unwrap();
@@ -134,6 +156,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setPoints(100);
               setTimeLimitSeconds(0);
               setCompletionCode("");
+              setQuizQuestion("");
+              setQuizAnswers(createEmptyQuizAnswers());
+              setQuizCorrectAnswerIndex(0);
               setLatitude(undefined);
               setLongitude(undefined);
               setCreateImageMode("upload");
@@ -190,14 +215,66 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
           {isCompletionCodeRequired(type) ? (
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
-              <input
-                value={completionCode}
-                onChange={(event) => setCompletionCode(event.target.value.toUpperCase())}
-                placeholder="Np. TIME-2048"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
+              <div className="flex gap-2">
+                <input
+                  value={completionCode}
+                  onChange={(event) => setCompletionCode(event.target.value.toUpperCase())}
+                  placeholder="Np. TIME-2048"
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCompletionCode(generateSampleCompletionCode())}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                >
+                  Wygeneruj
+                </button>
+              </div>
               <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
             </label>
+          ) : null}
+
+          {type === "quiz" ? (
+            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Pytanie i odpowiedzi</h3>
+              <label className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
+                <textarea
+                  value={quizQuestion}
+                  onChange={(event) => setQuizQuestion(event.target.value)}
+                  rows={2}
+                  placeholder="Wpisz pytanie quizowe"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+              </label>
+
+              <div className="space-y-2">
+                {quizAnswers.map((answer, index) => (
+                  <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                    <input
+                      type="radio"
+                      name="quiz-correct-answer-create"
+                      checked={quizCorrectAnswerIndex === index}
+                      onChange={() => setQuizCorrectAnswerIndex(index)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    <input
+                      value={answer}
+                      onChange={(event) =>
+                        setQuizAnswers((current) =>
+                          current.map((item, answerIndex) => (answerIndex === index ? event.target.value : item)),
+                        )
+                      }
+                      placeholder={`Odpowiedź ${index + 1}`}
+                      className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-500">
+                Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
+              </p>
+            </div>
           ) : null}
 
           <label className="space-y-1.5">
@@ -211,7 +288,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
             />
           </label>
 
-          <label className="space-y-1.5">
+          <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska (URL opcjonalny)</span>
             <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
                 <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
@@ -365,7 +442,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               {imageError && <p className="text-xs text-red-300">{imageError}</p>}
               {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
             </div>
-          </label>
+          </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">

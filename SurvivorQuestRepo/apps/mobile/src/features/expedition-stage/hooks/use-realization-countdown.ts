@@ -12,7 +12,7 @@ function formatCountdown(totalSeconds: number) {
   return `${padTime(hours)}:${padTime(minutes)}:${padTime(seconds)}`;
 }
 
-export function useRealizationCountdown(scheduledAt: string) {
+export function useRealizationCountdown(scheduledAt: string, durationMinutes: number) {
   const [nowTimestamp, setNowTimestamp] = useState(Date.now());
 
   useEffect(() => {
@@ -26,7 +26,9 @@ export function useRealizationCountdown(scheduledAt: string) {
   }, []);
 
   return useMemo(() => {
-    const targetTimestamp = new Date(scheduledAt).getTime();
+    const scheduledTimestamp = new Date(scheduledAt).getTime();
+    const safeDurationMinutes = Math.max(1, Math.round(durationMinutes) || 120);
+    const targetTimestamp = scheduledTimestamp + safeDurationMinutes * 60 * 1000;
 
     if (!Number.isFinite(targetTimestamp)) {
       return {
@@ -43,5 +45,5 @@ export function useRealizationCountdown(scheduledAt: string) {
       remainingLabel: formatCountdown(remainingSeconds),
       isCompleted: remainingSeconds === 0,
     };
-  }, [nowTimestamp, scheduledAt]);
+  }, [durationMinutes, nowTimestamp, scheduledAt]);
 }

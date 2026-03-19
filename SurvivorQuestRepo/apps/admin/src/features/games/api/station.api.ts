@@ -1,6 +1,7 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { Station, StationKind, StationType } from "../types/station";
+import type { Station, StationKind, StationQuiz, StationType } from "../types/station";
+import { normalizeStationQuiz } from "../station.utils";
 
 type StationDto = {
   id: string;
@@ -11,6 +12,13 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  quiz?:
+    | {
+        question?: string;
+        answers?: string[];
+        correctAnswerIndex?: number;
+      }
+    | null;
   latitude?: number | null;
   longitude?: number | null;
   sourceTemplateId?: string;
@@ -30,6 +38,7 @@ type CreateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
 };
@@ -43,6 +52,7 @@ type UpdateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
 };
@@ -95,6 +105,14 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    quiz:
+      station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
+        ? normalizeStationQuiz({
+            question: station.quiz.question,
+            answers: station.quiz.answers,
+            correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
+          }) ?? undefined
+        : undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
     longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
     sourceTemplateId: station.sourceTemplateId,

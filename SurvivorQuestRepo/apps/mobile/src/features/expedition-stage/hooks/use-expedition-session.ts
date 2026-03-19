@@ -167,7 +167,27 @@ export function useExpeditionSession(session: OnboardingSession) {
         return getApiErrorMessage(error, "Nie udało się uruchomić zadania.");
       }
 
-      return refreshSessionState();
+      setSessionState((current) => {
+        const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+          if (task.stationId !== normalizedStationId || task.status === "done") {
+            return task;
+          }
+
+          return {
+            ...task,
+            status: "in-progress",
+            startedAt: task.startedAt || startedAtIso,
+          };
+        });
+
+        return {
+          ...current,
+          tasks: nextTasks,
+        };
+      });
+
+      void refreshSessionState();
+      return null;
     },
     [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
   );

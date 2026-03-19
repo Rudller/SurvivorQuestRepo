@@ -10,6 +10,13 @@ export type RealizationType =
   | "dj"
   | "recreation";
 
+export type RealizationLanguage =
+  | "polish"
+  | "english"
+  | "ukrainian"
+  | "russian"
+  | "other";
+
 export const realizationTypeOptions: { value: RealizationType; label: string }[] = [
   { value: "outdoor-games", label: "Gry terenowe" },
   { value: "hotel-games", label: "Gry hotelowe" },
@@ -18,6 +25,21 @@ export const realizationTypeOptions: { value: RealizationType; label: string }[]
   { value: "dj", label: "DJ" },
   { value: "recreation", label: "Rekreacja" },
 ];
+
+export const realizationLanguageOptions: { value: RealizationLanguage; label: string }[] = [
+  { value: "polish", label: "Polski" },
+  { value: "english", label: "Angielski" },
+  { value: "ukrainian", label: "Ukraiński" },
+  { value: "russian", label: "Rosyjski" },
+  { value: "other", label: "Inne" },
+];
+
+export function getRealizationLanguageLabel(language: RealizationLanguage) {
+  return (
+    realizationLanguageOptions.find((option) => option.value === language)?.label ??
+    realizationLanguageOptions[0].label
+  );
+}
 
 export type RealizationLog = {
   id: string;
@@ -31,6 +53,8 @@ export type Realization = {
   id: string;
   companyName: string;
   location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -47,6 +71,7 @@ export type Realization = {
   requiredDevicesCount: number;
   peopleCount: number;
   positionsCount: number;
+  durationMinutes: number;
   locationRequired: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -64,6 +89,7 @@ export type RealizationStationDraft = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  quiz?: Station["quiz"];
   latitude?: number;
   longitude?: number;
 };

@@ -3,12 +3,7 @@ import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 
 type TopRealizationPanelProps = {
   companyName: string;
-  scheduledAt: string;
   logoUrl?: string;
-  clientType?: string;
-  teamCount?: number;
-  peopleCount?: number;
-  locationRequired?: boolean;
   teamName: string;
   teamSlot: number | null;
   teamColorHex: string;
@@ -33,24 +28,9 @@ function resolveCardTextColor(hexColor: string) {
   return brightness > 172 ? "#0f172a" : "#f8fafc";
 }
 
-function formatScheduledAt(value: string) {
-  const date = new Date(value);
-
-  if (!Number.isFinite(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString("pl-PL");
-}
-
 export function TopRealizationPanel({
   companyName,
-  scheduledAt,
   logoUrl,
-  clientType,
-  teamCount,
-  peopleCount,
-  locationRequired,
   teamName,
   teamSlot,
   teamColorHex,
@@ -72,7 +52,7 @@ export function TopRealizationPanel({
     >
       <View className="flex-row gap-3">
         <View
-          className="h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border"
+          className="h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border"
           style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
         >
           {logoUrl ? (
@@ -85,18 +65,8 @@ export function TopRealizationPanel({
         </View>
 
         <View className="flex-1 justify-center">
-          <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-            Klient realizacji
-          </Text>
-          <Text className="mt-0.5 text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          <Text className="text-xl font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
             {companyName}
-          </Text>
-          <Text className="mt-0.5 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-            Termin: {formatScheduledAt(scheduledAt)}
-          </Text>
-          <Text className="mt-0.5 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-            {clientType ? `Typ: ${clientType} • ` : ""}Drużyny: {teamCount ?? "-"} • Uczestnicy: {peopleCount ?? "-"} • GPS:{" "}
-            {locationRequired ? "wymagany" : "opcjonalny"}
           </Text>
         </View>
       </View>

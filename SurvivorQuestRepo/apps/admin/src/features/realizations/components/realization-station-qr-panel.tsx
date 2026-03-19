@@ -84,6 +84,13 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     }
     return new Date(data.expiresAt).toLocaleString("pl-PL");
   }, [data?.expiresAt]);
+  const completionCodeByStationId = useMemo(() => {
+    return new Map(
+      realization.scenarioStations
+        .map((station) => [station.id, station.completionCode?.trim() ?? ""] as const)
+        .filter(([, completionCode]) => Boolean(completionCode)),
+    );
+  }, [realization.scenarioStations]);
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -156,17 +163,21 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
               {data.entries.map((entry) => {
                 const qrImage = qrImagesByStationId[entry.stationId];
                 const fileName = `qr-${realization.id}-${entry.stationId}.png`;
+                const completionCode = completionCodeByStationId.get(entry.stationId);
 
                 return (
                   <article
                     key={entry.stationId}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+                    className="relative rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
                   >
+                    {completionCode ? (
+                      <div className="absolute right-3 top-3 rounded-md border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-[11px] font-semibold text-amber-300">
+                        Kod: {completionCode}
+                      </div>
+                    ) : null}
                     <div className="space-y-1">
                       <h3 className="text-sm font-semibold text-zinc-100">{entry.stationName}</h3>
-                      <p className="text-xs text-zinc-500">
-                        {entry.stationId} • {getStationTypeLabel(entry.stationType)}
-                      </p>
+                      <p className="text-xs text-zinc-500">{getStationTypeLabel(entry.stationType)}</p>
                     </div>
 
                     <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">

@@ -75,6 +75,16 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=640&q=80&auto=format&fit=crop',
     points: 100,
     timeLimitSeconds: 300,
+    quizData: {
+      question: 'Jaki jest pierwszy krok podczas zgubienia szlaku w lesie?',
+      answers: [
+        'Zatrzymać się i ocenić sytuację',
+        'Biec w kierunku słońca',
+        'Wyłączyć telefon',
+        'Rozdzielić zespół',
+      ],
+      correctAnswerIndex: 0,
+    },
     latitude: 52.2298,
     longitude: 21.0116,
     createdAt: atOffset(-14 * dayMs),
@@ -122,6 +132,16 @@ const stations: Prisma.StationCreateManyInput[] = [
       'https://images.unsplash.com/photo-1526498460520-4c246339dccb?w=640&q=80&auto=format&fit=crop',
     points: 130,
     timeLimitSeconds: 240,
+    quizData: {
+      question: 'Które działanie należy wykonać jako pierwsze po ogłoszeniu alarmu nocnego?',
+      answers: [
+        'Policzyć uczestników i zgłosić braki',
+        'Spakować cały sprzęt',
+        'Rozpocząć marsz bez instrukcji',
+        'Wyłączyć oświetlenie',
+      ],
+      correctAnswerIndex: 0,
+    },
     latitude: 52.2268,
     longitude: 21.0131,
     createdAt: atOffset(-14 * dayMs),

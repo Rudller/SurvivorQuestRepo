@@ -7,6 +7,11 @@ import { Prisma, StationType as PrismaStationType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type StationType = 'quiz' | 'time' | 'points';
+export type StationQuiz = {
+  question: string;
+  answers: [string, string, string, string];
+  correctAnswerIndex: number;
+};
 
 export type StationKind =
   | 'template'
@@ -22,6 +27,7 @@ export type StationEntity = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -41,6 +47,7 @@ export type StationDraftInput = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -55,6 +62,67 @@ function buildStationFallbackImage(seed: string) {
 }
 
 const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+const QUIZ_ANSWER_COUNT = 4;
+
+function toPrismaStationQuizData(quiz: StationQuiz | undefined) {
+  if (!quiz) {
+    return Prisma.DbNull;
+  }
+
+  return {
+    question: quiz.question,
+    answers: quiz.answers,
+    correctAnswerIndex: quiz.correctAnswerIndex,
+  } as Prisma.InputJsonValue;
+}
+
+function parseStationQuizData(
+  quizData: Prisma.JsonValue | null,
+): StationQuiz | undefined {
+  if (!quizData || typeof quizData !== 'object' || Array.isArray(quizData)) {
+    return undefined;
+  }
+
+  const payload = quizData as Record<string, unknown>;
+  const question = payload.question;
+  const answers = payload.answers;
+  const correctAnswerIndex = payload.correctAnswerIndex;
+
+  if (
+    typeof question !== 'string' ||
+    !Array.isArray(answers) ||
+    answers.length !== QUIZ_ANSWER_COUNT ||
+    !answers.every((answer) => typeof answer === 'string') ||
+    typeof correctAnswerIndex !== 'number'
+  ) {
+    return undefined;
+  }
+
+  const normalizedQuestion = question.trim();
+  const normalizedAnswers = answers.map((answer) => answer.trim());
+  const normalizedCorrectAnswerIndex = Math.round(correctAnswerIndex);
+
+  if (
+    !normalizedQuestion ||
+    normalizedAnswers.some((answer) => !answer) ||
+    !Number.isInteger(normalizedCorrectAnswerIndex) ||
+    normalizedCorrectAnswerIndex < 0 ||
+    normalizedCorrectAnswerIndex >= QUIZ_ANSWER_COUNT
+  ) {
+    return undefined;
+  }
+
+  return {
+    question: normalizedQuestion,
+    answers: [
+      normalizedAnswers[0],
+      normalizedAnswers[1],
+      normalizedAnswers[2],
+      normalizedAnswers[3],
+    ],
+    correctAnswerIndex: normalizedCorrectAnswerIndex,
+  };
+}
 
 function deriveStationKind(input: {
   scenarioInstanceId: string | null;
@@ -92,6 +160,7 @@ function mapStation(input: {
   points: number;
   timeLimitSeconds: number;
   completionCode: string | null;
+  quizData: Prisma.JsonValue | null;
   latitude: number | null;
   longitude: number | null;
   sourceTemplateId: string | null;
@@ -111,6 +180,7 @@ function mapStation(input: {
     points: input.points,
     timeLimitSeconds: input.timeLimitSeconds,
     completionCode: input.completionCode || undefined,
+    quiz: parseStationQuizData(input.quizData),
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
     longitude: typeof input.longitude === 'number' ? input.longitude : undefined,
     sourceTemplateId: input.sourceTemplateId || undefined,
@@ -198,6 +268,7 @@ export class StationService {
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
         completionCode: station.completionCode,
+        quizData: toPrismaStationQuizData(station.quiz),
         latitude: station.latitude,
         longitude: station.longitude,
         sourceTemplateId: station.id,
@@ -218,6 +289,7 @@ export class StationService {
         points: updatedStation.points,
         timeLimitSeconds: updatedStation.timeLimitSeconds,
         completionCode: updatedStation.completionCode,
+        quizData: toPrismaStationQuizData(updatedStation.quiz),
         latitude: updatedStation.latitude,
         longitude: updatedStation.longitude,
       },
@@ -266,6 +338,7 @@ export class StationService {
           points: source.points,
           timeLimitSeconds: source.timeLimitSeconds,
           completionCode: source.completionCode,
+          quizData: toPrismaStationQuizData(source.quiz),
           latitude: source.latitude,
           longitude: source.longitude,
           sourceTemplateId: source.sourceTemplateId ?? source.id,
@@ -297,6 +370,7 @@ export class StationService {
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
         completionCode: normalized.completionCode,
+        quizData: toPrismaStationQuizData(normalized.quiz),
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId: normalized.sourceTemplateId,
@@ -325,6 +399,7 @@ export class StationService {
         points: normalized.points,
         timeLimitSeconds: normalized.timeLimitSeconds,
         completionCode: normalized.completionCode,
+        quizData: toPrismaStationQuizData(normalized.quiz),
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId:
@@ -345,6 +420,7 @@ export class StationService {
       input.completionCode,
       input.type,
     );
+    const normalizedQuiz = this.normalizeStationQuiz(input.quiz, input.type);
 
     return {
       name: normalizedName,
@@ -357,6 +433,7 @@ export class StationService {
       points: Math.round(input.points),
       timeLimitSeconds: Math.round(input.timeLimitSeconds),
       completionCode: normalizedCompletionCode,
+      quiz: normalizedQuiz,
       latitude:
         typeof input.latitude === 'number' && Number.isFinite(input.latitude)
           ? input.latitude
@@ -366,6 +443,42 @@ export class StationService {
           ? input.longitude
           : undefined,
       sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
+    };
+  }
+
+  private normalizeStationQuiz(
+    quiz: StationQuiz | undefined,
+    stationType: StationType,
+  ): StationQuiz | undefined {
+    if (stationType !== 'quiz') {
+      return undefined;
+    }
+
+    if (!quiz) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const question = quiz.question?.trim();
+    const answers = quiz.answers?.map((answer) => answer.trim());
+    const correctAnswerIndex = Math.round(quiz.correctAnswerIndex);
+
+    if (
+      typeof question !== 'string' ||
+      !question ||
+      !Array.isArray(answers) ||
+      answers.length !== QUIZ_ANSWER_COUNT ||
+      answers.some((answer) => !answer) ||
+      !Number.isInteger(correctAnswerIndex) ||
+      correctAnswerIndex < 0 ||
+      correctAnswerIndex >= QUIZ_ANSWER_COUNT
+    ) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    return {
+      question,
+      answers: [answers[0], answers[1], answers[2], answers[3]],
+      correctAnswerIndex,
     };
   }
 

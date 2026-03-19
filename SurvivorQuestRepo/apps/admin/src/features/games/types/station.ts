@@ -1,6 +1,12 @@
 export type StationType = "quiz" | "time" | "points";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
 
+export type StationQuiz = {
+  question: string;
+  answers: string[];
+  correctAnswerIndex: number;
+};
+
 export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "time", label: "Na czas" },
   { value: "points", label: "Na punkty" },
@@ -16,6 +22,7 @@ export type Station = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

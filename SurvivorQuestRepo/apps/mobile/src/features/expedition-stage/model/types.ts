@@ -30,6 +30,7 @@ export type ExpeditionSessionState = {
     status: "planned" | "in-progress" | "done";
     locationRequired: boolean;
     scheduledAt: string;
+    durationMinutes: number;
     stations: ExpeditionRealizationStation[];
   };
   team: {
@@ -56,6 +57,12 @@ export type ExpeditionTask = {
   finishedAt: string | null;
 };
 
+export type ExpeditionStationQuiz = {
+  question: string;
+  answers: [string, string, string, string];
+  correctAnswerIndex: number;
+};
+
 export type ExpeditionRealizationStation = {
   id: string;
   name: string;
@@ -64,6 +71,7 @@ export type ExpeditionRealizationStation = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  quiz?: ExpeditionStationQuiz;
   latitude?: number;
   longitude?: number;
 };
@@ -118,6 +126,12 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       status: session.realization?.status ?? "in-progress",
       locationRequired: session.realization?.locationRequired ?? false,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      durationMinutes:
+        typeof session.realization?.durationMinutes === "number" &&
+        Number.isFinite(session.realization.durationMinutes) &&
+        session.realization.durationMinutes >= 1
+          ? Math.round(session.realization.durationMinutes)
+          : 120,
       stations: stationIds.map((stationId) => ({
         id: stationId,
         name: `Stanowisko ${stationId}`,
