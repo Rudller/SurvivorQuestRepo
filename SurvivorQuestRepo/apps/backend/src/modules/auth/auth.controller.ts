@@ -7,7 +7,9 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import { AUTH_LOGIN_THROTTLE } from '../../common/security/throttle.constants';
 import { parseLoginDto } from './dto/auth.dto';
 import {
   readSessionToken,
@@ -21,6 +23,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @Throttle(AUTH_LOGIN_THROTTLE)
   async login(
     @Body() payload: unknown,
     @Res({ passthrough: true }) response: Response,

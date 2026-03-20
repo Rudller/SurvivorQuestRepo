@@ -13,6 +13,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
 import { StationStorageService } from '../station/station-storage.service';
+import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import type {
   CreateRealizationDto,
   UpdateRealizationDto,
@@ -25,7 +26,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
-  'image/svg+xml',
 ]);
 
 @Controller('realizations')
@@ -67,6 +67,10 @@ export class RealizationController {
       throw new BadRequestException('Invalid logo image file');
     }
 
+    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+      throw new BadRequestException('Invalid logo image file signature');
+    }
+
     return this.stationStorageService.uploadRealizationLogo(file);
   }
 
@@ -89,6 +93,10 @@ export class RealizationController {
 
     if (!Number.isFinite(file.size) || file.size <= 0) {
       throw new BadRequestException('Invalid offer file');
+    }
+
+    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+      throw new BadRequestException('Invalid offer file signature');
     }
 
     return this.stationStorageService.uploadRealizationOfferPdf(file);

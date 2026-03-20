@@ -14,6 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import {
   parseCreateStationDto,
   parseDeleteStationDto,
@@ -29,7 +30,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
-  'image/svg+xml',
 ]);
 
 @Controller(['station', 'api/station'])
@@ -67,7 +67,9 @@ export class StationController {
       limits: { fileSize: MAX_IMAGE_UPLOAD_SIZE_BYTES },
     }),
   )
-  async uploadStationImage(@UploadedFile() file: Express.Multer.File | undefined) {
+  async uploadStationImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
     if (!file) {
       throw new BadRequestException('Image file is required');
     }
@@ -78,6 +80,10 @@ export class StationController {
 
     if (!Number.isFinite(file.size) || file.size <= 0) {
       throw new BadRequestException('Invalid image file');
+    }
+
+    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+      throw new BadRequestException('Invalid image file signature');
     }
 
     return this.stationStorageService.uploadStationImage(file);

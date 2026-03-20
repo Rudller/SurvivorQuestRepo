@@ -1,5 +1,18 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import {
+  MOBILE_JOIN_THROTTLE,
+  MOBILE_QR_RESOLVE_THROTTLE,
+} from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
 
 type JoinSessionPayload = {
@@ -64,6 +77,7 @@ export class MobileController {
   }
 
   @Post('session/join')
+  @Throttle(MOBILE_JOIN_THROTTLE)
   async joinMobileSession(@Body() payload: JoinSessionPayload) {
     return this.mobileService.joinMobileSession({
       joinCode: payload.joinCode || '',
@@ -137,6 +151,7 @@ export class MobileController {
   }
 
   @Post('station/resolve-qr')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
   async resolveMobileStationQr(@Body() payload: ResolveStationQrPayload) {
     return this.mobileService.resolveMobileStationQr({
       sessionToken: payload.sessionToken || '',

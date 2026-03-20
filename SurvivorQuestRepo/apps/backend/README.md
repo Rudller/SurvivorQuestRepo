@@ -114,9 +114,11 @@ Najwazniejsze zmienne:
 - `DATABASE_URL` - polaczenie Prisma do PostgreSQL
 - `PORT` - port API (domyslnie `3001`)
 - `CORS_ORIGIN_ALLOWLIST` - lista originow frontendow rozdzielona przecinkami
+- `CORS_ALLOW_ALL_DEV_ORIGINS` - opcjonalnie `true` tylko lokalnie, aby dopuscic dowolny origin w dev bez allowlisty
 - `AUTH_COOKIE_SAME_SITE` - `lax` / `strict` / `none`
 - `AUTH_COOKIE_SECURE` - `true` dla HTTPS, `false` dla lokalnego HTTP
-- `STATION_QR_SECRET` - sekret HMAC do podpisywania tokenow QR stanowisk
+- `STATION_QR_SECRET` - sekret HMAC do podpisywania tokenow QR stanowisk (min. 32 znaki)
+- `JOIN_CODE_PEPPER` - pepper do generowania kodow dolaczenia realizacji (min. 32 znaki)
 - `MOBILE_QR_ENTRY_BASE_URL` - bazowy deeplink/URL kodowany do QR (domyslnie `sq://station-entry`)
 
 ## 6. Szybki start (lokalnie)
@@ -157,7 +159,7 @@ Dla prawdziwego telefonu uzywaj IP maszyny w sieci LAN, nie `localhost`.
 
 Seed tworzy konto testowe kompatybilne z frontendem:
 - email: `test@mail.com`
-- haslo: `hasło123`
+- haslo: wartosc z `SEED_TEST_USER_PASSWORD` (domyslnie `change-me-seed-pass-123`)
 
 Flow:
 1. `POST /auth/login` ustawia cookie `sq_session`.
@@ -176,13 +178,13 @@ Przyklad create:
   "email": "admin2@survivorquest.app",
   "role": "admin",
   "status": "active",
-  "password": "haslo123"
+  "password": "haslo1234"
 }
 ```
 
 Odpowiedz uzytkownika zawiera pole `hasPassword`, aby frontend wiedzial, czy konto ma ustawione haslo.
 
-Backend haszuje nowe hasla zapisywane przez `POST /users`, `PUT /users` i przez seed.
+Backend haszuje nowe hasla zapisywane przez `POST /users`, `PUT /users` i przez seed. Pole `password` musi miec minimum 8 znakow.
 Cookie `sq_session` nadal przechowuje surowy token po stronie przegladarki, ale w tabeli `AuthSession` backend zapisuje juz tylko jego hash i podczas odczytu umie tez zmigrowac starsze rekordy zapisane w postaci jawnej.
 
 ## 8.1. Format bledow API
@@ -229,6 +231,7 @@ pnpm --filter backend prisma:studio
   - sprawdz czy PostgreSQL dziala i czy `DATABASE_URL` jest poprawny.
 - CORS blokuje requesty z frontendu
   - dodaj origin frontendu do `CORS_ORIGIN_ALLOWLIST`.
+  - w production `CORS_ORIGIN_ALLOWLIST` jest wymagane przy starcie.
 - Cookie auth nie dziala miedzy domenami
   - ustaw `AUTH_COOKIE_SAME_SITE=none`, `AUTH_COOKIE_SECURE=true`, uruchamiaj po HTTPS.
 - `401 Unauthorized` na endpointach adminowych

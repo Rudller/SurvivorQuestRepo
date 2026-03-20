@@ -89,7 +89,8 @@ export class AuthService {
     }
 
     const rawToken = sessionToken?.trim();
-    if (rawToken && session.refreshTokenHash === rawToken) {
+    const looksHashed = /^[a-f0-9]{64}$/i.test(session.refreshTokenHash);
+    if (rawToken && !looksHashed) {
       await this.prisma.authSession.update({
         where: { id: session.id },
         data: {

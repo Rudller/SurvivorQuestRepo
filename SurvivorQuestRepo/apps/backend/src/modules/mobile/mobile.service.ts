@@ -12,6 +12,7 @@ import {
   getOpaqueTokenCandidates,
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
+import { readRuntimeSecret } from '../../shared/lib/runtime-secret';
 import {
   signStationQrToken,
   verifyStationQrToken,
@@ -708,7 +709,8 @@ export class MobileService {
     }
 
     const startedAtIso =
-      existingProgress?.startedAt?.toISOString() || new Date(startedAt).toISOString();
+      existingProgress?.startedAt?.toISOString() ||
+      new Date(startedAt).toISOString();
 
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
@@ -802,7 +804,9 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const requiresCompletionCode = this.isCodeProtectedStationType(station.type);
+    const requiresCompletionCode = this.isCodeProtectedStationType(
+      station.type,
+    );
     if (requiresCompletionCode) {
       const expectedCode = this.parseCompletionCode(station.completionCode);
       const inputCode = this.parseCompletionCode(input.completionCode);
@@ -911,10 +915,7 @@ export class MobileService {
     };
   }
 
-  async getMobileAdminStationQrs(
-    realizationId: string,
-    ttlSeconds?: number,
-  ) {
+  async getMobileAdminStationQrs(realizationId: string, ttlSeconds?: number) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
     this.resolveStationQrTtlSeconds(ttlSeconds);
@@ -1621,7 +1622,10 @@ export class MobileService {
   }
 
   private getStationQrSecret() {
-    return process.env.STATION_QR_SECRET?.trim() || 'survivorquest-station-qr';
+    return readRuntimeSecret({
+      key: 'STATION_QR_SECRET',
+      developmentFallback: 'dev-station-qr-secret-change-me-123456',
+    });
   }
 
   private buildStationQrEntryUrl(token: string) {
@@ -1839,10 +1843,9 @@ export class MobileService {
 
     const haversine =
       Math.sin(latDelta / 2) ** 2 +
-      Math.cos(startLatRad) *
-        Math.cos(endLatRad) *
-        Math.sin(lngDelta / 2) ** 2;
-    const centralAngle = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      Math.cos(startLatRad) * Math.cos(endLatRad) * Math.sin(lngDelta / 2) ** 2;
+    const centralAngle =
+      2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 
     return earthRadiusMeters * centralAngle;
   }

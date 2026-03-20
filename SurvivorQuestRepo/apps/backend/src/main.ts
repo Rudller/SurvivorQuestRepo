@@ -16,7 +16,13 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   const allowlist = getCorsOriginAllowlist();
   const allowAllDevOrigins =
-    process.env.NODE_ENV !== 'production' && allowlist.length === 0;
+    process.env.NODE_ENV !== 'production' &&
+    allowlist.length === 0 &&
+    process.env.CORS_ALLOW_ALL_DEV_ORIGINS === 'true';
+
+  if (process.env.NODE_ENV === 'production' && allowlist.length === 0) {
+    throw new Error('CORS_ORIGIN_ALLOWLIST is required in production');
+  }
 
   app.enableCors({
     origin: (

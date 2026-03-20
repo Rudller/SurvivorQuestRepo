@@ -33,6 +33,7 @@ import {
   type StationQuiz,
   type StationType,
 } from '../station/station.service';
+import { readRuntimeSecret } from '../../shared/lib/runtime-secret';
 
 export type {
   RealizationEntity,
@@ -404,7 +405,10 @@ export class RealizationService {
   }
 
   private getJoinCodePepper() {
-    return process.env.JOIN_CODE_PEPPER?.trim() || 'survivorquest-join-code';
+    return readRuntimeSecret({
+      key: 'JOIN_CODE_PEPPER',
+      developmentFallback: 'dev-join-code-pepper-change-me-123456',
+    });
   }
 
   private parseStoredJoinCode(stored: string) {

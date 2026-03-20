@@ -16,6 +16,8 @@ const dayMs = 24 * 60 * 60 * 1000;
 const hourMs = 60 * 60 * 1000;
 const now = Date.now();
 const isDryRun = process.env.SEED_DRY_RUN === '1';
+const seedTestPassword =
+  process.env.SEED_TEST_USER_PASSWORD?.trim() || 'change-me-seed-pass-123';
 
 const atOffset = (offsetMs: number) => new Date(now + offsetMs);
 
@@ -48,7 +50,7 @@ const users: Prisma.UserCreateManyInput[] = [
     email: 'test@mail.com',
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
-    passwordHash: 'hasło123',
+    passwordHash: seedTestPassword,
     photoUrl: 'https://api.dicebear.com/9.x/initials/svg?seed=test@mail.com',
     createdAt: atOffset(-10 * dayMs),
     updatedAt: atOffset(-5 * dayMs),

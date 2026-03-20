@@ -9,6 +9,7 @@ import type {
 
 const USER_ROLES: UserRole[] = ['admin', 'instructor'];
 const USER_STATUSES: UserStatus[] = ['active', 'invited', 'blocked'];
+const MIN_PASSWORD_LENGTH = 8;
 
 function ensureTrimmedString(value: unknown, required = true) {
   if (typeof value !== 'string') {
@@ -53,6 +54,21 @@ function ensureStatus(value: unknown, required = true): UserStatus | undefined {
   return value as UserStatus;
 }
 
+function ensurePassword(value: unknown, required = false) {
+  const normalized = ensureTrimmedString(value, required);
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized.length < MIN_PASSWORD_LENGTH) {
+    throw new BadRequestException(
+      `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+    );
+  }
+
+  return normalized;
+}
+
 export function parseCreateUserDto(payload: unknown): CreateUserInput {
   if (!payload || typeof payload !== 'object') {
     throw new BadRequestException('Invalid payload');
@@ -67,7 +83,7 @@ export function parseCreateUserDto(payload: unknown): CreateUserInput {
     role: ensureRole(body.role)!,
     status: ensureStatus(body.status)!,
     photoUrl: ensureTrimmedString(body.photoUrl, false),
-    password: ensureTrimmedString(body.password, false),
+    password: ensurePassword(body.password, false),
   };
 }
 
@@ -90,7 +106,7 @@ export function parseUpdateUserDto(payload: unknown): UpdateUserInput {
     role: ensureRole(body.role, false),
     status: ensureStatus(body.status, false),
     photoUrl: ensureTrimmedString(body.photoUrl, false),
-    password: ensureTrimmedString(body.password, false),
+    password: ensurePassword(body.password, false),
   };
 }
 
