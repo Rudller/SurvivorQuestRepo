@@ -345,7 +345,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                     Wybierz plik obrazu
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp"
                       className="hidden"
                       onChange={(event) => {
                         const selectedFile = event.target.files?.[0] ?? null;
@@ -359,7 +359,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                       }}
                     />
                   </label>
-                  <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP, SVG.</p>
+                  <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
                 </div>
               )}
 

@@ -128,6 +128,10 @@ export async function handleImageFile(
     onError("Wybierz plik obrazu.");
     return;
   }
+  if (file.type === "image/svg+xml") {
+    onError("Format SVG nie jest obsługiwany. Użyj PNG, JPG lub WEBP.");
+    return;
+  }
   try {
     if (uploadFile) {
       const uploadedUrl = await uploadFile(file);

@@ -640,7 +640,7 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                             Wybierz plik obrazu
                             <input
                               type="file"
-                              accept="image/*"
+                              accept="image/png,image/jpeg,image/webp"
                               className="hidden"
                               onChange={(event) => {
                                 void handleImageFile(
@@ -659,7 +659,7 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                               }}
                             />
                           </label>
-                          <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP, SVG.</p>
+                          <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
                         </div>
                       )}
 

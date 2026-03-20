@@ -393,7 +393,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             )}
             <input
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) {
