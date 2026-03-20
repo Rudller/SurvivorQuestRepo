@@ -6,8 +6,8 @@ type BottomCountdownPanelProps = {
   remainingLabel: string;
   isCompleted: boolean;
   progressLabel: string;
-  onActivateCamera: () => void;
-  isCameraActivating?: boolean;
+  onOpenQrScanner: () => void;
+  isScannerOpening?: boolean;
 };
 
 function QrScannerIcon() {
@@ -26,8 +26,8 @@ export function BottomCountdownPanel({
   remainingLabel,
   isCompleted,
   progressLabel,
-  onActivateCamera,
-  isCameraActivating = false,
+  onOpenQrScanner,
+  isScannerOpening = false,
 }: BottomCountdownPanelProps) {
   return (
     <View
@@ -49,9 +49,9 @@ export function BottomCountdownPanel({
 
         <Pressable
           className="mx-3 h-14 w-14 items-center justify-center rounded-full active:opacity-90"
-          style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: isCameraActivating ? 0.7 : 1 }}
-          onPress={onActivateCamera}
-          disabled={isCameraActivating}
+          style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: isScannerOpening ? 0.7 : 1 }}
+          onPress={onOpenQrScanner}
+          disabled={isScannerOpening}
         >
           <QrScannerIcon />
         </Pressable>
@@ -66,7 +66,7 @@ export function BottomCountdownPanel({
         </View>
       </View>
       <Text className="mt-2 text-center text-[11px]" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        {isCameraActivating ? "Uruchamianie skanera..." : "Skaner QR"}
+        {isScannerOpening ? "Otwieranie skanera..." : "Skaner QR"}
       </Text>
     </View>
   );

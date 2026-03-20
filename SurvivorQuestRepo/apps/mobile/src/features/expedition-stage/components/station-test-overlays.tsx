@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Alert, Animated, Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import type { ExpeditionTaskStatus } from "../model/types";
 
@@ -19,6 +19,7 @@ export type StationTestViewModel = {
   quizAnswers?: [string, string, string, string];
   quizCorrectAnswerIndex?: number;
   status: ExpeditionTaskStatus;
+  quizFailed?: boolean;
   startedAt: string | null;
 };
 
@@ -34,6 +35,8 @@ type StationPreviewOverlayProps = {
   onClose: () => void;
   onStartTask?: (stationId: string) => Promise<string | null>;
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
+  onQuizFailed?: (stationId: string) => void;
+  onQuizPassed?: (stationId: string) => void;
 };
 
 type QuizPrestartOverlayProps = {
@@ -44,7 +47,11 @@ type QuizPrestartOverlayProps = {
   onClose: () => void;
 };
 
-function getStatusLabel(status: ExpeditionTaskStatus) {
+function getStatusLabel(status: ExpeditionTaskStatus, quizFailed = false) {
+  if (quizFailed && status !== "done") {
+    return "Niezaliczone";
+  }
+
   if (status === "done") {
     return "Ukończone";
   }
@@ -56,7 +63,11 @@ function getStatusLabel(status: ExpeditionTaskStatus) {
   return "Do zrobienia";
 }
 
-function getStatusColor(status: ExpeditionTaskStatus) {
+function getStatusColor(status: ExpeditionTaskStatus, quizFailed = false) {
+  if (quizFailed && status !== "done") {
+    return "#fca5a5";
+  }
+
   if (status === "done") {
     return "#34d399";
   }
@@ -140,11 +151,11 @@ export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStat
                       <Text className="text-xs font-semibold text-zinc-950">Wejdź</Text>
                     </Pressable>
                   </View>
-                  <Text className="mt-1 text-xs" style={{ color: getStatusColor(station.status) }}>
-                    Status: {getStatusLabel(station.status)}
-                  </Text>
-                </View>
-              ))
+                    <Text className="mt-1 text-xs" style={{ color: getStatusColor(station.status, Boolean(station.quizFailed)) }}>
+                      Status: {getStatusLabel(station.status, Boolean(station.quizFailed))}
+                    </Text>
+                  </View>
+                ))
             )}
           </View>
         </ScrollView>
@@ -257,7 +268,7 @@ export function QuizPrestartOverlay({ visible, stationName, isStarting = false, 
   } as const;
 
   return (
-    <Animated.View className="absolute inset-0 z-50 items-center justify-end px-3 pb-5" style={[{ backgroundColor: "rgba(15, 25, 20, 0.88)" }, backdropStyle]}>
+    <Animated.View className="absolute inset-0 z-50 items-center justify-center px-3" style={[{ backgroundColor: "rgba(15, 25, 20, 0.88)" }, backdropStyle]}>
       <Animated.View
         className="w-full max-w-[560px] rounded-3xl border px-4 py-4"
         style={[{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }, panelStyle]}
@@ -298,15 +309,24 @@ export function QuizPrestartOverlay({ visible, stationName, isStarting = false, 
   );
 }
 
-export function StationPreviewOverlay({ station: stationProp, onClose, onStartTask, onCompleteTask }: StationPreviewOverlayProps) {
+export function StationPreviewOverlay({
+  station: stationProp,
+  onClose,
+  onStartTask,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+}: StationPreviewOverlayProps) {
   const { height: viewportHeight } = useWindowDimensions();
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [codeResult, setCodeResult] = useState<string | null>(null);
+  const [quizSubmitError, setQuizSubmitError] = useState<string | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [quizIconLoadFailed, setQuizIconLoadFailed] = useState(false);
   const [isStartingTask, setIsStartingTask] = useState(false);
+  const [isSubmittingQuizAnswer, setIsSubmittingQuizAnswer] = useState(false);
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [displayedStation, setDisplayedStation] = useState<StationTestViewModel | null>(stationProp);
@@ -315,6 +335,7 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
   const quizFeedbackAnimation = useRef(new Animated.Value(0)).current;
   const timerPulseAnimation = useRef(new Animated.Value(0)).current;
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const timeoutPopupShownRef = useRef(false);
   const quizOptions = useMemo(
     () =>
       displayedStation?.quizAnswers ?? [
@@ -357,14 +378,17 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
     setQuizResult(null);
     setVerificationCode("");
     setCodeResult(null);
+    setQuizSubmitError(null);
     setImageLoadFailed(false);
     setQuizIconLoadFailed(false);
     setIsStartingTask(false);
+    setIsSubmittingQuizAnswer(false);
     setIsSubmittingCode(false);
     setNowMs(Date.now());
     quizFeedbackAnimation.setValue(0);
     timerPulseAnimation.setValue(0);
     timerPulseLoopRef.current?.stop();
+    timeoutPopupShownRef.current = false;
   }, [displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
 
   useEffect(() => {
@@ -377,19 +401,26 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
       return;
     }
 
-    const interval = setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const tick = () => {
+      const now = Date.now();
+      setNowMs(now);
+      const msToNextSecond = 1000 - (now % 1000);
+      timeout = setTimeout(tick, Math.max(40, msToNextSecond + 12));
+    };
+
+    tick();
 
     return () => {
-      clearInterval(interval);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     };
   }, [displayedStation]);
 
   const remainingTimeSeconds = (() => {
     if (
       !displayedStation ||
-      displayedStation.stationType !== "time" ||
       !displayedStation.startedAt ||
       displayedStation.timeLimitSeconds <= 0
     ) {
@@ -401,11 +432,13 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
       return null;
     }
 
-    const elapsedSeconds = Math.max(0, Math.round((nowMs - startedMs) / 1000));
-    return Math.max(0, displayedStation.timeLimitSeconds - elapsedSeconds);
+    const endsAtMs = startedMs + displayedStation.timeLimitSeconds * 1000;
+    const remainingMs = Math.max(0, endsAtMs - nowMs);
+    return Math.max(0, Math.ceil(remainingMs / 1000));
   })();
   const finalTenSecondsProgress =
     remainingTimeSeconds !== null && remainingTimeSeconds <= 10 ? clamp01((10 - remainingTimeSeconds) / 10) : 0;
+  const isUrgentPulse = remainingTimeSeconds !== null && remainingTimeSeconds <= 10;
   const hasCountdownForPulse = Boolean(
     displayedStation?.startedAt &&
       displayedStation.timeLimitSeconds > 0 &&
@@ -428,10 +461,7 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
       return;
     }
 
-    const pulseDuration =
-      remainingTimeSeconds <= 10
-        ? Math.max(160, 340 - Math.round(finalTenSecondsProgress * 180))
-        : 620;
+    const pulseDuration = isUrgentPulse ? 220 : 620;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(timerPulseAnimation, {
@@ -454,13 +484,46 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
       loop.stop();
     };
   }, [
-    finalTenSecondsProgress,
     hasCountdownForPulse,
     hasTimerStartedForPulse,
+    isUrgentPulse,
     isOverlayMounted,
-    remainingTimeSeconds,
     stationStatusForPulse,
     timerPulseAnimation,
+  ]);
+
+  useEffect(() => {
+    if (!displayedStation || displayedStation.stationType !== "quiz") {
+      return;
+    }
+
+    if (!displayedStation.startedAt || displayedStation.timeLimitSeconds <= 0 || displayedStation.status === "done") {
+      return;
+    }
+
+    if (remainingTimeSeconds === null || remainingTimeSeconds > 0) {
+      return;
+    }
+
+    if (selectedQuizOption !== null || isSubmittingQuizAnswer || timeoutPopupShownRef.current) {
+      return;
+    }
+
+    timeoutPopupShownRef.current = true;
+    onQuizFailed?.(displayedStation.stationId);
+    Alert.alert("Nieodpowiedziano na pytanie", "Czas na quiz minął. Zadanie nie zostało zaliczone.", [
+      {
+        text: "Wróć do mapy",
+        onPress: onClose,
+      },
+    ]);
+  }, [
+    displayedStation,
+    isSubmittingQuizAnswer,
+    onClose,
+    onQuizFailed,
+    remainingTimeSeconds,
+    selectedQuizOption,
   ]);
 
   if (!isOverlayMounted || !displayedStation) {
@@ -655,11 +718,12 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
                               : EXPEDITION_THEME.panelStrong,
                         }}
                         onPress={() => {
-                          if (selectedQuizOption !== null) {
+                          if (selectedQuizOption !== null || isSubmittingQuizAnswer) {
                             return;
                           }
 
                           setSelectedQuizOption(index);
+                          setQuizSubmitError(null);
                           const correct = station.quizCorrectAnswerIndex === index;
                           setQuizResult(correct ? "Dobra odpowiedź" : "Zła odpowiedź");
                           quizFeedbackAnimation.setValue(0);
@@ -668,8 +732,49 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
                             duration: 260,
                             useNativeDriver: true,
                           }).start();
+                          if (!correct) {
+                            onQuizFailed?.(station.stationId);
+                            Alert.alert("Nie zaliczono", "Wybrano nieprawidłową odpowiedź.", [
+                              {
+                                text: "Wróć do mapy",
+                                onPress: onClose,
+                              },
+                            ]);
+                            return;
+                          }
+
+                          if (!onCompleteTask) {
+                            onQuizPassed?.(station.stationId);
+                            Alert.alert("Zaliczono", "Poprawna odpowiedź. Zadanie zaliczone.", [
+                              {
+                                text: "Wróć do mapy",
+                                onPress: onClose,
+                              },
+                            ]);
+                            return;
+                          }
+
+                          setIsSubmittingQuizAnswer(true);
+                          void onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined)
+                            .then((error) => {
+                              if (error) {
+                                setQuizSubmitError(error);
+                                Alert.alert("Błąd", error);
+                                return;
+                              }
+                              onQuizPassed?.(station.stationId);
+                              Alert.alert("Zaliczono", "Poprawna odpowiedź. Zadanie zaliczone.", [
+                                {
+                                  text: "Wróć do mapy",
+                                  onPress: onClose,
+                                },
+                              ]);
+                            })
+                            .finally(() => {
+                              setIsSubmittingQuizAnswer(false);
+                            });
                         }}
-                        disabled={selectedQuizOption !== null}
+                        disabled={selectedQuizOption !== null || isSubmittingQuizAnswer}
                       >
                         <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                           {option}
@@ -697,6 +802,12 @@ export function StationPreviewOverlay({ station: stationProp, onClose, onStartTa
                       {quizResult}
                     </Text>
                   </Animated.View>
+                ) : null}
+
+                {quizSubmitError ? (
+                  <Text className="mt-2 text-center text-xs" style={{ color: EXPEDITION_THEME.danger }}>
+                    {quizSubmitError}
+                  </Text>
                 ) : null}
               </View>
             ) : null}

@@ -18,7 +18,7 @@ import {
 } from "../components/station-test-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
-import { buildStationPinCoordinates, DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
+import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import { DEFAULT_STATION_PIN_CUSTOMIZATION, resolveDefaultStationPoints, type MapCoordinate } from "../model/types";
 
 type ExpeditionStageScreenProps = {
@@ -203,13 +203,15 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [isCameraActivating, setIsCameraActivating] = useState(false);
+  const [isScannerOpening, setIsScannerOpening] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isQrResolving, setIsQrResolving] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
   const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
+  const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
+  const [failedQuizStationIds, setFailedQuizStationIds] = useState<string[]>([]);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
@@ -345,16 +347,6 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     setSelectedStationId(stationIds[0] ?? null);
   }, [selectedStationId, stationIds]);
 
-  const fallbackStationIds = useMemo(
-    () => stationIds.filter((stationId) => !realStationCoordinates[stationId]),
-    [realStationCoordinates, stationIds],
-  );
-
-  const fallbackStationCoordinates = useMemo(
-    () => buildStationPinCoordinates(fallbackStationIds, mapAnchor ?? stationCoordinateAnchor ?? DEFAULT_MAP_ANCHOR),
-    [fallbackStationIds, mapAnchor, stationCoordinateAnchor],
-  );
-
   useEffect(() => {
     if (!playerLocation) {
       return;
@@ -439,17 +431,14 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     showTransientPopup(actionMessage, "success");
   }, [actionMessage, showTransientPopup]);
 
-  const stationCoordinates = useMemo(
-    () => ({
-      ...fallbackStationCoordinates,
-      ...realStationCoordinates,
-    }),
-    [fallbackStationCoordinates, realStationCoordinates],
+  const mappableStationIds = useMemo(
+    () => stationIds.filter((stationId) => Boolean(realStationCoordinates[stationId])),
+    [realStationCoordinates, stationIds],
   );
 
   const stationPins = useMemo(
     () =>
-      stationIds.map((stationId) => {
+      mappableStationIds.map((stationId) => {
         const task = sessionState.tasks.find((item) => item.stationId === stationId);
         const metadata = stationMetadataMap[stationId];
         const visual = resolveStationVisual(metadata?.type, task?.status ?? "todo");
@@ -457,17 +446,17 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
         return {
           stationId,
           label: resolveStationLabel(stationId, metadata?.name),
-          coordinate: stationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
+          coordinate: realStationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
           status: task?.status ?? "todo",
           pointsAwarded: task?.pointsAwarded ?? 0,
           customization: visual,
         };
       }),
-    [mapAnchor, sessionState.tasks, stationCoordinates, stationIds, stationMetadataMap],
+    [mapAnchor, mappableStationIds, realStationCoordinates, sessionState.tasks, stationMetadataMap],
   );
 
   const selectedStationLabel = selectedStationId
-    ? stationPins.find((pin) => pin.stationId === selectedStationId)?.label ?? `Stanowisko ${selectedStationId}`
+    ? resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name)
     : null;
 
   const completedTasks = sessionState.tasks.filter((task) => task.status === "done").length;
@@ -486,8 +475,9 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
         stationId: task.stationId,
         label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name),
         done: task.status === "done",
+        failed: task.status !== "done" && failedQuizStationIds.includes(task.stationId),
       })),
-    [sessionState.tasks, stationMetadataMap],
+    [failedQuizStationIds, sessionState.tasks, stationMetadataMap],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
@@ -515,6 +505,7 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                 quizAnswers: stationCatalog.quiz?.answers,
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 status: task?.status ?? "todo",
+                quizFailed: (task?.status ?? "todo") !== "done" && failedQuizStationIds.includes(stationCatalog.id),
                 startedAt: task?.startedAt ?? null,
               } satisfies StationTestViewModel;
             })
@@ -538,6 +529,7 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                 quizAnswers: undefined,
                 quizCorrectAnswerIndex: undefined,
                 status: task.status,
+                quizFailed: task.status !== "done" && failedQuizStationIds.includes(stationId),
                 startedAt: task.startedAt,
               } satisfies StationTestViewModel;
             });
@@ -559,14 +551,31 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
             quizAnswers: definition.quizAnswers,
             quizCorrectAnswerIndex: definition.quizCorrectAnswerIndex,
             status: "todo",
+            quizFailed: false,
             startedAt: null,
           }) satisfies StationTestViewModel,
       );
 
       return [...baseEntries, ...mobileTestEntries].sort((left, right) => left.name.localeCompare(right.name, "pl"));
     },
-    [sessionState.realization.stations, sessionState.tasks, stationMetadataMap, taskByStationId],
+    [failedQuizStationIds, sessionState.realization.stations, sessionState.tasks, stationMetadataMap, taskByStationId],
   );
+
+  useEffect(() => {
+    setFailedQuizStationIds((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+
+      const activeFailedInProgress = new Set(
+        sessionState.tasks
+          .filter((task) => task.status === "in-progress")
+          .map((task) => task.stationId),
+      );
+      const next = current.filter((stationId) => activeFailedInProgress.has(stationId));
+      return next.length === current.length ? current : next;
+    });
+  }, [sessionState.tasks]);
 
   const activeStationTest = useMemo(
     () => stationTestEntries.find((item) => item.stationId === activeStationTestId) ?? null,
@@ -607,6 +616,27 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     }
   }, [pendingQuizStartStationId]);
 
+  useEffect(() => {
+    if (!activeStationTestId) {
+      return;
+    }
+
+    const activeTask = taskByStationId[activeStationTestId];
+    if (!activeTask?.startedAt) {
+      return;
+    }
+
+    setLocalStartedAtByStationId((current) => {
+      if (!current[activeStationTestId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[activeStationTestId];
+      return next;
+    });
+  }, [activeStationTestId, taskByStationId]);
+
   const teamColor = TEAM_COLORS.find((color) => color.key === sessionState.team.color) ?? null;
   const teamColorHex = teamColor?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
@@ -617,10 +647,10 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     sessionState.realization.durationMinutes,
   );
 
-  async function handleCameraActivation() {
+  async function handleOpenQrScanner() {
     setActionError(null);
     setActionMessage(null);
-    setIsCameraActivating(true);
+    setIsScannerOpening(true);
 
     try {
       const currentLocation = playerLocation ?? (await requestCurrentLocation().catch(() => null));
@@ -635,9 +665,9 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
       setIsQrScannerOpen(true);
       setActionMessage("Skaner QR gotowy.");
     } catch (error) {
-      setActionError(getApiErrorMessage(error, "Nie udało się uruchomić kamery."));
+      setActionError(getApiErrorMessage(error, "Nie udało się otworzyć skanera."));
     } finally {
-      setIsCameraActivating(false);
+      setIsScannerOpening(false);
     }
   }
 
@@ -786,8 +816,12 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                     <View
                       className="h-4 w-4 items-center justify-center rounded border"
                       style={{
-                        borderColor: item.done ? "#34d399" : EXPEDITION_THEME.border,
-                        backgroundColor: item.done ? "rgba(52, 211, 153, 0.2)" : "rgba(15, 23, 42, 0.2)",
+                        borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
+                        backgroundColor: item.done
+                          ? "rgba(52, 211, 153, 0.2)"
+                          : item.failed
+                            ? "rgba(127, 29, 29, 0.3)"
+                            : "rgba(15, 23, 42, 0.2)",
                       }}
                     >
                       {item.done ? (
@@ -797,9 +831,20 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                         >
                           ✓
                         </Text>
+                      ) : item.failed ? (
+                        <Text
+                          className="text-[10px] font-bold"
+                          style={{ color: "#fecaca", lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                        >
+                          ✕
+                        </Text>
                       ) : null}
                     </View>
-                    <Text className="flex-1 text-xs" style={{ color: EXPEDITION_THEME.textPrimary }} numberOfLines={1}>
+                    <Text
+                      className="flex-1 text-xs"
+                      style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary }}
+                      numberOfLines={1}
+                    >
                       {item.label}
                     </Text>
                   </View>
@@ -838,8 +883,8 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
             remainingLabel={countdown.remainingLabel}
             isCompleted={countdown.isCompleted}
             progressLabel={`${completedTasks}/${taskTotal}`}
-            onActivateCamera={() => void handleCameraActivation()}
-            isCameraActivating={isCameraActivating}
+            onOpenQrScanner={() => void handleOpenQrScanner()}
+            isScannerOpening={isScannerOpening}
           />
         </View>
       </View>
@@ -871,10 +916,23 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
       />
 
       <StationPreviewOverlay
-        station={activeStationTest}
+        station={
+          activeStationTest
+            ? {
+                ...activeStationTest,
+                startedAt: activeStationTest.startedAt ?? localStartedAtByStationId[activeStationTest.stationId] ?? null,
+              }
+            : null
+        }
         onClose={() => setActiveStationTestId(null)}
         onStartTask={handleStartStationTestTask}
         onCompleteTask={handleCompleteStationTestTask}
+        onQuizFailed={(stationId) => {
+          setFailedQuizStationIds((current) => (current.includes(stationId) ? current : [...current, stationId]));
+        }}
+        onQuizPassed={(stationId) => {
+          setFailedQuizStationIds((current) => current.filter((id) => id !== stationId));
+        }}
       />
 
       <QuizPrestartOverlay
@@ -889,12 +947,18 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
           if (!pendingQuizStartStationId) {
             return;
           }
+          const startedAtIso = new Date().toISOString();
           setIsStartingPendingQuiz(true);
+          setLocalStartedAtByStationId((current) => ({
+            ...current,
+            [pendingQuizStartStationId]: startedAtIso,
+          }));
           setActionError(null);
           setActionMessage(null);
 
-          const startError = await handleStartStationTestTask(pendingQuizStartStationId);
+          const startError = await startStationTask(pendingQuizStartStationId, startedAtIso);
           if (startError) {
+            setActionError(startError);
             setIsStartingPendingQuiz(false);
             return;
           }

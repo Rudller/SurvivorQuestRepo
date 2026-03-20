@@ -150,10 +150,28 @@ export class MobileController {
     return this.mobileService.getMobileAdminRealizationOverview('current');
   }
 
+  @Post('admin/realizations/current/reset-completed-tasks')
+  @UseGuards(AdminSessionGuard)
+  async resetMobileAdminCurrentRealizationCompletedTasks() {
+    return this.mobileService.resetMobileAdminCompletedTasks('current');
+  }
+
   @Get('admin/realizations/current/locations')
   @UseGuards(AdminSessionGuard)
   async getMobileAdminCurrentRealizationLocations() {
     return this.mobileService.getMobileAdminRealizationLocations('current');
+  }
+
+  @Get('admin/realizations/current/station-qr')
+  @UseGuards(AdminSessionGuard)
+  async getMobileAdminCurrentRealizationStationQrs(
+    @Query('ttlSeconds') ttlSeconds?: string,
+  ) {
+    const ttlCandidate =
+      typeof ttlSeconds === 'string' && ttlSeconds.trim().length > 0
+        ? Number(ttlSeconds)
+        : undefined;
+    return this.mobileService.getMobileAdminStationQrs('current', ttlCandidate);
   }
 
   @Get('admin/realizations/:realizationId')
@@ -162,6 +180,14 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminRealizationOverview(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/reset-completed-tasks')
+  @UseGuards(AdminSessionGuard)
+  async resetMobileAdminRealizationCompletedTasks(
+    @Param('realizationId') realizationId: string,
+  ) {
+    return this.mobileService.resetMobileAdminCompletedTasks(realizationId);
   }
 
   @Get('admin/realizations/:realizationId/locations')

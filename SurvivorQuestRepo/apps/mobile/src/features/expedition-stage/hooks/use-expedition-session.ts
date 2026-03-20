@@ -255,18 +255,63 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       try {
+        const finishedAt = new Date().toISOString();
         await postMobileCompleteTask(apiBaseUrl, {
           sessionToken: session.sessionToken,
           stationId: normalizedStationId,
           completionCode: normalizedCode,
           startedAt,
-          finishedAt: new Date().toISOString(),
+          finishedAt,
+        });
+
+        setSessionState((current) => {
+          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
+          const station = current.realization.stations.find((item) => item.id === normalizedStationId);
+
+          if (existingTask?.status === "done" || !existingTask) {
+            return current;
+          }
+
+          const basePoints = station?.points ?? resolveDefaultStationPoints(normalizedStationId);
+          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
+          const awardedPoints =
+            station?.type === "time"
+              ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
+              : Math.max(0, Math.round(basePoints));
+
+          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+            if (task.stationId !== normalizedStationId) {
+              return task;
+            }
+
+            return {
+              ...task,
+              status: "done" as const,
+              pointsAwarded: awardedPoints,
+              startedAt: task.startedAt ?? effectiveStartedAt,
+              finishedAt,
+            };
+          });
+
+          return {
+            ...current,
+            tasks: nextTasks,
+            team: {
+              ...current.team,
+              points: current.team.points + awardedPoints,
+            },
+            meta: {
+              ...current.meta,
+              eventLogCount: current.meta.eventLogCount + 1,
+            },
+          };
         });
       } catch (error) {
         return getApiErrorMessage(error, "Nie udało się ukończyć zadania.");
       }
 
-      return refreshSessionState();
+      void refreshSessionState();
+      return null;
     },
     [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
   );

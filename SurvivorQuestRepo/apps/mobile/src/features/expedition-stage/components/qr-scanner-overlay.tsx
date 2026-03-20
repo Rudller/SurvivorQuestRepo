@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 
 type QrScannerOverlayProps = {
@@ -12,6 +12,8 @@ type QrScannerOverlayProps = {
 export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: QrScannerOverlayProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
+  const [isMounted, setIsMounted] = useState(visible);
+  const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
     if (!visible) {
@@ -30,85 +32,186 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
     }
   }, [isResolving]);
 
+  useEffect(() => {
+    if (visible) {
+      setIsMounted(true);
+      slideAnimation.stopAnimation();
+      Animated.timing(slideAnimation, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    slideAnimation.stopAnimation();
+    Animated.timing(slideAnimation, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setIsMounted(false);
+      }
+    });
+  }, [slideAnimation, visible]);
+
   const canScan = useMemo(
     () => visible && permission?.granted && !isResolving && !isScanLocked,
     [isResolving, isScanLocked, permission?.granted, visible],
   );
 
-  if (!visible) {
+  if (!isMounted) {
     return null;
   }
 
-  if (!permission?.granted) {
-    return (
-      <View className="absolute inset-0 z-50 items-center justify-center bg-black/90 px-6">
-        <View className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900/95 p-5">
-          <Text className="text-base font-semibold text-zinc-100">Dostęp do kamery</Text>
-          <Text className="mt-2 text-sm text-zinc-300">
-            Aby skanować kody QR stanowisk, włącz dostęp do kamery.
-          </Text>
-
-          <View className="mt-4 flex-row gap-2">
-            <Pressable
-              className="flex-1 rounded-lg border border-zinc-700 px-3 py-2"
-              onPress={onClose}
-            >
-              <Text className="text-center text-sm text-zinc-200">Anuluj</Text>
-            </Pressable>
-            <Pressable
-              className="flex-1 rounded-lg bg-amber-400 px-3 py-2"
-              onPress={() => void requestPermission()}
-            >
-              <Text className="text-center text-sm font-semibold text-zinc-950">Włącz kamerę</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  const backdropStyle = {
+    opacity: slideAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    }),
+  } as const;
+  const panelStyle = {
+    opacity: slideAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.92, 1],
+    }),
+    transform: [
+      {
+        translateY: slideAnimation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [180, 0],
+        }),
+      },
+    ],
+  } as const;
 
   return (
-    <View className="absolute inset-0 z-50 bg-black">
-      <CameraView
-        className="flex-1"
-        facing="back"
-        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={
-          canScan
-            ? ({ data }) => {
-                const value = typeof data === "string" ? data.trim() : "";
-                if (!value) {
-                  return;
-                }
-
-                setIsScanLocked(true);
-                onDetected(value);
-              }
-            : undefined
-        }
-      />
-
-      <View className="pointer-events-none absolute left-0 right-0 top-16 items-center px-5">
-        <View className="rounded-xl bg-black/65 px-4 py-2">
-          <Text className="text-center text-xs uppercase tracking-widest text-zinc-300">Skaner QR</Text>
-          <Text className="mt-1 text-center text-sm text-zinc-100">Skieruj aparat na kod stanowiska</Text>
-        </View>
-      </View>
-
-      <View className="absolute left-0 right-0 bottom-10 items-center px-5">
-        <View className="w-full max-w-md rounded-2xl bg-black/70 p-4">
-          {isResolving ? (
-            <View className="mb-3 flex-row items-center justify-center gap-2">
-              <ActivityIndicator color="#fbbf24" />
-              <Text className="text-sm text-zinc-200">Weryfikuję kod...</Text>
+    <Animated.View className="absolute inset-0 z-50" style={[{ backgroundColor: "rgba(0, 0, 0, 0.85)" }, backdropStyle]}>
+      <Animated.View className="absolute inset-0 items-center justify-center px-4" style={panelStyle}>
+        <View className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4">
+          <View className="flex-row items-start justify-between gap-3">
+            <View className="flex-1">
+              <Text className="text-xs uppercase tracking-widest text-zinc-300">Skaner QR</Text>
+              <Text className="mt-1 text-sm text-zinc-100">Skieruj kod do ramki</Text>
             </View>
-          ) : null}
+            <Pressable
+              className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
+              style={{ borderColor: "#3f3f46", backgroundColor: "#27272a" }}
+              onPress={onClose}
+            >
+              <Text className="text-base font-semibold text-zinc-100">✕</Text>
+            </Pressable>
+          </View>
 
-          <Pressable className="rounded-lg border border-zinc-600 px-3 py-2" onPress={onClose}>
-            <Text className="text-center text-sm text-zinc-100">Zamknij skaner</Text>
-          </Pressable>
+          {!permission?.granted ? (
+            <View className="mt-4 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3">
+              <Text className="text-sm font-semibold text-zinc-100">Dostęp do kamery</Text>
+              <Text className="mt-1 text-xs text-zinc-300">
+                Aby skanować kody QR stanowisk, włącz dostęp do kamery.
+              </Text>
+              <Pressable
+                className="mt-3 rounded-lg bg-amber-400 px-3 py-2 active:opacity-90"
+                onPress={() => void requestPermission()}
+              >
+                <Text className="text-center text-sm font-semibold text-zinc-950">Włącz kamerę</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View className="mt-3 rounded-xl border border-zinc-700 bg-black" style={{ height: 420 }}>
+              <CameraView
+                style={{ flex: 1 }}
+                active={visible}
+                facing="back"
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={
+                  canScan
+                    ? ({ data }) => {
+                        const value = typeof data === "string" ? data.trim() : "";
+                        if (!value) {
+                          return;
+                        }
+
+                        setIsScanLocked(true);
+                        onDetected(value);
+                      }
+                    : undefined
+                }
+              />
+              <View className="pointer-events-none absolute inset-0 items-center justify-center">
+                <View
+                  style={{
+                    width: 300,
+                    height: 300,
+                    position: "relative",
+                  }}
+                >
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: 34,
+                      height: 34,
+                      borderTopWidth: 3,
+                      borderLeftWidth: 3,
+                      borderColor: "#fbbf24",
+                      borderTopLeftRadius: 10,
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      right: 0,
+                      width: 34,
+                      height: 34,
+                      borderTopWidth: 3,
+                      borderRightWidth: 3,
+                      borderColor: "#fbbf24",
+                      borderTopRightRadius: 10,
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      left: 0,
+                      width: 34,
+                      height: 34,
+                      borderBottomWidth: 3,
+                      borderLeftWidth: 3,
+                      borderColor: "#fbbf24",
+                      borderBottomLeftRadius: 10,
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      right: 0,
+                      width: 34,
+                      height: 34,
+                      borderBottomWidth: 3,
+                      borderRightWidth: 3,
+                      borderColor: "#fbbf24",
+                      borderBottomRightRadius: 10,
+                    }}
+                  />
+                </View>
+              </View>
+              {isResolving ? (
+                <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/55">
+                  <View className="flex-row items-center gap-2 rounded-xl bg-black/70 px-3 py-2">
+                    <ActivityIndicator color="#fbbf24" />
+                    <Text className="text-sm text-zinc-100">Weryfikuję kod...</Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          )}
         </View>
-      </View>
-    </View>
+      </Animated.View>
+    </Animated.View>
   );
 }

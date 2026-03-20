@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
-import { useGetCurrentRealizationOverviewQuery } from "@/features/current-realization/api/current-realization.api";
+import {
+  useGetCurrentRealizationOverviewQuery,
+  useResetCurrentRealizationCompletedTasksMutation,
+} from "@/features/current-realization/api/current-realization.api";
+import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
 
 function isUnauthorized(error: unknown) {
@@ -14,6 +18,7 @@ function isUnauthorized(error: unknown) {
 
 export default function CurrentRealizationPage() {
   const router = useRouter();
+  const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
 
   const {
     data: meData,
@@ -23,6 +28,7 @@ export default function CurrentRealizationPage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const [resetCompletedTasks, { isLoading: isResettingTasks }] = useResetCurrentRealizationCompletedTasksMutation();
 
   const {
     data: overview,
@@ -78,9 +84,36 @@ export default function CurrentRealizationPage() {
               </div>
 
               {overview && (
-                <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
-                  <p>Kod dołączenia</p>
-                  <p className="mt-0.5 text-sm font-semibold tracking-widest">{overview.realization.joinCode}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsQrPanelOpen(true)}
+                    className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Kody QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Czy na pewno chcesz zresetować wszystkie ukończone zadania?")) {
+                        return;
+                      }
+
+                      try {
+                        await resetCompletedTasks().unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isResettingTasks}
+                    className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isResettingTasks ? "Resetowanie..." : "Resetuj ukończone zadania"}
+                  </button>
+                  <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
+                    <p>Kod dołączenia</p>
+                    <p className="mt-0.5 text-sm font-semibold tracking-widest">{overview.realization.joinCode}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -175,7 +208,8 @@ export default function CurrentRealizationPage() {
                           {overview.realization.locationRequired ? "Tak" : "Nie"}
                         </p>
                         <p>
-                          <span className="text-zinc-500">Stanowiska:</span> {overview.realization.stationIds.join(", ")}
+                          <span className="text-zinc-500">Stanowiska:</span>{" "}
+                          {overview.realization.stations.map((station) => station.stationName || station.stationId).join(", ")}
                         </p>
                       </div>
                     </div>
@@ -203,6 +237,13 @@ export default function CurrentRealizationPage() {
           </div>
         </section>
       </div>
+
+      {overview && isQrPanelOpen ? (
+        <CurrentRealizationStationQrPanel
+          realization={overview.realization}
+          onClose={() => setIsQrPanelOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

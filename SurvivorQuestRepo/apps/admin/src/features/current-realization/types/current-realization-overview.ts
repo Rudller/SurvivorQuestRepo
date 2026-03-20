@@ -14,7 +14,7 @@ export type CurrentRealizationOverview = {
     joinCode: string;
     teamCount: number;
     stationIds: string[];
-    stations: Array<{ stationId: string; defaultPoints: number }>;
+    stations: Array<{ stationId: string; stationName: string; defaultPoints: number }>;
     updatedAt: string;
   };
   teams: Array<{

@@ -1,5 +1,6 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
+import type { StationType } from "@/features/games/types/station";
 import type { CurrentRealizationOverview } from "../types/current-realization-overview";
 
 type UnknownRecord = Record<string, unknown>;
@@ -45,6 +46,7 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         const item = asRecord(value);
         return {
           stationId: asString(item.stationId ?? item.station_id),
+          stationName: asString(item.stationName ?? item.station_name),
           defaultPoints: asNumber(item.defaultPoints ?? item.default_points),
         };
       }),
@@ -128,13 +130,56 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
   };
 }
 
+export type CurrentRealizationStationQrResponse = {
+  realizationId: string;
+  issuedAt: string;
+  expiresAt: string;
+  tokenTtlSeconds: number;
+  entries: Array<{
+    stationId: string;
+    stationName: string;
+    stationType: StationType;
+    completionCode: string | null;
+    qrToken: string;
+    entryUrl: string;
+  }>;
+};
+
 export const currentRealizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getCurrentRealizationOverview: build.query<CurrentRealizationOverview, void>({
       query: () => buildApiPath("/mobile/admin/realizations/current"),
       transformResponse: (response: unknown) => normalizeOverview(response),
+      providesTags: ["Realization"],
+    }),
+    resetCurrentRealizationCompletedTasks: build.mutation<
+      { realizationId: string; resetCount: number; affectedTeams: number },
+      void
+    >({
+      query: () => ({
+        url: buildApiPath("/mobile/admin/realizations/current/reset-completed-tasks"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    getCurrentRealizationStationQrs: build.query<
+      CurrentRealizationStationQrResponse,
+      { ttlSeconds?: number } | void
+    >({
+      query: (arg) => {
+        const ttlSeconds = arg?.ttlSeconds;
+        const suffix =
+          typeof ttlSeconds === "number" && Number.isFinite(ttlSeconds)
+            ? `?ttlSeconds=${Math.max(1, Math.round(ttlSeconds))}`
+            : "";
+        return buildApiPath(`/mobile/admin/realizations/current/station-qr${suffix}`);
+      },
     }),
   }),
 });
 
-export const { useGetCurrentRealizationOverviewQuery } = currentRealizationApi;
+export const {
+  useGetCurrentRealizationOverviewQuery,
+  useResetCurrentRealizationCompletedTasksMutation,
+  useGetCurrentRealizationStationQrsQuery,
+} = currentRealizationApi;

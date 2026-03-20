@@ -951,6 +951,7 @@ export class MobileService {
           stationId,
           stationName: station?.name || `Station ${stationId}`,
           stationType: station?.type || 'quiz',
+          completionCode: station?.completionCode?.trim() || null,
           qrToken,
           entryUrl: this.buildStationQrEntryUrl(qrToken),
         };
@@ -1179,10 +1180,9 @@ export class MobileService {
         teamCount: realization.teamCount,
         stationIds: realization.stationIds,
         stations: await Promise.all(
-          realization.stationIds.map(async (stationId) => ({
-            stationId,
-            defaultPoints: await this.getDefaultPointsForStation(stationId),
-          })),
+          realization.stationIds.map((stationId) =>
+            this.getStationSummaryForAdmin(stationId),
+          ),
         ),
         updatedAt: realization.updatedAt,
       },
@@ -1208,6 +1208,73 @@ export class MobileService {
         pointsTotal: teamViews.reduce((sum, team) => sum + team.points, 0),
         eventCount: logs.length,
       },
+    };
+  }
+
+  async resetMobileAdminCompletedTasks(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    const resettableTasks = await this.prisma.teamTaskProgress.findMany({
+      where: {
+        realizationId: realization.id,
+        status: {
+          in: [TaskStatus.DONE, TaskStatus.IN_PROGRESS],
+        },
+      },
+      select: {
+        id: true,
+        teamId: true,
+      },
+    });
+
+    if (resettableTasks.length === 0) {
+      return {
+        realizationId: realization.id,
+        resetCount: 0,
+        affectedTeams: 0,
+      };
+    }
+
+    const affectedTeamIds = Array.from(
+      new Set(resettableTasks.map((item) => item.teamId)),
+    );
+
+    await this.prisma.teamTaskProgress.updateMany({
+      where: {
+        realizationId: realization.id,
+        status: {
+          in: [TaskStatus.DONE, TaskStatus.IN_PROGRESS],
+        },
+      },
+      data: {
+        status: TaskStatus.TODO,
+        pointsAwarded: 0,
+        startedAt: null,
+        finishedAt: null,
+      },
+    });
+
+    for (const teamId of affectedTeamIds) {
+      await this.recalculateTeamPoints(teamId, realization.id);
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: null,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'completed_tasks_reset',
+      payload: {
+        resetCount: resettableTasks.length,
+        affectedTeams: affectedTeamIds.length,
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      resetCount: resettableTasks.length,
+      affectedTeams: affectedTeamIds.length,
     };
   }
 
@@ -1505,9 +1572,13 @@ export class MobileService {
     return points;
   }
 
-  private async getDefaultPointsForStation(stationId: string) {
+  private async getStationSummaryForAdmin(stationId: string) {
     const station = await this.stationService.findStationById(stationId);
-    return station?.points ?? 0;
+    return {
+      stationId,
+      stationName: station?.name ?? `Stanowisko ${stationId}`,
+      defaultPoints: station?.points ?? 0,
+    };
   }
 
   private resolveStationQrTtlSeconds(ttlSeconds?: number) {

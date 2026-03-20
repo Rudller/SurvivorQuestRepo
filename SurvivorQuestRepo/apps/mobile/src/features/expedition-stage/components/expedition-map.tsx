@@ -6,6 +6,7 @@ import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
 
 const OSM_ATTRIBUTION_LABEL = "© OpenStreetMap contributors";
 const DEFAULT_ZOOM = 14;
+const DEFAULT_EDGE_DISTANCE_METERS = 200;
 
 type ExpeditionMapProps = {
   centerCoordinate: MapCoordinate;
@@ -100,12 +101,26 @@ function buildLeafletHtml(initialPayloadJson: string) {
           }).addTo(map);
         }
 
+        function applyDefaultDistanceView(centerLatLng) {
+          if (!map || !centerLatLng) {
+            return;
+          }
+
+          const center = L.latLng(centerLatLng[0], centerLatLng[1]);
+          const bounds = center.toBounds(${DEFAULT_EDGE_DISTANCE_METERS * 2});
+          map.fitBounds(bounds, {
+            animate: false,
+            padding: [22, 22],
+            maxZoom: 19,
+          });
+        }
+
         function applyPayload(payload) {
           ensureMap();
 
           const center = toLatLng(payload.centerCoordinate);
           if (!initializedCenter && center) {
-            map.setView(center, ${DEFAULT_ZOOM});
+            applyDefaultDistanceView(center);
             initializedCenter = true;
             lastCenterKey = center[0].toFixed(6) + "," + center[1].toFixed(6);
           }
