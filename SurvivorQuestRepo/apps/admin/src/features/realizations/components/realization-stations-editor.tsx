@@ -10,7 +10,6 @@ import {
   normalizeStationQuiz,
   QUIZ_ANSWER_COUNT,
   isCompletionCodeRequired,
-  isValidCompletionCode,
   formatTimeLimit,
   handleImageFile,
   handleImagePaste,
@@ -18,6 +17,10 @@ import {
   normalizeCompletionCode,
   generateSampleCompletionCode,
   type ImageInputMode,
+  resolveCompletionCodeGeneratorMode,
+  type CompletionCodeGeneratorMode,
+  completionCodeModeOptions,
+  isValidCompletionCodeForMode,
 } from "@/features/games/station.utils";
 import type { RealizationStationDraft } from "../types/realization";
 
@@ -36,6 +39,7 @@ const RealizationLocationPickerMap = dynamic(
 interface RealizationStationsEditorProps {
   stations: RealizationStationDraft[];
   onChange: (stations: RealizationStationDraft[]) => void;
+  showValidation?: boolean;
 }
 
 export function createEmptyRealizationStationDraft(): RealizationStationDraft {
@@ -116,7 +120,8 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
       return true;
     }
 
-    if (isCompletionCodeRequired(station.type) && !isValidCompletionCode(station.completionCode ?? "")) {
+    const completionCodeMode = resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
+    if (isCompletionCodeRequired(station.type) && !isValidCompletionCodeForMode(station.completionCode ?? "", completionCodeMode)) {
       return true;
     }
 
@@ -145,9 +150,48 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
   });
 }
 
-export function RealizationStationsEditor({ stations, onChange }: RealizationStationsEditorProps) {
+export type RealizationStationValidation = {
+  missingName: boolean;
+  missingDescription: boolean;
+  invalidPoints: boolean;
+  invalidTimeLimit: boolean;
+  invalidCompletionCode: boolean;
+  invalidQuiz: boolean;
+  invalidCoordinates: boolean;
+};
+
+export function getRealizationStationValidation(station: RealizationStationDraft): RealizationStationValidation {
+  const missingName = !station.name.trim();
+  const missingDescription = !station.description.trim();
+  const invalidPoints = !Number.isFinite(station.points) || station.points <= 0;
+  const invalidTimeLimit =
+    !Number.isFinite(station.timeLimitSeconds) || station.timeLimitSeconds < 0 || station.timeLimitSeconds > 600;
+  const completionCodeMode = resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
+  const invalidCompletionCode =
+    isCompletionCodeRequired(station.type) && !isValidCompletionCodeForMode(station.completionCode ?? "", completionCodeMode);
+  const invalidQuiz = station.type === "quiz" && (!station.quiz || !normalizeStationQuiz(station.quiz));
+  const hasLatitude = typeof station.latitude === "number" && Number.isFinite(station.latitude);
+  const hasLongitude = typeof station.longitude === "number" && Number.isFinite(station.longitude);
+  const invalidCoordinates =
+    hasLatitude !== hasLongitude ||
+    (hasLatitude && (station.latitude! < -90 || station.latitude! > 90)) ||
+    (hasLongitude && (station.longitude! < -180 || station.longitude! > 180));
+
+  return {
+    missingName,
+    missingDescription,
+    invalidPoints,
+    invalidTimeLimit,
+    invalidCompletionCode,
+    invalidQuiz,
+    invalidCoordinates,
+  };
+}
+
+export function RealizationStationsEditor({ stations, onChange, showValidation = false }: RealizationStationsEditorProps) {
   const [expandedStationIndex, setExpandedStationIndex] = useState<number | null>(null);
   const [stationImageModes, setStationImageModes] = useState<Record<string, ImageInputMode>>({});
+  const [stationCompletionCodeModes, setStationCompletionCodeModes] = useState<Record<string, CompletionCodeGeneratorMode>>({});
   const [stationImageErrors, setStationImageErrors] = useState<Record<string, string>>({});
   const [stationLocationErrors, setStationLocationErrors] = useState<Record<string, string>>({});
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
@@ -182,6 +226,10 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
 
   function setStationImageMode(stationKey: string, mode: ImageInputMode) {
     setStationImageModes((current) => ({ ...current, [stationKey]: mode }));
+  }
+
+  function setStationCompletionCodeMode(stationKey: string, mode: CompletionCodeGeneratorMode) {
+    setStationCompletionCodeModes((current) => ({ ...current, [stationKey]: mode }));
   }
 
   function setStationImageError(stationKey: string, error: string | null) {
@@ -291,6 +339,11 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
       delete next[stationKey];
       return next;
     });
+    setStationCompletionCodeModes((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
     setStationImageErrors((current) => {
       const next = { ...current };
       delete next[stationKey];
@@ -384,6 +437,10 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
         {stations.map((station, index) => {
           const stationKey = getStationKey(index, station);
           const imageMode = stationImageModes[stationKey] ?? "upload";
+          const completionCodeMode =
+            stationCompletionCodeModes[stationKey] ?? resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
+          const stationValidation = getRealizationStationValidation(station);
+          const hasStationValidationError = Object.values(stationValidation).some(Boolean);
           const imageError = stationImageErrors[stationKey];
           const locationError = stationLocationErrors[stationKey];
           const isLocating = stationLocationLoading[stationKey] === true;
@@ -395,7 +452,12 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
             Number.isFinite(station.longitude);
 
           return (
-            <div key={station.id ?? `new-${index}`} className="rounded-lg border border-zinc-700 bg-zinc-950/70">
+            <div
+              key={station.id ?? `new-${index}`}
+              className={`rounded-lg border bg-zinc-950/70 ${
+                showValidation && hasStationValidationError ? "border-red-500/60" : "border-zinc-700"
+              }`}
+            >
               <div className="flex items-start justify-between gap-2 px-3 py-2">
                 <button
                   type="button"
@@ -463,8 +525,15 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       <input
                         value={station.name}
                         onChange={(event) => updateStation(index, { name: event.target.value })}
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                          showValidation && stationValidation.missingName
+                            ? "border-red-500/70 focus:border-red-400/80"
+                            : "border-zinc-700 focus:border-amber-400/80"
+                        }`}
                       />
+                      {showValidation && stationValidation.missingName ? (
+                        <p className="text-xs text-red-300">Uzupełnij nazwę stanowiska.</p>
+                      ) : null}
                     </label>
 
                     <label className="space-y-1.5">
@@ -485,6 +554,9 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                                   }
                                 : station.quiz,
                           });
+                          if (!isCompletionCodeRequired(nextType)) {
+                            setStationCompletionCodeMode(stationKey, "letters");
+                          }
                         }}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       >
@@ -500,22 +572,55 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                   {isCompletionCodeRequired(station.type) ? (
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
+                      <div className="inline-flex w-fit rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                        {completionCodeModeOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setStationCompletionCodeMode(stationKey, option.value)}
+                            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                              completionCodeMode === option.value
+                                ? "bg-amber-400 text-zinc-950"
+                                : "text-zinc-300 hover:text-zinc-100"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
                       <div className="flex gap-2">
                         <input
                           value={station.completionCode ?? ""}
-                          onChange={(event) => updateStation(index, { completionCode: event.target.value.toUpperCase() })}
-                          placeholder="Np. TIME-2048"
-                          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          onChange={(event) => {
+                            const nextValue = event.target.value.toUpperCase();
+                            updateStation(index, { completionCode: nextValue });
+                            setStationCompletionCodeMode(stationKey, resolveCompletionCodeGeneratorMode(nextValue));
+                          }}
+                          placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
+                          className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                            showValidation && stationValidation.invalidCompletionCode
+                              ? "border-red-500/70 focus:border-red-400/80"
+                              : "border-zinc-700 focus:border-amber-400/80"
+                          }`}
                         />
                         <button
                           type="button"
-                          onClick={() => updateStation(index, { completionCode: generateSampleCompletionCode() })}
+                          onClick={() =>
+                            updateStation(index, { completionCode: generateSampleCompletionCode(8, completionCodeMode) })
+                          }
                           className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                         >
                           Wygeneruj
                         </button>
                       </div>
-                      <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
+                      <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty. Kod mieszany będzie traktowany jak tryb literowy.</p>
+                      {showValidation && stationValidation.invalidCompletionCode ? (
+                        <p className="text-xs text-red-300">
+                          {completionCodeMode === "digits"
+                            ? "Kod w trybie Cyfry musi zawierać wyłącznie 0-9 (3-32 znaki)."
+                            : "Podaj kod 3-32 znaki: A-Z, 0-9 lub '-'."}
+                        </p>
+                      ) : null}
                     </label>
                   ) : null}
 
@@ -536,7 +641,11 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                               },
                             })
                           }
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                            showValidation && stationValidation.invalidQuiz
+                              ? "border-red-500/70 focus:border-red-400/80"
+                              : "border-zinc-700 focus:border-amber-400/80"
+                          }`}
                         />
                       </label>
 
@@ -575,7 +684,11 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                                 })
                               }
                               placeholder={`Odpowiedź ${answerIndex + 1}`}
-                              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                              className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                showValidation && stationValidation.invalidQuiz
+                                  ? "border-red-500/70 focus:border-red-400/80"
+                                  : "border-zinc-700 focus:border-amber-400/80"
+                              }`}
                             />
                           </label>
                         ))}
@@ -583,6 +696,9 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       <p className="text-xs text-zinc-500">
                         Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
                       </p>
+                      {showValidation && stationValidation.invalidQuiz ? (
+                        <p className="text-xs text-red-300">Quiz wymaga pytania, 4 odpowiedzi i jednej poprawnej.</p>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -592,8 +708,15 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       rows={3}
                       value={station.description}
                       onChange={(event) => updateStation(index, { description: event.target.value })}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        showValidation && stationValidation.missingDescription
+                          ? "border-red-500/70 focus:border-red-400/80"
+                          : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
+                    {showValidation && stationValidation.missingDescription ? (
+                      <p className="text-xs text-red-300">Uzupełnij opis stanowiska.</p>
+                    ) : null}
                   </label>
 
                   <div className="space-y-1.5">
@@ -741,16 +864,25 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       min={1}
                       value={station.points}
                       onChange={(event) => updateStation(index, { points: Number(event.target.value) })}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        showValidation && stationValidation.invalidPoints
+                          ? "border-red-500/70 focus:border-red-400/80"
+                          : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
+                    {showValidation && stationValidation.invalidPoints ? (
+                      <p className="text-xs text-red-300">Punkty muszą być większe od 0.</p>
+                    ) : null}
                   </div>
 
                   <div className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Limit czasu</span>
                     <div
-                      className={`space-y-3 rounded-lg border border-zinc-700 bg-zinc-900 p-3 transition ${
-                        station.timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"
-                      }`}
+                      className={`space-y-3 rounded-lg border bg-zinc-900 p-3 transition ${
+                        showValidation && stationValidation.invalidTimeLimit
+                          ? "border-red-500/70"
+                          : "border-zinc-700"
+                      } ${station.timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"}`}
                     >
                       <p className="text-lg font-semibold leading-none text-zinc-100">{formatTimeLimit(station.timeLimitSeconds)}</p>
                       <input
@@ -770,16 +902,23 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                         value={station.timeLimitSeconds}
                         onChange={(event) => updateStation(index, { timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) })}
                         placeholder="0 = brak limitu"
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                          showValidation && stationValidation.invalidTimeLimit
+                            ? "border-red-500/70 focus:border-red-400/80"
+                            : "border-zinc-700 focus:border-amber-400/80"
+                        }`}
                       />
                       <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
+                      {showValidation && stationValidation.invalidTimeLimit ? (
+                        <p className="text-xs text-red-300">Limit czasu musi być w zakresie 0-600 sekund.</p>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
-                      <input
+                        <input
                         type="number"
                         step="any"
                         min={-90}
@@ -791,13 +930,17 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                           })
                         }
                         placeholder="np. 52.22970"
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
+                          className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                            showValidation && stationValidation.invalidCoordinates
+                              ? "border-red-500/70 focus:border-red-400/80"
+                              : "border-zinc-700 focus:border-amber-400/80"
+                          }`}
+                        />
                     </label>
 
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
-                      <input
+                        <input
                         type="number"
                         step="any"
                         min={-180}
@@ -809,8 +952,12 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                           })
                         }
                         placeholder="np. 21.01220"
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
+                          className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                            showValidation && stationValidation.invalidCoordinates
+                              ? "border-red-500/70 focus:border-red-400/80"
+                              : "border-zinc-700 focus:border-amber-400/80"
+                          }`}
+                        />
                     </label>
                   </div>
 
@@ -847,6 +994,11 @@ export function RealizationStationsEditor({ stations, onChange }: RealizationSta
                       }}
                     />
                     <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
+                    {showValidation && stationValidation.invalidCoordinates ? (
+                      <p className="text-xs text-red-300">
+                        Uzupełnij obie współrzędne razem i sprawdź zakres: szer. -90..90, dł. -180..180.
+                      </p>
+                    ) : null}
                     {locationError && <p className="text-xs text-red-300">{locationError}</p>}
                   </div>
 

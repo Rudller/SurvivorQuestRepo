@@ -36,6 +36,7 @@ interface EditRealizationPanelProps {
   stations: Station[];
   userEmail?: string;
   onClose: () => void;
+  onSaved?: (realization: Realization) => void;
 }
 
 type DateTimeInputElement = HTMLInputElement & {
@@ -59,12 +60,14 @@ export function EditRealizationPanel({
   stations,
   userEmail,
   onClose,
+  onSaved,
 }: EditRealizationPanelProps) {
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
 
   const [editError, setEditError] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const [instructorInput, setInstructorInput] = useState("");
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
@@ -75,6 +78,7 @@ export function EditRealizationPanel({
     location: realization.location ?? "",
     language: realization.language,
     customLanguage: realization.customLanguage ?? "",
+    introText: realization.introText ?? "",
     contactPerson: realization.contactPerson ?? "",
     contactPhone: realization.contactPhone ?? "",
     contactEmail: realization.contactEmail ?? "",
@@ -83,7 +87,7 @@ export function EditRealizationPanel({
     logoUrl: realization.logoUrl,
     offerPdfUrl: realization.offerPdfUrl,
     offerPdfName: realization.offerPdfName,
-    scenarioId: realization.scenarioId,
+    scenarioId: realization.scenarioTemplateId ?? realization.scenarioId,
     teamCount: realization.teamCount,
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
@@ -102,7 +106,10 @@ export function EditRealizationPanel({
       return [];
     }
 
-    if (scenario.id === realization.scenarioId && realization.scenarioStations.length > 0) {
+    if (
+      scenario.id === (realization.scenarioTemplateId ?? realization.scenarioId) &&
+      realization.scenarioStations.length > 0
+    ) {
       return realization.scenarioStations.map(toRealizationStationDraft);
     }
 
@@ -112,10 +119,21 @@ export function EditRealizationPanel({
       .map(toRealizationStationDraft);
   }
 
-  const [scenarioStations, setScenarioStations] = useState(() => mapScenarioStations(realization.scenarioId));
+  const [scenarioStations, setScenarioStations] = useState(() =>
+    mapScenarioStations(realization.scenarioTemplateId ?? realization.scenarioId),
+  );
   const positionsCount = scenarioStations.length;
   const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isUpdating || isUploadingLogo || isUploadingOffer;
+  const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
+  const isCompanyNameInvalid = submitAttempted && !editValues.companyName.trim();
+  const isScenarioInvalid = submitAttempted && !editValues.scenarioId;
+  const isContactPersonInvalid = submitAttempted && !editValues.contactPerson.trim();
+  const isContactChannelInvalid = submitAttempted && !editValues.contactPhone.trim() && !editValues.contactEmail.trim();
+  const isCustomLanguageInvalid = submitAttempted && editValues.language === "other" && !editValues.customLanguage.trim();
+  const isScheduledAtInvalid = submitAttempted && !editValues.scheduledAt;
+  const isDurationInvalid = submitAttempted && (!Number.isFinite(editValues.durationMinutes) || editValues.durationMinutes < 1);
+  const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
   const pendingLogoPreviewUrl = useMemo(
     () => (pendingLogoFile ? URL.createObjectURL(pendingLogoFile) : undefined),
     [pendingLogoFile],
@@ -209,8 +227,8 @@ export function EditRealizationPanel({
             onSubmit={async (event) => {
               event.preventDefault();
               setEditError(null);
+              setSubmitAttempted(true);
 
-              const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
               const hasIncompleteFields =
                 !editValues.companyName.trim() ||
                 !editValues.scenarioId ||
@@ -220,8 +238,12 @@ export function EditRealizationPanel({
                 (editValues.language === "other" && !editValues.customLanguage.trim()) ||
                 !Number.isFinite(editValues.durationMinutes) ||
                 editValues.durationMinutes < 1 ||
-                scenarioStations.length === 0 ||
-                hasInvalidScenarioStations;
+                scenarioStations.length === 0;
+
+              if (hasInvalidScenarioStations) {
+                setEditError("Nie można zapisać realizacji: popraw dane stanowisk (nazwa/opis/punkty/kody/quiz).");
+                return;
+              }
 
               if (
                 hasIncompleteFields &&
@@ -232,6 +254,7 @@ export function EditRealizationPanel({
 
               const fallbackScenarioId =
                 editValues.scenarioId ||
+                realization.scenarioTemplateId ||
                 realization.scenarioId ||
                 scenarios.find((scenario) => !scenario.sourceTemplateId)?.id ||
                 scenarios[0]?.id ||
@@ -241,8 +264,14 @@ export function EditRealizationPanel({
                 return;
               }
 
+              const selectedScenarioTemplate = scenarioById.get(fallbackScenarioId);
+              if (!selectedScenarioTemplate || selectedScenarioTemplate.sourceTemplateId) {
+                setEditError("Wybierz scenariusz szablonowy.");
+                return;
+              }
+
               const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStations);
-              const useCustomScenarioStations = scenarioStations.length > 0 && !hasInvalidScenarioStations;
+              const useCustomScenarioStations = scenarioStations.length > 0;
               const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
               const positionsCountForSubmit = Math.max(
                 1,
@@ -282,12 +311,13 @@ export function EditRealizationPanel({
                   nextOfferPdfName = pendingOfferPdfFile.name;
                 }
 
-                await updateRealization({
+                const updatedRealization = await updateRealization({
                   id: realization.id,
                   companyName: normalizedCompanyName,
                   location: editValues.location.trim() || undefined,
                   language: editValues.language,
                   customLanguage: normalizedCustomLanguage,
+                  introText: editValues.introText.trim() || undefined,
                   contactPerson: normalizedContactPerson,
                   contactPhone: normalizedContactPhone,
                   contactEmail: normalizedContactEmail,
@@ -306,6 +336,8 @@ export function EditRealizationPanel({
                   scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
                   changedBy: userEmail,
                 }).unwrap();
+                onSaved?.(updatedRealization);
+                setSubmitAttempted(false);
                 onClose();
               } catch {
                 setEditError("Nie udało się zapisać zmian realizacji.");
@@ -350,8 +382,11 @@ export function EditRealizationPanel({
                   <input
                     value={editValues.companyName}
                     onChange={(event) => setEditValues((prev) => ({ ...prev, companyName: event.target.value }))}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                      isCompanyNameInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                    }`}
                   />
+                  {isCompanyNameInvalid ? <p className="text-xs text-red-300">Uzupełnij nazwę firmy.</p> : null}
                 </label>
 
                 <label className="block space-y-1.5">
@@ -402,8 +437,13 @@ export function EditRealizationPanel({
                         onChange={(event) =>
                           setEditValues((prev) => ({ ...prev, customLanguage: event.target.value }))
                         }
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                          isCustomLanguageInvalid
+                            ? "border-red-500/70 focus:border-red-400/80"
+                            : "border-zinc-700 focus:border-amber-400/80"
+                        }`}
                       />
+                      {isCustomLanguageInvalid ? <p className="text-xs text-red-300">Wpisz własny język realizacji.</p> : null}
                     </label>
                   )}
 
@@ -421,8 +461,13 @@ export function EditRealizationPanel({
                     <input
                       value={editValues.contactPerson}
                       onChange={(event) => setEditValues((prev) => ({ ...prev, contactPerson: event.target.value }))}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        isContactPersonInvalid
+                          ? "border-red-500/70 focus:border-red-400/80"
+                          : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
+                    {isContactPersonInvalid ? <p className="text-xs text-red-300">Uzupełnij osobę kontaktową.</p> : null}
                   </label>
 
                   <label className="space-y-1.5">
@@ -430,7 +475,11 @@ export function EditRealizationPanel({
                     <input
                       value={editValues.contactPhone}
                       onChange={(event) => setEditValues((prev) => ({ ...prev, contactPhone: event.target.value }))}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        isContactChannelInvalid
+                          ? "border-red-500/70 focus:border-red-400/80"
+                          : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
                   </label>
 
@@ -440,8 +489,13 @@ export function EditRealizationPanel({
                       type="email"
                       value={editValues.contactEmail}
                       onChange={(event) => setEditValues((prev) => ({ ...prev, contactEmail: event.target.value }))}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        isContactChannelInvalid
+                          ? "border-red-500/70 focus:border-red-400/80"
+                          : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
+                    {isContactChannelInvalid ? <p className="text-xs text-red-300">Podaj telefon lub e-mail kontaktowy.</p> : null}
                   </label>
                 </div>
 
@@ -542,7 +596,9 @@ export function EditRealizationPanel({
                       type="datetime-local"
                       value={editValues.scheduledAt}
                       onChange={(event) => setEditValues((prev) => ({ ...prev, scheduledAt: event.target.value }))}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${
+                        isScheduledAtInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
                     <button
                       type="button"
@@ -553,6 +609,7 @@ export function EditRealizationPanel({
                       <CalendarInputIcon />
                     </button>
                   </div>
+                  {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
                 </label>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -603,8 +660,11 @@ export function EditRealizationPanel({
                           durationMinutes: Number(event.target.value),
                         }))
                       }
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        isDurationInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                      }`}
                     />
+                    {isDurationInvalid ? <p className="text-xs text-red-300">Czas trwania musi być większy od 0.</p> : null}
                   </label>
 
                 </div>
@@ -623,21 +683,39 @@ export function EditRealizationPanel({
                       setEditValues((prev) => ({ ...prev, scenarioId: nextScenarioId }));
                       setScenarioStations(mapScenarioStations(nextScenarioId));
                     }}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                      isScenarioInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                    }`}
                   >
                     <option value="">Wybierz scenariusz</option>
-                    {scenarios.filter((scenario) => !scenario.sourceTemplateId || scenario.id === realization.scenarioId).map((scenario) => (
+                    {scenarios.filter((scenario) => !scenario.sourceTemplateId).map((scenario) => (
                       <option key={scenario.id} value={scenario.id}>
-                        {scenario.name}{scenario.sourceTemplateId ? " (instancja)" : ""}
+                        {scenario.name}
                       </option>
                     ))}
                   </select>
+                  {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
                 </label>
 
                 <p className="text-xs text-zinc-500">
                   Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
                 </p>
-                <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} />
+                <div
+                  className={`rounded-lg border ${
+                    isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations)
+                      ? "border-red-500/60"
+                      : "border-transparent"
+                  }`}
+                >
+                  <RealizationStationsEditor
+                    stations={scenarioStations}
+                    onChange={setScenarioStations}
+                    showValidation={submitAttempted}
+                  />
+                </div>
+                {isScenarioStationsEmpty ? (
+                  <p className="text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
+                ) : null}
 
                 <div className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
@@ -673,6 +751,23 @@ export function EditRealizationPanel({
                     </button>
                   )}
                 </div>
+
+                <label className="block space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
+                  <textarea
+                    value={editValues.introText}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({
+                        ...prev,
+                        introText: event.target.value,
+                      }))
+                    }
+                    placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                    rows={5}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                  <p className="text-xs text-zinc-500">To pole jest opcjonalne.</p>
+                </label>
               </fieldset>
             </div>
 
@@ -698,6 +793,9 @@ export function EditRealizationPanel({
               <p>
                 <span className="text-zinc-500">Kod dołączenia:</span>{" "}
                 <span className="font-mono text-zinc-200">{realization.joinCode}</span>
+              </p>
+              <p>
+                <span className="text-zinc-500">Tekst wstępu:</span> {editValues.introText.trim() ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

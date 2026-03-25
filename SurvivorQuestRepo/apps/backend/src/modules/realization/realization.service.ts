@@ -46,6 +46,7 @@ const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const JOIN_CODE_LENGTH = 6;
 const STORED_JOIN_CODE_VERSION_PREFIX = 'v2';
 const QUIZ_ANSWER_COUNT = 4;
+const LEGACY_JOIN_CODE_PEPPERS = ['survivorquest-join-code'];
 
 @Injectable()
 export class RealizationService {
@@ -93,6 +94,7 @@ export class RealizationService {
         location: validated.location,
         language: toPrismaRealizationLanguage(validated.language),
         customLanguage: validated.customLanguage,
+        introText: validated.introText,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -152,10 +154,17 @@ export class RealizationService {
     if (!requestedScenario) {
       throw new BadRequestException('Scenario not found');
     }
+    const currentScenario = await this.scenarioService.findScenarioById(
+      current.scenarioId,
+    );
+    const currentScenarioTemplateId =
+      currentScenario?.sourceTemplateId ?? currentScenario?.id;
 
     const scenario =
       requestedScenario.id === current.scenarioId
         ? requestedScenario
+        : currentScenarioTemplateId === requestedScenario.id && currentScenario
+          ? currentScenario
         : await this.scenarioService.cloneScenario(requestedScenario.id, {
             realizationId,
           });
@@ -177,6 +186,9 @@ export class RealizationService {
         location: validated.location,
         language: toPrismaRealizationLanguage(validated.language),
         customLanguage: validated.customLanguage,
+        introText: Object.prototype.hasOwnProperty.call(payload, 'introText')
+          ? validated.introText ?? null
+          : undefined,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -341,6 +353,12 @@ export class RealizationService {
     const scenario = await this.scenarioService.findScenarioById(
       realization.scenarioId,
     );
+    const scenarioTemplateId = scenario?.sourceTemplateId ?? scenario?.id;
+    const scenarioTemplate =
+      scenarioTemplateId && scenarioTemplateId !== scenario?.id
+        ? await this.scenarioService.findScenarioById(scenarioTemplateId)
+        : scenario;
+    const scenarioTemplateName = scenarioTemplate?.name;
     const stations =
       stationsFromSync ||
       (scenario
@@ -358,6 +376,8 @@ export class RealizationService {
     return buildRealizationEntity({
       realization: {
         ...realization,
+        scenarioTemplateId,
+        scenarioTemplateName,
         joinCode: publicJoinCode,
       },
       stationIds: stations.map((item) => item.id),
@@ -387,8 +407,12 @@ export class RealizationService {
     });
   }
 
-  private generateJoinCode(realizationId: string, attempt: number) {
-    const seed = `${realizationId}:${attempt}:${this.getJoinCodePepper()}`;
+  private generateJoinCode(
+    realizationId: string,
+    attempt: number,
+    pepper = this.getJoinCodePepper(),
+  ) {
+    const seed = `${realizationId}:${attempt}:${pepper}`;
     const hash = this.hashJoinCode(seed);
     const bytes = Buffer.from(hash, 'hex');
     let code = '';
@@ -409,6 +433,18 @@ export class RealizationService {
       key: 'JOIN_CODE_PEPPER',
       developmentFallback: 'dev-join-code-pepper-change-me-123456',
     });
+  }
+
+  private getJoinCodePepperCandidates() {
+    const legacyPepperFromEnv = process.env.JOIN_CODE_LEGACY_PEPPER?.trim();
+
+    return Array.from(
+      new Set([
+        this.getJoinCodePepper(),
+        ...(legacyPepperFromEnv ? [legacyPepperFromEnv] : []),
+        ...LEGACY_JOIN_CODE_PEPPERS,
+      ]),
+    );
   }
 
   private parseStoredJoinCode(stored: string) {
@@ -469,11 +505,12 @@ export class RealizationService {
       return storedJoinCode;
     }
 
-    const publicCode = this.generateJoinCode(realizationId, parsed.attempt);
-    const publicCodeHash = this.hashJoinCode(publicCode);
-
-    if (publicCodeHash === parsed.hash) {
-      return publicCode;
+    for (const pepper of this.getJoinCodePepperCandidates()) {
+      const publicCode = this.generateJoinCode(realizationId, parsed.attempt, pepper);
+      const publicCodeHash = this.hashJoinCode(publicCode);
+      if (publicCodeHash === parsed.hash) {
+        return publicCode;
+      }
     }
 
     return '------';

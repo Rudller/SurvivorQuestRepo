@@ -43,6 +43,7 @@ type RealizationDto = {
   location?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -52,6 +53,8 @@ type RealizationDto = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  scenarioTemplateId?: string;
+  scenarioTemplateName?: string;
   joinCode?: string;
   stationIds?: string[];
   scenarioStations?: StationDto[];
@@ -73,6 +76,7 @@ type CreateRealizationPayload = {
   location?: string;
   language: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -98,6 +102,7 @@ type UpdateRealizationPayload = {
   location?: string;
   language: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -209,6 +214,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     language: dto.language ?? "polish",
     customLanguage:
       dto.language === "other" ? dto.customLanguage?.trim() || undefined : undefined,
+    introText: dto.introText?.trim() || undefined,
     contactPerson: dto.contactPerson?.trim() || "",
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,
@@ -218,6 +224,8 @@ function normalizeRealization(dto: RealizationDto): Realization {
     offerPdfUrl: dto.offerPdfUrl,
     offerPdfName: dto.offerPdfName,
     scenarioId: dto.scenarioId,
+    scenarioTemplateId: dto.scenarioTemplateId?.trim() || undefined,
+    scenarioTemplateName: dto.scenarioTemplateName?.trim() || undefined,
     joinCode: dto.joinCode?.trim() || "------",
     stationIds: dto.stationIds ?? scenarioStations.map((station) => station.id),
     scenarioStations,

@@ -13,12 +13,15 @@ import {
   handleImageFile,
   handleImagePaste,
   isCompletionCodeRequired,
-  isValidCompletionCode,
+  isValidCompletionCodeForMode,
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
   normalizeStationQuiz,
   QUIZ_ANSWER_COUNT,
+  resolveCompletionCodeGeneratorMode,
+  type CompletionCodeGeneratorMode,
+  completionCodeModeOptions,
 } from "../station.utils";
 
 interface EditStationModalProps {
@@ -48,6 +51,9 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [editImageMode, setEditImageMode] = useState<ImageInputMode>("upload");
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>(
+    resolveCompletionCodeGeneratorMode(station.completionCode ?? ""),
+  );
 
   const [editValues, setEditValues] = useState({
     name: station.name,
@@ -107,8 +113,12 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 return;
               }
 
-              if (isCompletionCodeRequired(editValues.type) && !isValidCompletionCode(editValues.completionCode)) {
-                setEditFormError("Dla stanowisk Na czas / Na punkty podaj kod (3-32 znaki: A-Z, 0-9, -).");
+              if (isCompletionCodeRequired(editValues.type) && !isValidCompletionCodeForMode(editValues.completionCode, completionCodeMode)) {
+                setEditFormError(
+                  completionCodeMode === "digits"
+                    ? "Dla trybu Cyfry kod musi mieć 3-32 znaki i zawierać tylko cyfry 0-9."
+                    : "Dla stanowisk Na czas / Na punkty podaj kod (3-32 znaki: A-Z, 0-9, -).",
+                );
                 return;
               }
 
@@ -187,7 +197,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               <span className="text-xs uppercase tracking-wider text-zinc-400">Typ stanowiska</span>
               <select
                 value={editValues.type}
-                onChange={(event) =>
+                onChange={(event) => {
                   setEditValues((prev) => {
                     const nextType = event.target.value as StationType;
                     return {
@@ -195,8 +205,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       type: nextType,
                       completionCode: isCompletionCodeRequired(nextType) ? prev.completionCode : "",
                     };
-                  })
-                }
+                  });
+                  if (!isCompletionCodeRequired(event.target.value as StationType)) {
+                    setCompletionCodeMode("letters");
+                  }
+                }}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               >
                 {stationTypeOptions.map((option) => (
@@ -210,26 +223,47 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             {isCompletionCodeRequired(editValues.type) ? (
               <label className="space-y-1.5">
                 <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
+                <div className="inline-flex w-fit rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                  {completionCodeModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setCompletionCodeMode(option.value)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                        completionCodeMode === option.value
+                          ? "bg-amber-400 text-zinc-950"
+                          : "text-zinc-300 hover:text-zinc-100"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex gap-2">
                   <input
                     value={editValues.completionCode}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({ ...prev, completionCode: event.target.value.toUpperCase() }))
-                    }
-                    placeholder="Np. POINTS-2048"
+                    onChange={(event) => {
+                      const nextValue = event.target.value.toUpperCase();
+                      setEditValues((prev) => ({ ...prev, completionCode: nextValue }));
+                      setCompletionCodeMode(resolveCompletionCodeGeneratorMode(nextValue));
+                    }}
+                    placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
                     className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                   <button
                     type="button"
                     onClick={() =>
-                      setEditValues((prev) => ({ ...prev, completionCode: generateSampleCompletionCode() }))
+                      setEditValues((prev) => ({
+                        ...prev,
+                        completionCode: generateSampleCompletionCode(8, completionCodeMode),
+                      }))
                     }
                     className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                   >
                     Wygeneruj
                   </button>
                 </div>
-                <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
+                <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty. Kod mieszany będzie traktowany jak tryb literowy.</p>
               </label>
             ) : null}
 

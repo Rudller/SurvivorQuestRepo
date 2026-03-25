@@ -5,15 +5,22 @@ import { stationTypeOptions } from "./types/station";
 export type ImageInputMode = "upload" | "paste" | "url";
 export type StationSortField = "name" | "type";
 export type SortDirection = "asc" | "desc";
+export type CompletionCodeGeneratorMode = "digits" | "letters";
 export type UploadImageFileFn = (file: File) => Promise<string>;
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
-const COMPLETION_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const COMPLETION_CODE_DIGITS_ONLY_REGEX = /^\d{3,32}$/;
+const COMPLETION_CODE_LETTERS_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const COMPLETION_CODE_DIGITS_ALPHABET = "0123456789";
 export const QUIZ_ANSWER_COUNT = 4;
 
 export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
   { value: "upload", label: "Upload" },
   { value: "paste", label: "Wklej" },
   { value: "url", label: "URL" },
+];
+export const completionCodeModeOptions: { value: CompletionCodeGeneratorMode; label: string }[] = [
+  { value: "digits", label: "Cyfry" },
+  { value: "letters", label: "Litery" },
 ];
 
 export function looksLikeUrl(value: string) {
@@ -99,22 +106,39 @@ export function isValidCompletionCode(value: string) {
   return COMPLETION_CODE_REGEX.test(normalizeCompletionCode(value));
 }
 
-function getRandomCompletionCodeChar() {
+export function isValidCompletionCodeForMode(value: string, mode: CompletionCodeGeneratorMode) {
+  if (mode === "digits") {
+    return isDigitsOnlyCompletionCode(value);
+  }
+
+  return isValidCompletionCode(value);
+}
+
+export function isDigitsOnlyCompletionCode(value: string) {
+  return COMPLETION_CODE_DIGITS_ONLY_REGEX.test(normalizeCompletionCode(value));
+}
+
+export function resolveCompletionCodeGeneratorMode(value: string): CompletionCodeGeneratorMode {
+  return isDigitsOnlyCompletionCode(value) ? "digits" : "letters";
+}
+
+function getRandomCompletionCodeChar(mode: CompletionCodeGeneratorMode) {
+  const alphabet = mode === "digits" ? COMPLETION_CODE_DIGITS_ALPHABET : COMPLETION_CODE_LETTERS_ALPHABET;
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
     const random = new Uint32Array(1);
     crypto.getRandomValues(random);
-    return COMPLETION_CODE_ALPHABET[random[0] % COMPLETION_CODE_ALPHABET.length];
+    return alphabet[random[0] % alphabet.length];
   }
-  return COMPLETION_CODE_ALPHABET[Math.floor(Math.random() * COMPLETION_CODE_ALPHABET.length)];
+  return alphabet[Math.floor(Math.random() * alphabet.length)];
 }
 
-function generateCompletionCodeSuffix(length: number) {
-  return Array.from({ length }, () => getRandomCompletionCodeChar()).join("");
+function generateCompletionCodeSuffix(length: number, mode: CompletionCodeGeneratorMode) {
+  return Array.from({ length }, () => getRandomCompletionCodeChar(mode)).join("");
 }
 
-export function generateSampleCompletionCode(length = 8) {
+export function generateSampleCompletionCode(length = 8, mode: CompletionCodeGeneratorMode = "letters") {
   const normalizedLength = Math.min(32, Math.max(3, Math.round(length)));
-  return generateCompletionCodeSuffix(normalizedLength);
+  return generateCompletionCodeSuffix(normalizedLength, mode);
 }
 
 export async function handleImageFile(

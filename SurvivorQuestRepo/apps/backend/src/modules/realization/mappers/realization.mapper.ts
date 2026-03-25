@@ -123,6 +123,7 @@ export function buildRealizationEntity(input: {
       location: string | null;
       language: PrismaRealizationLanguage;
       customLanguage: string | null;
+      introText: string | null;
       contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
@@ -132,6 +133,8 @@ export function buildRealizationEntity(input: {
     offerPdfUrl: string | null;
     offerPdfName: string | null;
     scenarioId: string;
+    scenarioTemplateId?: string;
+    scenarioTemplateName?: string;
     joinCode: string;
     teamCount: number;
     requiredDevicesCount: number;
@@ -156,6 +159,7 @@ export function buildRealizationEntity(input: {
     location: realization.location || undefined,
     language: fromPrismaRealizationLanguage(realization.language),
     customLanguage: realization.customLanguage || undefined,
+    introText: realization.introText || undefined,
     contactPerson: realization.contactPerson,
     contactPhone: realization.contactPhone || undefined,
     contactEmail: realization.contactEmail || undefined,
@@ -169,6 +173,8 @@ export function buildRealizationEntity(input: {
     offerPdfUrl: realization.offerPdfUrl || undefined,
     offerPdfName: realization.offerPdfName || undefined,
     scenarioId: realization.scenarioId,
+    scenarioTemplateId: realization.scenarioTemplateId,
+    scenarioTemplateName: realization.scenarioTemplateName,
     stationIds: input.stationIds,
     scenarioStations: input.scenarioStations,
     joinCode: realization.joinCode,

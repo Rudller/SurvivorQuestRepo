@@ -13,12 +13,15 @@ import {
   formatTimeLimit,
   handleImageFile,
   isCompletionCodeRequired,
-  isValidCompletionCode,
+  isValidCompletionCodeForMode,
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
   normalizeStationQuiz,
   QUIZ_ANSWER_COUNT,
+  resolveCompletionCodeGeneratorMode,
+  type CompletionCodeGeneratorMode,
+  completionCodeModeOptions,
 } from "../station.utils";
 
 type CreateStationFormProps = {
@@ -49,6 +52,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [points, setPoints] = useState(100);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [completionCode, setCompletionCode] = useState("");
+  const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>("letters");
   const [quizQuestion, setQuizQuestion] = useState("");
   const [quizAnswers, setQuizAnswers] = useState<string[]>(() => createEmptyQuizAnswers());
   const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
@@ -89,8 +93,12 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               return;
             }
 
-            if (isCompletionCodeRequired(type) && !isValidCompletionCode(completionCode)) {
-              setFormError("Dla stanowisk Na czas / Na punkty podaj kod (3-32 znaki: A-Z, 0-9, -).");
+            if (isCompletionCodeRequired(type) && !isValidCompletionCodeForMode(completionCode, completionCodeMode)) {
+              setFormError(
+                completionCodeMode === "digits"
+                  ? "Dla trybu Cyfry kod musi mieć 3-32 znaki i zawierać tylko cyfry 0-9."
+                  : "Dla stanowisk Na czas / Na punkty podaj kod (3-32 znaki: A-Z, 0-9, -).",
+              );
               return;
             }
 
@@ -200,6 +208,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 setType(nextType);
                 if (!isCompletionCodeRequired(nextType)) {
                   setCompletionCode("");
+                  setCompletionCodeMode("letters");
                 }
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -214,25 +223,45 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
 
           {isCompletionCodeRequired(type) ? (
             <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
-              <div className="flex gap-2">
-                <input
-                  value={completionCode}
-                  onChange={(event) => setCompletionCode(event.target.value.toUpperCase())}
-                  placeholder="Np. TIME-2048"
-                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-                <button
-                  type="button"
-                  onClick={() => setCompletionCode(generateSampleCompletionCode())}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                >
-                  Wygeneruj
-                </button>
-              </div>
-              <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty.</p>
-            </label>
-          ) : null}
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
+                <div className="inline-flex w-fit rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                  {completionCodeModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setCompletionCodeMode(option.value)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                        completionCodeMode === option.value
+                          ? "bg-amber-400 text-zinc-950"
+                          : "text-zinc-300 hover:text-zinc-100"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={completionCode}
+                    onChange={(event) => {
+                      const nextValue = event.target.value.toUpperCase();
+                      setCompletionCode(nextValue);
+                      setCompletionCodeMode(resolveCompletionCodeGeneratorMode(nextValue));
+                    }}
+                    placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
+                    className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCompletionCode(generateSampleCompletionCode(8, completionCodeMode))}
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Wygeneruj
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty. Kod mieszany będzie traktowany jak tryb literowy.</p>
+              </label>
+            ) : null}
 
           {type === "quiz" ? (
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">

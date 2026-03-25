@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { RealizationLanguage, RealizationStatus, RealizationType } from "../types/realization";
+import type { Realization, RealizationLanguage, RealizationStatus, RealizationType } from "../types/realization";
 import {
   getRealizationLanguageLabel,
   realizationLanguageOptions,
@@ -31,6 +31,7 @@ interface CreateRealizationFormProps {
   stations: Station[];
   userEmail?: string;
   onClose: () => void;
+  onSaved?: (realization: Realization) => void;
 }
 
 type DateTimeInputElement = HTMLInputElement & {
@@ -48,7 +49,7 @@ function CalendarInputIcon() {
   );
 }
 
-export function CreateRealizationForm({ scenarios, stations, userEmail, onClose }: CreateRealizationFormProps) {
+export function CreateRealizationForm({ scenarios, stations, userEmail, onClose, onSaved }: CreateRealizationFormProps) {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
@@ -60,6 +61,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
   const [contactEmail, setContactEmail] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
   const [customLanguage, setCustomLanguage] = useState("");
+  const [introText, setIntroText] = useState("");
   const [instructors, setInstructors] = useState<string[]>([]);
   const [instructorInput, setInstructorInput] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
@@ -73,6 +75,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
 
   const scenarioById = useMemo(
@@ -97,6 +100,15 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
   const positionsCount = scenarioStations.length;
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isCreating || isUploadingLogo || isUploadingOffer;
+  const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
+  const isCompanyNameInvalid = submitAttempted && !companyName.trim();
+  const isScenarioInvalid = submitAttempted && !selectedScenarioId;
+  const isContactPersonInvalid = submitAttempted && !contactPerson.trim();
+  const isContactChannelInvalid = submitAttempted && !contactPhone.trim() && !contactEmail.trim();
+  const isCustomLanguageInvalid = submitAttempted && selectedLanguage === "other" && !customLanguage.trim();
+  const isScheduledAtInvalid = submitAttempted && !scheduledAt;
+  const isDurationInvalid = submitAttempted && (!Number.isFinite(durationMinutes) || durationMinutes < 1);
+  const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
   const logoPreviewUrl = useMemo(
     () => (logoFile ? URL.createObjectURL(logoFile) : undefined),
     [logoFile],
@@ -159,8 +171,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           onSubmit={async (event) => {
         event.preventDefault();
         setFormError(null);
-
-        const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
+        setSubmitAttempted(true);
         const hasIncompleteFields =
           !companyName.trim() ||
           !selectedScenarioId ||
@@ -170,8 +181,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           !scheduledAt ||
           !Number.isFinite(durationMinutes) ||
           durationMinutes < 1 ||
-          scenarioStations.length === 0 ||
-          hasInvalidScenarioStations;
+          scenarioStations.length === 0;
+
+        if (hasInvalidScenarioStations) {
+          setFormError("Nie można zapisać realizacji: popraw dane stanowisk (nazwa/opis/punkty/kody/quiz).");
+          return;
+        }
 
         if (
           hasIncompleteFields &&
@@ -188,7 +203,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
         }
 
         const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStations);
-        const useCustomScenarioStations = scenarioStations.length > 0 && !hasInvalidScenarioStations;
+        const useCustomScenarioStations = scenarioStations.length > 0;
         const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
         const positionsCountForSubmit = Math.max(
           1,
@@ -221,11 +236,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             nextOfferPdfName = offerPdfFile.name;
           }
 
-          await createRealization({
+          const createdRealization = await createRealization({
             companyName: normalizedCompanyName,
             location: location.trim() || undefined,
             language: selectedLanguage,
             customLanguage: normalizedCustomLanguage,
+            introText: introText.trim() || undefined,
             contactPerson: normalizedContactPerson,
             contactPhone: normalizedContactPhone,
             contactEmail: normalizedContactEmail,
@@ -244,6 +260,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
             scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
             changedBy: userEmail,
           }).unwrap();
+          onSaved?.(createdRealization);
           setCompanyName("");
           setLocation("");
           setContactPerson("");
@@ -251,6 +268,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           setContactEmail("");
           setSelectedLanguage("polish");
           setCustomLanguage("");
+          setIntroText("");
           setInstructors([]);
           setInstructorInput("");
           setStatus("planned");
@@ -262,6 +280,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           setOfferPdfName(undefined);
           setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
           setScenarioStations([]);
+          setSubmitAttempted(false);
           onClose();
         } catch {
           setFormError("Nie udało się dodać realizacji.");
@@ -291,8 +310,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 value={companyName}
                 onChange={(event) => setCompanyName(event.target.value)}
                 placeholder="Nazwa firmy"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                  isCompanyNameInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                }`}
               />
+              {isCompanyNameInvalid ? <p className="text-xs text-red-300">Uzupełnij nazwę firmy.</p> : null}
             </label>
 
             <label className="space-y-1.5">
@@ -316,8 +338,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 value={contactPerson}
                 onChange={(event) => setContactPerson(event.target.value)}
                 placeholder="Imię i nazwisko"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                  isContactPersonInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                }`}
               />
+              {isContactPersonInvalid ? <p className="text-xs text-red-300">Uzupełnij osobę kontaktową.</p> : null}
             </label>
 
             <label className="space-y-1.5">
@@ -348,8 +373,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                   value={customLanguage}
                   onChange={(event) => setCustomLanguage(event.target.value)}
                   placeholder="Np. Hiszpański"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                    isCustomLanguageInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                  }`}
                 />
+                {isCustomLanguageInvalid ? <p className="text-xs text-red-300">Wpisz własny język realizacji.</p> : null}
               </label>
             )}
 
@@ -369,7 +397,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 value={contactPhone}
                 onChange={(event) => setContactPhone(event.target.value)}
                 placeholder="+48 ..."
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                  isContactChannelInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                }`}
               />
             </label>
 
@@ -380,8 +410,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 value={contactEmail}
                 onChange={(event) => setContactEmail(event.target.value)}
                 placeholder="kontakt@firma.pl"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                  isContactChannelInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                }`}
               />
+              {isContactChannelInvalid ? <p className="text-xs text-red-300">Podaj telefon lub e-mail kontaktowy.</p> : null}
             </label>
           </div>
 
@@ -428,7 +461,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                   type="datetime-local"
                   value={scheduledAt}
                   onChange={(event) => setScheduledAt(event.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${
+                    isScheduledAtInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                  }`}
                 />
                 <button
                   type="button"
@@ -439,6 +474,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                   <CalendarInputIcon />
                 </button>
               </div>
+              {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
             </label>
 
             <label className="space-y-1.5">
@@ -483,8 +519,11 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 min={1}
                 value={durationMinutes}
                 onChange={(event) => setDurationMinutes(Number(event.target.value))}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                  isDurationInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+                }`}
               />
+              {isDurationInvalid ? <p className="text-xs text-red-300">Czas trwania musi być większy od 0.</p> : null}
             </label>
 
           </div>
@@ -547,7 +586,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 setSelectedScenarioId(nextScenarioId);
                 setScenarioStations(mapScenarioStations(nextScenarioId));
               }}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                isScenarioInvalid ? "border-red-500/70 focus:border-red-400/80" : "border-zinc-700 focus:border-amber-400/80"
+              }`}
             >
               <option value="">Wybierz scenariusz</option>
               {scenarios.filter((s) => !s.sourceTemplateId).map((scenario) => (
@@ -556,9 +597,15 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
                 </option>
               ))}
             </select>
+            {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
           </label>
 
-          <details open className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <details
+            open
+            className={`rounded-lg border bg-zinc-950/60 p-3 ${
+              isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations) ? "border-red-500/60" : "border-zinc-800"
+            }`}
+          >
             <summary className="cursor-pointer text-xs uppercase tracking-wider text-zinc-400">
               Stanowiska realizacji ({scenarioStations.length}) • {selectedStationsPoints} pkt
             </summary>
@@ -566,7 +613,10 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
               <p className="mb-2 text-xs text-zinc-500">
                 Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
               </p>
-              <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} />
+              <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} showValidation={submitAttempted} />
+              {isScenarioStationsEmpty ? (
+                <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
+              ) : null}
             </div>
           </details>
 
@@ -601,9 +651,21 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
               >
                 Usuń PDF
               </button>
-            )}
-          </div>
-        </fieldset>
+              )}
+            </div>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
+              <textarea
+                value={introText}
+                onChange={(event) => setIntroText(event.target.value)}
+                placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                rows={5}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+              <p className="text-xs text-zinc-500">To pole jest opcjonalne.</p>
+            </label>
+          </fieldset>
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
 
@@ -666,6 +728,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose 
           </p>
           <p>
             <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
           </p>
           <p>
             <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}

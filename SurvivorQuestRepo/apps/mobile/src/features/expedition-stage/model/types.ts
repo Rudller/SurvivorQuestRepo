@@ -18,6 +18,7 @@ export type ExpeditionSessionState = {
   realization: {
     id: string;
     companyName: string;
+    introText?: string;
     contactPerson: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -71,6 +72,7 @@ export type ExpeditionRealizationStation = {
   imageUrl: string;
   points: number;
   timeLimitSeconds: number;
+  completionCodeInputMode?: "numeric" | "alphanumeric";
   quiz?: ExpeditionStationQuiz;
   latitude?: number;
   longitude?: number;
@@ -114,6 +116,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
     realization: {
       id: session.realization?.id ?? session.realizationId ?? "offline-realization",
       companyName: session.realization?.companyName ?? "Realizacja terenowa",
+      introText: session.realization?.introText,
       contactPerson: "",
       contactPhone: undefined,
       contactEmail: undefined,

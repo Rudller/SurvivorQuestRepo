@@ -24,6 +24,7 @@ type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-m
 type MobileBootstrapRealization = {
   id: string;
   companyName: string;
+  introText?: string;
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
   durationMinutes: number;
@@ -71,6 +72,11 @@ type MobileSelectTeamResponse = {
     badgeKey: string | null;
     points: number;
   };
+  reassignment?: {
+    replacedExistingAssignment: boolean;
+    replacedAssignments: number;
+    message?: string;
+  };
 };
 
 type MobileApiError = {
@@ -89,22 +95,30 @@ const OFFLINE_TEST_SESSION_TOKEN = "offline-test-session";
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 
-const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team"];
+const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team", "customization"];
 
 const STEP_LABEL: Record<Screen, string> = {
   api: "Połączenie API",
   code: "Kod realizacji",
   team: "Przydzielenie drużyny",
+  customization: "Customizacja drużyny",
 };
 
 const STEP_HINT: Record<Screen, string> = {
   api: "Etap 1 potwierdza połączenie z backendem i gotowość API.",
   code: "Etap 2 wymaga wpisania kodu realizacji od administratora.",
-  team: "Etap 3 pokazuje przydział drużyny i pozwala rozpocząć aplikację.",
+  team: "Etap 3 pokazuje przydział drużyny przed konfiguracją baneru.",
+  customization: "Skonfiguruj baner drużyny i przejdź do ekranu startu aplikacji.",
 };
 
 type RealizationOnboardingScreenProps = {
   onComplete?: (session: OnboardingSession) => void;
+  recoveryIntent?: {
+    realizationCode: string;
+    apiBaseUrl: string | null;
+    notice: string;
+  } | null;
+  onRecoveryConsumed?: () => void;
 };
 
 function getErrorMessage(error: unknown) {
@@ -132,6 +146,30 @@ function normalizeDurationMinutes(value: unknown) {
   }
 
   return Math.round(parsed);
+}
+
+function normalizeRealizationStatus(value: unknown): "planned" | "in-progress" | "done" {
+  if (value === "in-progress" || value === "done") {
+    return value;
+  }
+
+  return "planned";
+}
+
+function resolveBannerTextColor(hexColor: string) {
+  const normalizedHex = hexColor.replace("#", "");
+
+  if (!/^[0-9a-fA-F]{6}$/.test(normalizedHex)) {
+    return "#f8fafc";
+  }
+
+  const parsedHex = Number.parseInt(normalizedHex, 16);
+  const red = (parsedHex >> 16) & 255;
+  const green = (parsedHex >> 8) & 255;
+  const blue = parsedHex & 255;
+  const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+
+  return brightness > 172 ? "#0f172a" : "#f8fafc";
 }
 
 function normalizeApiBaseUrl(value: string | null | undefined) {
@@ -257,6 +295,7 @@ function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
   return {
     id: "offline-test-realization",
     companyName: "Realizacja TEST (offline)",
+    introText: "Tryb testowy offline jest aktywny. Możecie od razu rozpocząć grę.",
     status: "in-progress",
     scheduledAt: new Date().toISOString(),
     durationMinutes: 120,
@@ -267,7 +306,11 @@ function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
   };
 }
 
-export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardingScreenProps) {
+export function RealizationOnboardingScreen({
+  onComplete,
+  recoveryIntent,
+  onRecoveryConsumed,
+}: RealizationOnboardingScreenProps) {
   const routePulse = useRef(new Animated.Value(0)).current;
   const { width } = useWindowDimensions();
   const isTabletLayout = width >= 768;
@@ -315,6 +358,11 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
     () => TEAM_COLORS.find((color) => color.key === teamColor) ?? TEAM_COLORS[0],
     [teamColor],
   );
+  const bannerTextColor = resolveBannerTextColor(selectedColor.hex);
+  const bannerMutedTextColor =
+    bannerTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
+  const bannerIconBackground =
+    bannerTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
   const topPanelActiveStepIndex = TOP_PANEL_STEP_ORDER.indexOf(screen);
   const availableTeamSlots = useMemo(
     () => Array.from({ length: activeRealization?.teamCount ?? 0 }, (_, index) => index + 1),
@@ -362,6 +410,27 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
       isActive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!recoveryIntent) {
+      return;
+    }
+
+    setRealizationCode(recoveryIntent.realizationCode);
+    if (typeof recoveryIntent.apiBaseUrl === "string") {
+      setApiBaseUrlOverride(normalizeApiBaseUrl(recoveryIntent.apiBaseUrl));
+    }
+    setSetupMessage(recoveryIntent.notice);
+    setSetupState("loading");
+    setScreen("code");
+    if (!deviceId) {
+      return;
+    }
+
+    void onSubmitCode(recoveryIntent.realizationCode, recoveryIntent.apiBaseUrl).finally(() => {
+      onRecoveryConsumed?.();
+    });
+  }, [deviceId, onRecoveryConsumed, recoveryIntent]);
 
   useEffect(() => {
     let isActive = true;
@@ -452,6 +521,12 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
   }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig]);
 
   function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
+    const normalizedStatus = normalizeRealizationStatus(activeRealization?.status);
+    const awaitingAdminStart =
+      normalizedStatus === "planned" &&
+      nextSessionToken !== OFFLINE_TEST_SESSION_TOKEN &&
+      Boolean(apiBaseUrl);
+
     onComplete?.({
       realizationId: activeRealization?.id ?? null,
       realizationCode,
@@ -461,15 +536,17 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
         ? {
             id: activeRealization.id,
             companyName: activeRealization.companyName,
-            status: activeRealization.status,
+            status: normalizedStatus,
             scheduledAt: activeRealization.scheduledAt,
             durationMinutes: normalizeDurationMinutes(activeRealization.durationMinutes),
             joinCode: activeRealization.joinCode,
             teamCount: activeRealization.teamCount,
             stationIds: activeRealization.stationIds,
             locationRequired: activeRealization.locationRequired,
+            introText: activeRealization.introText?.trim() || undefined,
           }
         : null,
+      awaitingAdminStart,
       team: {
         slotNumber: selectedTeam,
         name: nextTeamName,
@@ -534,8 +611,11 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
     ],
   };
 
-  async function onSubmitCode() {
-    const normalizedCode = realizationCode.trim().toUpperCase();
+  async function onSubmitCode(
+    overrideCode?: string,
+    preferredApiBaseUrl?: string | null,
+  ) {
+    const normalizedCode = (overrideCode ?? realizationCode).trim().toUpperCase();
 
     if (!normalizedCode) {
       setSetupState("error");
@@ -575,7 +655,9 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
       return;
     }
 
-    const baseUrlCandidates = resolveApiBaseUrlCandidates(apiBaseUrlOverride);
+    const baseUrlCandidates = resolveApiBaseUrlCandidates(
+      preferredApiBaseUrl ?? apiBaseUrlOverride,
+    );
 
     if (baseUrlCandidates.length === 0) {
       setApiConnectionStatus("config-missing");
@@ -628,6 +710,8 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
 
       const normalizedRealization = {
         ...realization,
+        status: normalizeRealizationStatus(realization.status),
+        introText: realization.introText?.trim() || undefined,
         durationMinutes: normalizeDurationMinutes(realization.durationMinutes),
       };
 
@@ -701,7 +785,14 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
         setTeamIcon(result.team.badgeKey);
       }
 
-      setSetupMessage(`Przydzielono ręcznie: Drużyna ${result.team.slotNumber}.`);
+      const reassignmentMessage =
+        result.reassignment?.replacedExistingAssignment === true
+          ? result.reassignment.message ?? "Drużyna była już zajęta na innym urządzeniu. Przypisanie zostało przełączone."
+          : null;
+      setSetupMessage(
+        reassignmentMessage ??
+          `Przydzielono ręcznie: Drużyna ${result.team.slotNumber}.`,
+      );
       setIsTeamPickerOpen(false);
     } catch (error) {
       setTeamPickerError(getErrorMessage(error));
@@ -910,54 +1001,56 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
         }}
       >
         <View className={`w-full ${contentGapClassName}`} style={{ maxWidth: contentMaxWidth }}>
-          <View
-            className={`rounded-3xl border ${isTabletLayout ? "px-8 py-7" : "px-5 py-5"}`}
-            style={{
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: EXPEDITION_THEME.panel,
-            }}
-          >
-            <Text className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-              Expedition Map
-            </Text>
-            <Text
-              className={`mt-1 font-semibold tracking-tight ${isTabletLayout ? "text-5xl" : "text-3xl"}`}
-              style={{ color: EXPEDITION_THEME.textPrimary }}
+          {screen !== "customization" && (
+            <View
+              className={`rounded-3xl border ${isTabletLayout ? "px-8 py-7" : "px-5 py-5"}`}
+              style={{
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: EXPEDITION_THEME.panel,
+              }}
             >
-              SurvivorQuest
-            </Text>
-            <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-              {STEP_HINT[screen]}
-            </Text>
+              <Text className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                Expedition Map
+              </Text>
+              <Text
+                className={`mt-1 font-semibold tracking-tight ${isTabletLayout ? "text-5xl" : "text-3xl"}`}
+                style={{ color: EXPEDITION_THEME.textPrimary }}
+              >
+                SurvivorQuest
+              </Text>
+              <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+                {STEP_HINT[screen]}
+              </Text>
 
-            <View className="mt-4 flex-row gap-2">
-              {TOP_PANEL_STEP_ORDER.map((step, index) => {
-                const isActive = index === topPanelActiveStepIndex;
-                const isCompleted = topPanelActiveStepIndex > -1 && index < topPanelActiveStepIndex;
+              <View className="mt-4 flex-row gap-2">
+                {TOP_PANEL_STEP_ORDER.map((step, index) => {
+                  const isActive = index === topPanelActiveStepIndex;
+                  const isCompleted = topPanelActiveStepIndex > -1 && index < topPanelActiveStepIndex;
 
-                return (
-                  <View
-                    key={step}
-                    className="flex-1 rounded-xl border px-2 py-2"
-                    style={{
-                      borderColor: isActive || isCompleted ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
-                      backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                    }}
-                  >
-                    <Text
-                      className="text-[10px] uppercase tracking-widest"
-                      style={{ color: isActive || isCompleted ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textSubtle }}
+                  return (
+                    <View
+                      key={step}
+                      className="flex-1 rounded-xl border px-2 py-2"
+                      style={{
+                        borderColor: isActive || isCompleted ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                        backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                      }}
                     >
-                      Etap {index + 1}
-                    </Text>
-                    <Text className="mt-0.5 text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                      {STEP_LABEL[step]}
-                    </Text>
-                  </View>
-                );
-              })}
+                      <Text
+                        className="text-[10px] uppercase tracking-widest"
+                        style={{ color: isActive || isCompleted ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textSubtle }}
+                      >
+                        Etap {index + 1}
+                      </Text>
+                      <Text className="mt-0.5 text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                        {STEP_LABEL[step]}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          )}
 
           {screen === "api" && (
             <View
@@ -1135,6 +1228,19 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
                 <Text className="text-center text-base font-semibold text-zinc-950">Aktywuj realizację</Text>
               </Pressable>
 
+              <Pressable
+                className="mt-2 rounded-2xl border px-4 py-3 active:opacity-90"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                }}
+                onPress={() => setScreen("api")}
+              >
+                <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  Cofnij do etapu 1
+                </Text>
+              </Pressable>
+
               {setupState === "loading" && (
                 <View
                   className="mt-4 rounded-2xl border px-4 py-4"
@@ -1220,11 +1326,11 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
                 }}
                 onPress={openTeamPicker}
                 disabled={availableTeamSlots.length === 0}
-              >
-                <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Zmień drużynę
-                </Text>
-              </Pressable>
+                >
+                  <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                    Zmień drużynę
+                  </Text>
+                </Pressable>
 
               <View className="mt-4 flex-row gap-2">
                 <Pressable
@@ -1238,12 +1344,174 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
                 </Pressable>
                 <Pressable
                   className="flex-1 rounded-2xl px-3 py-3 active:opacity-90"
+                  style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: selectedTeam ? 1 : 0.6 }}
+                  onPress={() => setScreen("customization")}
+                  disabled={!selectedTeam}
+                >
+                  <Text className="text-center font-semibold text-zinc-950">
+                    Przejdź do edytora banera
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {screen === "customization" && (
+            <View
+              className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
+              style={{
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: EXPEDITION_THEME.panel,
+              }}
+            >
+              <View className="px-1">
+                <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  Edytor baneru drużyny
+                </Text>
+                <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+                  Dopracuj wygląd baneru drużyny. Ten baner będzie widoczny w górnym panelu podczas gry.
+                </Text>
+              </View>
+
+              <View
+                className="mt-3 rounded-2xl border px-4 py-4"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelStrong,
+                }}
+              >
+                <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Podgląd baneru
+                </Text>
+                <View
+                  className="mt-2 rounded-xl border px-2 py-1"
+                  style={{
+                    borderColor: EXPEDITION_THEME.border,
+                    backgroundColor: selectedColor.hex,
+                    minHeight: isTabletLayout ? 104 : 88,
+                  }}
+                >
+                  <View className="flex-1 flex-row items-center gap-2">
+                    <View className="h-full w-1/6 items-center justify-center rounded-md" style={{ backgroundColor: bannerIconBackground }}>
+                      <Text className={isTabletLayout ? "text-4xl" : "text-3xl"}>{teamIcon}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text
+                        className={isTabletLayout ? "text-2xl font-extrabold" : "text-xl font-extrabold"}
+                        style={{ color: bannerTextColor }}
+                        numberOfLines={1}
+                      >
+                        {teamName.trim() || "Nazwa drużyny"}
+                      </Text>
+                      <Text className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: bannerMutedTextColor }}>
+                        Drużyna {selectedTeam ?? "-"} • {selectedColor.label}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text className="text-[9px] uppercase tracking-widest" style={{ color: bannerMutedTextColor }}>
+                        Punkty
+                      </Text>
+                      <Text
+                        className={isTabletLayout ? "text-2xl font-extrabold text-right" : "text-xl font-extrabold text-right"}
+                        style={{ color: bannerTextColor }}
+                      >
+                        0
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View
+                className="mt-3 rounded-2xl border px-4 py-4"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                }}
+              >
+                <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Customizacja drużyny
+                </Text>
+
+                <TextInput
+                  className="mt-2 rounded-2xl border px-4 py-3 text-sm font-semibold"
+                  style={{
+                    borderColor: EXPEDITION_THEME.border,
+                    backgroundColor: EXPEDITION_THEME.panel,
+                    color: EXPEDITION_THEME.textPrimary,
+                  }}
+                  value={teamName}
+                  onChangeText={(value) => {
+                    setTeamName(value);
+                    setSaveMessage(null);
+                  }}
+                  placeholder="Nazwa drużyny"
+                  placeholderTextColor={EXPEDITION_THEME.textSubtle}
+                  maxLength={40}
+                />
+
+                <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Kolor drużyny
+                </Text>
+                <View className="mt-2 flex-row flex-wrap gap-3">
+                  {TEAM_COLORS.map((colorOption) => {
+                    const isSelected = colorOption.key === teamColor;
+
+                    return (
+                      <Pressable
+                        key={colorOption.key}
+                        className="h-12 w-12 items-center justify-center rounded-full border active:opacity-90"
+                        style={{
+                          borderColor: isSelected ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                          backgroundColor: isSelected ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                        }}
+                        onPress={() => {
+                          setTeamColor(colorOption.key);
+                          setSaveMessage(null);
+                        }}
+                      >
+                        <View className="h-7 w-7 rounded-full" style={{ backgroundColor: colorOption.hex }} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Ikona drużyny
+                </Text>
+                <View className="mt-2 flex-row flex-wrap gap-3">
+                  {TEAM_ICONS.map((iconOption) => {
+                    const isSelected = iconOption === teamIcon;
+
+                    return (
+                      <Pressable
+                        key={iconOption}
+                        className="h-14 w-14 items-center justify-center rounded-2xl border active:opacity-90"
+                        style={{
+                          borderColor: isSelected ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                          backgroundColor: isSelected ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
+                        }}
+                        onPress={() => {
+                          setTeamIcon(iconOption);
+                          setSaveMessage(null);
+                        }}
+                      >
+                        <Text className="text-2xl">{iconOption}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View className="mt-4">
+                <Pressable
+                  className="rounded-2xl px-3 py-3 active:opacity-90"
                   style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: selectedTeam && !isSaving ? 1 : 0.6 }}
                   onPress={() => void onSaveCustomization()}
                   disabled={!selectedTeam || isSaving}
                 >
                   <Text className="text-center font-semibold text-zinc-950">
-                    {isSaving ? "Uruchamianie..." : "Przejdź do startu aplikacji"}
+                    {isSaving ? "Uruchamianie..." : "Start!"}
                   </Text>
                 </Pressable>
               </View>
@@ -1264,9 +1532,11 @@ export function RealizationOnboardingScreen({ onComplete }: RealizationOnboardin
             </View>
           )}
 
-          <Text className="px-2 text-center text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-            Etap 1 sprawdza API, etap 2 aktywuje realizację kodem, a etap 3 finalizuje przydział drużyny.
-          </Text>
+          {screen !== "customization" && (
+            <Text className="px-2 text-center text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
+              Etap 1 sprawdza API, etap 2 aktywuje realizację kodem, etap 3 finalizuje przydział, a potem konfigurujesz baner drużyny.
+            </Text>
+          )}
         </View>
       </ScrollView>
 

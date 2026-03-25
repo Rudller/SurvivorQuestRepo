@@ -65,6 +65,10 @@ export class ScenarioService {
 
   async listScenarios() {
     const scenarios = await this.prisma.scenario.findMany({
+      where: {
+        realizationId: null,
+        sourceTemplateId: null,
+      },
       include: {
         scenarioStations: { orderBy: { order: 'asc' } },
       },

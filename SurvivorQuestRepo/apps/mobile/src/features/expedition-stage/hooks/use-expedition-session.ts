@@ -3,6 +3,7 @@ import type { OnboardingSession } from "../../onboarding/model/types";
 import {
   fetchMobileSessionState,
   getApiErrorMessage,
+  isSessionTokenInvalidError,
   postMobileCompleteTask,
   postMobileResolveStationQr,
   postMobileStartTask,
@@ -62,6 +63,8 @@ export function useExpeditionSession(session: OnboardingSession) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastLocationSyncAt, setLastLocationSyncAt] = useState<string | null>(null);
+  const [isSessionInvalid, setIsSessionInvalid] = useState(false);
+  const [sessionInvalidReason, setSessionInvalidReason] = useState<string | null>(null);
 
   useEffect(() => {
     setSessionState(buildInitialSessionState(session));
@@ -69,6 +72,8 @@ export function useExpeditionSession(session: OnboardingSession) {
     setIsLoading(!isOfflineSession(session));
     setIsRefreshing(false);
     setLastLocationSyncAt(null);
+    setIsSessionInvalid(false);
+    setSessionInvalidReason(null);
   }, [session]);
 
   const refreshSessionState = useCallback(async () => {
@@ -91,10 +96,16 @@ export function useExpeditionSession(session: OnboardingSession) {
       const nextState = await fetchMobileSessionState(apiBaseUrl, session.sessionToken);
       setSessionState(nextState);
       setErrorMessage(null);
+      setIsSessionInvalid(false);
+      setSessionInvalidReason(null);
       return null;
     } catch (error) {
       const message = getApiErrorMessage(error, "Nie udało się odświeżyć stanu sesji.");
       setErrorMessage(message);
+      if (isSessionTokenInvalidError(error)) {
+        setIsSessionInvalid(true);
+        setSessionInvalidReason(message);
+      }
       return message;
     } finally {
       setIsLoading(false);
@@ -435,6 +446,8 @@ export function useExpeditionSession(session: OnboardingSession) {
     isLoading,
     isRefreshing,
     errorMessage,
+    isSessionInvalid,
+    sessionInvalidReason,
     offlineMode,
     lastLocationSyncAt,
     refreshSessionState,

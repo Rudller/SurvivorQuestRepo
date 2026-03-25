@@ -86,11 +86,25 @@ function normalizePlayerLocation(value: unknown): PlayerLocation | null {
 function normalizeSessionState(raw: unknown): ExpeditionSessionState {
   const source = asRecord(raw);
   const realization = asRecord(source.realization);
+  const scenario = asRecord(realization.scenario);
   const team = asRecord(source.team);
   const meta = asRecord(source.meta);
-  const stations = asArray(realization.stations).map((stationItem) => {
+  const stationIdsFromPayload = [
+    ...asArray(realization.stationIds ?? realization.station_ids),
+    ...asArray(scenario.stationIds ?? scenario.station_ids),
+  ]
+    .map((stationId) => asString(stationId).trim())
+    .filter((stationId) => stationId.length > 0);
+  const stationRowsFromPayload = [
+    ...asArray(realization.stations),
+    ...asArray(realization.scenarioStations ?? realization.scenario_stations),
+    ...asArray(scenario.stations),
+    ...asArray(scenario.scenarioStations ?? scenario.scenario_stations),
+  ];
+  const stationsFromApi = stationRowsFromPayload
+    .map((stationItem) => {
     const station = asRecord(stationItem);
-    const id = asString(station.id);
+    const id = asString(station.id ?? station.stationId ?? station.station_id).trim();
     const name = asString(station.name, id || "Stanowisko");
 
     return {
@@ -103,6 +117,10 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
       points: Math.max(0, Math.round(asNumber(station.points, 0))),
       timeLimitSeconds: Math.max(0, Math.round(asNumber(station.timeLimitSeconds ?? station.time_limit_seconds, 0))),
+      completionCodeInputMode:
+        asString(station.completionCodeInputMode ?? station.completion_code_input_mode, "alphanumeric") === "numeric"
+          ? "numeric"
+          : "alphanumeric",
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       latitude: (() => {
         const value = asNumber(station.latitude ?? station.lat, Number.NaN);
@@ -113,12 +131,82 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         return Number.isFinite(value) ? value : undefined;
       })(),
     } satisfies ExpeditionRealizationStation;
+  })
+    .filter((station) => station.id.length > 0);
+  const stationById = new Map<string, ExpeditionRealizationStation>();
+  stationsFromApi.forEach((station) => {
+    if (!stationById.has(station.id)) {
+      stationById.set(station.id, station);
+    }
+  });
+  const taskRowsFromPayload = [...asArray(source.tasks), ...asArray(realization.tasks)];
+  const tasksFromApi = taskRowsFromPayload
+    .map((taskItem) => {
+    const task = asRecord(taskItem);
+    return {
+      stationId: asString(task.stationId ?? task.station_id).trim(),
+      status: normalizeTaskStatus(task.status),
+      pointsAwarded: Math.max(0, Math.round(asNumber(task.pointsAwarded ?? task.points_awarded, 0))),
+      startedAt: asString(task.startedAt ?? task.started_at) || null,
+      finishedAt: asString(task.finishedAt ?? task.finished_at) || null,
+    };
+  })
+    .filter((task) => task.stationId.length > 0);
+  const orderedStationIds: string[] = [];
+  const seenStationIds = new Set<string>();
+  const pushStationId = (stationId: string) => {
+    const normalizedStationId = stationId.trim();
+    if (!normalizedStationId || seenStationIds.has(normalizedStationId)) {
+      return;
+    }
+
+    seenStationIds.add(normalizedStationId);
+    orderedStationIds.push(normalizedStationId);
+  };
+  stationsFromApi.forEach((station) => pushStationId(station.id));
+  stationIdsFromPayload.forEach((stationId) => pushStationId(stationId));
+  tasksFromApi.forEach((task) => pushStationId(task.stationId));
+  const mergedStations = orderedStationIds.map((stationId) => {
+    const existingStation = stationById.get(stationId);
+    if (existingStation) {
+      return existingStation;
+    }
+
+    return {
+      id: stationId,
+      name: `Stanowisko ${stationId}`,
+      type: "quiz",
+      description: "Opis stanowiska jest dostępny po skanie QR.",
+      imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationId)}`,
+      points: 100,
+      timeLimitSeconds: 0,
+      completionCodeInputMode: "alphanumeric",
+      quiz: undefined,
+      latitude: undefined,
+      longitude: undefined,
+    } satisfies ExpeditionRealizationStation;
+  });
+  const taskByStationId = new Map(tasksFromApi.map((task) => [task.stationId, task]));
+  const mergedTasks = orderedStationIds.map((stationId) => {
+    const existingTask = taskByStationId.get(stationId);
+    if (existingTask) {
+      return existingTask;
+    }
+
+    return {
+      stationId,
+      status: "todo" as const,
+      pointsAwarded: 0,
+      startedAt: null,
+      finishedAt: null,
+    };
   });
 
   return {
     realization: {
       id: asString(realization.id, "unknown-realization"),
       companyName: asString(realization.companyName ?? realization.company_name, "Realizacja terenowa"),
+      introText: asString(realization.introText ?? realization.intro_text) || undefined,
       contactPerson: asString(realization.contactPerson ?? realization.contact_person),
       contactPhone: asString(realization.contactPhone ?? realization.contact_phone) || undefined,
       contactEmail: asString(realization.contactEmail ?? realization.contact_email) || undefined,
@@ -134,10 +222,10 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
-      durationMinutes:
-        Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,
-      stations,
-    },
+       durationMinutes:
+         Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,
+       stations: mergedStations,
+     },
     team: {
       id: asString(team.id, "unknown-team"),
       slotNumber: Math.max(1, Math.round(asNumber(team.slotNumber ?? team.slot_number, 1))),
@@ -147,16 +235,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       points: Math.max(0, Math.round(asNumber(team.points, 0))),
       lastLocation: normalizePlayerLocation(team.lastLocation ?? team.last_location),
     },
-    tasks: asArray(source.tasks).map((taskItem) => {
-      const task = asRecord(taskItem);
-      return {
-        stationId: asString(task.stationId ?? task.station_id),
-        status: normalizeTaskStatus(task.status),
-        pointsAwarded: Math.max(0, Math.round(asNumber(task.pointsAwarded ?? task.points_awarded, 0))),
-        startedAt: asString(task.startedAt ?? task.started_at) || null,
-        finishedAt: asString(task.finishedAt ?? task.finished_at) || null,
-      };
-    }),
+    tasks: mergedTasks,
     meta: {
       sessionExpiresAt: asString(meta.sessionExpiresAt ?? meta.session_expires_at, ""),
       eventLogCount: Math.max(0, Math.round(asNumber(meta.eventLogCount ?? meta.event_log_count, 0))),
@@ -188,6 +267,20 @@ export function getApiErrorMessage(error: unknown, fallback = "Wystąpił błąd
   }
 
   return fallback;
+}
+
+export function isSessionTokenInvalidError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("http 401") ||
+    message.includes("invalid session token") ||
+    message.includes("session expired") ||
+    message.includes("missing session token")
+  );
 }
 
 export async function fetchMobileSessionState(apiBaseUrl: string, sessionToken: string) {
@@ -301,6 +394,7 @@ export async function postMobileResolveStationQr(
       imageUrl: string;
       points: number;
       timeLimitSeconds: number;
+      completionCodeInputMode?: "numeric" | "alphanumeric";
       quiz?: {
         question: string;
         answers: [string, string, string, string];

@@ -148,7 +148,11 @@ export function RealizationsTable({
               </thead>
               <tbody>
                 {sortedRealizations.map((realization) => {
-                  const linkedScenario = scenarioById.get(realization.scenarioId);
+                  const linkedScenario = scenarioById.get(
+                    realization.scenarioTemplateId ?? realization.scenarioId,
+                  );
+                  const linkedScenarioName =
+                    linkedScenario?.name ?? realization.scenarioTemplateName ?? null;
                   const realizationStations =
                     realization.scenarioStations.length > 0
                       ? realization.scenarioStations
@@ -189,9 +193,9 @@ export function RealizationsTable({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-zinc-300">
-                        {linkedScenario ? (
+                        {linkedScenarioName ? (
                           <>
-                            <p className="line-clamp-1">{linkedScenario.name}</p>
+                            <p className="line-clamp-1">{linkedScenarioName}</p>
                             <p className="text-xs text-zinc-500">Stanowiska: {stationCount}</p>
                           </>
                         ) : (

@@ -1,21 +1,33 @@
-export type Screen = "api" | "code" | "team";
+export type Screen = "api" | "code" | "team" | "customization";
 
 export type TeamColor =
   | "red"
-  | "orange"
-  | "amber"
-  | "yellow"
-  | "lime"
-  | "emerald"
-  | "teal"
-  | "cyan"
-  | "sky"
-  | "blue"
-  | "indigo"
-  | "violet"
   | "rose"
   | "pink"
-  | "slate";
+  | "magenta"
+  | "violet"
+  | "purple"
+  | "indigo"
+  | "navy"
+  | "blue"
+  | "sky"
+  | "cyan"
+  | "turquoise"
+  | "teal"
+  | "mint"
+  | "aquamarine"
+  | "emerald"
+  | "green"
+  | "lime"
+  | "orange"
+  | "amber"
+  | "gold"
+  | "yellow"
+  | "brown"
+  | "gray"
+  | "slate"
+  | "black"
+  | "white";
 
 export type TeamColorOption = {
   key: TeamColor;
@@ -42,6 +54,7 @@ export type OnboardingRealizationSummary = {
   teamCount: number;
   stationIds: string[];
   locationRequired: boolean;
+  introText?: string;
 };
 
 export type OnboardingSession = {
@@ -50,5 +63,6 @@ export type OnboardingSession = {
   sessionToken: string;
   apiBaseUrl: string | null;
   realization: OnboardingRealizationSummary | null;
+  awaitingAdminStart?: boolean;
   team: TeamCustomizationSelection;
 };

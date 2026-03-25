@@ -36,6 +36,7 @@ export type CreateRealizationDto = {
   location?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -99,6 +100,7 @@ export function validateRealizationPayload(
   const companyName = payload.companyName?.trim() || '';
   const location = payload.location?.trim() || '';
   const customLanguage = payload.customLanguage?.trim() || '';
+  const introText = payload.introText?.trim() || '';
   const contactPerson = payload.contactPerson?.trim() || '';
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
@@ -157,6 +159,7 @@ export function validateRealizationPayload(
     location: location || undefined,
     language: payload.language,
     customLanguage: payload.language === 'other' ? customLanguage : undefined,
+    introText: introText || undefined,
     contactPerson,
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,

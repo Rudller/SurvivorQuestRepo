@@ -8,6 +8,7 @@ export type StationTestType = "quiz" | "time" | "points";
 export type StationTestViewModel = {
   stationId: string;
   stationType: StationTestType;
+  completionCodeInputMode?: "numeric" | "alphanumeric";
   name: string;
   typeLabel: string;
   description: string;
@@ -28,12 +29,13 @@ type StationTestMenuOverlayProps = {
   stations: StationTestViewModel[];
   onClose: () => void;
   onEnterStation: (stationId: string) => void;
+  onOpenWelcomeScreen: () => void;
 };
 
 type StationPreviewOverlayProps = {
   station: StationTestViewModel | null;
   onClose: () => void;
-  onStartTask?: (stationId: string) => Promise<string | null>;
+  onRequestClose?: () => void;
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string) => void;
   onQuizPassed?: (stationId: string) => void;
@@ -42,6 +44,7 @@ type StationPreviewOverlayProps = {
 type QuizPrestartOverlayProps = {
   visible: boolean;
   stationName: string | null;
+  stationType?: StationTestType;
   isStarting?: boolean;
   onStart: () => void;
   onClose: () => void;
@@ -83,9 +86,39 @@ function getCodePlaceholder(stationType: StationTestType) {
   return stationType === "time" ? "np. TIME-2048" : "np. POINTS-2048";
 }
 
-const QUIZ_BRAIN_ICON_URI = "https://cdn-icons-png.flaticon.com/512/5677/5677920.png";
+const NUMERIC_PINPAD_LAYOUT = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "backspace", "0", "submit"] as const;
+const NUMERIC_PINPAD_SUBLABELS: Record<string, string> = {
+  "0": "+",
+  "1": "",
+  "2": "ABC",
+  "3": "DEF",
+  "4": "GHI",
+  "5": "JKL",
+  "6": "MNO",
+  "7": "PQRS",
+  "8": "TUV",
+  "9": "WXYZ",
+};
 
-export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStation }: StationTestMenuOverlayProps) {
+const QUIZ_BRAIN_ICON_URI = "https://cdn-icons-png.flaticon.com/512/5677/5677920.png";
+const INVALID_COMPLETION_CODE_MARKERS = ["invalid completion code", "http 400"];
+
+function isInvalidCompletionCodeErrorMessage(value: string | null) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return false;
+  }
+
+  return INVALID_COMPLETION_CODE_MARKERS.some((marker) => normalized.includes(marker));
+}
+
+export function StationTestMenuOverlay({
+  visible,
+  stations,
+  onClose,
+  onEnterStation,
+  onOpenWelcomeScreen,
+}: StationTestMenuOverlayProps) {
   if (!visible) {
     return null;
   }
@@ -99,10 +132,10 @@ export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStat
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1">
             <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Menu testowe stanowisk
+              Menu testowe
             </Text>
             <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Lista pobrana z panelu admina + dodatkowe stanowiska testowe mobile.
+              Lista pobrana z panelu admina dla aktywnej realizacji.
             </Text>
           </View>
           <Pressable
@@ -115,6 +148,16 @@ export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStat
             </Text>
           </Pressable>
         </View>
+
+        <Pressable
+          className="mt-3 rounded-xl border px-3 py-2 active:opacity-90"
+          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+          onPress={onOpenWelcomeScreen}
+        >
+          <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+            Pokaż Welcome Screen
+          </Text>
+        </Pressable>
 
         <ScrollView className="mt-3" style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
           <View className="gap-2">
@@ -159,6 +202,44 @@ export function StationTestMenuOverlay({ visible, stations, onClose, onEnterStat
             )}
           </View>
         </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+type WelcomePreviewOverlayProps = {
+  visible: boolean;
+  introText?: string;
+  onClose: () => void;
+};
+
+export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePreviewOverlayProps) {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <View className="absolute inset-0 z-50 items-center justify-center px-4" style={{ backgroundColor: "rgba(15, 25, 20, 0.78)" }}>
+      <View
+        className="w-full max-w-[560px] rounded-3xl border p-5"
+        style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+      >
+        <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+          Tekst wstępu
+        </Text>
+        <Text className="mt-3 text-sm leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          {introText?.trim() || "Brak tekstu wstępu dla tej realizacji."}
+        </Text>
+
+        <Pressable
+          className="mt-4 rounded-xl border px-3 py-2 active:opacity-90"
+          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+          onPress={onClose}
+        >
+          <Text className="text-center text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            Zamknij
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -212,7 +293,14 @@ function blendHexColors(from: string, to: string, ratio: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export function QuizPrestartOverlay({ visible, stationName, isStarting = false, onStart, onClose }: QuizPrestartOverlayProps) {
+export function QuizPrestartOverlay({
+  visible,
+  stationName,
+  stationType = "quiz",
+  isStarting = false,
+  onStart,
+  onClose,
+}: QuizPrestartOverlayProps) {
   const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const [displayStationName, setDisplayStationName] = useState(stationName);
@@ -266,6 +354,15 @@ export function QuizPrestartOverlay({ visible, stationName, isStarting = false, 
       },
     ],
   } as const;
+  const prestartBadge = stationType === "time" ? "Na czas" : "Quiz";
+  const prestartTitle =
+    stationType === "time"
+      ? "Za chwilę zostanie uruchomione zadanie czasowe"
+      : "Za chwilę zostanie uruchomiony quiz";
+  const prestartDescription =
+    stationType === "time"
+      ? "Przygotuj się. Po starcie od razu ruszy licznik czasu."
+      : "Przygotuj się na odpowiedzenie na pytania.";
 
   return (
     <Animated.View className="absolute inset-0 z-50 items-center justify-center px-3" style={[{ backgroundColor: "rgba(15, 25, 20, 0.88)" }, backdropStyle]}>
@@ -274,13 +371,13 @@ export function QuizPrestartOverlay({ visible, stationName, isStarting = false, 
         style={[{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }, panelStyle]}
       >
         <Text className="text-center text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          Quiz
+          {prestartBadge}
         </Text>
         <Text className="mt-2 text-center text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-          Za chwilę zostanie uruchomiony quiz
+          {prestartTitle}
         </Text>
         <Text className="mt-2 text-center text-sm leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
-          Przygotuj się na odpowiedzenie na pytania.
+          {prestartDescription}
           {displayStationName ? ` Stanowisko: ${displayStationName}.` : ""}
         </Text>
 
@@ -312,7 +409,7 @@ export function QuizPrestartOverlay({ visible, stationName, isStarting = false, 
 export function StationPreviewOverlay({
   station: stationProp,
   onClose,
-  onStartTask,
+  onRequestClose,
   onCompleteTask,
   onQuizFailed,
   onQuizPassed,
@@ -325,15 +422,19 @@ export function StationPreviewOverlay({
   const [quizSubmitError, setQuizSubmitError] = useState<string | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [quizIconLoadFailed, setQuizIconLoadFailed] = useState(false);
-  const [isStartingTask, setIsStartingTask] = useState(false);
   const [isSubmittingQuizAnswer, setIsSubmittingQuizAnswer] = useState(false);
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [isCodeInputInvalid, setIsCodeInputInvalid] = useState(false);
+  const [isCodeInputSuccess, setIsCodeInputSuccess] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [displayedStation, setDisplayedStation] = useState<StationTestViewModel | null>(stationProp);
   const [isOverlayMounted, setIsOverlayMounted] = useState(Boolean(stationProp));
   const overlaySlideAnimation = useRef(new Animated.Value(stationProp ? 1 : 0)).current;
   const quizFeedbackAnimation = useRef(new Animated.Value(0)).current;
   const timerPulseAnimation = useRef(new Animated.Value(0)).current;
+  const codeInputShakeAnimation = useRef(new Animated.Value(0)).current;
+  const codeInputResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const codeInputSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const timeoutPopupShownRef = useRef(false);
   const quizOptions = useMemo(
@@ -381,15 +482,38 @@ export function StationPreviewOverlay({
     setQuizSubmitError(null);
     setImageLoadFailed(false);
     setQuizIconLoadFailed(false);
-    setIsStartingTask(false);
     setIsSubmittingQuizAnswer(false);
     setIsSubmittingCode(false);
+    setIsCodeInputInvalid(false);
+    setIsCodeInputSuccess(false);
     setNowMs(Date.now());
     quizFeedbackAnimation.setValue(0);
     timerPulseAnimation.setValue(0);
+    codeInputShakeAnimation.setValue(0);
+    if (codeInputResetTimeoutRef.current) {
+      clearTimeout(codeInputResetTimeoutRef.current);
+      codeInputResetTimeoutRef.current = null;
+    }
+    if (codeInputSuccessTimeoutRef.current) {
+      clearTimeout(codeInputSuccessTimeoutRef.current);
+      codeInputSuccessTimeoutRef.current = null;
+    }
     timerPulseLoopRef.current?.stop();
     timeoutPopupShownRef.current = false;
-  }, [displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
+  }, [codeInputShakeAnimation, displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (codeInputResetTimeoutRef.current) {
+        clearTimeout(codeInputResetTimeoutRef.current);
+        codeInputResetTimeoutRef.current = null;
+      }
+      if (codeInputSuccessTimeoutRef.current) {
+        clearTimeout(codeInputSuccessTimeoutRef.current);
+        codeInputSuccessTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -534,12 +658,23 @@ export function StationPreviewOverlay({
   const isQuizStation = station.stationType === "quiz";
   const requiresCode = station.stationType === "time" || station.stationType === "points";
   const isTimeStation = station.stationType === "time";
+  const isNumericCodeStation =
+    requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
   const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
   const shouldShowQuizFallbackGraphic =
     isQuizStation && (imageLoadFailed || !normalizedImageUrl || isDicebearFallback);
   const stationImageUri = shouldShowQuizFallbackGraphic ? undefined : normalizedImageUrl || undefined;
-  const stationMediaHeight = Math.max(190, Math.round(viewportHeight * 0.33));
+  const stationDescription = station.description.trim();
+  const stationMediaHeight = (() => {
+    if (isNumericCodeStation) {
+      return Math.max(104, Math.round(viewportHeight * 0.14));
+    }
+    if (requiresCode) {
+      return Math.max(128, Math.round(viewportHeight * 0.2));
+    }
+    return Math.max(190, Math.round(viewportHeight * 0.33));
+  })();
   const hasTimerStarted = Boolean(station.startedAt);
   const hasQuizAnswer = selectedQuizOption !== null;
   const feedbackTone =
@@ -580,6 +715,79 @@ export function StationPreviewOverlay({
         } as const)
       : undefined;
   const executionTimeLabel = remainingTimeLabel ?? station.timeLimitLabel;
+  const shouldShowExecutionTimer = executionTimeLabel.trim().length > 0;
+  const isCodeActionDisabled =
+    station.status === "done" || isSubmittingCode || isCodeInputSuccess || (isTimeStation && !hasTimerStarted);
+  const codeInputShakeStyle = {
+    transform: [{ translateX: codeInputShakeAnimation }],
+  } as const;
+  const triggerInvalidCodeFeedback = () => {
+    setIsCodeInputInvalid(true);
+    codeInputShakeAnimation.stopAnimation();
+    codeInputShakeAnimation.setValue(0);
+    Animated.sequence([
+      Animated.timing(codeInputShakeAnimation, { toValue: -10, duration: 45, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: 10, duration: 45, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: -8, duration: 40, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: 8, duration: 40, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: -4, duration: 35, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: 4, duration: 35, useNativeDriver: true }),
+      Animated.timing(codeInputShakeAnimation, { toValue: 0, duration: 35, useNativeDriver: true }),
+    ]).start();
+
+    if (codeInputResetTimeoutRef.current) {
+      clearTimeout(codeInputResetTimeoutRef.current);
+    }
+    codeInputResetTimeoutRef.current = setTimeout(() => {
+      setIsCodeInputInvalid(false);
+      codeInputResetTimeoutRef.current = null;
+    }, 1000);
+  };
+  const submitVerificationCode = async () => {
+    if (!verificationCode.trim()) {
+      setCodeResult("Wpisz kod, aby zatwierdzić stanowisko.");
+      return;
+    }
+
+    if (!onCompleteTask) {
+      setIsCodeInputInvalid(false);
+      setIsCodeInputSuccess(true);
+      setCodeResult("Kod zatwierdzony (tryb testowy).");
+      if (codeInputSuccessTimeoutRef.current) {
+        clearTimeout(codeInputSuccessTimeoutRef.current);
+      }
+      codeInputSuccessTimeoutRef.current = setTimeout(() => {
+        codeInputSuccessTimeoutRef.current = null;
+        onClose();
+      }, 5000);
+      return;
+    }
+
+    setIsSubmittingCode(true);
+    const error = await onCompleteTask(station.stationId, verificationCode, station.startedAt ?? undefined);
+    setIsSubmittingCode(false);
+
+    if (error) {
+      if (isInvalidCompletionCodeErrorMessage(error)) {
+        setCodeResult(null);
+        triggerInvalidCodeFeedback();
+        return;
+      }
+      setCodeResult(error);
+      return;
+    }
+
+    setIsCodeInputInvalid(false);
+    setIsCodeInputSuccess(true);
+    setCodeResult("Kod zatwierdzony.");
+    if (codeInputSuccessTimeoutRef.current) {
+      clearTimeout(codeInputSuccessTimeoutRef.current);
+    }
+    codeInputSuccessTimeoutRef.current = setTimeout(() => {
+      codeInputSuccessTimeoutRef.current = null;
+      onClose();
+    }, 5000);
+  };
   const overlayBackdropStyle = {
     opacity: overlaySlideAnimation.interpolate({
       inputRange: [0, 1],
@@ -607,79 +815,95 @@ export function StationPreviewOverlay({
         <View className="flex-1 rounded-3xl border" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}>
           <View className="flex-row items-start justify-between gap-3 px-4 pb-2 pt-4">
             <View className="flex-1">
-              <Text className="text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                {isQuizStation ? "Quiz" : "Stanowisko"}
-              </Text>
+                <Text
+                  className="text-[11px] uppercase tracking-widest"
+                  style={{ color: EXPEDITION_THEME.textSubtle }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {`${station.name} • ${station.typeLabel}`}
+                </Text>
             </View>
             <Pressable
               className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-              onPress={onClose}
+              onPress={onRequestClose ?? onClose}
             >
-              <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text
+                className="text-base font-semibold text-center"
+                style={{ color: EXPEDITION_THEME.textPrimary, lineHeight: 16, includeFontPadding: false }}
+              >
                 ✕
               </Text>
             </Pressable>
           </View>
 
-          <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 132 }} showsVerticalScrollIndicator={false}>
-            <View
-              className="mt-1 w-full overflow-hidden rounded-2xl border"
-              style={{
-                height: stationMediaHeight,
-                borderColor: EXPEDITION_THEME.border,
-                backgroundColor: EXPEDITION_THEME.panelMuted,
-              }}
-            >
-              {shouldShowQuizFallbackGraphic ? (
-                <View className="flex-1 items-center justify-center">
-                  {!quizIconLoadFailed ? (
-                    <Image
-                      source={{ uri: QUIZ_BRAIN_ICON_URI }}
-                      style={{ width: "62%", height: "62%", tintColor: "#ffffff" }}
-                      resizeMode="contain"
-                      onError={() => setQuizIconLoadFailed(true)}
-                    />
-                  ) : (
-                    <Text className="text-4xl">🧠</Text>
-                  )}
-                </View>
-              ) : stationImageUri ? (
-                <Image
-                  source={{ uri: stationImageUri }}
-                  style={{ width: "100%", height: "100%" }}
-                  resizeMode="cover"
-                  onError={() => setImageLoadFailed(true)}
-                />
-              ) : (
-                <View className="flex-1 items-center justify-center">
-                  <Text className="text-3xl">📍</Text>
-                </View>
-              )}
-            </View>
-
-            <View className="mt-3 flex-row items-start justify-between gap-2">
-              <Text className="flex-1 text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {station.name}
-              </Text>
-              <View className="rounded-full border px-3 py-1" style={{ borderColor: EXPEDITION_THEME.border }}>
-                <Text className="text-[11px]" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  {station.typeLabel}
-                </Text>
-              </View>
-            </View>
-
-            {station.description.trim().length > 0 ? (
-              <Text className="mt-2 text-sm leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
-                {station.description}
-              </Text>
-            ) : null}
-
-            {isQuizStation ? (
+          <View className="flex-1 px-4">
+            <View className="flex-1">
               <View
-                className="mt-3 rounded-2xl border px-3 py-3"
-                style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                className={`${isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden rounded-2xl border`}
+                style={{
+                  ...(requiresCode
+                    ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
+                    : { height: stationMediaHeight }),
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                }}
               >
+                {shouldShowQuizFallbackGraphic ? (
+                  <View className="flex-1 items-center justify-center">
+                    {!quizIconLoadFailed ? (
+                      <Image
+                        source={{ uri: QUIZ_BRAIN_ICON_URI }}
+                        style={{ width: "62%", height: "62%", tintColor: "#ffffff" }}
+                        resizeMode="contain"
+                        onError={() => setQuizIconLoadFailed(true)}
+                      />
+                    ) : (
+                      <Text className="text-4xl">🧠</Text>
+                    )}
+                  </View>
+                ) : stationImageUri ? (
+                  <Image
+                    source={{ uri: stationImageUri }}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode="cover"
+                    onError={() => setImageLoadFailed(true)}
+                  />
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <Text className="text-3xl">📍</Text>
+                  </View>
+                )}
+              </View>
+
+              {requiresCode ? (
+                <View
+                  className="my-3 px-1"
+                >
+                  <Text
+                    className="text-base leading-6"
+                    style={{ color: EXPEDITION_THEME.textMuted, textAlign: "justify" }}
+                  >
+                    {stationDescription.length > 0
+                      ? stationDescription
+                      : "Opis zadania nie został jeszcze dodany."}
+                  </Text>
+                </View>
+              ) : stationDescription.length > 0 ? (
+                <Text
+                  className={`${isNumericCodeStation ? "mt-2" : "mt-3"} text-sm leading-5`}
+                  style={{ color: EXPEDITION_THEME.textMuted }}
+                >
+                  {stationDescription}
+                </Text>
+              ) : null}
+
+              {isQuizStation ? (
+                <View
+                  className="mt-3 rounded-2xl border px-3 py-3"
+                  style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                >
                 <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                   {station.quizQuestion?.trim() || "Quiz: wybierz jedną z 4 odpowiedzi"}
                 </Text>
@@ -809,147 +1033,227 @@ export function StationPreviewOverlay({
                     {quizSubmitError}
                   </Text>
                 ) : null}
-              </View>
-            ) : null}
+                </View>
+              ) : null}
+            </View>
 
             {requiresCode ? (
               <View
-                className="mt-3 rounded-2xl border px-3 py-3"
+                className={`${isNumericCodeStation ? "mt-2" : "mt-3"} rounded-2xl border px-3 ${isNumericCodeStation ? "py-2" : "py-3"}`}
                 style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               >
-                <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  {station.stationType === "time" ? "Time: potwierdź wykonanie kodem" : "Points: potwierdź wynik kodem"}
-                </Text>
-                <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Wpisz kod i zatwierdź stanowisko.
-                </Text>
+                {station.completionCodeInputMode === "numeric" ? (
+                  <View className={isNumericCodeStation ? "mt-1" : "mt-2"}>
+                    <View className="items-center">
+                      <Animated.View
+                        className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} w-full max-w-[320px] rounded-2xl border px-4 ${isNumericCodeStation ? "py-2.5" : "py-3"}`}
+                        style={[
+                          codeInputShakeStyle,
+                            {
+                             borderColor: isCodeInputSuccess
+                               ? "#34d399"
+                               : isCodeInputInvalid
+                                 ? EXPEDITION_THEME.danger
+                                 : EXPEDITION_THEME.border,
+                             backgroundColor: isCodeInputSuccess
+                               ? "rgba(52, 211, 153, 0.2)"
+                               : isCodeInputInvalid
+                                 ? "rgba(239, 111, 108, 0.16)"
+                                 : EXPEDITION_THEME.panelStrong,
+                           },
+                         ]}
+                       >
+                        <Text
+                          className="text-center text-2xl font-semibold tracking-[0.35em]"
+                          style={{ color: EXPEDITION_THEME.textPrimary }}
+                          numberOfLines={1}
+                        >
+                          {verificationCode || "• • • •"}
+                        </Text>
+                      </Animated.View>
+                    </View>
 
-                {isTimeStation && station.status !== "done" ? (
+                    <View className={`mx-auto ${isNumericCodeStation ? "mt-2" : "mt-3"} w-full max-w-[320px] flex-row flex-wrap justify-between gap-y-2`}>
+                      {NUMERIC_PINPAD_LAYOUT.map((key) => {
+                        const isBackspaceKey = key === "backspace";
+                        const isSubmitKey = key === "submit";
+                        const isDisabled =
+                          isCodeActionDisabled ||
+                          (isBackspaceKey && verificationCode.length === 0);
+                        const label = isBackspaceKey ? "⌫" : isSubmitKey ? "OK" : key;
+                        const isDigitKey = /^\d$/.test(label);
+                        const sublabel = isDigitKey ? NUMERIC_PINPAD_SUBLABELS[label] : "";
+
+                        return (
+                          <Pressable
+                            key={`${station.stationId}-pin-${key}`}
+                            className="items-center justify-center rounded-full active:opacity-85"
+                            style={{
+                              width: "31%",
+                              aspectRatio: 1,
+                              borderWidth: 1,
+                              borderColor: EXPEDITION_THEME.border,
+                              backgroundColor: isSubmitKey
+                                ? isDisabled
+                                  ? EXPEDITION_THEME.panelStrong
+                                  : EXPEDITION_THEME.accent
+                                : EXPEDITION_THEME.panelStrong,
+                              opacity: isDisabled ? 0.45 : 1,
+                            }}
+                            disabled={isDisabled}
+                        onPress={() => {
+                          if (isBackspaceKey) {
+                            setVerificationCode((current) => current.slice(0, -1));
+                            setIsCodeInputInvalid(false);
+                            setIsCodeInputSuccess(false);
+                            setCodeResult(null);
+                            return;
+                          }
+                              if (isSubmitKey) {
+                                void submitVerificationCode();
+                                return;
+                              }
+
+                              setVerificationCode((current) => {
+                                const nextValue = `${current}${key}`;
+                                return nextValue.slice(0, 32);
+                              });
+                              setIsCodeInputInvalid(false);
+                              setIsCodeInputSuccess(false);
+                              setCodeResult(null);
+                            }}
+                          >
+                            {isDigitKey ? (
+                              <View className="h-full w-full items-center justify-center">
+                                <Text
+                                  className="text-[30px] font-medium text-center"
+                                  style={{
+                                    color: EXPEDITION_THEME.textPrimary,
+                                    textAlign: "center",
+                                    fontVariant: ["tabular-nums"],
+                                  }}
+                                >
+                                  {label}
+                                </Text>
+                                <Text
+                                  className="mt-[-2px] text-[9px] font-semibold tracking-[1.6px] text-center"
+                                  style={{ color: EXPEDITION_THEME.textSubtle }}
+                                >
+                                  {sublabel}
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text
+                                className={`${isSubmitKey ? "text-xl" : "text-base"} font-semibold text-center`}
+                                style={{
+                                  color: isSubmitKey ? "#09090b" : EXPEDITION_THEME.textPrimary,
+                                  width: "100%",
+                                  textAlign: "center",
+                                  textAlignVertical: "center",
+                                }}
+                              >
+                                {label}
+                              </Text>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : (
+                  <Animated.View style={codeInputShakeStyle}>
+                    <TextInput
+                      className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} rounded-xl border px-3 py-2 text-sm`}
+                      style={{
+                         borderColor: isCodeInputSuccess
+                           ? "#34d399"
+                           : isCodeInputInvalid
+                             ? EXPEDITION_THEME.danger
+                             : EXPEDITION_THEME.border,
+                         backgroundColor: isCodeInputSuccess
+                           ? "rgba(52, 211, 153, 0.2)"
+                           : isCodeInputInvalid
+                             ? "rgba(239, 111, 108, 0.16)"
+                             : EXPEDITION_THEME.panelStrong,
+                         color: EXPEDITION_THEME.textPrimary,
+                       }}
+                      placeholder={getCodePlaceholder(station.stationType)}
+                      placeholderTextColor={EXPEDITION_THEME.textSubtle}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      value={verificationCode}
+                      editable={station.status !== "done" && (!isTimeStation || hasTimerStarted)}
+                      onChangeText={(value) => {
+                        setVerificationCode(value);
+                        setIsCodeInputInvalid(false);
+                        setIsCodeInputSuccess(false);
+                        setCodeResult(null);
+                      }}
+                    />
+                  </Animated.View>
+                )}
+
+                {station.completionCodeInputMode !== "numeric" ? (
                   <Pressable
-                    className="mt-2 items-center rounded-xl py-2.5 active:opacity-90"
-                    style={{ backgroundColor: hasTimerStarted ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent }}
-                    disabled={hasTimerStarted || isStartingTask}
-                    onPress={async () => {
-                      if (!onStartTask) {
-                        setCodeResult("Start timera dostępny po podpięciu API.");
-                        return;
-                      }
-
-                      setIsStartingTask(true);
-                      const error = await onStartTask(station.stationId);
-                      setIsStartingTask(false);
-
-                      if (error) {
-                        setCodeResult(error);
-                        return;
-                      }
-
-                      setCodeResult("Licznik zadania uruchomiony.");
+                    className={`${isNumericCodeStation ? "mt-2" : "mt-3"} items-center rounded-xl py-2.5 active:opacity-90`}
+                    style={{
+                      backgroundColor: isCodeActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
+                    }}
+                    disabled={isCodeActionDisabled}
+                    onPress={() => {
+                      void submitVerificationCode();
                     }}
                   >
                     <Text className="text-sm font-semibold text-zinc-950">
-                      {hasTimerStarted ? "Licznik uruchomiony" : isStartingTask ? "Uruchamianie..." : "Start zadania"}
+                      {isSubmittingCode ? "Zatwierdzanie..." : "Zatwierdź kod"}
                     </Text>
                   </Pressable>
                 ) : null}
 
-                <TextInput
-                  className="mt-2 rounded-xl border px-3 py-2 text-sm"
-                  style={{
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelStrong,
-                    color: EXPEDITION_THEME.textPrimary,
-                  }}
-                  placeholder={getCodePlaceholder(station.stationType)}
-                  placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  value={verificationCode}
-                  editable={station.status !== "done" && (!isTimeStation || hasTimerStarted)}
-                  onChangeText={(value) => {
-                    setVerificationCode(value);
-                    setCodeResult(null);
-                  }}
-                />
-
-                <Pressable
-                  className="mt-3 items-center rounded-xl py-2.5 active:opacity-90"
-                  style={{
-                    backgroundColor:
-                      station.status === "done" || (isTimeStation && !hasTimerStarted)
-                        ? EXPEDITION_THEME.panelStrong
-                        : EXPEDITION_THEME.accent,
-                  }}
-                  disabled={station.status === "done" || isSubmittingCode || (isTimeStation && !hasTimerStarted)}
-                  onPress={async () => {
-                    if (!verificationCode.trim()) {
-                      setCodeResult("Wpisz kod, aby zatwierdzić stanowisko.");
-                      return;
-                    }
-
-                    if (!onCompleteTask) {
-                      setCodeResult("Kod zatwierdzony (tryb testowy).");
-                      return;
-                    }
-
-                    setIsSubmittingCode(true);
-                    const error = await onCompleteTask(station.stationId, verificationCode, station.startedAt ?? undefined);
-                    setIsSubmittingCode(false);
-
-                    if (error) {
-                      setCodeResult(error);
-                      return;
-                    }
-
-                    setCodeResult("Kod zatwierdzony.");
-                  }}
-                >
-                  <Text className="text-sm font-semibold text-zinc-950">
-                    {isSubmittingCode ? "Zatwierdzanie..." : "Zatwierdź kod"}
-                  </Text>
-                </Pressable>
-
-                {codeResult ? (
-                  <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+                {codeResult && !isInvalidCompletionCodeErrorMessage(codeResult) ? (
+                  <Text className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} text-xs`} style={{ color: EXPEDITION_THEME.textMuted }}>
                     {codeResult}
                   </Text>
                 ) : null}
               </View>
             ) : null}
 
-          </ScrollView>
-
-          <View
-            pointerEvents="none"
-            style={{ position: "absolute", left: 16, right: 16, bottom: 16, alignItems: "center" }}
-          >
-            <View className="items-center px-4 py-2">
-              <Animated.Text
-                className="text-center text-6xl font-extrabold"
-                style={[{ color: timerTextColor }, timerPulseStyle]}
-              >
-                {executionTimeLabel}
-              </Animated.Text>
-              <Text className="mt-1 text-center text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                Czas do ukończenia zadania
-              </Text>
-            </View>
           </View>
 
-          <View
-            pointerEvents="none"
-            style={{ position: "absolute", right: 16, bottom: 16 }}
-          >
-            <View
-              className="rounded-2xl border px-3 py-2"
-              style={{ borderColor: "rgba(252, 211, 77, 0.4)", backgroundColor: "rgba(252, 211, 77, 0.1)" }}
-            >
-              <Text className="text-[10px] uppercase tracking-widest" style={{ color: "#fcd34d" }}>
-                Punkty
-              </Text>
-              <Text className="mt-0.5 text-right text-lg font-extrabold" style={{ color: "#fcd34d" }}>
-                {station.points}
-              </Text>
+          <View className={`px-4 ${isNumericCodeStation ? "pb-3 pt-1" : "pb-4 pt-2"}`}>
+            <View className="flex-row items-end">
+              <View className="flex-1" />
+
+              {shouldShowExecutionTimer ? (
+                <View className="items-center px-4 py-2">
+                  <Animated.Text
+                    className={`text-center ${isNumericCodeStation ? "text-5xl" : "text-6xl"} font-extrabold`}
+                    style={[{ color: timerTextColor }, timerPulseStyle]}
+                  >
+                    {executionTimeLabel}
+                  </Animated.Text>
+                  <Text
+                    className="mt-1 text-center text-[10px] uppercase tracking-widest"
+                    style={{ color: EXPEDITION_THEME.textSubtle }}
+                  >
+                    Czas do ukończenia zadania
+                  </Text>
+                </View>
+              ) : null}
+
+              <View className="flex-1 items-end">
+                <View
+                  className="rounded-2xl border px-3 py-2"
+                  style={{ borderColor: "rgba(252, 211, 77, 0.4)", backgroundColor: "rgba(252, 211, 77, 0.1)" }}
+                >
+                  <Text className="text-[10px] uppercase tracking-widest" style={{ color: "#fcd34d" }}>
+                    Punkty
+                  </Text>
+                  <Text className="mt-0.5 text-right text-lg font-extrabold" style={{ color: "#fcd34d" }}>
+                    {station.points}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
 

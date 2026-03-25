@@ -6,7 +6,10 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import {
   useGetCurrentRealizationOverviewQuery,
+  useFinishCurrentRealizationMutation,
+  useResetCurrentRealizationMutation,
   useResetCurrentRealizationCompletedTasksMutation,
+  useStartCurrentRealizationMutation,
 } from "@/features/current-realization/api/current-realization.api";
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
@@ -14,6 +17,30 @@ import { AdminSidebar } from "@/shared/components/admin-sidebar";
 function isUnauthorized(error: unknown) {
   const err = error as FetchBaseQueryError | undefined;
   return typeof err?.status === "number" && err.status === 401;
+}
+
+function renderTeamStatusLabel(status: "unassigned" | "ready" | "active" | "offline") {
+  if (status === "ready") {
+    return "Ready";
+  }
+
+  if (status === "active") {
+    return "Aktywna";
+  }
+
+  if (status === "offline") {
+    return "Offline";
+  }
+
+  return "Nieprzypisana";
+}
+
+function renderEventTypeLabel(eventType: string) {
+  if (eventType === "team_ready_for_start") {
+    return "Ready";
+  }
+
+  return eventType;
 }
 
 export default function CurrentRealizationPage() {
@@ -29,6 +56,9 @@ export default function CurrentRealizationPage() {
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const [resetCompletedTasks, { isLoading: isResettingTasks }] = useResetCurrentRealizationCompletedTasksMutation();
+  const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
+  const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
+  const [resetCurrentRealization, { isLoading: isResettingRealization }] = useResetCurrentRealizationMutation();
 
   const {
     data: overview,
@@ -81,6 +111,11 @@ export default function CurrentRealizationPage() {
                     {overview.realization.companyName} • {new Date(overview.realization.scheduledAt).toLocaleString("pl-PL")}
                   </p>
                 )}
+                {overview && (
+                  <p className="mt-1 text-xs uppercase tracking-wider text-zinc-500">
+                    Status realizacji: {overview.realization.status}
+                  </p>
+                )}
               </div>
 
               {overview && (
@@ -91,6 +126,72 @@ export default function CurrentRealizationPage() {
                     className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                   >
                     Kody QR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Uruchomić aplikację globalnie dla tej realizacji?")) {
+                        return;
+                      }
+
+                      try {
+                        await startCurrentRealization().unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isStartingRealization || overview.realization.status === "in-progress"}
+                    className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isStartingRealization
+                      ? "Uruchamianie..."
+                      : overview.realization.status === "in-progress"
+                        ? "Aplikacja uruchomiona"
+                        : "Start aplikacji"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Zakończyć realizację?")) {
+                        return;
+                      }
+
+                      try {
+                        await finishCurrentRealization().unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isFinishingRealization || overview.realization.status === "done"}
+                    className="rounded-md border border-zinc-400/40 bg-zinc-500/10 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isFinishingRealization
+                      ? "Zamykanie..."
+                      : overview.realization.status === "done"
+                        ? "Realizacja zakończona"
+                        : "Zakończ realizację"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          "Zresetować realizację? Usunie to podłączenia urządzeń i postęp zadań, ustawi status na planned oraz datę rozpoczęcia na teraz.",
+                        )
+                      ) {
+                        return;
+                      }
+
+                      try {
+                        await resetCurrentRealization().unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isResettingRealization}
+                    className="rounded-md border border-orange-400/40 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
                   </button>
                   <button
                     type="button"
@@ -170,7 +271,7 @@ export default function CurrentRealizationPage() {
                             <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Flaga</th>
                             <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
                             <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Zadania</th>
-                            <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Urządzenia</th>
+                            <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status drużyny</th>
                             <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Lokalizacja</th>
                           </tr>
                         </thead>
@@ -183,7 +284,7 @@ export default function CurrentRealizationPage() {
                               <td className="px-3 py-2 text-zinc-300">{team.badgeKey || team.badgeImageUrl || "-"}</td>
                               <td className="px-3 py-2 font-semibold text-amber-300">{team.points}</td>
                               <td className="px-3 py-2 text-zinc-300">{team.taskStats.done}/{team.taskStats.total}</td>
-                              <td className="px-3 py-2 text-zinc-300">{team.deviceCount}</td>
+                              <td className="px-3 py-2 text-zinc-300">{renderTeamStatusLabel(team.status)}</td>
                               <td className="px-3 py-2 text-zinc-400">
                                 {team.lastLocation
                                   ? `${team.lastLocation.lat.toFixed(4)}, ${team.lastLocation.lng.toFixed(4)}`
@@ -219,7 +320,13 @@ export default function CurrentRealizationPage() {
                       <div className="mt-3 max-h-105 space-y-2 overflow-y-auto pr-1">
                         {overview.logs.map((log) => (
                           <article key={log.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
-                            <p className="text-xs font-medium uppercase tracking-wider text-amber-300">{log.eventType}</p>
+                            <p className="text-xs font-medium uppercase tracking-wider text-amber-300">{renderEventTypeLabel(log.eventType)}</p>
+                            {log.teamId && (
+                              <p className="mt-1 text-xs text-zinc-300">
+                                Drużyna {log.teamSlot ?? "?"}
+                                {log.teamName?.trim() ? ` • ${log.teamName}` : ""}
+                              </p>
+                            )}
                             <p className="mt-1 text-xs text-zinc-400">
                               {log.actorType} • {log.actorId} • {new Date(log.createdAt).toLocaleString("pl-PL")}
                             </p>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import type { OnboardingSession } from "../../onboarding/model/types";
@@ -13,6 +13,7 @@ import {
   QuizPrestartOverlay,
   StationPreviewOverlay,
   StationTestMenuOverlay,
+  WelcomePreviewOverlay,
   type StationTestType,
   type StationTestViewModel,
 } from "../components/station-test-overlays";
@@ -23,6 +24,7 @@ import { DEFAULT_STATION_PIN_CUSTOMIZATION, resolveDefaultStationPoints, type Ma
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
+  onSessionInvalid?: (reason?: string) => void;
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
@@ -35,51 +37,6 @@ type TransientPopup = {
 const POPUP_MIN_DURATION_MS = 6_500;
 const POPUP_MAX_DURATION_MS = 12_000;
 const POPUP_MS_PER_CHAR = 45;
-
-const MOBILE_TEST_STATION_DEFINITIONS: Array<{
-  stationId: string;
-  stationType: StationTestType;
-  name: string;
-  description: string;
-  points: number;
-  timeLimitSeconds: number;
-  quizQuestion?: string;
-  quizAnswers?: [string, string, string, string];
-  quizCorrectAnswerIndex?: number;
-}> = [
-  {
-    stationId: "mobile-test-quiz",
-    stationType: "quiz",
-    name: "TEST: Quiz mobilny",
-    description: "Przykładowe stanowisko quizowe do testu UI wyboru jednej z 4 odpowiedzi.",
-    points: 100,
-    timeLimitSeconds: 300,
-    quizQuestion: "Jak powinna działać drużyna na stanowisku testowym?",
-    quizAnswers: [
-      "Sprawdzam komunikację i plan zespołu.",
-      "Działam bez konsultacji z drużyną.",
-      "Ignoruję zasady bezpieczeństwa.",
-      "Rozdzielam zespół i tracę kontakt.",
-    ],
-    quizCorrectAnswerIndex: 0,
-  },
-  {
-    stationId: "mobile-test-time",
-    stationType: "time",
-    name: "TEST: Time mobilny",
-    description: "Przykładowe stanowisko time z potwierdzeniem przez wpisanie kodu.",
-    points: 160,
-    timeLimitSeconds: 420,
-  },
-  {
-    stationId: "mobile-test-points",
-    stationType: "points",
-    name: "TEST: Points mobilny",
-    description: "Przykładowe stanowisko points z potwierdzeniem przez wpisanie kodu.",
-    points: 220,
-    timeLimitSeconds: 0,
-  },
-];
 
 function toCoordinate(latitude: number, longitude: number): MapCoordinate {
   return { latitude, longitude };
@@ -161,12 +118,21 @@ function normalizeStationType(stationType?: string): StationTestType {
 
 function formatTimeLimitLabel(timeLimitSeconds: number) {
   if (!Number.isFinite(timeLimitSeconds) || timeLimitSeconds <= 0) {
-    return "Brak limitu czasu";
+    return "";
   }
 
   const minutes = Math.floor(timeLimitSeconds / 60);
   const seconds = timeLimitSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function isInvalidCompletionCodeError(value: string | null) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.includes("invalid completion code") || normalized.includes("http 400");
 }
 
 function extractStationQrToken(rawValue: string) {
@@ -187,12 +153,14 @@ function extractStationQrToken(rawValue: string) {
   return normalized;
 }
 
-export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
+export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const {
     sessionState,
     isLoading,
     errorMessage,
+    isSessionInvalid,
+    sessionInvalidReason,
     startStationTask,
     completeStationTask,
     syncTeamLocation,
@@ -207,11 +175,15 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isQrResolving, setIsQrResolving] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
+  const [isWelcomePreviewOpen, setIsWelcomePreviewOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
   const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
+  const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
+  const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const [failedQuizStationIds, setFailedQuizStationIds] = useState<string[]>([]);
+  const [failedTimedStationIds, setFailedTimedStationIds] = useState<string[]>([]);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
@@ -376,6 +348,14 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   }, []);
 
   useEffect(() => {
+    if (!isSessionInvalid) {
+      return;
+    }
+
+    onSessionInvalid?.(sessionInvalidReason ?? undefined);
+  }, [isSessionInvalid, onSessionInvalid, sessionInvalidReason]);
+
+  useEffect(() => {
     if (!errorMessage) {
       lastPopupSourceValuesRef.current.errorMessage = null;
       return;
@@ -475,9 +455,12 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
         stationId: task.stationId,
         label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name),
         done: task.status === "done",
-        failed: task.status !== "done" && failedQuizStationIds.includes(task.stationId),
+        failed:
+          task.status !== "done" &&
+          (failedQuizStationIds.includes(task.stationId) ||
+            failedTimedStationIds.includes(task.stationId)),
       })),
-    [failedQuizStationIds, sessionState.tasks, stationMetadataMap],
+    [failedQuizStationIds, failedTimedStationIds, sessionState.tasks, stationMetadataMap],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
@@ -500,12 +483,16 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                   `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: stationCatalog.points ?? resolveDefaultStationPoints(stationCatalog.id),
                 timeLimitSeconds: stationCatalog.timeLimitSeconds ?? 0,
+                completionCodeInputMode: stationCatalog.completionCodeInputMode ?? "alphanumeric",
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 status: task?.status ?? "todo",
-                quizFailed: (task?.status ?? "todo") !== "done" && failedQuizStationIds.includes(stationCatalog.id),
+                quizFailed:
+                  (task?.status ?? "todo") !== "done" &&
+                  (failedQuizStationIds.includes(stationCatalog.id) ||
+                    failedTimedStationIds.includes(stationCatalog.id)),
                 startedAt: task?.startedAt ?? null,
               } satisfies StationTestViewModel;
             })
@@ -524,45 +511,50 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
                 imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: resolveDefaultStationPoints(stationId),
                 timeLimitSeconds: 0,
-                timeLimitLabel: "Brak limitu czasu",
+                completionCodeInputMode: "alphanumeric",
+                timeLimitLabel: formatTimeLimitLabel(0),
                 quizQuestion: undefined,
                 quizAnswers: undefined,
                 quizCorrectAnswerIndex: undefined,
                 status: task.status,
-                quizFailed: task.status !== "done" && failedQuizStationIds.includes(stationId),
+                quizFailed:
+                  task.status !== "done" &&
+                  (failedQuizStationIds.includes(stationId) ||
+                    failedTimedStationIds.includes(stationId)),
                 startedAt: task.startedAt,
               } satisfies StationTestViewModel;
             });
 
-      const stationIds = new Set(baseEntries.map((entry) => entry.stationId));
-      const mobileTestEntries = MOBILE_TEST_STATION_DEFINITIONS.filter((definition) => !stationIds.has(definition.stationId)).map(
-        (definition) =>
-          ({
-            stationId: definition.stationId,
-            stationType: definition.stationType,
-            name: definition.name,
-            typeLabel: resolveStationTypeLabel(definition.stationType),
-            description: definition.description,
-            imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(definition.name)}`,
-            points: definition.points,
-            timeLimitSeconds: definition.timeLimitSeconds,
-            timeLimitLabel: formatTimeLimitLabel(definition.timeLimitSeconds),
-            quizQuestion: definition.quizQuestion,
-            quizAnswers: definition.quizAnswers,
-            quizCorrectAnswerIndex: definition.quizCorrectAnswerIndex,
-            status: "todo",
-            quizFailed: false,
-            startedAt: null,
-          }) satisfies StationTestViewModel,
-      );
-
-      return [...baseEntries, ...mobileTestEntries].sort((left, right) => left.name.localeCompare(right.name, "pl"));
+      return [...baseEntries].sort((left, right) => left.name.localeCompare(right.name, "pl"));
     },
-    [failedQuizStationIds, sessionState.realization.stations, sessionState.tasks, stationMetadataMap, taskByStationId],
+    [
+      failedQuizStationIds,
+      failedTimedStationIds,
+      sessionState.realization.stations,
+      sessionState.tasks,
+      stationMetadataMap,
+      taskByStationId,
+    ],
   );
 
   useEffect(() => {
     setFailedQuizStationIds((current) => {
+      if (current.length === 0) {
+        return current;
+      }
+
+      const activeFailedInProgress = new Set(
+        sessionState.tasks
+          .filter((task) => task.status === "in-progress")
+          .map((task) => task.stationId),
+      );
+      const next = current.filter((stationId) => activeFailedInProgress.has(stationId));
+      return next.length === current.length ? current : next;
+    });
+  }, [sessionState.tasks]);
+
+  useEffect(() => {
+    setFailedTimedStationIds((current) => {
       if (current.length === 0) {
         return current;
       }
@@ -584,6 +576,10 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   const pendingQuizStartStation = useMemo(
     () => stationTestEntries.find((item) => item.stationId === pendingQuizStartStationId) ?? null,
     [pendingQuizStartStationId, stationTestEntries],
+  );
+  const pendingTimeStartStation = useMemo(
+    () => stationTestEntries.find((item) => item.stationId === pendingTimeStartStationId) ?? null,
+    [pendingTimeStartStationId, stationTestEntries],
   );
 
   useEffect(() => {
@@ -611,10 +607,28 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
   }, [pendingQuizStartStationId, stationTestEntries]);
 
   useEffect(() => {
+    if (!pendingTimeStartStationId) {
+      return;
+    }
+
+    if (stationTestEntries.some((item) => item.stationId === pendingTimeStartStationId)) {
+      return;
+    }
+
+    setPendingTimeStartStationId(null);
+  }, [pendingTimeStartStationId, stationTestEntries]);
+
+  useEffect(() => {
     if (!pendingQuizStartStationId) {
       setIsStartingPendingQuiz(false);
     }
   }, [pendingQuizStartStationId]);
+
+  useEffect(() => {
+    if (!pendingTimeStartStationId) {
+      setIsStartingPendingTime(false);
+    }
+  }, [pendingTimeStartStationId]);
 
   useEffect(() => {
     if (!activeStationTestId) {
@@ -698,9 +712,15 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
         setSelectedStationId(scannedStationId);
         if (result.station.type === "quiz") {
           setPendingQuizStartStationId(scannedStationId);
+          setPendingTimeStartStationId(null);
+          setActiveStationTestId(null);
+        } else if (result.station.type === "time") {
+          setPendingQuizStartStationId(null);
+          setPendingTimeStartStationId(scannedStationId);
           setActiveStationTestId(null);
         } else {
           setPendingQuizStartStationId(null);
+          setPendingTimeStartStationId(null);
           setActiveStationTestId(scannedStationId);
         }
         setIsQrScannerOpen(false);
@@ -723,11 +743,21 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     if (stationIds.includes(stationId)) {
       setSelectedStationId(stationId);
     }
-    if (selectedStation?.stationType === "quiz") {
+    if (selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0) {
+      setPendingQuizStartStationId(null);
+      setPendingTimeStartStationId(stationId);
+      setActiveStationTestId(null);
+    } else if (selectedStation?.stationType === "quiz") {
       setPendingQuizStartStationId(stationId);
+      setPendingTimeStartStationId(null);
+      setActiveStationTestId(null);
+    } else if (selectedStation?.stationType === "time") {
+      setPendingQuizStartStationId(null);
+      setPendingTimeStartStationId(stationId);
       setActiveStationTestId(null);
     } else {
       setPendingQuizStartStationId(null);
+      setPendingTimeStartStationId(null);
       setActiveStationTestId(stationId);
     }
     setIsStationTestMenuOpen(false);
@@ -737,9 +767,24 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
     async (stationId: string) => {
       setActionError(null);
       setActionMessage(null);
+      const startedAtIso = new Date().toISOString();
 
-      const result = await startStationTask(stationId, new Date().toISOString());
+      setLocalStartedAtByStationId((current) => ({
+        ...current,
+        [stationId]: startedAtIso,
+      }));
+
+      const result = await startStationTask(stationId, startedAtIso);
       if (result) {
+        setLocalStartedAtByStationId((current) => {
+          if (!current[stationId]) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[stationId];
+          return next;
+        });
         setActionError(result);
         return result;
       }
@@ -755,17 +800,57 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
       setActionError(null);
       setActionMessage(null);
 
+      if (failedTimedStationIds.includes(stationId)) {
+        return "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.";
+      }
+
       const result = await completeStationTask(stationId, completionCode, startedAt);
       if (result) {
-        setActionError(result);
+        if (!isInvalidCompletionCodeError(result)) {
+          setActionError(result);
+        }
         return result;
       }
 
       setActionMessage("Zadanie zaliczone.");
       return null;
     },
-    [completeStationTask],
+    [completeStationTask, failedTimedStationIds],
   );
+
+  const handleRequestCloseActiveStation = useCallback(() => {
+    if (!activeStationTest) {
+      setActiveStationTestId(null);
+      return;
+    }
+
+    const isAlreadyDone = activeStationTest.status === "done";
+    const hasTimeLimit = activeStationTest.timeLimitSeconds > 0;
+    if (isAlreadyDone || !hasTimeLimit) {
+      setActiveStationTestId(null);
+      return;
+    }
+
+    Alert.alert(
+      "Uwaga: zadanie na czas",
+      "Jeśli zamkniesz stanowisko bez ukończenia, zadanie zostanie automatycznie oznaczone jako niezaliczone.",
+      [
+        { text: "Wróć", style: "cancel" },
+        {
+          text: "Zamknij i nie zaliczaj",
+          style: "destructive",
+          onPress: () => {
+            const stationId = activeStationTest.stationId;
+            setFailedTimedStationIds((current) =>
+              current.includes(stationId) ? current : [...current, stationId],
+            );
+            setActionError("Zadanie zostało oznaczone jako niezaliczone.");
+            setActiveStationTestId(null);
+          },
+        },
+      ],
+    );
+  }, [activeStationTest]);
 
   return (
     <View className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
@@ -809,48 +894,46 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
             <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
               Zadania
             </Text>
-            <ScrollView className="mt-2" style={{ maxHeight: 140 }} showsVerticalScrollIndicator={false}>
-              <View className="gap-1.5">
-                {checklistItems.map((item) => (
-                  <View key={item.stationId} className="flex-row items-center gap-2">
-                    <View
-                      className="h-4 w-4 items-center justify-center rounded border"
-                      style={{
-                        borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
-                        backgroundColor: item.done
-                          ? "rgba(52, 211, 153, 0.2)"
-                          : item.failed
-                            ? "rgba(127, 29, 29, 0.3)"
-                            : "rgba(15, 23, 42, 0.2)",
-                      }}
-                    >
-                      {item.done ? (
-                        <Text
-                          className="text-[10px] font-bold text-emerald-300"
-                          style={{ lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                        >
-                          ✓
-                        </Text>
-                      ) : item.failed ? (
-                        <Text
-                          className="text-[10px] font-bold"
-                          style={{ color: "#fecaca", lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                        >
-                          ✕
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text
-                      className="flex-1 text-xs"
-                      style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary }}
-                      numberOfLines={1}
-                    >
-                      {item.label}
-                    </Text>
+            <View className="mt-2 gap-1.5">
+              {checklistItems.map((item) => (
+                <View key={item.stationId} className="flex-row items-center gap-2">
+                  <View
+                    className="h-4 w-4 items-center justify-center rounded border"
+                    style={{
+                      borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
+                      backgroundColor: item.done
+                        ? "rgba(52, 211, 153, 0.2)"
+                        : item.failed
+                          ? "rgba(127, 29, 29, 0.3)"
+                          : "rgba(15, 23, 42, 0.2)",
+                    }}
+                  >
+                    {item.done ? (
+                      <Text
+                        className="text-[10px] font-bold text-emerald-300"
+                        style={{ lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                      >
+                        ✓
+                      </Text>
+                    ) : item.failed ? (
+                      <Text
+                        className="text-[10px] font-bold"
+                        style={{ color: "#fecaca", lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                      >
+                        ✕
+                      </Text>
+                    ) : null}
                   </View>
-                ))}
-              </View>
-            </ScrollView>
+                  <Text
+                    className="flex-1 text-xs"
+                    style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary }}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
 
           <Pressable
@@ -913,6 +996,16 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
         stations={stationTestEntries}
         onClose={() => setIsStationTestMenuOpen(false)}
         onEnterStation={handleEnterStationTest}
+        onOpenWelcomeScreen={() => {
+          setIsStationTestMenuOpen(false);
+          setIsWelcomePreviewOpen(true);
+        }}
+      />
+
+      <WelcomePreviewOverlay
+        visible={isWelcomePreviewOpen}
+        introText={sessionState.realization.introText ?? session.realization?.introText}
+        onClose={() => setIsWelcomePreviewOpen(false)}
       />
 
       <StationPreviewOverlay
@@ -925,7 +1018,7 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
             : null
         }
         onClose={() => setActiveStationTestId(null)}
-        onStartTask={handleStartStationTestTask}
+        onRequestClose={handleRequestCloseActiveStation}
         onCompleteTask={handleCompleteStationTestTask}
         onQuizFailed={(stationId) => {
           setFailedQuizStationIds((current) => (current.includes(stationId) ? current : [...current, stationId]));
@@ -938,6 +1031,7 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
       <QuizPrestartOverlay
         visible={Boolean(pendingQuizStartStation)}
         stationName={pendingQuizStartStation?.name ?? null}
+        stationType="quiz"
         isStarting={isStartingPendingQuiz}
         onClose={() => {
           setPendingQuizStartStationId(null);
@@ -966,6 +1060,33 @@ export function ExpeditionStageScreen({ session }: ExpeditionStageScreenProps) {
           setActiveStationTestId(pendingQuizStartStationId);
           setPendingQuizStartStationId(null);
           setIsStartingPendingQuiz(false);
+        }}
+      />
+
+      <QuizPrestartOverlay
+        visible={Boolean(pendingTimeStartStation)}
+        stationName={pendingTimeStartStation?.name ?? null}
+        stationType="time"
+        isStarting={isStartingPendingTime}
+        onClose={() => {
+          setPendingTimeStartStationId(null);
+          setIsStartingPendingTime(false);
+        }}
+        onStart={async () => {
+          if (!pendingTimeStartStationId) {
+            return;
+          }
+
+          setIsStartingPendingTime(true);
+          const startError = await handleStartStationTestTask(pendingTimeStartStationId);
+          if (startError) {
+            setIsStartingPendingTime(false);
+            return;
+          }
+
+          setActiveStationTestId(pendingTimeStartStationId);
+          setPendingTimeStartStationId(null);
+          setIsStartingPendingTime(false);
         }}
       />
 

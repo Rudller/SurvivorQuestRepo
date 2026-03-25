@@ -152,6 +152,7 @@ model Realization {
   location            String?
   language            RealizationLanguage @default(POLISH)
   customLanguage      String?
+  introText           String?
   contactPerson       String
   contactPhone        String?
   contactEmail        String?

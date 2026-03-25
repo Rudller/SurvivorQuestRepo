@@ -34,6 +34,10 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
     realization: {
       id: asString(realization.id),
       companyName: asString(realization.companyName ?? realization.company_name),
+      introText: (() => {
+        const value = realization.introText ?? realization.intro_text;
+        return typeof value === "string" ? value : null;
+      })(),
       status: asString(realization.status, "planned") as CurrentRealizationOverview["realization"]["status"],
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at),
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
@@ -114,6 +118,14 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         id: asString(log.id),
         realizationId: asString(log.realizationId ?? log.realization_id),
         teamId: (log.teamId as string | null) ?? (log.team_id as string | null) ?? null,
+        teamSlot: (() => {
+          const value = log.teamSlot ?? log.team_slot;
+          if (value === null || typeof value === "undefined") {
+            return null;
+          }
+          return asNumber(value, 0);
+        })(),
+        teamName: (log.teamName as string | null) ?? (log.team_name as string | null) ?? null,
         actorType: asString(log.actorType ?? log.actor_type, "system") as CurrentRealizationOverview["logs"][number]["actorType"],
         actorId: asString(log.actorId ?? log.actor_id),
         eventType: asString(log.eventType ?? log.event_type),
@@ -162,6 +174,43 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Realization"],
     }),
+    startCurrentRealization: build.mutation<
+      { realizationId: string; status: "in-progress"; started: boolean; startedAt: string },
+      void
+    >({
+      query: () => ({
+        url: buildApiPath("/mobile/admin/realizations/current/start"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    finishCurrentRealization: build.mutation<
+      { realizationId: string; status: "done"; finished: boolean; finishedAt: string },
+      void
+    >({
+      query: () => ({
+        url: buildApiPath("/mobile/admin/realizations/current/finish"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    resetCurrentRealization: build.mutation<
+      {
+        realizationId: string;
+        status: "planned";
+        resetAt: string;
+        deletedAssignments: number;
+        deletedTaskProgress: number;
+        deletedRuntimeEvents: number;
+      },
+      void
+    >({
+      query: () => ({
+        url: buildApiPath("/mobile/admin/realizations/current/reset"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
     getCurrentRealizationStationQrs: build.query<
       CurrentRealizationStationQrResponse,
       { ttlSeconds?: number } | void
@@ -181,5 +230,8 @@ export const currentRealizationApi = baseApi.injectEndpoints({
 export const {
   useGetCurrentRealizationOverviewQuery,
   useResetCurrentRealizationCompletedTasksMutation,
+  useStartCurrentRealizationMutation,
+  useFinishCurrentRealizationMutation,
+  useResetCurrentRealizationMutation,
   useGetCurrentRealizationStationQrsQuery,
 } = currentRealizationApi;

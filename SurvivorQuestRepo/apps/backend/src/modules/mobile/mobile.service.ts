@@ -6,7 +6,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
-import { EventActorType, Prisma, TaskStatus, TeamStatus } from '@prisma/client';
+import {
+  EventActorType,
+  Prisma,
+  RealizationStatus as PrismaRealizationStatus,
+  TaskStatus,
+  TeamStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   getOpaqueTokenCandidates,
@@ -26,37 +32,61 @@ import { StationService } from '../station/station.service';
 
 type TeamColor =
   | 'red'
-  | 'orange'
-  | 'amber'
-  | 'yellow'
-  | 'lime'
-  | 'emerald'
-  | 'teal'
-  | 'cyan'
-  | 'sky'
-  | 'blue'
-  | 'indigo'
-  | 'violet'
   | 'rose'
   | 'pink'
-  | 'slate';
+  | 'magenta'
+  | 'violet'
+  | 'purple'
+  | 'indigo'
+  | 'navy'
+  | 'blue'
+  | 'sky'
+  | 'cyan'
+  | 'turquoise'
+  | 'teal'
+  | 'mint'
+  | 'aquamarine'
+  | 'emerald'
+  | 'green'
+  | 'lime'
+  | 'orange'
+  | 'amber'
+  | 'gold'
+  | 'yellow'
+  | 'brown'
+  | 'gray'
+  | 'slate'
+  | 'black'
+  | 'white';
 
 const TEAM_COLORS: TeamColor[] = [
   'red',
-  'orange',
-  'amber',
-  'yellow',
-  'lime',
-  'emerald',
-  'teal',
-  'cyan',
-  'sky',
-  'blue',
-  'indigo',
-  'violet',
   'rose',
   'pink',
+  'magenta',
+  'violet',
+  'purple',
+  'indigo',
+  'navy',
+  'blue',
+  'sky',
+  'cyan',
+  'turquoise',
+  'teal',
+  'mint',
+  'aquamarine',
+  'emerald',
+  'green',
+  'lime',
+  'orange',
+  'amber',
+  'gold',
+  'yellow',
+  'brown',
+  'gray',
   'slate',
+  'black',
+  'white',
 ];
 
 const BADGE_KEYS = [
@@ -98,6 +128,7 @@ const STATIC_STATION_QR_VALIDITY_YEARS = 20;
 const STATIC_STATION_QR_NONCE_LENGTH = 24;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
+const COMPLETION_CODE_DIGITS_ONLY_REGEX = /^\d{3,32}$/;
 type StationQrRejectReason = Exclude<
   VerifyStationQrTokenResult,
   { ok: true }
@@ -121,6 +152,7 @@ export class MobileService {
       realizations: realizations.map((realization) => ({
         id: realization.id,
         companyName: realization.companyName,
+        introText: realization.introText,
         status: this.normalizeStatus(
           realization.status,
           realization.scheduledAt,
@@ -188,6 +220,13 @@ export class MobileService {
         throw new NotFoundException('Team not found');
       }
 
+      const resolvedColor = await this.ensureTeamColorAssigned({
+        id: existingAssignment.team.id,
+        realizationId: realization.id,
+        slotNumber: existingAssignment.team.slotNumber,
+        color: existingAssignment.team.color,
+      });
+
       return {
         sessionToken: rotatedSessionToken,
         realizationId: realization.id,
@@ -195,7 +234,7 @@ export class MobileService {
           id: existingAssignment.team.id,
           slotNumber: existingAssignment.team.slotNumber,
           name: existingAssignment.team.name,
-          color: existingAssignment.team.color,
+          color: resolvedColor,
           badgeKey: existingAssignment.team.badgeKey,
           points: existingAssignment.team.points,
         },
@@ -226,6 +265,13 @@ export class MobileService {
     if (!selectedTeam) {
       throw new ConflictException('No free team slots');
     }
+
+    const resolvedColor = await this.ensureTeamColorAssigned({
+      id: selectedTeam.id,
+      realizationId: realization.id,
+      slotNumber: selectedTeam.slotNumber,
+      color: selectedTeam.color,
+    });
 
     const now = new Date();
     const sessionToken = this.generateSessionToken();
@@ -267,7 +313,7 @@ export class MobileService {
         id: selectedTeam.id,
         slotNumber: selectedTeam.slotNumber,
         name: selectedTeam.name,
-        color: selectedTeam.color,
+        color: resolvedColor,
         badgeKey: selectedTeam.badgeKey,
         points: selectedTeam.points,
       },
@@ -278,6 +324,12 @@ export class MobileService {
   async getMobileSessionState(sessionToken: string) {
     const { assignment, team, realization } =
       await this.requireSession(sessionToken);
+    const resolvedColor = await this.ensureTeamColorAssigned({
+      id: team.id,
+      realizationId: realization.id,
+      slotNumber: team.slotNumber,
+      color: team.color,
+    });
     const taskProgress = await this.prisma.teamTaskProgress.findMany({
       where: {
         realizationId: realization.id,
@@ -301,11 +353,26 @@ export class MobileService {
     const eventLogCount = await this.prisma.eventLog.count({
       where: { realizationId: realization.id },
     });
+    const normalizedRealizationStatus = this.normalizeStatus(
+      realization.status,
+      realization.scheduledAt,
+      realization.durationMinutes,
+    );
+
+    if (normalizedRealizationStatus === 'planned') {
+      await this.emitTeamReadyForStartIfNeeded({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorId: assignment.deviceId,
+        sessionExpiresAt: assignment.expiresAt.toISOString(),
+      });
+    }
 
     return {
       realization: {
         id: realization.id,
         companyName: realization.companyName,
+        introText: realization.introText,
         contactPerson: realization.contactPerson,
         contactPhone: realization.contactPhone,
         contactEmail: realization.contactEmail,
@@ -315,11 +382,7 @@ export class MobileService {
         peopleCount: realization.peopleCount,
         positionsCount: realization.positionsCount,
         instructors: realization.instructors,
-        status: this.normalizeStatus(
-          realization.status,
-          realization.scheduledAt,
-          realization.durationMinutes,
-        ),
+        status: normalizedRealizationStatus,
         locationRequired: realization.locationRequired,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
@@ -331,6 +394,9 @@ export class MobileService {
           imageUrl: station.imageUrl,
           points: station.points,
           timeLimitSeconds: station.timeLimitSeconds,
+          completionCodeInputMode: this.resolveCompletionCodeInputMode(
+            station.completionCode,
+          ),
           quiz:
             station.quiz && Array.isArray(station.quiz.answers)
               ? {
@@ -347,7 +413,7 @@ export class MobileService {
         id: team.id,
         slotNumber: team.slotNumber,
         name: team.name,
-        color: team.color,
+        color: resolvedColor,
         badgeKey: team.badgeKey,
         points: team.points,
         lastLocation: this.toLastLocation(team),
@@ -371,7 +437,15 @@ export class MobileService {
       input.sessionToken,
     );
     const teamName = input.name?.trim();
-    const color = this.parseTeamColor(input.color?.trim());
+    const requestedColor = input.color?.trim();
+    const color = requestedColor
+      ? this.parseTeamColor(requestedColor)
+      : await this.ensureTeamColorAssigned({
+          id: team.id,
+          realizationId: realization.id,
+          slotNumber: team.slotNumber,
+          color: team.color,
+        });
 
     if (!teamName) {
       throw new BadRequestException('Team name is required');
@@ -459,17 +533,26 @@ export class MobileService {
       throw new NotFoundException('Team not found');
     }
 
+    let replacementCount = 0;
     if (requestedTeam.id !== team.id) {
-      const activeOnRequested = await this.prisma.teamAssignment.count({
+      const activeOnRequested = await this.prisma.teamAssignment.findMany({
         where: {
           teamId: requestedTeam.id,
           expiresAt: { gt: new Date() },
           id: { not: assignment.id },
         },
+        select: { id: true },
       });
 
-      if (activeOnRequested > 0) {
-        throw new ConflictException('Selected team is not available');
+      replacementCount = activeOnRequested.length;
+      if (replacementCount > 0) {
+        await this.prisma.teamAssignment.deleteMany({
+          where: {
+            id: {
+              in: activeOnRequested.map((item) => item.id),
+            },
+          },
+        });
       }
 
       await this.prisma.teamAssignment.update({
@@ -492,14 +575,29 @@ export class MobileService {
       });
     }
 
+    const resolvedColor = await this.ensureTeamColorAssigned({
+      id: requestedTeam.id,
+      realizationId: realization.id,
+      slotNumber: requestedTeam.slotNumber,
+      color: requestedTeam.color,
+    });
+
     return {
       team: {
         id: requestedTeam.id,
         slotNumber: requestedTeam.slotNumber,
         name: requestedTeam.name,
-        color: requestedTeam.color,
+        color: resolvedColor,
         badgeKey: requestedTeam.badgeKey,
         points: requestedTeam.points,
+      },
+      reassignment: {
+        replacedExistingAssignment: replacementCount > 0,
+        replacedAssignments: replacementCount,
+        message:
+          replacementCount > 0
+            ? 'Team was already selected on another device. Assignment was switched to this device.'
+            : 'Team selected successfully.',
       },
     };
   }
@@ -540,7 +638,10 @@ export class MobileService {
     const availableColors = TEAM_COLORS.filter(
       (color) => !usedColors.has(color),
     );
-    const color = team.color || availableColors[0] || null;
+    const color =
+      this.normalizeTeamColor(team.color) ||
+      availableColors[0] ||
+      TEAM_COLORS[(Math.max(1, team.slotNumber) - 1) % TEAM_COLORS.length];
 
     await this.prisma.team.update({
       where: { id: team.id },
@@ -1071,6 +1172,9 @@ export class MobileService {
         imageUrl: station.imageUrl,
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
+        completionCodeInputMode: this.resolveCompletionCodeInputMode(
+          station.completionCode,
+        ),
         quiz:
           station.quiz && Array.isArray(station.quiz.answers)
             ? {
@@ -1099,6 +1203,11 @@ export class MobileService {
   async getMobileAdminRealizationOverview(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const normalizedRealizationStatus = this.normalizeStatus(
+      realization.status,
+      realization.scheduledAt,
+      realization.durationMinutes,
+    );
 
     const teams = await this.prisma.team.findMany({
       where: { realizationId: realization.id },
@@ -1142,6 +1251,9 @@ export class MobileService {
           finishedAt: progress?.finishedAt?.toISOString() || null,
         };
       });
+      const doneTasksCount = tasks.filter(
+        (task) => task.status === 'done',
+      ).length;
 
       return {
         id: team.id,
@@ -1151,10 +1263,14 @@ export class MobileService {
         badgeKey: team.badgeKey,
         badgeImageUrl: team.badgeImageUrl,
         points: team.points,
-        status: this.fromTeamStatus(team.status),
+        status: this.resolveTeamAdminStatus(
+          team.status,
+          normalizedRealizationStatus,
+          teamAssignments.length,
+        ),
         taskStats: {
-          total: team.taskTotal,
-          done: team.taskDone,
+          total: tasks.length,
+          done: doneTasksCount,
         },
         lastLocation: this.toLastLocation(team),
         deviceCount: teamAssignments.length,
@@ -1173,7 +1289,8 @@ export class MobileService {
       realization: {
         id: realization.id,
         companyName: realization.companyName,
-        status: realization.status,
+        introText: realization.introText,
+        status: normalizedRealizationStatus,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
@@ -1188,16 +1305,24 @@ export class MobileService {
         updatedAt: realization.updatedAt,
       },
       teams: teamViews,
-      logs: logs.map((log) => ({
-        id: log.id,
-        realizationId: log.realizationId,
-        teamId: log.teamId,
-        actorType: this.fromActorType(log.actorType),
-        actorId: log.actorId,
-        eventType: log.eventType,
-        payload: log.payload as Record<string, unknown>,
-        createdAt: log.createdAt.toISOString(),
-      })),
+      logs: logs.map((log) => {
+        const teamForLog = log.teamId
+          ? teamViews.find((team) => team.id === log.teamId)
+          : null;
+
+        return {
+          id: log.id,
+          realizationId: log.realizationId,
+          teamId: log.teamId,
+          teamSlot: teamForLog?.slotNumber ?? null,
+          teamName: teamForLog?.name ?? null,
+          actorType: this.fromActorType(log.actorType),
+          actorId: log.actorId,
+          eventType: log.eventType,
+          payload: log.payload as Record<string, unknown>,
+          createdAt: log.createdAt.toISOString(),
+        };
+      }),
       stats: {
         activeTeams: teamViews.filter((team) => team.status === 'active')
           .length,
@@ -1276,6 +1401,165 @@ export class MobileService {
       realizationId: realization.id,
       resetCount: resettableTasks.length,
       affectedTeams: affectedTeamIds.length,
+    };
+  }
+
+  async startMobileAdminRealization(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const startedAt = new Date();
+    const normalizedStatus = this.normalizeStatus(
+      realization.status,
+      realization.scheduledAt,
+      realization.durationMinutes,
+    );
+
+    if (normalizedStatus === 'done') {
+      throw new ConflictException(
+        'Realization is already completed and cannot be started again',
+      );
+    }
+
+    if (normalizedStatus !== 'in-progress') {
+      await this.prisma.realization.update({
+        where: { id: realization.id },
+        data: {
+          status: PrismaRealizationStatus.IN_PROGRESS,
+          scheduledAt: startedAt,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: null,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'realization_started',
+      payload: {
+        previousStatus: normalizedStatus,
+        startedAt: startedAt.toISOString(),
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      status: 'in-progress' as const,
+      started: normalizedStatus !== 'in-progress',
+      startedAt: startedAt.toISOString(),
+    };
+  }
+
+  async finishMobileAdminRealization(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const finishedAt = new Date();
+    const normalizedStatus = this.normalizeStatus(
+      realization.status,
+      realization.scheduledAt,
+      realization.durationMinutes,
+    );
+
+    if (normalizedStatus !== 'done') {
+      await this.prisma.realization.update({
+        where: { id: realization.id },
+        data: {
+          status: PrismaRealizationStatus.DONE,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: null,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'realization_finished',
+      payload: {
+        previousStatus: normalizedStatus,
+        finishedAt: finishedAt.toISOString(),
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      status: 'done' as const,
+      finished: normalizedStatus !== 'done',
+      finishedAt: finishedAt.toISOString(),
+    };
+  }
+
+  async resetMobileAdminRealization(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const resetAt = new Date();
+
+    await this.ensureTeamsForRealization(realization);
+
+    const [deletedAssignments, deletedProgress, deletedRuntimeEvents] =
+      await this.prisma.$transaction([
+        this.prisma.teamAssignment.deleteMany({
+          where: { realizationId: realization.id },
+        }),
+        this.prisma.teamTaskProgress.deleteMany({
+          where: { realizationId: realization.id },
+        }),
+        this.prisma.eventLog.deleteMany({
+          where: {
+            realizationId: realization.id,
+            actorType: {
+              in: [EventActorType.MOBILE_DEVICE, EventActorType.SYSTEM],
+            },
+          },
+        }),
+      ]);
+
+    await this.prisma.team.updateMany({
+      where: { realizationId: realization.id },
+      data: {
+        name: null,
+        color: null,
+        badgeKey: null,
+        badgeImageUrl: null,
+        points: 0,
+        taskDone: 0,
+        status: TeamStatus.UNASSIGNED,
+        lastLocationLat: null,
+        lastLocationLng: null,
+        lastLocationAccuracy: null,
+        lastLocationAt: null,
+      },
+    });
+
+    await this.prisma.realization.update({
+      where: { id: realization.id },
+      data: {
+        status: PrismaRealizationStatus.PLANNED,
+        scheduledAt: resetAt,
+      },
+    });
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: null,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'realization_reset',
+      payload: {
+        resetAt: resetAt.toISOString(),
+        deletedAssignments: deletedAssignments.count,
+        deletedTaskProgress: deletedProgress.count,
+        deletedRuntimeEvents: deletedRuntimeEvents.count,
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      status: 'planned' as const,
+      resetAt: resetAt.toISOString(),
+      deletedAssignments: deletedAssignments.count,
+      deletedTaskProgress: deletedProgress.count,
+      deletedRuntimeEvents: deletedRuntimeEvents.count,
     };
   }
 
@@ -1368,6 +1652,7 @@ export class MobileService {
       ...item,
       id: item.id,
       companyName: item.companyName,
+      introText: item.introText,
       status: this.normalizeStatus(
         item.status,
         item.scheduledAt,
@@ -1413,14 +1698,11 @@ export class MobileService {
     teamCount: number;
     stationIds: string[];
   }) {
+    const targetTaskTotal = realization.stationIds.length;
     const existing = await this.prisma.team.findMany({
       where: { realizationId: realization.id },
       orderBy: { slotNumber: 'asc' },
     });
-
-    if (existing.length === realization.teamCount) {
-      return;
-    }
 
     if (existing.length > realization.teamCount) {
       const overflow = existing
@@ -1429,6 +1711,27 @@ export class MobileService {
       if (overflow.length > 0) {
         await this.prisma.team.deleteMany({ where: { id: { in: overflow } } });
       }
+    }
+
+    const keptTeams = existing.slice(
+      0,
+      Math.min(existing.length, realization.teamCount),
+    );
+    const teamsWithOutdatedTaskTotal = keptTeams.filter(
+      (team) => team.taskTotal !== targetTaskTotal,
+    );
+    if (teamsWithOutdatedTaskTotal.length > 0) {
+      await this.prisma.$transaction(
+        teamsWithOutdatedTaskTotal.map((team) =>
+          this.prisma.team.update({
+            where: { id: team.id },
+            data: {
+              taskTotal: targetTaskTotal,
+              taskDone: Math.min(team.taskDone, targetTaskTotal),
+            },
+          }),
+        ),
+      );
     }
 
     for (
@@ -1440,7 +1743,7 @@ export class MobileService {
         data: {
           realizationId: realization.id,
           slotNumber: slot,
-          taskTotal: realization.stationIds.length,
+          taskTotal: targetTaskTotal,
           taskDone: 0,
           status: TeamStatus.UNASSIGNED,
         },
@@ -1668,6 +1971,17 @@ export class MobileService {
     return normalized;
   }
 
+  private resolveCompletionCodeInputMode(value?: string | null) {
+    const normalized = this.parseCompletionCode(value);
+    if (!normalized) {
+      return 'alphanumeric' as const;
+    }
+
+    return COMPLETION_CODE_DIGITS_ONLY_REGEX.test(normalized)
+      ? ('numeric' as const)
+      : ('alphanumeric' as const);
+  }
+
   private computeLinearTimePoints(input: {
     basePoints: number;
     timeLimitSeconds: number;
@@ -1708,6 +2022,53 @@ export class MobileService {
     }
 
     return color as TeamColor;
+  }
+
+  private normalizeTeamColor(color?: string | null): TeamColor | null {
+    if (!color) {
+      return null;
+    }
+
+    return TEAM_COLORS.includes(color as TeamColor) ? (color as TeamColor) : null;
+  }
+
+  private async ensureTeamColorAssigned(input: {
+    id: string;
+    realizationId: string;
+    slotNumber: number;
+    color?: string | null;
+  }) {
+    const normalized = this.normalizeTeamColor(input.color);
+    if (normalized) {
+      return normalized;
+    }
+
+    const peers = await this.prisma.team.findMany({
+      where: {
+        realizationId: input.realizationId,
+        id: { not: input.id },
+      },
+      select: {
+        color: true,
+      },
+    });
+    const usedColors = new Set(
+      peers
+        .map((item) => this.normalizeTeamColor(item.color))
+        .filter((value): value is TeamColor => Boolean(value)),
+    );
+    const availableColors = TEAM_COLORS.filter((color) => !usedColors.has(color));
+    const fallbackIndex =
+      (Math.max(1, Number(input.slotNumber) || 1) - 1) % TEAM_COLORS.length;
+    const assignedColor =
+      availableColors[0] || TEAM_COLORS[fallbackIndex] || TEAM_COLORS[0];
+
+    await this.prisma.team.update({
+      where: { id: input.id },
+      data: { color: assignedColor },
+    });
+
+    return assignedColor;
   }
 
   private async emitEvent(log: {
@@ -1899,6 +2260,52 @@ export class MobileService {
     if (status === TeamStatus.ACTIVE) return 'active' as const;
     if (status === TeamStatus.OFFLINE) return 'offline' as const;
     return 'unassigned' as const;
+  }
+
+  private resolveTeamAdminStatus(
+    status: TeamStatus,
+    realizationStatus: RealizationStatus,
+    activeDeviceCount: number,
+  ) {
+    if (realizationStatus === 'planned' && activeDeviceCount > 0) {
+      return 'ready' as const;
+    }
+
+    return this.fromTeamStatus(status);
+  }
+
+  private async emitTeamReadyForStartIfNeeded(input: {
+    realizationId: string;
+    teamId: string;
+    actorId: string;
+    sessionExpiresAt: string;
+  }) {
+    const existingReadyLog = await this.prisma.eventLog.findFirst({
+      where: {
+        realizationId: input.realizationId,
+        teamId: input.teamId,
+        eventType: 'team_ready_for_start',
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingReadyLog) {
+      return;
+    }
+
+    await this.emitEvent({
+      realizationId: input.realizationId,
+      teamId: input.teamId,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: input.actorId,
+      eventType: 'team_ready_for_start',
+      payload: {
+        state: 'ready',
+        waitingFor: 'realization_start',
+        sessionExpiresAt: input.sessionExpiresAt,
+      },
+    });
   }
 
   private fromActorType(actorType: EventActorType) {

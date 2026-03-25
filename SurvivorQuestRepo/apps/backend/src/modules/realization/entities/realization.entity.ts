@@ -33,6 +33,7 @@ export type RealizationEntity = {
   location?: string;
   language: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -42,6 +43,8 @@ export type RealizationEntity = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  scenarioTemplateId?: string;
+  scenarioTemplateName?: string;
   stationIds: string[];
   scenarioStations: StationEntity[];
   joinCode: string;
@@ -78,6 +81,7 @@ export type ValidatedRealizationPayload = {
   location?: string;
   language: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;

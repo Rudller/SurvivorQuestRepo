@@ -55,6 +55,7 @@ export type Realization = {
   location?: string;
   language: RealizationLanguage;
   customLanguage?: string;
+  introText?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -64,6 +65,8 @@ export type Realization = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  scenarioTemplateId?: string;
+  scenarioTemplateName?: string;
   stationIds: string[];
   scenarioStations: Station[];
   joinCode: string;

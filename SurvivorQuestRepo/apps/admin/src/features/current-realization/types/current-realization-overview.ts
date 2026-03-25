@@ -2,12 +2,13 @@ export type CurrentRealizationStatus = "planned" | "in-progress" | "done";
 
 export type CurrentTeamTaskStatus = "todo" | "in-progress" | "done";
 
-export type CurrentTeamStatus = "unassigned" | "active" | "offline";
+export type CurrentTeamStatus = "unassigned" | "ready" | "active" | "offline";
 
 export type CurrentRealizationOverview = {
   realization: {
     id: string;
     companyName: string;
+    introText: string | null;
     status: CurrentRealizationStatus;
     scheduledAt: string;
     locationRequired: boolean;
@@ -47,6 +48,8 @@ export type CurrentRealizationOverview = {
     id: string;
     realizationId: string;
     teamId: string | null;
+    teamSlot: number | null;
+    teamName: string | null;
     actorType: "admin" | "mobile-device" | "system";
     actorId: string;
     eventType: string;
