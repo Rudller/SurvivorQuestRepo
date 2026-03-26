@@ -2,19 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { useGetUsersQuery } from "@/features/users/api/user.api";
 import { CreateUserForm } from "@/features/users/components/create-user-form";
 import { EditUserForm } from "@/features/users/components/edit-user-form";
 import { UsersTable } from "@/features/users/components/users-table";
 import type { User } from "@/features/users/types/user";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 export default function UsersPage() {
   const router = useRouter();
@@ -41,7 +36,7 @@ export default function UsersPage() {
   });
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -51,7 +46,7 @@ export default function UsersPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
   return (
@@ -111,3 +106,5 @@ export default function UsersPage() {
     </main>
   );
 }
+
+

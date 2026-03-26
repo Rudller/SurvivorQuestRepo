@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import {
   useGetCurrentRealizationOverviewQuery,
   useFinishCurrentRealizationMutation,
@@ -13,11 +13,6 @@ import {
 } from "@/features/current-realization/api/current-realization.api";
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 function renderTeamStatusLabel(status: "unassigned" | "ready" | "active" | "offline") {
   if (status === "ready") {
@@ -40,7 +35,37 @@ function renderEventTypeLabel(eventType: string) {
     return "Ready";
   }
 
+  if (eventType === "task_failed") {
+    return "Task failed";
+  }
+
   return eventType;
+}
+
+function renderTaskFailedReason(payload: Record<string, unknown>) {
+  const reasonLabel = typeof payload.reasonLabel === "string" ? payload.reasonLabel.trim() : "";
+  if (reasonLabel) {
+    return reasonLabel;
+  }
+
+  const reason = typeof payload.reason === "string" ? payload.reason.trim() : "";
+  if (!reason) {
+    return "";
+  }
+
+  if (reason === "quiz_incorrect_answer") {
+    return "Błędna odpowiedź quizu";
+  }
+
+  if (reason === "time_limit_expired") {
+    return "Przekroczony limit czasu";
+  }
+
+  if (reason === "task_closed_before_completion") {
+    return "Zamknięto zadanie przed ukończeniem";
+  }
+
+  return reason;
 }
 
 export default function CurrentRealizationPage() {
@@ -76,7 +101,7 @@ export default function CurrentRealizationPage() {
   );
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -86,7 +111,7 @@ export default function CurrentRealizationPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
   return (
@@ -330,6 +355,11 @@ export default function CurrentRealizationPage() {
                             <p className="mt-1 text-xs text-zinc-400">
                               {log.actorType} • {log.actorId} • {new Date(log.createdAt).toLocaleString("pl-PL")}
                             </p>
+                            {log.eventType === "task_failed" ? (
+                              <p className="mt-1 text-xs text-red-300">
+                                Powód: {renderTaskFailedReason(log.payload) || "nieznany"}
+                              </p>
+                            ) : null}
                           </article>
                         ))}
                         {overview.logs.length === 0 && (
@@ -354,3 +384,5 @@ export default function CurrentRealizationPage() {
     </main>
   );
 }
+
+

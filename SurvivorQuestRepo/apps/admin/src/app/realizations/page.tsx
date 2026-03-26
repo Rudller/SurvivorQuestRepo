@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { useGetStationsQuery } from "@/features/games/api/station.api";
 import { useGetScenariosQuery } from "@/features/scenario/api/scenario.api";
 import type { Realization } from "@/features/realizations/types/realization";
@@ -14,11 +14,6 @@ import { CreateRealizationForm } from "@/features/realizations/components/create
 import { EditRealizationPanel } from "@/features/realizations/components/edit-realization-panel";
 import { RealizationStationQrPanel } from "@/features/realizations/components/realization-station-qr-panel";
 import type { RealizationSortField, SortDirection } from "@/features/realizations/realization.utils";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 export default function RealizationsPage() {
   const router = useRouter();
@@ -38,7 +33,7 @@ export default function RealizationsPage() {
   const [qrRealization, setQrRealization] = useState<Realization | null>(null);
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -48,7 +43,7 @@ export default function RealizationsPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
   return (
@@ -134,3 +129,5 @@ export default function RealizationsPage() {
     </main>
   );
 }
+
+

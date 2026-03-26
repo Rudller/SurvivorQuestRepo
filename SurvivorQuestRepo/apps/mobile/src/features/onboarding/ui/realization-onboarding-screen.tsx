@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActionSheetIOS,
@@ -15,8 +15,9 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { DEFAULT_REALIZATION_CODE, EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
+import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
 import type { OnboardingSession, Screen, TeamColor } from "../model/types";
+import { TeamCustomizationStep } from "./team-customization-step";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -25,6 +26,7 @@ type MobileBootstrapRealization = {
   id: string;
   companyName: string;
   introText?: string;
+  gameRules?: string;
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
   durationMinutes: number;
@@ -45,6 +47,10 @@ type MobileJoinResponse = {
   sessionToken: string;
   realizationId: string;
   locationRequired: boolean;
+  customizationOccupancy?: {
+    colors?: Record<string, number>;
+    icons?: Record<string, number>;
+  };
   team: {
     id: string;
     slotNumber: number;
@@ -61,9 +67,28 @@ type MobileClaimResponse = {
   color: string | null;
   badgeKey: string | null;
   changedFields: string[];
+  customizationOccupancy?: {
+    colors?: Record<string, number>;
+    icons?: Record<string, number>;
+  };
+};
+
+type MobileUpdateCustomizationResponse = {
+  teamId: string;
+  color: string | null;
+  badgeKey: string | null;
+  changedFields: string[];
+  customizationOccupancy?: {
+    colors?: Record<string, number>;
+    icons?: Record<string, number>;
+  };
 };
 
 type MobileSelectTeamResponse = {
+  customizationOccupancy?: {
+    colors?: Record<string, number>;
+    icons?: Record<string, number>;
+  };
   team: {
     id: string;
     slotNumber: number;
@@ -91,9 +116,21 @@ type MobileApiError = {
   };
 };
 
-const OFFLINE_TEST_SESSION_TOKEN = "offline-test-session";
+type MobileSessionStateResponse = {
+  customizationOccupancy?: {
+    colors?: Record<string, number>;
+    icons?: Record<string, number>;
+  };
+  team?: {
+    slotNumber: number;
+    color: string | null;
+    badgeKey: string | null;
+  };
+};
+
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
+const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
 
 const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team", "customization"];
 
@@ -291,18 +328,34 @@ function isTeamColor(value: string | null): value is TeamColor {
   return TEAM_COLORS.some((color) => color.key === value);
 }
 
-function buildOfflineTestRealization(code: string): MobileBootstrapRealization {
+function normalizeOccupancyMap(
+  value: Record<string, number> | undefined,
+): Record<string, number> {
+  if (!value) {
+    return {};
+  }
+
+  const normalized: Record<string, number> = {};
+  for (const [key, slot] of Object.entries(value)) {
+    if (typeof key !== "string" || !key.trim()) {
+      continue;
+    }
+    if (!Number.isInteger(slot) || slot < 1) {
+      continue;
+    }
+    normalized[key] = slot;
+  }
+
+  return normalized;
+}
+
+function normalizeCustomizationOccupancy(value: {
+  colors?: Record<string, number>;
+  icons?: Record<string, number>;
+} | null | undefined) {
   return {
-    id: "offline-test-realization",
-    companyName: "Realizacja TEST (offline)",
-    introText: "Tryb testowy offline jest aktywny. Możecie od razu rozpocząć grę.",
-    status: "in-progress",
-    scheduledAt: new Date().toISOString(),
-    durationMinutes: 120,
-    joinCode: code,
-    locationRequired: true,
-    teamCount: 6,
-    stationIds: ["g-1", "g-2", "g-3"],
+    colors: normalizeOccupancyMap(value?.colors),
+    icons: normalizeOccupancyMap(value?.icons),
   };
 }
 
@@ -330,7 +383,7 @@ export function RealizationOnboardingScreen({
   const [isTeamPickerOpen, setIsTeamPickerOpen] = useState(false);
   const [teamPickerError, setTeamPickerError] = useState<string | null>(null);
 
-  const [realizationCode, setRealizationCode] = useState(DEFAULT_REALIZATION_CODE);
+  const [realizationCode, setRealizationCode] = useState("");
   const [apiBaseUrlOverride, setApiBaseUrlOverride] = useState<string | null>(null);
   const [apiBaseUrlDraft, setApiBaseUrlDraft] = useState("");
   const [apiConfigMessage, setApiConfigMessage] = useState<string | null>(null);
@@ -353,6 +406,12 @@ export function RealizationOnboardingScreen({
   const [teamName, setTeamName] = useState("Drużyna");
   const [teamColor, setTeamColor] = useState<TeamColor>("amber");
   const [teamIcon, setTeamIcon] = useState("🦊");
+  const [customizationBlockMessage, setCustomizationBlockMessage] =
+    useState<string | null>(null);
+  const [customizationOccupancy, setCustomizationOccupancy] = useState(() =>
+    normalizeCustomizationOccupancy(null),
+  );
+  const liveCustomizationRequestRef = useRef(0);
 
   const selectedColor = useMemo(
     () => TEAM_COLORS.find((color) => color.key === teamColor) ?? TEAM_COLORS[0],
@@ -376,6 +435,34 @@ export function RealizationOnboardingScreen({
         : apiConnectionStatus === "config-missing"
           ? "#71717a"
           : EXPEDITION_THEME.danger;
+
+  const refreshCustomizationState = useCallback(async () => {
+    if (!apiBaseUrl || !sessionToken) {
+      return;
+    }
+
+    const state = await requestMobileApi<MobileSessionStateResponse>(
+      apiBaseUrl,
+      `/api/mobile/session/state?sessionToken=${encodeURIComponent(sessionToken)}`,
+    );
+
+    setCustomizationOccupancy(
+      normalizeCustomizationOccupancy(state.customizationOccupancy),
+    );
+
+    if (state.team?.slotNumber === selectedTeam) {
+      if (isTeamColor(state.team.color)) {
+        setTeamColor(state.team.color);
+      }
+
+      if (
+        typeof state.team.badgeKey === "string" &&
+        TEAM_ICONS.includes(state.team.badgeKey)
+      ) {
+        setTeamIcon(state.team.badgeKey);
+      }
+    }
+  }, [apiBaseUrl, selectedTeam, sessionToken]);
 
   useEffect(() => {
     let isActive = true;
@@ -520,12 +607,42 @@ export function RealizationOnboardingScreen({
     };
   }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig]);
 
+  useEffect(() => {
+    if (screen !== "customization" || !apiBaseUrl || !sessionToken) {
+      return;
+    }
+
+    let isCancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const pollCustomizationOccupancy = async () => {
+      try {
+        await refreshCustomizationState();
+      } catch {
+        // Keep current occupancy; next poll will retry.
+      } finally {
+        if (!isCancelled) {
+          timeoutId = setTimeout(
+            () => void pollCustomizationOccupancy(),
+            CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS,
+          );
+        }
+      }
+    };
+
+    void pollCustomizationOccupancy();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [refreshCustomizationState, screen]);
+
   function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
     const normalizedStatus = normalizeRealizationStatus(activeRealization?.status);
-    const awaitingAdminStart =
-      normalizedStatus === "planned" &&
-      nextSessionToken !== OFFLINE_TEST_SESSION_TOKEN &&
-      Boolean(apiBaseUrl);
+    const awaitingAdminStart = normalizedStatus === "planned" && Boolean(apiBaseUrl);
 
     onComplete?.({
       realizationId: activeRealization?.id ?? null,
@@ -544,9 +661,12 @@ export function RealizationOnboardingScreen({
             stationIds: activeRealization.stationIds,
             locationRequired: activeRealization.locationRequired,
             introText: activeRealization.introText?.trim() || undefined,
+            gameRules: activeRealization.gameRules?.trim() || undefined,
           }
         : null,
       awaitingAdminStart,
+      showGameRulesAfterStart:
+        !awaitingAdminStart && Boolean(activeRealization?.gameRules?.trim()),
       team: {
         slotNumber: selectedTeam,
         name: nextTeamName,
@@ -637,23 +757,10 @@ export function RealizationOnboardingScreen({
     setApiBaseUrl(null);
     setSessionToken(null);
     setSelectedTeam(null);
+    setCustomizationBlockMessage(null);
+    setCustomizationOccupancy(normalizeCustomizationOccupancy(null));
     setTeamPickerError(null);
     setIsTeamPickerOpen(false);
-
-    if (normalizedCode === "TEST") {
-      const offlineRealization = buildOfflineTestRealization(normalizedCode);
-      setApiBaseUrl(null);
-      setActiveRealization(offlineRealization);
-      setSessionToken(OFFLINE_TEST_SESSION_TOKEN);
-      setSelectedTeam(1);
-      setTeamName("Drużyna 1");
-      setTeamColor("amber");
-      setTeamIcon("🦊");
-      setSetupState("ready");
-      setSetupMessage("Przydzielono automatycznie: Drużyna 1.");
-      setScreen("team");
-      return;
-    }
 
     const baseUrlCandidates = resolveApiBaseUrlCandidates(
       preferredApiBaseUrl ?? apiBaseUrlOverride,
@@ -712,6 +819,7 @@ export function RealizationOnboardingScreen({
         ...realization,
         status: normalizeRealizationStatus(realization.status),
         introText: realization.introText?.trim() || undefined,
+        gameRules: realization.gameRules?.trim() || undefined,
         durationMinutes: normalizeDurationMinutes(realization.durationMinutes),
       };
 
@@ -720,13 +828,21 @@ export function RealizationOnboardingScreen({
       setSessionToken(join.sessionToken);
       setSelectedTeam(join.team.slotNumber);
       setTeamName(join.team.name?.trim() || `Drużyna ${join.team.slotNumber}`);
+      setCustomizationBlockMessage(null);
+      setCustomizationOccupancy(
+        normalizeCustomizationOccupancy(join.customizationOccupancy),
+      );
 
       if (isTeamColor(join.team.color)) {
         setTeamColor(join.team.color);
+      } else {
+        setTeamColor("amber");
       }
 
       if (typeof join.team.badgeKey === "string" && TEAM_ICONS.includes(join.team.badgeKey)) {
         setTeamIcon(join.team.badgeKey);
+      } else {
+        setTeamIcon("🦊");
       }
 
       setSetupState("ready");
@@ -744,15 +860,6 @@ export function RealizationOnboardingScreen({
 
   async function onSelectTeamFromPopup(slotNumber: number) {
     if (slotNumber === selectedTeam) {
-      setIsTeamPickerOpen(false);
-      return;
-    }
-
-    if (sessionToken === OFFLINE_TEST_SESSION_TOKEN) {
-      setSelectedTeam(slotNumber);
-      setTeamName(`Drużyna ${slotNumber}`);
-      setSetupMessage(`Przydzielono ręcznie: Drużyna ${slotNumber}.`);
-      setTeamPickerError(null);
       setIsTeamPickerOpen(false);
       return;
     }
@@ -776,13 +883,21 @@ export function RealizationOnboardingScreen({
 
       setSelectedTeam(result.team.slotNumber);
       setTeamName(result.team.name?.trim() || `Drużyna ${result.team.slotNumber}`);
+      setCustomizationBlockMessage(null);
+      setCustomizationOccupancy(
+        normalizeCustomizationOccupancy(result.customizationOccupancy),
+      );
 
       if (isTeamColor(result.team.color)) {
         setTeamColor(result.team.color);
+      } else {
+        setTeamColor("amber");
       }
 
       if (typeof result.team.badgeKey === "string" && TEAM_ICONS.includes(result.team.badgeKey)) {
         setTeamIcon(result.team.badgeKey);
+      } else {
+        setTeamIcon("🦊");
       }
 
       const reassignmentMessage =
@@ -814,13 +929,6 @@ export function RealizationOnboardingScreen({
       return;
     }
 
-    if (sessionToken === OFFLINE_TEST_SESSION_TOKEN) {
-      setTeamName(trimmedName);
-      setSaveMessage(`Zapisano lokalnie ustawienia: ${trimmedName}.`);
-      completeOnboarding(sessionToken, trimmedName);
-      return;
-    }
-
     if (!apiBaseUrl) {
       setSaveMessage("Brakuje konfiguracji API. Ustaw adres serwera.");
       return;
@@ -843,6 +951,10 @@ export function RealizationOnboardingScreen({
 
       const normalizedResultName = result.name.trim() || trimmedName;
       setTeamName(normalizedResultName);
+      setCustomizationBlockMessage(null);
+      setCustomizationOccupancy(
+        normalizeCustomizationOccupancy(result.customizationOccupancy),
+      );
       setSaveMessage(`Zapisano ustawienia: ${normalizedResultName}.`);
       completionTeamName = normalizedResultName;
     } catch (error) {
@@ -855,6 +967,128 @@ export function RealizationOnboardingScreen({
       completeOnboarding(sessionToken, completionTeamName);
     }
   }
+
+  const handleTeamNameChange = useCallback((value: string) => {
+    setTeamName(value);
+    setCustomizationBlockMessage(null);
+    setSaveMessage(null);
+  }, []);
+
+  const persistLiveCustomization = useCallback(
+    async (input: {
+      nextColor?: TeamColor;
+      nextIcon?: string;
+      previousColor: TeamColor;
+      previousIcon: string;
+    }) => {
+      if (!sessionToken || !apiBaseUrl) {
+        return;
+      }
+
+      const requestId = liveCustomizationRequestRef.current + 1;
+      liveCustomizationRequestRef.current = requestId;
+
+      try {
+        const result = await requestMobileApi<MobileUpdateCustomizationResponse>(
+          apiBaseUrl,
+          "/api/mobile/team/customization",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              sessionToken,
+              ...(typeof input.nextColor !== "undefined"
+                ? { color: input.nextColor }
+                : {}),
+              ...(typeof input.nextIcon !== "undefined"
+                ? { badgeKey: input.nextIcon }
+                : {}),
+            }),
+          },
+        );
+
+        if (liveCustomizationRequestRef.current !== requestId) {
+          return;
+        }
+
+        setCustomizationOccupancy(
+          normalizeCustomizationOccupancy(result.customizationOccupancy),
+        );
+        setCustomizationBlockMessage(null);
+      } catch (error) {
+        if (liveCustomizationRequestRef.current !== requestId) {
+          return;
+        }
+
+        setTeamColor(input.previousColor);
+        setTeamIcon(input.previousIcon);
+        setSaveMessage(`Nie udało się zapisać zmian na żywo: ${getErrorMessage(error)}`);
+        await refreshCustomizationState().catch(() => undefined);
+      }
+    },
+    [apiBaseUrl, refreshCustomizationState, sessionToken],
+  );
+
+  const handleTeamColorChange = useCallback((value: TeamColor) => {
+    const previousColor = teamColor;
+    const previousIcon = teamIcon;
+    const occupiedBy = customizationOccupancy.colors[value];
+    if (
+      typeof occupiedBy === "number" &&
+      (!selectedTeam || occupiedBy !== selectedTeam)
+    ) {
+      setCustomizationBlockMessage(
+        `Ten kolor jest już wybrany przez Drużynę ${occupiedBy}. Wybierz inny.`,
+      );
+      return;
+    }
+
+    setTeamColor(value);
+    setCustomizationBlockMessage(null);
+    setSaveMessage(null);
+    void persistLiveCustomization({
+      nextColor: value,
+      previousColor,
+      previousIcon,
+    });
+  }, [
+    customizationOccupancy.colors,
+    persistLiveCustomization,
+    selectedTeam,
+    teamColor,
+    teamIcon,
+  ]);
+
+  const handleTeamIconChange = useCallback((value: string) => {
+    const previousColor = teamColor;
+    const previousIcon = teamIcon;
+    const occupiedBy = customizationOccupancy.icons[value];
+    if (
+      typeof occupiedBy === "number" &&
+      (!selectedTeam || occupiedBy !== selectedTeam)
+    ) {
+      setCustomizationBlockMessage(
+        `Ta emotikona jest już wybrana przez Drużynę ${occupiedBy}. Wybierz inną.`,
+      );
+      return;
+    }
+
+    setTeamIcon(value);
+    setCustomizationBlockMessage(null);
+    setSaveMessage(null);
+    void persistLiveCustomization({
+      nextIcon: value,
+      previousColor,
+      previousIcon,
+    });
+  }, [
+    customizationOccupancy.icons,
+    persistLiveCustomization,
+    selectedTeam,
+    teamColor,
+    teamIcon,
+  ]);
+
+  const canSaveCustomization = Boolean(selectedTeam) && !isSaving;
 
   function openTeamPicker() {
     setTeamPickerError(null);
@@ -1357,179 +1591,27 @@ export function RealizationOnboardingScreen({
           )}
 
           {screen === "customization" && (
-            <View
-              className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
-              style={{
-                borderColor: EXPEDITION_THEME.border,
-                backgroundColor: EXPEDITION_THEME.panel,
-              }}
-            >
-              <View className="px-1">
-                <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Edytor baneru drużyny
-                </Text>
-                <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Dopracuj wygląd baneru drużyny. Ten baner będzie widoczny w górnym panelu podczas gry.
-                </Text>
-              </View>
-
-              <View
-                className="mt-3 rounded-2xl border px-4 py-4"
-                style={{
-                  borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelStrong,
-                }}
-              >
-                <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Podgląd baneru
-                </Text>
-                <View
-                  className="mt-2 rounded-xl border px-2 py-1"
-                  style={{
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: selectedColor.hex,
-                    minHeight: isTabletLayout ? 104 : 88,
-                  }}
-                >
-                  <View className="flex-1 flex-row items-center gap-2">
-                    <View className="h-full w-1/6 items-center justify-center rounded-md" style={{ backgroundColor: bannerIconBackground }}>
-                      <Text className={isTabletLayout ? "text-4xl" : "text-3xl"}>{teamIcon}</Text>
-                    </View>
-                    <View className="flex-1">
-                      <Text
-                        className={isTabletLayout ? "text-2xl font-extrabold" : "text-xl font-extrabold"}
-                        style={{ color: bannerTextColor }}
-                        numberOfLines={1}
-                      >
-                        {teamName.trim() || "Nazwa drużyny"}
-                      </Text>
-                      <Text className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: bannerMutedTextColor }}>
-                        Drużyna {selectedTeam ?? "-"} • {selectedColor.label}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text className="text-[9px] uppercase tracking-widest" style={{ color: bannerMutedTextColor }}>
-                        Punkty
-                      </Text>
-                      <Text
-                        className={isTabletLayout ? "text-2xl font-extrabold text-right" : "text-xl font-extrabold text-right"}
-                        style={{ color: bannerTextColor }}
-                      >
-                        0
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              <View
-                className="mt-3 rounded-2xl border px-4 py-4"
-                style={{
-                  borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelMuted,
-                }}
-              >
-                <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Customizacja drużyny
-                </Text>
-
-                <TextInput
-                  className="mt-2 rounded-2xl border px-4 py-3 text-sm font-semibold"
-                  style={{
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panel,
-                    color: EXPEDITION_THEME.textPrimary,
-                  }}
-                  value={teamName}
-                  onChangeText={(value) => {
-                    setTeamName(value);
-                    setSaveMessage(null);
-                  }}
-                  placeholder="Nazwa drużyny"
-                  placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                  maxLength={40}
-                />
-
-                <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Kolor drużyny
-                </Text>
-                <View className="mt-2 flex-row flex-wrap gap-3">
-                  {TEAM_COLORS.map((colorOption) => {
-                    const isSelected = colorOption.key === teamColor;
-
-                    return (
-                      <Pressable
-                        key={colorOption.key}
-                        className="h-12 w-12 items-center justify-center rounded-full border active:opacity-90"
-                        style={{
-                          borderColor: isSelected ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-                          backgroundColor: isSelected ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                        }}
-                        onPress={() => {
-                          setTeamColor(colorOption.key);
-                          setSaveMessage(null);
-                        }}
-                      >
-                        <View className="h-7 w-7 rounded-full" style={{ backgroundColor: colorOption.hex }} />
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Ikona drużyny
-                </Text>
-                <View className="mt-2 flex-row flex-wrap gap-3">
-                  {TEAM_ICONS.map((iconOption) => {
-                    const isSelected = iconOption === teamIcon;
-
-                    return (
-                      <Pressable
-                        key={iconOption}
-                        className="h-14 w-14 items-center justify-center rounded-2xl border active:opacity-90"
-                        style={{
-                          borderColor: isSelected ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-                          backgroundColor: isSelected ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
-                        }}
-                        onPress={() => {
-                          setTeamIcon(iconOption);
-                          setSaveMessage(null);
-                        }}
-                      >
-                        <Text className="text-2xl">{iconOption}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View className="mt-4">
-                <Pressable
-                  className="rounded-2xl px-3 py-3 active:opacity-90"
-                  style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: selectedTeam && !isSaving ? 1 : 0.6 }}
-                  onPress={() => void onSaveCustomization()}
-                  disabled={!selectedTeam || isSaving}
-                >
-                  <Text className="text-center font-semibold text-zinc-950">
-                    {isSaving ? "Uruchamianie..." : "Start!"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {saveMessage && (
-                <View
-                  className="mt-3 rounded-2xl border px-3 py-2"
-                  style={{
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelStrong,
-                  }}
-                >
-                  <Text className="text-sm" style={{ color: saveMessage.startsWith("Nie") ? EXPEDITION_THEME.danger : EXPEDITION_THEME.accentStrong }}>
-                    {saveMessage}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <TeamCustomizationStep
+              isTabletLayout={isTabletLayout}
+              selectedTeam={selectedTeam}
+              teamName={teamName}
+              teamColor={teamColor}
+              teamIcon={teamIcon}
+              selectedColor={selectedColor}
+              bannerTextColor={bannerTextColor}
+              bannerMutedTextColor={bannerMutedTextColor}
+              bannerIconBackground={bannerIconBackground}
+              saveMessage={saveMessage}
+              isSaving={isSaving}
+              canSave={canSaveCustomization}
+              occupiedColors={customizationOccupancy.colors}
+              occupiedIcons={customizationOccupancy.icons}
+              blockMessage={customizationBlockMessage}
+              onTeamNameChange={handleTeamNameChange}
+              onTeamColorChange={handleTeamColorChange}
+              onTeamIconChange={handleTeamIconChange}
+              onSave={onSaveCustomization}
+            />
           )}
 
           {screen !== "customization" && (

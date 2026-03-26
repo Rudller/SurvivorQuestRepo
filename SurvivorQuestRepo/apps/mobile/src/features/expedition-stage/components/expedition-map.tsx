@@ -74,9 +74,15 @@ function buildLeafletHtml(initialPayloadJson: string) {
           return [coordinate.latitude, coordinate.longitude];
         }
 
-        function buildPinHtml(color, isSelected, isDone) {
-          const strokeColor = isSelected ? "#f0c977" : isDone ? "#34d399" : "#0f172a";
-          const pinOpacity = isDone ? "0.55" : "1";
+        function buildPinHtml(color, isSelected, isDone, isFailed) {
+          const strokeColor = isSelected
+            ? "#f0c977"
+            : isDone
+              ? "#34d399"
+              : isFailed
+                ? "#ef4444"
+                : "#0f172a";
+          const pinOpacity = isDone || isFailed ? "0.55" : "1";
           return '<div class="station-pin" style="opacity:' + pinOpacity + ';"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="46" viewBox="0 0 32 46"><path d="M16 2C8.3 2 2 8.2 2 16c0 11.4 12.1 26.1 12.6 26.8.4.5 1.2.5 1.6 0C17.9 42.1 30 27.4 30 16 30 8.2 23.7 2 16 2z" fill="' + color + '" stroke="' + strokeColor + '" stroke-width="2"/><circle cx="16" cy="16" r="5.3" fill="#ffffff"/></svg></div>';
         }
 
@@ -151,13 +157,20 @@ function buildLeafletHtml(initialPayloadJson: string) {
             const markerColor =
               pin && pin.status === "done"
                 ? "#10b981"
+                : pin && pin.failed
+                  ? "#ef4444"
                 : pin && pin.customization && typeof pin.customization.color === "string"
                   ? pin.customization.color
                   : "#f59e0b";
             const isSelected = payload.selectedStationId === pin.stationId;
             const icon = L.divIcon({
               className: "",
-              html: buildPinHtml(markerColor, isSelected, pin.status === "done"),
+              html: buildPinHtml(
+                markerColor,
+                isSelected,
+                pin.status === "done",
+                Boolean(pin.failed),
+              ),
               iconSize: [32, 46],
               iconAnchor: [16, 44],
               popupAnchor: [0, -40],

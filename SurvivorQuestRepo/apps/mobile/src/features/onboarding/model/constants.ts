@@ -91,4 +91,3 @@ export const TEAM_ICONS = [
 
 export const TEAM_SLOTS = Array.from({ length: 8 }, (_, index) => index + 1);
 
-export const DEFAULT_REALIZATION_CODE = "TEST";

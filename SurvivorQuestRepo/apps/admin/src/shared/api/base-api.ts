@@ -1,29 +1,60 @@
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { buildApiUrl } from "./api-path";
+import { buildApiUrl, getConfiguredApiUrl, resetConfiguredApiUrl } from "./api-path";
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: "",
   credentials: "include",
 });
 
-const dynamicBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = (
+function buildRequestArgs(args: string | FetchArgs) {
+  if (typeof args === "string") {
+    return buildApiUrl(args);
+  }
+
+  return {
+    ...args,
+    url: buildApiUrl(args.url),
+  };
+}
+
+function isAbsoluteUrl(url: string) {
+  return /^https?:\/\//i.test(url.trim());
+}
+
+function shouldRetryWithDefaultApiUrl(args: string | FetchArgs, error?: FetchBaseQueryError) {
+  if (typeof window === "undefined" || !error || error.status !== "FETCH_ERROR") {
+    return false;
+  }
+
+  if (typeof args === "string") {
+    return !isAbsoluteUrl(args);
+  }
+
+  return !isAbsoluteUrl(args.url);
+}
+
+const dynamicBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
   api,
   extraOptions,
 ) => {
-  if (typeof args === "string") {
-    return rawBaseQuery(buildApiUrl(args), api, extraOptions);
+  const runRequest = () => rawBaseQuery(buildRequestArgs(args), api, extraOptions);
+  const initialResult = await runRequest();
+
+  if (!shouldRetryWithDefaultApiUrl(args, initialResult.error)) {
+    return initialResult;
   }
 
-  return rawBaseQuery(
-    {
-      ...args,
-      url: buildApiUrl(args.url),
-    },
-    api,
-    extraOptions,
-  );
+  const currentApiUrl = getConfiguredApiUrl();
+  resetConfiguredApiUrl();
+  const fallbackApiUrl = getConfiguredApiUrl();
+
+  if (fallbackApiUrl === currentApiUrl) {
+    return initialResult;
+  }
+
+  return runRequest();
 };
 
 export const baseApi = createApi({

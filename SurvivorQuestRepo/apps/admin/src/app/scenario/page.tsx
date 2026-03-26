@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { useGetScenariosQuery } from "@/features/scenario/api/scenario.api";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { useGetStationsQuery } from "@/features/games/api/station.api";
@@ -11,11 +11,6 @@ import { AdminSidebar } from "@/shared/components/admin-sidebar";
 import { CreateScenarioForm } from "@/features/scenario/components/create-scenario-form";
 import { ScenariosTable } from "@/features/scenario/components/scenarios-table";
 import { EditScenarioModal } from "@/features/scenario/components/edit-scenario-modal";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 export default function ScenarioPage() {
   const router = useRouter();
@@ -40,7 +35,7 @@ export default function ScenarioPage() {
   } = useGetScenariosQuery(undefined, { skip: !meData });
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -50,10 +45,10 @@ export default function ScenarioPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
-  if (isScenariosError && isUnauthorized(scenariosError)) {
+  if (isScenariosError && isUnauthorizedError(scenariosError)) {
     return <main className="p-8">Przekierowanie do logowania...</main>;
   }
 
@@ -91,7 +86,7 @@ export default function ScenarioPage() {
             />
           )}
 
-          {isScenariosError && !isUnauthorized(scenariosError) && (
+          {isScenariosError && !isUnauthorizedError(scenariosError) && (
             <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
               <p>Nie udało się pobrać scenariuszy.</p>
               <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(scenariosError, null, 2)}</pre>
@@ -120,3 +115,5 @@ export default function ScenarioPage() {
     </main>
   );
 }
+
+

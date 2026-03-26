@@ -55,6 +55,7 @@ export type OnboardingRealizationSummary = {
   stationIds: string[];
   locationRequired: boolean;
   introText?: string;
+  gameRules?: string;
 };
 
 export type OnboardingSession = {
@@ -64,5 +65,6 @@ export type OnboardingSession = {
   apiBaseUrl: string | null;
   realization: OnboardingRealizationSummary | null;
   awaitingAdminStart?: boolean;
+  showGameRulesAfterStart?: boolean;
   team: TeamCustomizationSelection;
 };

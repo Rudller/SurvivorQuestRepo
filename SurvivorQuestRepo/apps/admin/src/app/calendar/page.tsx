@@ -2,15 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { DashboardCalendar } from "@/features/dashboard/components/dashboard-calendar";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 export default function CalendarPage() {
   const router = useRouter();
@@ -25,7 +20,7 @@ export default function CalendarPage() {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -35,7 +30,7 @@ export default function CalendarPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
   return (
@@ -58,3 +53,5 @@ export default function CalendarPage() {
     </main>
   );
 }
+
+

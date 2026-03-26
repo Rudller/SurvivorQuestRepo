@@ -48,4 +48,3 @@ Open `Aktualna realizacja` in admin and watch team/event updates.
 
 - `localhost` from a real phone points to the phone, not your PC.
 - Use PC LAN IP and keep both devices on the same Wi-Fi network.
-- Kod `TEST` odświeża izolowany snapshot mobilnego backendu na podstawie aktualnych realizacji backendu.

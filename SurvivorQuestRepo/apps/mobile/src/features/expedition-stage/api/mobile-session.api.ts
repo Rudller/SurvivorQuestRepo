@@ -29,7 +29,7 @@ function asArray(value: unknown) {
 }
 
 function normalizeTaskStatus(value: unknown): ExpeditionTaskStatus {
-  return value === "done" || value === "in-progress" ? value : "todo";
+  return value === "done" || value === "in-progress" || value === "failed" ? value : "todo";
 }
 
 function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["quiz"] | undefined {
@@ -207,6 +207,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       id: asString(realization.id, "unknown-realization"),
       companyName: asString(realization.companyName ?? realization.company_name, "Realizacja terenowa"),
       introText: asString(realization.introText ?? realization.intro_text) || undefined,
+      gameRules: asString(realization.gameRules ?? realization.game_rules) || undefined,
       contactPerson: asString(realization.contactPerson ?? realization.contact_person),
       contactPhone: asString(realization.contactPhone ?? realization.contact_phone) || undefined,
       contactEmail: asString(realization.contactEmail ?? realization.contact_email) || undefined,
@@ -359,6 +360,34 @@ export async function postMobileCompleteTask(
   );
 }
 
+export async function postMobileFailTask(
+  apiBaseUrl: string,
+  payload: {
+    sessionToken: string;
+    stationId: string;
+    reason?: string;
+    startedAt?: string;
+    finishedAt?: string;
+  },
+) {
+  return requestMobileApi<{
+    teamId: string;
+    stationId: string;
+    pointsTotal: number;
+    pointsAwarded: number;
+    taskStatus: "failed";
+  }>(apiBaseUrl, "/api/mobile/task/fail", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionToken: payload.sessionToken,
+      stationId: payload.stationId,
+      reason: payload.reason,
+      startedAt: payload.startedAt,
+      finishedAt: payload.finishedAt,
+    }),
+  });
+}
+
 export async function postMobileStartTask(
   apiBaseUrl: string,
   payload: { sessionToken: string; stationId: string; startedAt?: string },
@@ -405,7 +434,7 @@ export async function postMobileResolveStationQr(
     };
     task: {
       stationId: string;
-      status: "todo" | "in-progress" | "done";
+      status: "todo" | "in-progress" | "done" | "failed";
       pointsAwarded: number;
       startedAt: string | null;
       finishedAt: string | null;

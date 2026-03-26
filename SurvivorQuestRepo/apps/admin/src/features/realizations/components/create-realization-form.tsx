@@ -20,6 +20,7 @@ import {
   RealizationStationsEditor,
   toRealizationStationDraft,
 } from "./realization-stations-editor";
+import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import {
   getStatusLabel,
   toDateTimeLocalValue,
@@ -37,6 +38,10 @@ interface CreateRealizationFormProps {
 type DateTimeInputElement = HTMLInputElement & {
   showPicker?: () => void;
 };
+
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
 
 function CalendarInputIcon() {
   return (
@@ -62,12 +67,14 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
   const [customLanguage, setCustomLanguage] = useState("");
   const [introText, setIntroText] = useState("");
+  const [gameRules, setGameRules] = useState("");
   const [instructors, setInstructors] = useState<string[]>([]);
   const [instructorInput, setInstructorInput] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [offerPdfFile, setOfferPdfFile] = useState<File | null>(null);
   const [offerPdfName, setOfferPdfName] = useState<string | undefined>();
+  const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [teamCount, setTeamCount] = useState(2);
   const [peopleCount, setPeopleCount] = useState(10);
@@ -241,7 +248,8 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             location: location.trim() || undefined,
             language: selectedLanguage,
             customLanguage: normalizedCustomLanguage,
-            introText: introText.trim() || undefined,
+            introText: introText || undefined,
+            gameRules: gameRules.trim() || undefined,
             contactPerson: normalizedContactPerson,
             contactPhone: normalizedContactPhone,
             contactEmail: normalizedContactEmail,
@@ -269,6 +277,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           setSelectedLanguage("polish");
           setCustomLanguage("");
           setIntroText("");
+          setGameRules("");
           setInstructors([]);
           setInstructorInput("");
           setStatus("planned");
@@ -632,13 +641,23 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
                   return;
                 }
 
+                if (!isPdfFile(file)) {
+                  setOfferPdfFile(null);
+                  setOfferPdfName(undefined);
+                  setOfferPdfError("Niedozwolony format pliku. Wybierz plik PDF.");
+                  event.currentTarget.value = "";
+                  return;
+                }
+
                 setOfferPdfFile(file);
                 setOfferPdfName(file.name);
+                setOfferPdfError(null);
                 setFormError(null);
                 event.currentTarget.value = "";
               }}
               className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
             />
+            {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
             {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
             {offerPdfFile && (
               <button
@@ -646,6 +665,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
                 onClick={() => {
                   setOfferPdfFile(null);
                   setOfferPdfName(undefined);
+                  setOfferPdfError(null);
                 }}
                 className="text-xs text-red-400 hover:text-red-300"
               >
@@ -654,17 +674,22 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
               )}
             </div>
 
-            <label className="block space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
-              <textarea
-                value={introText}
-                onChange={(event) => setIntroText(event.target.value)}
-                placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
-                rows={5}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-              <p className="text-xs text-zinc-500">To pole jest opcjonalne.</p>
-            </label>
+            <StyledMarkdownEditor
+              label="Tekst wstępu"
+              value={introText}
+              onChange={setIntroText}
+              placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+              rows={5}
+              helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+            />
+            <StyledMarkdownEditor
+              label="Zasady gry"
+              value={gameRules}
+              onChange={setGameRules}
+              placeholder="Wpisz zasady gry widoczne po Welcome screen."
+              rows={8}
+              helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+            />
           </fieldset>
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
@@ -731,6 +756,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           </p>
           <p>
             <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
           </p>
           <p>
             <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}

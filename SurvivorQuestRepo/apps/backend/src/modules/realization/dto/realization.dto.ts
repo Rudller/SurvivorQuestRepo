@@ -37,6 +37,7 @@ export type CreateRealizationDto = {
   language?: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -101,6 +102,7 @@ export function validateRealizationPayload(
   const location = payload.location?.trim() || '';
   const customLanguage = payload.customLanguage?.trim() || '';
   const introText = payload.introText?.trim() || '';
+  const gameRules = payload.gameRules?.trim() || '';
   const contactPerson = payload.contactPerson?.trim() || '';
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
@@ -160,6 +162,7 @@ export function validateRealizationPayload(
     language: payload.language,
     customLanguage: payload.language === 'other' ? customLanguage : undefined,
     introText: introText || undefined,
+    gameRules: gameRules || undefined,
     contactPerson,
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,

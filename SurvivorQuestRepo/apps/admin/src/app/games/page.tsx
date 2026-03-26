@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
+import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { useGetStationsQuery } from "@/features/games/api/station.api";
 import type { Station } from "@/features/games/types/station";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
@@ -11,11 +11,6 @@ import { StationsTable } from "@/features/games/components/stations-table";
 import { CreateStationForm } from "@/features/games/components/create-station-form";
 import { EditStationModal } from "@/features/games/components/edit-station-modal";
 import type { StationSortField, SortDirection } from "@/features/games/station.utils";
-
-function isUnauthorized(error: unknown) {
-  const err = error as FetchBaseQueryError | undefined;
-  return typeof err?.status === "number" && err.status === 401;
-}
 
 export default function StationPage() {
   const router = useRouter();
@@ -33,7 +28,7 @@ export default function StationPage() {
   const [editingGame, setEditingGame] = useState<Station | null>(null);
 
   useEffect(() => {
-    if (isMeError && isUnauthorized(meError)) {
+    if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
@@ -43,7 +38,7 @@ export default function StationPage() {
   }
 
   if (isMeError) {
-    return <main className="p-8">Przekierowanie do logowania...</main>;
+    return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
   return (
@@ -107,3 +102,5 @@ export default function StationPage() {
     </main>
   );
 }
+
+

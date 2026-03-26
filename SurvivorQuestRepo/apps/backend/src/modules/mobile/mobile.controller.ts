@@ -38,6 +38,12 @@ type RandomizeTeamPayload = {
   sessionToken?: string;
 };
 
+type UpdateTeamCustomizationPayload = {
+  sessionToken?: string;
+  color?: string;
+  badgeKey?: string;
+};
+
 type LocationPayload = {
   sessionToken?: string;
   lat?: number;
@@ -52,6 +58,14 @@ type CompleteTaskPayload = {
   sessionToken?: string;
   stationId?: string;
   completionCode?: string;
+  startedAt?: string;
+  finishedAt?: string;
+};
+
+type FailTaskPayload = {
+  sessionToken?: string;
+  stationId?: string;
+  reason?: string;
   startedAt?: string;
   finishedAt?: string;
 };
@@ -117,6 +131,17 @@ export class MobileController {
     });
   }
 
+  @Post('team/customization')
+  async updateMobileTeamCustomization(
+    @Body() payload: UpdateTeamCustomizationPayload,
+  ) {
+    return this.mobileService.updateMobileTeamCustomization({
+      sessionToken: payload.sessionToken || '',
+      color: payload.color,
+      badgeKey: payload.badgeKey,
+    });
+  }
+
   @Post('team/location')
   async updateMobileTeamLocation(@Body() payload: LocationPayload) {
     return this.mobileService.updateMobileTeamLocation({
@@ -136,6 +161,17 @@ export class MobileController {
       sessionToken: payload.sessionToken || '',
       stationId: payload.stationId || '',
       completionCode: payload.completionCode,
+      startedAt: payload.startedAt,
+      finishedAt: payload.finishedAt,
+    });
+  }
+
+  @Post('task/fail')
+  async failMobileTask(@Body() payload: FailTaskPayload) {
+    return this.mobileService.failMobileTask({
+      sessionToken: payload.sessionToken || '',
+      stationId: payload.stationId || '',
+      reason: payload.reason,
       startedAt: payload.startedAt,
       finishedAt: payload.finishedAt,
     });

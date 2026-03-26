@@ -56,6 +56,7 @@ export type Realization = {
   language: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;

@@ -1,6 +1,6 @@
 import type { OnboardingSession } from "../../onboarding/model/types";
 
-export type ExpeditionTaskStatus = "todo" | "in-progress" | "done";
+export type ExpeditionTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
 export type MapCoordinate = {
   latitude: number;
@@ -19,6 +19,7 @@ export type ExpeditionSessionState = {
     id: string;
     companyName: string;
     introText?: string;
+    gameRules?: string;
     contactPerson: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -88,6 +89,7 @@ export type StationPin = {
   label: string;
   coordinate: MapCoordinate;
   status: ExpeditionTaskStatus;
+  failed?: boolean;
   pointsAwarded: number;
   customization: StationPinCustomization;
 };
@@ -117,6 +119,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       id: session.realization?.id ?? session.realizationId ?? "offline-realization",
       companyName: session.realization?.companyName ?? "Realizacja terenowa",
       introText: session.realization?.introText,
+      gameRules: session.realization?.gameRules,
       contactPerson: "",
       contactPhone: undefined,
       contactEmail: undefined,

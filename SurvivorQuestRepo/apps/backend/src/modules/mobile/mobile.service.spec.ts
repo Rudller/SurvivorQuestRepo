@@ -1,5 +1,6 @@
 import { EventActorType, TeamStatus } from '@prisma/client';
 import { MobileService } from './mobile.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('MobileService team selection', () => {
   function createService() {
@@ -34,6 +35,7 @@ describe('MobileService team selection', () => {
       team: {
         id: 'team-1',
         slotNumber: 1,
+        color: 'red',
       },
       realization: {
         id: 'realization-1',
@@ -49,7 +51,10 @@ describe('MobileService team selection', () => {
       points: 0,
     });
     prisma.teamAssignment.findMany.mockResolvedValue([{ id: 'assignment-old' }]);
-    prisma.team.findMany.mockResolvedValue([{ color: 'orange' }]);
+    prisma.team.findMany.mockResolvedValueOnce([
+      { slotNumber: 1, color: 'red', badgeKey: 'beaver-01' },
+      { slotNumber: 2, color: null, badgeKey: null },
+    ]);
 
     const result = await service.selectMobileTeam({
       sessionToken: 'token',
@@ -74,10 +79,14 @@ describe('MobileService team selection', () => {
       message:
         'Team was already selected on another device. Assignment was switched to this device.',
     });
-    expect(result.team.color).toBe('red');
+    expect(result.team.color).toBeNull();
+    expect(result.customizationOccupancy).toEqual({
+      colors: { red: 1 },
+      icons: { '🦫': 1 },
+    });
   });
 
-  it('auto-assigns color in claim when payload color is missing', async () => {
+  it('rejects claim when payload color is missing', async () => {
     const { service, prisma } = createService();
 
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
@@ -98,44 +107,147 @@ describe('MobileService team selection', () => {
       },
     });
 
-    prisma.team.findMany
-      .mockResolvedValueOnce([
-        { id: 'peer-1', name: 'Inna', color: 'orange' },
-      ])
-      .mockResolvedValueOnce([{ color: 'orange' }]);
-    prisma.team.update.mockResolvedValue({});
-
-    const result = await service.claimMobileTeam({
-      sessionToken: 'token',
-      name: 'Nowa Drużyna',
-      color: '',
-      badgeKey: 'fox-01',
-    });
-
-    expect(result.color).toBe('red');
-    expect(prisma.team.update).toHaveBeenNthCalledWith(1, {
-      where: { id: 'team-1' },
-      data: { color: 'red' },
-    });
-    expect(prisma.team.update).toHaveBeenNthCalledWith(2, {
-      where: { id: 'team-1' },
-      data: {
+    await expect(
+      service.claimMobileTeam({
+        sessionToken: 'token',
         name: 'Nowa Drużyna',
-        color: 'red',
+        color: '',
         badgeKey: 'fox-01',
-        badgeImageUrl: null,
-        status: TeamStatus.ACTIVE,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.team.findMany).not.toHaveBeenCalled();
+    expect(prisma.team.update).not.toHaveBeenCalled();
+    expect(prisma.eventLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('MobileService join session', () => {
+  function createService() {
+    const prisma = {
+      realization: {
+        findMany: jest.fn(),
+      },
+      team: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      teamAssignment: {
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        deleteMany: jest.fn(),
+        count: jest.fn(),
+        create: jest.fn(),
+      },
+      eventLog: {
+        create: jest.fn(),
+      },
+    };
+
+    const realizationService = {
+      listRealizations: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      realizationService as never,
+      {} as never,
+    );
+    return { service, prisma, realizationService };
+  }
+
+  it('reuses previously assigned team for the same device after assignment expiry', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        introText: null,
+        gameRules: null,
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        locationRequired: true,
+        joinCode: 'JOIN01',
+        teamCount: 2,
+        stationIds: ['s-1'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      {
+        id: 'realization-1',
+        locationRequired: true,
+      },
+    ]);
+
+    jest
+      .spyOn(service as never, 'ensureTeamsForRealization')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'getCustomizationOccupancyByRealization')
+      .mockResolvedValue({ colors: {}, icons: {} });
+    jest
+      .spyOn(service as never, 'generateSessionToken')
+      .mockReturnValue('mob_test_token');
+
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      id: 'expired-assignment',
+      teamId: 'team-2',
+      realizationId: 'realization-1',
+      deviceId: 'device-1',
+      expiresAt: new Date(Date.now() - 60_000),
+      team: {
+        id: 'team-2',
+        slotNumber: 2,
+        name: 'Drużyna 2',
+        color: 'amber',
+        badgeKey: '🦊',
+        points: 30,
       },
     });
-    expect(prisma.eventLog.create).toHaveBeenCalledWith({
-      data: {
+
+    prisma.team.findMany.mockResolvedValue([
+      {
+        id: 'team-1',
+        slotNumber: 1,
+        name: 'Drużyna 1',
+        color: null,
+        badgeKey: null,
+        points: 0,
+      },
+      {
+        id: 'team-2',
+        slotNumber: 2,
+        name: 'Drużyna 2',
+        color: 'amber',
+        badgeKey: '🦊',
+        points: 30,
+      },
+    ]);
+    prisma.teamAssignment.findMany.mockResolvedValue([]);
+    prisma.teamAssignment.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.teamAssignment.create.mockResolvedValue({
+      id: 'new-assignment',
+      memberName: 'Użytkownik mobilny',
+    });
+
+    const result = await service.joinMobileSession({
+      joinCode: 'JOIN01',
+      deviceId: 'device-1',
+      memberName: 'Użytkownik mobilny',
+    });
+
+    expect(prisma.teamAssignment.deleteMany).toHaveBeenCalledWith({
+      where: {
         realizationId: 'realization-1',
-        teamId: 'team-1',
-        actorType: EventActorType.MOBILE_DEVICE,
-        actorId: 'device-1',
-        eventType: 'team_profile_updated',
-        payload: { changedFields: ['name', 'color', 'badge'] },
+        deviceId: 'device-1',
       },
     });
+    expect(prisma.teamAssignment.create).toHaveBeenCalled();
+    const createPayload = prisma.teamAssignment.create.mock.calls[0][0];
+    expect(createPayload.data.teamId).toBe('team-2');
+    expect(result.team.slotNumber).toBe(2);
   });
 });

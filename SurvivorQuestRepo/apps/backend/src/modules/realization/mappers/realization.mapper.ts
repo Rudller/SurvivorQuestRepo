@@ -124,6 +124,7 @@ export function buildRealizationEntity(input: {
       language: PrismaRealizationLanguage;
       customLanguage: string | null;
       introText: string | null;
+      gameRules: string | null;
       contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
@@ -160,6 +161,7 @@ export function buildRealizationEntity(input: {
     language: fromPrismaRealizationLanguage(realization.language),
     customLanguage: realization.customLanguage || undefined,
     introText: realization.introText || undefined,
+    gameRules: realization.gameRules || undefined,
     contactPerson: realization.contactPerson,
     contactPhone: realization.contactPhone || undefined,
     contactEmail: realization.contactEmail || undefined,

@@ -153,6 +153,7 @@ model Realization {
   language            RealizationLanguage @default(POLISH)
   customLanguage      String?
   introText           String?
+  gameRules           String?
   contactPerson       String
   contactPhone        String?
   contactEmail        String?

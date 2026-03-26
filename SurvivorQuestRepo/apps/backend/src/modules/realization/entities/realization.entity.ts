@@ -34,6 +34,7 @@ export type RealizationEntity = {
   language: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -82,6 +83,7 @@ export type ValidatedRealizationPayload = {
   language: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;

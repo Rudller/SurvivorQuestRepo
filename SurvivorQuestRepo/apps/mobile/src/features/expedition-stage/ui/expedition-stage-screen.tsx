@@ -20,7 +20,12 @@ import {
 import { TopRealizationPanel } from "../components/top-realization-panel";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
-import { DEFAULT_STATION_PIN_CUSTOMIZATION, resolveDefaultStationPoints, type MapCoordinate } from "../model/types";
+import {
+  DEFAULT_STATION_PIN_CUSTOMIZATION,
+  resolveDefaultStationPoints,
+  type ExpeditionTaskStatus,
+  type MapCoordinate,
+} from "../model/types";
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
@@ -72,9 +77,13 @@ function resolveCoordinateCentroid(coordinates: MapCoordinate[]) {
   } satisfies MapCoordinate;
 }
 
-function resolveStationVisual(stationType: string | undefined, status: "todo" | "in-progress" | "done") {
+function resolveStationVisual(stationType: string | undefined, status: ExpeditionTaskStatus) {
   if (status === "done") {
     return { icon: "✅", color: "#10b981" };
+  }
+
+  if (status === "failed") {
+    return { icon: "❌", color: "#ef4444" };
   }
 
   if (stationType === "time") {
@@ -163,6 +172,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     sessionInvalidReason,
     startStationTask,
     completeStationTask,
+    failStationTask,
     syncTeamLocation,
     resolveStationQrToken,
   } = useExpeditionSession(session);
@@ -182,8 +192,6 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
-  const [failedQuizStationIds, setFailedQuizStationIds] = useState<string[]>([]);
-  const [failedTimedStationIds, setFailedTimedStationIds] = useState<string[]>([]);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
@@ -416,30 +424,49 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     [realStationCoordinates, stationIds],
   );
 
+  const failedTaskIds = useMemo(
+    () =>
+      new Set(
+        sessionState.tasks
+          .filter((task) => task.status === "failed")
+          .map((task) => task.stationId),
+      ),
+    [sessionState.tasks],
+  );
   const stationPins = useMemo(
     () =>
       mappableStationIds.map((stationId) => {
         const task = sessionState.tasks.find((item) => item.stationId === stationId);
         const metadata = stationMetadataMap[stationId];
         const visual = resolveStationVisual(metadata?.type, task?.status ?? "todo");
+        const isFailed = task ? failedTaskIds.has(task.stationId) : false;
 
         return {
           stationId,
           label: resolveStationLabel(stationId, metadata?.name),
           coordinate: realStationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
           status: task?.status ?? "todo",
+          failed: isFailed,
           pointsAwarded: task?.pointsAwarded ?? 0,
           customization: visual,
         };
       }),
-    [mapAnchor, mappableStationIds, realStationCoordinates, sessionState.tasks, stationMetadataMap],
+    [
+      failedTaskIds,
+      mapAnchor,
+      mappableStationIds,
+      realStationCoordinates,
+      sessionState.tasks,
+      stationMetadataMap,
+    ],
   );
 
   const selectedStationLabel = selectedStationId
     ? resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name)
     : null;
-
-  const completedTasks = sessionState.tasks.filter((task) => task.status === "done").length;
+  const completedTasks = sessionState.tasks.filter(
+    (task) => task.status === "done" || failedTaskIds.has(task.stationId),
+  ).length;
   const taskTotal = sessionState.tasks.length;
   const taskByStationId = useMemo(
     () =>
@@ -455,12 +482,9 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         stationId: task.stationId,
         label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name),
         done: task.status === "done",
-        failed:
-          task.status !== "done" &&
-          (failedQuizStationIds.includes(task.stationId) ||
-            failedTimedStationIds.includes(task.stationId)),
+        failed: task.status !== "done" && failedTaskIds.has(task.stationId),
       })),
-    [failedQuizStationIds, failedTimedStationIds, sessionState.tasks, stationMetadataMap],
+    [failedTaskIds, sessionState.tasks, stationMetadataMap],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
@@ -489,10 +513,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
                 quizAnswers: stationCatalog.quiz?.answers,
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 status: task?.status ?? "todo",
-                quizFailed:
-                  (task?.status ?? "todo") !== "done" &&
-                  (failedQuizStationIds.includes(stationCatalog.id) ||
-                    failedTimedStationIds.includes(stationCatalog.id)),
+                quizFailed: (task?.status ?? "todo") === "failed",
                 startedAt: task?.startedAt ?? null,
               } satisfies StationTestViewModel;
             })
@@ -517,10 +538,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
                 quizAnswers: undefined,
                 quizCorrectAnswerIndex: undefined,
                 status: task.status,
-                quizFailed:
-                  task.status !== "done" &&
-                  (failedQuizStationIds.includes(stationId) ||
-                    failedTimedStationIds.includes(stationId)),
+                quizFailed: task.status === "failed",
                 startedAt: task.startedAt,
               } satisfies StationTestViewModel;
             });
@@ -528,46 +546,12 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       return [...baseEntries].sort((left, right) => left.name.localeCompare(right.name, "pl"));
     },
     [
-      failedQuizStationIds,
-      failedTimedStationIds,
       sessionState.realization.stations,
       sessionState.tasks,
       stationMetadataMap,
       taskByStationId,
     ],
   );
-
-  useEffect(() => {
-    setFailedQuizStationIds((current) => {
-      if (current.length === 0) {
-        return current;
-      }
-
-      const activeFailedInProgress = new Set(
-        sessionState.tasks
-          .filter((task) => task.status === "in-progress")
-          .map((task) => task.stationId),
-      );
-      const next = current.filter((stationId) => activeFailedInProgress.has(stationId));
-      return next.length === current.length ? current : next;
-    });
-  }, [sessionState.tasks]);
-
-  useEffect(() => {
-    setFailedTimedStationIds((current) => {
-      if (current.length === 0) {
-        return current;
-      }
-
-      const activeFailedInProgress = new Set(
-        sessionState.tasks
-          .filter((task) => task.status === "in-progress")
-          .map((task) => task.stationId),
-      );
-      const next = current.filter((stationId) => activeFailedInProgress.has(stationId));
-      return next.length === current.length ? current : next;
-    });
-  }, [sessionState.tasks]);
 
   const activeStationTest = useMemo(
     () => stationTestEntries.find((item) => item.stationId === activeStationTestId) ?? null,
@@ -800,7 +784,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       setActionError(null);
       setActionMessage(null);
 
-      if (failedTimedStationIds.includes(stationId)) {
+      if (taskByStationId[stationId]?.status === "failed") {
         return "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.";
       }
 
@@ -815,7 +799,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       setActionMessage("Zadanie zaliczone.");
       return null;
     },
-    [completeStationTask, failedTimedStationIds],
+    [completeStationTask, taskByStationId],
   );
 
   const handleRequestCloseActiveStation = useCallback(() => {
@@ -824,7 +808,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       return;
     }
 
-    const isAlreadyDone = activeStationTest.status === "done";
+    const isAlreadyDone = activeStationTest.status === "done" || activeStationTest.status === "failed";
     const hasTimeLimit = activeStationTest.timeLimitSeconds > 0;
     if (isAlreadyDone || !hasTimeLimit) {
       setActiveStationTestId(null);
@@ -841,16 +825,38 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
           style: "destructive",
           onPress: () => {
             const stationId = activeStationTest.stationId;
-            setFailedTimedStationIds((current) =>
-              current.includes(stationId) ? current : [...current, stationId],
-            );
-            setActionError("Zadanie zostało oznaczone jako niezaliczone.");
-            setActiveStationTestId(null);
+            const startedAt = activeStationTest.startedAt ?? localStartedAtByStationId[stationId];
+            void failStationTask(
+              stationId,
+              "task_closed_before_completion",
+              startedAt,
+            ).then((error) => {
+              if (error) {
+                setActionError(error);
+              } else {
+                setActionMessage("Zadanie zostało oznaczone jako niezaliczone.");
+              }
+              setActiveStationTestId(null);
+            });
           },
         },
       ],
     );
-  }, [activeStationTest]);
+  }, [activeStationTest, failStationTask, localStartedAtByStationId]);
+
+  const handleTimeStationExpired = useCallback(
+    (stationId: string) => {
+      const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
+      void failStationTask(stationId, "time_limit_expired", startedAt).then((error) => {
+        if (error) {
+          setActionError(error);
+          return;
+        }
+        setActionError("Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.");
+      });
+    },
+    [failStationTask, localStartedAtByStationId, taskByStationId],
+  );
 
   return (
     <View className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
@@ -1021,11 +1027,14 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         onRequestClose={handleRequestCloseActiveStation}
         onCompleteTask={handleCompleteStationTestTask}
         onQuizFailed={(stationId) => {
-          setFailedQuizStationIds((current) => (current.includes(stationId) ? current : [...current, stationId]));
+          const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
+          void failStationTask(stationId, "quiz_incorrect_answer", startedAt).then((error) => {
+            if (error) {
+              setActionError(error);
+            }
+          });
         }}
-        onQuizPassed={(stationId) => {
-          setFailedQuizStationIds((current) => current.filter((id) => id !== stationId));
-        }}
+        onTimeExpired={handleTimeStationExpired}
       />
 
       <QuizPrestartOverlay

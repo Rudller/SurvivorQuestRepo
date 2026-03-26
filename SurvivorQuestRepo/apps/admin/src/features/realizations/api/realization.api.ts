@@ -44,6 +44,7 @@ type RealizationDto = {
   language?: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -77,6 +78,7 @@ type CreateRealizationPayload = {
   language: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -103,6 +105,7 @@ type UpdateRealizationPayload = {
   language: RealizationLanguage;
   customLanguage?: string;
   introText?: string;
+  gameRules?: string;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -215,6 +218,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     customLanguage:
       dto.language === "other" ? dto.customLanguage?.trim() || undefined : undefined,
     introText: dto.introText?.trim() || undefined,
+    gameRules: dto.gameRules?.trim() || undefined,
     contactPerson: dto.contactPerson?.trim() || "",
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,

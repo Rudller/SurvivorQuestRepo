@@ -29,6 +29,7 @@ import {
   RealizationStationsEditor,
   toRealizationStationDraft,
 } from "./realization-stations-editor";
+import { StyledMarkdownEditor } from "./styled-markdown-editor";
 
 interface EditRealizationPanelProps {
   realization: Realization;
@@ -42,6 +43,10 @@ interface EditRealizationPanelProps {
 type DateTimeInputElement = HTMLInputElement & {
   showPicker?: () => void;
 };
+
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
 
 function CalendarInputIcon() {
   return (
@@ -72,6 +77,7 @@ export function EditRealizationPanel({
   const [instructorInput, setInstructorInput] = useState("");
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
+  const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
   const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
   const [editValues, setEditValues] = useState({
     companyName: realization.companyName,
@@ -79,6 +85,7 @@ export function EditRealizationPanel({
     language: realization.language,
     customLanguage: realization.customLanguage ?? "",
     introText: realization.introText ?? "",
+    gameRules: realization.gameRules ?? "",
     contactPerson: realization.contactPerson ?? "",
     contactPhone: realization.contactPhone ?? "",
     contactEmail: realization.contactEmail ?? "",
@@ -317,7 +324,8 @@ export function EditRealizationPanel({
                   location: editValues.location.trim() || undefined,
                   language: editValues.language,
                   customLanguage: normalizedCustomLanguage,
-                  introText: editValues.introText.trim() || undefined,
+                  introText: editValues.introText || undefined,
+                  gameRules: editValues.gameRules.trim() || undefined,
                   contactPerson: normalizedContactPerson,
                   contactPhone: normalizedContactPhone,
                   contactEmail: normalizedContactEmail,
@@ -731,18 +739,28 @@ export function EditRealizationPanel({
                         return;
                       }
 
+                      if (!isPdfFile(file)) {
+                        setPendingOfferPdfFile(null);
+                        setOfferPdfError("Niedozwolony format pliku. Wybierz plik PDF.");
+                        event.currentTarget.value = "";
+                        return;
+                      }
+
                       setPendingOfferPdfFile(file);
+                      setOfferPdfError(null);
                       setEditError(null);
                       event.currentTarget.value = "";
                     }}
                     className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                   />
+                  {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
                   {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
                   {(pendingOfferPdfFile || editValues.offerPdfUrl) && (
                     <button
                       type="button"
                       onClick={() => {
                         setPendingOfferPdfFile(null);
+                        setOfferPdfError(null);
                         setEditValues((prev) => ({ ...prev, offerPdfUrl: undefined, offerPdfName: undefined }));
                       }}
                       className="text-xs text-red-400 hover:text-red-300"
@@ -752,22 +770,32 @@ export function EditRealizationPanel({
                   )}
                 </div>
 
-                <label className="block space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
-                  <textarea
-                    value={editValues.introText}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({
-                        ...prev,
-                        introText: event.target.value,
-                      }))
-                    }
-                    placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
-                    rows={5}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                  <p className="text-xs text-zinc-500">To pole jest opcjonalne.</p>
-                </label>
+                <StyledMarkdownEditor
+                  label="Tekst wstępu"
+                  value={editValues.introText}
+                  onChange={(nextValue) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      introText: nextValue,
+                    }))
+                  }
+                  placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                  rows={5}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
+                <StyledMarkdownEditor
+                  label="Zasady gry"
+                  value={editValues.gameRules}
+                  onChange={(nextValue) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      gameRules: nextValue,
+                    }))
+                  }
+                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                  rows={8}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
               </fieldset>
             </div>
 
@@ -796,6 +824,9 @@ export function EditRealizationPanel({
               </p>
               <p>
                 <span className="text-zinc-500">Tekst wstępu:</span> {editValues.introText.trim() ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Zasady gry:</span> {editValues.gameRules.trim() ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

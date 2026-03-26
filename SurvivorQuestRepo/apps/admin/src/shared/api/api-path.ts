@@ -1,9 +1,57 @@
 const DEFAULT_BACKEND_API_URL = "http://localhost:3001";
+const DEFAULT_BACKEND_API_PORT = "3001";
 const API_URL_STORAGE_KEY = "survivorquest.admin.api-url";
 const API_URL_CHANGE_EVENT = "survivorquest:api-url-changed";
 
+function isLocalHostname(hostname: string) {
+  const normalizedHostname = hostname.trim().toLowerCase();
+  return (
+    normalizedHostname === "localhost" ||
+    normalizedHostname === "127.0.0.1" ||
+    normalizedHostname === "::1"
+  );
+}
+
+function buildHostBasedDefaultApiUrl() {
+  if (typeof window === "undefined") {
+    return DEFAULT_BACKEND_API_URL;
+  }
+
+  const currentHostname = window.location.hostname.trim();
+  if (!currentHostname || isLocalHostname(currentHostname)) {
+    return DEFAULT_BACKEND_API_URL;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "https" : "http";
+  return `${protocol}://${currentHostname}:${DEFAULT_BACKEND_API_PORT}`;
+}
+
 function getDefaultApiUrl() {
-  return process.env.NEXT_PUBLIC_API_URL?.trim() || DEFAULT_BACKEND_API_URL;
+  const envApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!envApiUrl) {
+    return buildHostBasedDefaultApiUrl();
+  }
+
+  const normalizedEnvApiUrl = normalizeApiUrl(envApiUrl);
+  if (!normalizedEnvApiUrl) {
+    return buildHostBasedDefaultApiUrl();
+  }
+
+  if (typeof window === "undefined") {
+    return normalizedEnvApiUrl;
+  }
+
+  const currentHostname = window.location.hostname.trim();
+  if (!currentHostname || isLocalHostname(currentHostname)) {
+    return normalizedEnvApiUrl;
+  }
+
+  const envHostname = new URL(normalizedEnvApiUrl).hostname;
+  if (isLocalHostname(envHostname)) {
+    return buildHostBasedDefaultApiUrl();
+  }
+
+  return normalizedEnvApiUrl;
 }
 
 function normalizeApiUrl(value: string) {

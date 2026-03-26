@@ -5,6 +5,7 @@ import {
   getApiErrorMessage,
   isSessionTokenInvalidError,
   postMobileCompleteTask,
+  postMobileFailTask,
   postMobileResolveStationQr,
   postMobileStartTask,
   postMobileTeamLocation,
@@ -57,7 +58,24 @@ function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, s
 }
 
 export function useExpeditionSession(session: OnboardingSession) {
-  const offlineMode = useMemo(() => isOfflineSession(session), [session]);
+  const sessionIdentityKey = useMemo(
+    () =>
+      [
+        session.apiBaseUrl?.trim() || "",
+        session.sessionToken?.trim() || "",
+        session.realization?.id || session.realizationId || "",
+        String(session.team.slotNumber ?? ""),
+      ].join("|"),
+    [
+      session.apiBaseUrl,
+      session.realization?.id,
+      session.realizationId,
+      session.sessionToken,
+      session.team.slotNumber,
+    ],
+  );
+  const stableSession = useMemo(() => session, [sessionIdentityKey]);
+  const offlineMode = useMemo(() => isOfflineSession(stableSession), [stableSession]);
   const [sessionState, setSessionState] = useState<ExpeditionSessionState>(() => buildInitialSessionState(session));
   const [isLoading, setIsLoading] = useState(!offlineMode);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -67,14 +85,14 @@ export function useExpeditionSession(session: OnboardingSession) {
   const [sessionInvalidReason, setSessionInvalidReason] = useState<string | null>(null);
 
   useEffect(() => {
-    setSessionState(buildInitialSessionState(session));
+    setSessionState(buildInitialSessionState(stableSession));
     setErrorMessage(null);
-    setIsLoading(!isOfflineSession(session));
+    setIsLoading(!isOfflineSession(stableSession));
     setIsRefreshing(false);
     setLastLocationSyncAt(null);
     setIsSessionInvalid(false);
     setSessionInvalidReason(null);
-  }, [session]);
+  }, [stableSession]);
 
   const refreshSessionState = useCallback(async () => {
     if (offlineMode) {
@@ -143,7 +161,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       if (offlineMode) {
         setSessionState((current) => {
           const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId || task.status === "done") {
+            if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
               return task;
             }
 
@@ -179,10 +197,10 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       setSessionState((current) => {
-        const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-          if (task.stationId !== normalizedStationId || task.status === "done") {
-            return task;
-          }
+          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+            if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
+              return task;
+            }
 
           return {
             ...task,
@@ -224,7 +242,7 @@ export function useExpeditionSession(session: OnboardingSession) {
               ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
               : Math.max(0, Math.round(basePoints));
 
-          if (existingTask?.status === "done") {
+          if (existingTask?.status === "done" || existingTask?.status === "failed") {
             return current;
           }
 
@@ -279,7 +297,7 @@ export function useExpeditionSession(session: OnboardingSession) {
           const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
           const station = current.realization.stations.find((item) => item.id === normalizedStationId);
 
-          if (existingTask?.status === "done" || !existingTask) {
+          if (existingTask?.status === "done" || existingTask?.status === "failed" || !existingTask) {
             return current;
           }
 
@@ -411,6 +429,105 @@ export function useExpeditionSession(session: OnboardingSession) {
     [offlineMode, session.apiBaseUrl, session.sessionToken],
   );
 
+  const failStationTask = useCallback(
+    async (stationId: string, reason?: string, startedAt?: string) => {
+      const normalizedStationId = stationId.trim();
+      if (!normalizedStationId) {
+        return "Nieprawidłowe stanowisko.";
+      }
+
+      if (offlineMode) {
+        setSessionState((current) => {
+          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
+          if (!existingTask || existingTask.status === "done" || existingTask.status === "failed") {
+            return current;
+          }
+
+          const finishedAt = new Date().toISOString();
+          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
+
+          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+            if (task.stationId !== normalizedStationId) {
+              return task;
+            }
+
+            return {
+              ...task,
+              status: "failed" as const,
+              pointsAwarded: 0,
+              startedAt: task.startedAt ?? effectiveStartedAt,
+              finishedAt,
+            };
+          });
+
+          return {
+            ...current,
+            tasks: nextTasks,
+            meta: {
+              ...current.meta,
+              eventLogCount: current.meta.eventLogCount + 1,
+            },
+          };
+        });
+        return null;
+      }
+
+      const apiBaseUrl = session.apiBaseUrl?.trim();
+      if (!apiBaseUrl) {
+        return "Brakuje konfiguracji API.";
+      }
+
+      try {
+        const finishedAt = new Date().toISOString();
+        await postMobileFailTask(apiBaseUrl, {
+          sessionToken: session.sessionToken,
+          stationId: normalizedStationId,
+          reason,
+          startedAt,
+          finishedAt,
+        });
+
+        setSessionState((current) => {
+          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
+          if (!existingTask || existingTask.status === "done" || existingTask.status === "failed") {
+            return current;
+          }
+
+          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
+
+          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+            if (task.stationId !== normalizedStationId) {
+              return task;
+            }
+
+            return {
+              ...task,
+              status: "failed" as const,
+              pointsAwarded: 0,
+              startedAt: task.startedAt ?? effectiveStartedAt,
+              finishedAt,
+            };
+          });
+
+          return {
+            ...current,
+            tasks: nextTasks,
+            meta: {
+              ...current.meta,
+              eventLogCount: current.meta.eventLogCount + 1,
+            },
+          };
+        });
+      } catch (error) {
+        return getApiErrorMessage(error, "Nie udało się oznaczyć zadania jako niezaliczone.");
+      }
+
+      void refreshSessionState();
+      return null;
+    },
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+  );
+
   const resolveStationQrToken = useCallback(
     async (token: string) => {
       const normalizedToken = token.trim();
@@ -453,6 +570,7 @@ export function useExpeditionSession(session: OnboardingSession) {
     refreshSessionState,
     startStationTask,
     completeStationTask,
+    failStationTask,
     syncTeamLocation,
     resolveStationQrToken,
   };

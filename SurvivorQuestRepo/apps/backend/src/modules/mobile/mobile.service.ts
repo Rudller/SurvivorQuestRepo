@@ -100,6 +100,17 @@ const BADGE_KEYS = [
   'lynx-01',
 ];
 
+const LEGACY_BADGE_KEY_TO_ICON: Record<string, string> = {
+  'beaver-01': '🦫',
+  'fox-01': '🦊',
+  'owl-01': '🦉',
+  'wolf-01': '🐺',
+  'otter-01': '🦦',
+  'capybara-02': '🦬',
+  'falcon-01': '🦅',
+  'lynx-01': '🐯',
+};
+
 const FUNNY_TEAM_NAMES = [
   'Turbo Bobry',
   'Galaktyczne Kapibary',
@@ -116,7 +127,6 @@ const FUNNY_TEAM_NAMES = [
 ];
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const TEST_JOIN_CODE = 'TEST';
 const LOCATION_DEDUP_MIN_INTERVAL_MS = 4_000;
 const LOCATION_DEDUP_MIN_DISTANCE_METERS = 3;
 const LOCATION_MAX_ACCURACY_METERS = 10_000;
@@ -153,6 +163,7 @@ export class MobileService {
         id: realization.id,
         companyName: realization.companyName,
         introText: realization.introText,
+        gameRules: realization.gameRules,
         status: this.normalizeStatus(
           realization.status,
           realization.scheduledAt,
@@ -182,15 +193,8 @@ export class MobileService {
       throw new BadRequestException('Invalid payload');
     }
 
-    if (joinCode.toUpperCase() === TEST_JOIN_CODE) {
-      await this.resetMobileStateFromRealizationSnapshot();
-    }
-
     const realizations = await this.getRealizationsView();
-    const realization =
-      joinCode.toUpperCase() === TEST_JOIN_CODE
-        ? this.resolveCurrentMobileRealization(realizations)
-        : this.findRealizationByJoinCode(realizations, joinCode);
+    const realization = this.findRealizationByJoinCode(realizations, joinCode);
 
     if (!realization) {
       throw new NotFoundException('Invalid join code');
@@ -220,12 +224,8 @@ export class MobileService {
         throw new NotFoundException('Team not found');
       }
 
-      const resolvedColor = await this.ensureTeamColorAssigned({
-        id: existingAssignment.team.id,
-        realizationId: realization.id,
-        slotNumber: existingAssignment.team.slotNumber,
-        color: existingAssignment.team.color,
-      });
+      const customizationOccupancy =
+        await this.getCustomizationOccupancyByRealization(realization.id);
 
       return {
         sessionToken: rotatedSessionToken,
@@ -234,10 +234,11 @@ export class MobileService {
           id: existingAssignment.team.id,
           slotNumber: existingAssignment.team.slotNumber,
           name: existingAssignment.team.name,
-          color: resolvedColor,
-          badgeKey: existingAssignment.team.badgeKey,
+          color: existingAssignment.team.color,
+          badgeKey: this.normalizeTeamBadgeKey(existingAssignment.team.badgeKey),
           points: existingAssignment.team.points,
         },
+        customizationOccupancy,
         locationRequired: realization.locationRequired,
         refreshedAt: refreshed,
       };
@@ -248,17 +249,42 @@ export class MobileService {
       orderBy: { slotNumber: 'asc' },
     });
 
-    let selectedTeam = teams[0];
-    for (const candidate of teams) {
-      const activeCount = await this.prisma.teamAssignment.count({
+    const now = new Date();
+    let selectedTeam = existingAssignment?.team
+      ? teams.find((team) => team.id === existingAssignment.teamId) || teams[0]
+      : teams[0];
+
+    if (existingAssignment?.team && selectedTeam) {
+      const activeOnSelected = await this.prisma.teamAssignment.findMany({
         where: {
-          teamId: candidate.id,
-          expiresAt: { gt: new Date() },
+          teamId: selectedTeam.id,
+          expiresAt: { gt: now },
+          deviceId: { not: deviceId },
         },
+        select: { id: true },
       });
-      if (activeCount === 0) {
-        selectedTeam = candidate;
-        break;
+
+      if (activeOnSelected.length > 0) {
+        await this.prisma.teamAssignment.deleteMany({
+          where: {
+            id: { in: activeOnSelected.map((item) => item.id) },
+          },
+        });
+      }
+    }
+
+    if (!existingAssignment?.team) {
+      for (const candidate of teams) {
+        const activeCount = await this.prisma.teamAssignment.count({
+          where: {
+            teamId: candidate.id,
+            expiresAt: { gt: now },
+          },
+        });
+        if (activeCount === 0) {
+          selectedTeam = candidate;
+          break;
+        }
       }
     }
 
@@ -266,14 +292,18 @@ export class MobileService {
       throw new ConflictException('No free team slots');
     }
 
-    const resolvedColor = await this.ensureTeamColorAssigned({
-      id: selectedTeam.id,
-      realizationId: realization.id,
-      slotNumber: selectedTeam.slotNumber,
-      color: selectedTeam.color,
-    });
+    const customizationOccupancy =
+      await this.getCustomizationOccupancyByRealization(realization.id);
 
-    const now = new Date();
+    if (existingAssignment) {
+      await this.prisma.teamAssignment.deleteMany({
+        where: {
+          realizationId: realization.id,
+          deviceId,
+        },
+      });
+    }
+
     const sessionToken = this.generateSessionToken();
     const assignment = await this.prisma.teamAssignment.create({
       data: {
@@ -313,10 +343,11 @@ export class MobileService {
         id: selectedTeam.id,
         slotNumber: selectedTeam.slotNumber,
         name: selectedTeam.name,
-        color: resolvedColor,
-        badgeKey: selectedTeam.badgeKey,
+        color: selectedTeam.color,
+        badgeKey: this.normalizeTeamBadgeKey(selectedTeam.badgeKey),
         points: selectedTeam.points,
       },
+      customizationOccupancy,
       locationRequired: realization.locationRequired,
     };
   }
@@ -324,17 +355,15 @@ export class MobileService {
   async getMobileSessionState(sessionToken: string) {
     const { assignment, team, realization } =
       await this.requireSession(sessionToken);
-    const resolvedColor = await this.ensureTeamColorAssigned({
-      id: team.id,
-      realizationId: realization.id,
-      slotNumber: team.slotNumber,
-      color: team.color,
-    });
     const taskProgress = await this.prisma.teamTaskProgress.findMany({
       where: {
         realizationId: realization.id,
         teamId: team.id,
       },
+    });
+    const failedStationIds = await this.getFailedTaskStationIds({
+      realizationId: realization.id,
+      teamId: team.id,
     });
 
     const tasks = realization.stationIds.map((stationId) => {
@@ -343,7 +372,9 @@ export class MobileService {
       );
       return {
         stationId,
-        status: this.fromTaskStatus(progress?.status) || 'todo',
+        status:
+          this.fromTaskStatus(progress?.status, failedStationIds.has(stationId)) ||
+          'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
@@ -353,6 +384,8 @@ export class MobileService {
     const eventLogCount = await this.prisma.eventLog.count({
       where: { realizationId: realization.id },
     });
+    const customizationOccupancy =
+      await this.getCustomizationOccupancyByRealization(realization.id);
     const normalizedRealizationStatus = this.normalizeStatus(
       realization.status,
       realization.scheduledAt,
@@ -373,6 +406,7 @@ export class MobileService {
         id: realization.id,
         companyName: realization.companyName,
         introText: realization.introText,
+        gameRules: realization.gameRules,
         contactPerson: realization.contactPerson,
         contactPhone: realization.contactPhone,
         contactEmail: realization.contactEmail,
@@ -413,11 +447,12 @@ export class MobileService {
         id: team.id,
         slotNumber: team.slotNumber,
         name: team.name,
-        color: resolvedColor,
-        badgeKey: team.badgeKey,
+        color: team.color,
+        badgeKey: this.normalizeTeamBadgeKey(team.badgeKey),
         points: team.points,
         lastLocation: this.toLastLocation(team),
       },
+      customizationOccupancy,
       tasks,
       meta: {
         sessionExpiresAt: assignment.expiresAt.toISOString(),
@@ -440,15 +475,13 @@ export class MobileService {
     const requestedColor = input.color?.trim();
     const color = requestedColor
       ? this.parseTeamColor(requestedColor)
-      : await this.ensureTeamColorAssigned({
-          id: team.id,
-          realizationId: realization.id,
-          slotNumber: team.slotNumber,
-          color: team.color,
-        });
+      : this.normalizeTeamColor(team.color);
 
     if (!teamName) {
       throw new BadRequestException('Team name is required');
+    }
+    if (!color) {
+      throw new BadRequestException('Team color is required');
     }
 
     const peers = await this.prisma.team.findMany({
@@ -471,13 +504,23 @@ export class MobileService {
     }
 
     const changedFields: string[] = [];
+    const normalizedCurrentBadgeKey = this.normalizeTeamBadgeKey(team.badgeKey);
     if (team.name !== teamName) changedFields.push('name');
     if (team.color !== color) changedFields.push('color');
 
-    const nextBadgeKey = input.badgeKey?.trim() || null;
+    const nextBadgeKey = this.normalizeTeamBadgeKey(input.badgeKey);
     const nextBadgeImageUrl = input.badgeImageUrl?.trim() || null;
     if (
-      team.badgeKey !== nextBadgeKey ||
+      nextBadgeKey &&
+      peers.some(
+        (item) => this.normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
+      )
+    ) {
+      throw new ConflictException('Team icon already taken');
+    }
+
+    if (
+      normalizedCurrentBadgeKey !== nextBadgeKey ||
       team.badgeImageUrl !== nextBadgeImageUrl
     ) {
       changedFields.push('badge');
@@ -502,6 +545,8 @@ export class MobileService {
       eventType: 'team_profile_updated',
       payload: { changedFields },
     });
+    const customizationOccupancy =
+      await this.getCustomizationOccupancyByRealization(realization.id);
 
     return {
       teamId: team.id,
@@ -509,6 +554,94 @@ export class MobileService {
       color,
       badgeKey: nextBadgeKey,
       changedFields,
+      customizationOccupancy,
+    };
+  }
+
+  async updateMobileTeamCustomization(input: {
+    sessionToken: string;
+    color?: string;
+    badgeKey?: string;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+    const hasColorInput = typeof input.color !== 'undefined';
+    const hasBadgeKeyInput = typeof input.badgeKey !== 'undefined';
+    const requestedColor = input.color?.trim();
+    const requestedBadgeKey = input.badgeKey?.trim();
+    const currentColor = this.normalizeTeamColor(team.color);
+    const currentBadgeKey = this.normalizeTeamBadgeKey(team.badgeKey);
+
+    const nextColor = hasColorInput
+      ? (() => {
+          if (!requestedColor) {
+            throw new BadRequestException('Team color is required');
+          }
+          return this.parseTeamColor(requestedColor);
+        })()
+      : currentColor;
+    const nextBadgeKey = hasBadgeKeyInput
+      ? this.normalizeTeamBadgeKey(requestedBadgeKey)
+      : currentBadgeKey;
+
+    const peers = await this.prisma.team.findMany({
+      where: {
+        realizationId: realization.id,
+        id: { not: team.id },
+      },
+    });
+
+    if (
+      hasColorInput &&
+      nextColor &&
+      peers.some((item) => item.color === nextColor)
+    ) {
+      throw new ConflictException('Team color already taken');
+    }
+    if (
+      hasBadgeKeyInput &&
+      nextBadgeKey &&
+      peers.some(
+        (item) => this.normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
+      )
+    ) {
+      throw new ConflictException('Team icon already taken');
+    }
+
+    const changedFields: string[] = [];
+    if (currentColor !== nextColor) changedFields.push('color');
+    if (currentBadgeKey !== nextBadgeKey) changedFields.push('badge');
+
+    await this.prisma.team.update({
+      where: { id: team.id },
+      data: {
+        color: nextColor,
+        badgeKey: nextBadgeKey,
+        status: TeamStatus.ACTIVE,
+      },
+    });
+
+    if (changedFields.length > 0) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'team_customization_updated',
+        payload: { changedFields },
+      });
+    }
+
+    const customizationOccupancy =
+      await this.getCustomizationOccupancyByRealization(realization.id);
+
+    return {
+      teamId: team.id,
+      color: nextColor,
+      badgeKey: nextBadgeKey,
+      changedFields,
+      customizationOccupancy,
     };
   }
 
@@ -575,22 +708,19 @@ export class MobileService {
       });
     }
 
-    const resolvedColor = await this.ensureTeamColorAssigned({
-      id: requestedTeam.id,
-      realizationId: realization.id,
-      slotNumber: requestedTeam.slotNumber,
-      color: requestedTeam.color,
-    });
+    const customizationOccupancy =
+      await this.getCustomizationOccupancyByRealization(realization.id);
 
     return {
       team: {
         id: requestedTeam.id,
         slotNumber: requestedTeam.slotNumber,
         name: requestedTeam.name,
-        color: resolvedColor,
-        badgeKey: requestedTeam.badgeKey,
+        color: requestedTeam.color,
+        badgeKey: this.normalizeTeamBadgeKey(requestedTeam.badgeKey),
         points: requestedTeam.points,
       },
+      customizationOccupancy,
       reassignment: {
         replacedExistingAssignment: replacementCount > 0,
         replacedAssignments: replacementCount,
@@ -627,8 +757,14 @@ export class MobileService {
 
     const randomName =
       availableNames[Math.floor(Math.random() * availableNames.length)];
+    const usedBadgeKeys = new Set(
+      peers.map((item) => this.toLowerSafe(item.badgeKey)).filter(Boolean),
+    );
+    const availableBadgeKeys = BADGE_KEYS.filter(
+      (badgeKey) => !usedBadgeKeys.has(badgeKey.toLowerCase()),
+    );
     const randomBadgeKey =
-      BADGE_KEYS[Math.floor(Math.random() * BADGE_KEYS.length)];
+      availableBadgeKeys[Math.floor(Math.random() * availableBadgeKeys.length)];
 
     if (!randomName || !randomBadgeKey) {
       throw new ConflictException('Randomization failed');
@@ -1016,6 +1152,132 @@ export class MobileService {
     };
   }
 
+  async failMobileTask(input: {
+    sessionToken: string;
+    stationId: string;
+    reason?: string;
+    startedAt?: string;
+    finishedAt?: string;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+
+    if (!input.stationId?.trim()) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    if (!realization.stationIds.includes(input.stationId)) {
+      throw new BadRequestException(
+        'Station not available in this realization',
+      );
+    }
+
+    const finishedAt = this.parseIsoOrNow(input.finishedAt);
+    if (!finishedAt) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const station = await this.stationService.findStationById(input.stationId);
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
+
+    const existingProgress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+    });
+
+    if (existingProgress?.status === TaskStatus.DONE) {
+      const failedStationIds = await this.getFailedTaskStationIds({
+        realizationId: realization.id,
+        teamId: team.id,
+      });
+      if (failedStationIds.has(input.stationId)) {
+        return {
+          teamId: team.id,
+          stationId: input.stationId,
+          pointsTotal: team.points,
+          pointsAwarded: 0,
+          taskStatus: 'failed' as const,
+        };
+      }
+      throw new ConflictException('Task already completed');
+    }
+
+    const startedAtIso = this.parseIsoOrNow(input.startedAt);
+    if (input.startedAt && !startedAtIso) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const startedAtSource =
+      existingProgress?.startedAt?.toISOString() || startedAtIso || null;
+    const failureReason = this.resolveTaskFailureReason(input.reason);
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.DONE,
+          pointsAwarded: 0,
+          startedAt: existingProgress.startedAt
+            ? existingProgress.startedAt
+            : startedAtSource
+              ? new Date(startedAtSource)
+              : null,
+          finishedAt: new Date(finishedAt),
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+          status: TaskStatus.DONE,
+          pointsAwarded: 0,
+          startedAt: startedAtSource ? new Date(startedAtSource) : null,
+          finishedAt: new Date(finishedAt),
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: assignment.deviceId,
+      eventType: 'task_failed',
+      payload: {
+        stationId: input.stationId,
+        stationType: station.type,
+        reason: failureReason.code,
+        reasonLabel: failureReason.label,
+        reasonRaw: failureReason.raw,
+        startedAt: startedAtSource,
+        finishedAt,
+      },
+    });
+
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
+
+    return {
+      teamId: team.id,
+      stationId: input.stationId,
+      pointsTotal,
+      pointsAwarded: 0,
+      taskStatus: 'failed' as const,
+    };
+  }
+
   async getMobileAdminStationQrs(realizationId: string, ttlSeconds?: number) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
@@ -1148,6 +1410,10 @@ export class MobileService {
         },
       },
     });
+    const failedStationIds = await this.getFailedTaskStationIds({
+      realizationId: realization.id,
+      teamId: team.id,
+    });
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -1188,7 +1454,9 @@ export class MobileService {
       },
       task: {
         stationId: station.id,
-        status: this.fromTaskStatus(progress?.status) || 'todo',
+        status:
+          this.fromTaskStatus(progress?.status, failedStationIds.has(station.id)) ||
+          'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
@@ -1232,6 +1500,36 @@ export class MobileService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    const latestTaskOutcomeByTeam = new Map<
+      string,
+      Map<string, 'failed' | 'done'>
+    >();
+    for (const log of logs) {
+      if (
+        !log.teamId ||
+        (log.eventType !== 'task_failed' && log.eventType !== 'task_completed')
+      ) {
+        continue;
+      }
+
+      const stationId = this.parseStationIdFromEventPayload(log.payload);
+      if (!stationId) {
+        continue;
+      }
+
+      const teamOutcome =
+        latestTaskOutcomeByTeam.get(log.teamId) || new Map<string, 'failed' | 'done'>();
+      if (!latestTaskOutcomeByTeam.has(log.teamId)) {
+        latestTaskOutcomeByTeam.set(log.teamId, teamOutcome);
+      }
+
+      if (!teamOutcome.has(stationId)) {
+        teamOutcome.set(
+          stationId,
+          log.eventType === 'task_failed' ? 'failed' : 'done',
+        );
+      }
+    }
 
     const teamViews = teams.map((team) => {
       const teamAssignments = assignments.filter(
@@ -1243,16 +1541,18 @@ export class MobileService {
         const progress = taskProgresses.find(
           (item) => item.stationId === stationId && item.teamId === team.id,
         );
+        const isFailed =
+          latestTaskOutcomeByTeam.get(team.id)?.get(stationId) === 'failed';
 
         return {
           stationId,
-          status: this.fromTaskStatus(progress?.status) || 'todo',
+          status: this.fromTaskStatus(progress?.status, isFailed) || 'todo',
           pointsAwarded: progress?.pointsAwarded || 0,
           finishedAt: progress?.finishedAt?.toISOString() || null,
         };
       });
       const doneTasksCount = tasks.filter(
-        (task) => task.status === 'done',
+        (task) => task.status === 'done' || task.status === 'failed',
       ).length;
 
       return {
@@ -1286,11 +1586,12 @@ export class MobileService {
     });
 
     return {
-      realization: {
-        id: realization.id,
-        companyName: realization.companyName,
-        introText: realization.introText,
-        status: normalizedRealizationStatus,
+        realization: {
+          id: realization.id,
+          companyName: realization.companyName,
+          introText: realization.introText,
+          gameRules: realization.gameRules,
+          status: normalizedRealizationStatus,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
@@ -1328,7 +1629,10 @@ export class MobileService {
           .length,
         completedTasks: teamViews.reduce(
           (sum, team) =>
-            sum + team.tasks.filter((task) => task.status === 'done').length,
+            sum +
+            team.tasks.filter(
+              (task) => task.status === 'done' || task.status === 'failed',
+            ).length,
           0,
         ),
         pointsTotal: teamViews.reduce((sum, team) => sum + team.points, 0),
@@ -1653,6 +1957,7 @@ export class MobileService {
       id: item.id,
       companyName: item.companyName,
       introText: item.introText,
+      gameRules: item.gameRules,
       status: this.normalizeStatus(
         item.status,
         item.scheduledAt,
@@ -1662,7 +1967,7 @@ export class MobileService {
       durationMinutes: item.durationMinutes,
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
-      joinCode: item.joinCode || TEST_JOIN_CODE,
+      joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
       createdAt: item.createdAt,
@@ -1747,28 +2052,6 @@ export class MobileService {
           taskDone: 0,
           status: TeamStatus.UNASSIGNED,
         },
-      });
-    }
-  }
-
-  private async resetMobileStateFromRealizationSnapshot() {
-    await this.prisma.teamTaskProgress.deleteMany();
-    await this.prisma.teamAssignment.deleteMany();
-    await this.prisma.eventLog.deleteMany({
-      where: {
-        actorType: {
-          in: [EventActorType.MOBILE_DEVICE, EventActorType.SYSTEM],
-        },
-      },
-    });
-    await this.prisma.team.deleteMany();
-
-    const realizations = await this.realizationService.listRealizations();
-    for (const realization of realizations) {
-      await this.ensureTeamsForRealization({
-        id: realization.id,
-        teamCount: realization.teamCount,
-        stationIds: realization.stationIds,
       });
     }
   }
@@ -2032,43 +2315,42 @@ export class MobileService {
     return TEAM_COLORS.includes(color as TeamColor) ? (color as TeamColor) : null;
   }
 
-  private async ensureTeamColorAssigned(input: {
-    id: string;
-    realizationId: string;
-    slotNumber: number;
-    color?: string | null;
-  }) {
-    const normalized = this.normalizeTeamColor(input.color);
-    if (normalized) {
-      return normalized;
+  private async getCustomizationOccupancyByRealization(realizationId: string) {
+    const teams = await this.prisma.team.findMany({
+      where: { realizationId },
+      select: {
+        slotNumber: true,
+        color: true,
+        badgeKey: true,
+      },
+      orderBy: { slotNumber: 'asc' },
+    });
+
+    const colors: Partial<Record<TeamColor, number>> = {};
+    const icons: Record<string, number> = {};
+    for (const item of teams) {
+      const normalizedColor = this.normalizeTeamColor(item.color);
+      if (normalizedColor && typeof colors[normalizedColor] !== 'number') {
+        colors[normalizedColor] = item.slotNumber;
+      }
+
+      const normalizedBadgeKey = item.badgeKey?.trim();
+      const normalizedIcon = this.normalizeTeamBadgeKey(normalizedBadgeKey);
+      if (normalizedIcon && typeof icons[normalizedIcon] !== 'number') {
+        icons[normalizedIcon] = item.slotNumber;
+      }
     }
 
-    const peers = await this.prisma.team.findMany({
-      where: {
-        realizationId: input.realizationId,
-        id: { not: input.id },
-      },
-      select: {
-        color: true,
-      },
-    });
-    const usedColors = new Set(
-      peers
-        .map((item) => this.normalizeTeamColor(item.color))
-        .filter((value): value is TeamColor => Boolean(value)),
-    );
-    const availableColors = TEAM_COLORS.filter((color) => !usedColors.has(color));
-    const fallbackIndex =
-      (Math.max(1, Number(input.slotNumber) || 1) - 1) % TEAM_COLORS.length;
-    const assignedColor =
-      availableColors[0] || TEAM_COLORS[fallbackIndex] || TEAM_COLORS[0];
+    return { colors, icons };
+  }
 
-    await this.prisma.team.update({
-      where: { id: input.id },
-      data: { color: assignedColor },
-    });
+  private normalizeTeamBadgeKey(value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      return null;
+    }
 
-    return assignedColor;
+    return LEGACY_BADGE_KEY_TO_ICON[trimmed] || trimmed;
   }
 
   private async emitEvent(log: {
@@ -2250,7 +2532,98 @@ export class MobileService {
     };
   }
 
-  private fromTaskStatus(status?: TaskStatus | null) {
+  private parseStationIdFromEventPayload(payload: unknown) {
+    const source =
+      typeof payload === 'object' && payload !== null
+        ? (payload as Record<string, unknown>)
+        : null;
+    const stationId = source?.stationId;
+    return typeof stationId === 'string' && stationId.trim().length > 0
+      ? stationId.trim()
+      : null;
+  }
+
+  private resolveTaskFailureReason(reason?: string) {
+    const raw = reason?.trim() || null;
+    const normalized = raw?.toLowerCase() || '';
+
+    if (normalized === 'quiz_incorrect_answer') {
+      return {
+        code: 'quiz_incorrect_answer',
+        label: 'Błędna odpowiedź quizu',
+        raw,
+      } as const;
+    }
+
+    if (normalized === 'time_limit_expired') {
+      return {
+        code: 'time_limit_expired',
+        label: 'Przekroczony limit czasu',
+        raw,
+      } as const;
+    }
+
+    if (normalized === 'task_closed_before_completion') {
+      return {
+        code: 'task_closed_before_completion',
+        label: 'Zamknięto zadanie przed ukończeniem',
+        raw,
+      } as const;
+    }
+
+    if (!raw) {
+      return {
+        code: 'manual_fail',
+        label: 'Oznaczono jako niezaliczone',
+        raw: null,
+      } as const;
+    }
+
+    return {
+      code: 'custom_fail_reason',
+      label: 'Niestandardowy powód niezaliczenia',
+      raw,
+    } as const;
+  }
+
+  private async getFailedTaskStationIds(input: {
+    realizationId: string;
+    teamId: string;
+  }) {
+    const logs = await this.prisma.eventLog.findMany({
+      where: {
+        realizationId: input.realizationId,
+        teamId: input.teamId,
+        eventType: {
+          in: ['task_failed', 'task_completed'],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        eventType: true,
+        payload: true,
+      },
+    });
+
+    const failed = new Set<string>();
+    const decided = new Set<string>();
+    for (const log of logs) {
+      const stationId = this.parseStationIdFromEventPayload(log.payload);
+      if (!stationId || decided.has(stationId)) {
+        continue;
+      }
+
+      decided.add(stationId);
+      if (log.eventType === 'task_failed') {
+        failed.add(stationId);
+      }
+    }
+
+    return failed;
+  }
+
+  private fromTaskStatus(status?: TaskStatus | null, failed = false) {
+    if (failed) return 'failed' as const;
     if (!status || status === TaskStatus.TODO) return 'todo' as const;
     if (status === TaskStatus.IN_PROGRESS) return 'in-progress' as const;
     return 'done' as const;

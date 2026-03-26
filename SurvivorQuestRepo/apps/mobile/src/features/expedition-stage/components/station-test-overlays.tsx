@@ -39,6 +39,7 @@ type StationPreviewOverlayProps = {
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string) => void;
   onQuizPassed?: (stationId: string) => void;
+  onTimeExpired?: (stationId: string) => void;
 };
 
 type QuizPrestartOverlayProps = {
@@ -50,7 +51,23 @@ type QuizPrestartOverlayProps = {
   onClose: () => void;
 };
 
+type IntroBlock = {
+  kind: "paragraph" | "unordered" | "ordered";
+  text: string;
+  order?: number;
+};
+
+type IntroInlinePart = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+};
+
 function getStatusLabel(status: ExpeditionTaskStatus, quizFailed = false) {
+  if (status === "failed") {
+    return "Niezaliczone";
+  }
+
   if (quizFailed && status !== "done") {
     return "Niezaliczone";
   }
@@ -67,6 +84,10 @@ function getStatusLabel(status: ExpeditionTaskStatus, quizFailed = false) {
 }
 
 function getStatusColor(status: ExpeditionTaskStatus, quizFailed = false) {
+  if (status === "failed") {
+    return "#fca5a5";
+  }
+
   if (quizFailed && status !== "done") {
     return "#fca5a5";
   }
@@ -84,6 +105,62 @@ function getStatusColor(status: ExpeditionTaskStatus, quizFailed = false) {
 
 function getCodePlaceholder(stationType: StationTestType) {
   return stationType === "time" ? "np. TIME-2048" : "np. POINTS-2048";
+}
+
+function parseIntroBlocks(rawText: string): IntroBlock[] {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  return lines.map((line) => {
+    const unorderedMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (unorderedMatch) {
+      return { kind: "unordered", text: unorderedMatch[1].trim() };
+    }
+
+    const orderedMatch = /^(\d+)\.\s+(.*)$/.exec(line);
+    if (orderedMatch) {
+      return {
+        kind: "ordered",
+        order: Number(orderedMatch[1]),
+        text: orderedMatch[2].trim(),
+      };
+    }
+
+    return { kind: "paragraph", text: line.trim() };
+  });
+}
+
+function parseIntroInline(text: string): IntroInlinePart[] {
+  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const parts: IntroInlinePart[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(tokenPattern)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, index) });
+    }
+
+    if (token.startsWith("**") && token.endsWith("**")) {
+      parts.push({ text: token.slice(2, -2), bold: true });
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      parts.push({ text: token.slice(1, -1), italic: true });
+    } else {
+      parts.push({ text: token });
+    }
+
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex) });
+  }
+
+  return parts;
 }
 
 const NUMERIC_PINPAD_LAYOUT = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "backspace", "0", "submit"] as const;
@@ -217,6 +294,7 @@ export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePr
   if (!visible) {
     return null;
   }
+  const blocks = parseIntroBlocks(introText?.trim() || "");
 
   return (
     <View className="absolute inset-0 z-50 items-center justify-center px-4" style={{ backgroundColor: "rgba(15, 25, 20, 0.78)" }}>
@@ -227,9 +305,43 @@ export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePr
         <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
           Tekst wstępu
         </Text>
-        <Text className="mt-3 text-sm leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
-          {introText?.trim() || "Brak tekstu wstępu dla tej realizacji."}
-        </Text>
+        {blocks.length === 0 ? (
+          <Text className="mt-3 text-sm leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            Brak tekstu wstępu dla tej realizacji.
+          </Text>
+        ) : (
+          <View className="mt-3">
+            {blocks.map((block, blockIndex) => {
+              const parts = parseIntroInline(block.text);
+              const prefix = block.kind === "unordered" ? "• " : block.kind === "ordered" ? `${block.order ?? 1}. ` : "";
+
+              return (
+                <Text
+                  key={`intro-${block.kind}-${blockIndex}`}
+                  className="mb-1 text-sm leading-6"
+                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                >
+                  {prefix ? (
+                    <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                      {prefix}
+                    </Text>
+                  ) : null}
+                  {parts.map((part, partIndex) => (
+                    <Text
+                      key={`intro-${blockIndex}-${partIndex}`}
+                      style={{
+                        fontWeight: part.bold ? "700" : "400",
+                        fontStyle: part.italic ? "italic" : "normal",
+                      }}
+                    >
+                      {part.text}
+                    </Text>
+                  ))}
+                </Text>
+              );
+            })}
+          </View>
+        )}
 
         <Pressable
           className="mt-4 rounded-xl border px-3 py-2 active:opacity-90"
@@ -413,6 +525,7 @@ export function StationPreviewOverlay({
   onCompleteTask,
   onQuizFailed,
   onQuizPassed,
+  onTimeExpired,
 }: StationPreviewOverlayProps) {
   const { height: viewportHeight } = useWindowDimensions();
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
@@ -520,7 +633,8 @@ export function StationPreviewOverlay({
       !displayedStation ||
       !displayedStation.startedAt ||
       displayedStation.timeLimitSeconds <= 0 ||
-      displayedStation.status === "done"
+      displayedStation.status === "done" ||
+      displayedStation.status === "failed"
     ) {
       return;
     }
@@ -566,7 +680,8 @@ export function StationPreviewOverlay({
   const hasCountdownForPulse = Boolean(
     displayedStation?.startedAt &&
       displayedStation.timeLimitSeconds > 0 &&
-      displayedStation.status !== "done",
+      displayedStation.status !== "done" &&
+      displayedStation.status !== "failed",
   );
   const hasTimerStartedForPulse = Boolean(displayedStation?.startedAt);
   const stationStatusForPulse = displayedStation?.status;
@@ -580,6 +695,7 @@ export function StationPreviewOverlay({
       !hasCountdownForPulse ||
       !hasTimerStartedForPulse ||
       stationStatusForPulse === "done" ||
+      stationStatusForPulse === "failed" ||
       remainingTimeSeconds === null
     ) {
       return;
@@ -621,7 +737,12 @@ export function StationPreviewOverlay({
       return;
     }
 
-    if (!displayedStation.startedAt || displayedStation.timeLimitSeconds <= 0 || displayedStation.status === "done") {
+    if (
+      !displayedStation.startedAt ||
+      displayedStation.timeLimitSeconds <= 0 ||
+      displayedStation.status === "done" ||
+      displayedStation.status === "failed"
+    ) {
       return;
     }
 
@@ -648,6 +769,44 @@ export function StationPreviewOverlay({
     onQuizFailed,
     remainingTimeSeconds,
     selectedQuizOption,
+  ]);
+
+  useEffect(() => {
+    if (!displayedStation || displayedStation.stationType === "quiz") {
+      return;
+    }
+
+    if (
+      !displayedStation.startedAt ||
+      displayedStation.timeLimitSeconds <= 0 ||
+      displayedStation.status === "done" ||
+      displayedStation.status === "failed"
+    ) {
+      return;
+    }
+
+    if (remainingTimeSeconds === null || remainingTimeSeconds > 0) {
+      return;
+    }
+
+    if (isSubmittingCode || timeoutPopupShownRef.current) {
+      return;
+    }
+
+    timeoutPopupShownRef.current = true;
+    onTimeExpired?.(displayedStation.stationId);
+    Alert.alert("Czas minął", "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.", [
+      {
+        text: "Wróć do mapy",
+        onPress: onClose,
+      },
+    ]);
+  }, [
+    displayedStation,
+    isSubmittingCode,
+    onClose,
+    onTimeExpired,
+    remainingTimeSeconds,
   ]);
 
   if (!isOverlayMounted || !displayedStation) {
@@ -716,8 +875,19 @@ export function StationPreviewOverlay({
       : undefined;
   const executionTimeLabel = remainingTimeLabel ?? station.timeLimitLabel;
   const shouldShowExecutionTimer = executionTimeLabel.trim().length > 0;
+  const hasTimedLimit = station.timeLimitSeconds > 0;
+  const isTimeExpired =
+    hasTimedLimit &&
+    hasTimerStarted &&
+    remainingTimeSeconds !== null &&
+    remainingTimeSeconds <= 0;
   const isCodeActionDisabled =
-    station.status === "done" || isSubmittingCode || isCodeInputSuccess || (isTimeStation && !hasTimerStarted);
+    station.status === "done" ||
+    station.status === "failed" ||
+    isSubmittingCode ||
+    isCodeInputSuccess ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired;
   const codeInputShakeStyle = {
     transform: [{ translateX: codeInputShakeAnimation }],
   } as const;
@@ -998,7 +1168,12 @@ export function StationPreviewOverlay({
                               setIsSubmittingQuizAnswer(false);
                             });
                         }}
-                        disabled={selectedQuizOption !== null || isSubmittingQuizAnswer}
+                        disabled={
+                          selectedQuizOption !== null ||
+                          isSubmittingQuizAnswer ||
+                          station.status === "done" ||
+                          station.status === "failed"
+                        }
                       >
                         <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                           {option}
@@ -1179,11 +1354,15 @@ export function StationPreviewOverlay({
                        }}
                       placeholder={getCodePlaceholder(station.stationType)}
                       placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      value={verificationCode}
-                      editable={station.status !== "done" && (!isTimeStation || hasTimerStarted)}
-                      onChangeText={(value) => {
+                       autoCapitalize="characters"
+                       autoCorrect={false}
+                         value={verificationCode}
+                         editable={
+                           station.status !== "done" &&
+                           station.status !== "failed" &&
+                           (!hasTimedLimit || (hasTimerStarted && !isTimeExpired))
+                         }
+                       onChangeText={(value) => {
                         setVerificationCode(value);
                         setIsCodeInputInvalid(false);
                         setIsCodeInputSuccess(false);

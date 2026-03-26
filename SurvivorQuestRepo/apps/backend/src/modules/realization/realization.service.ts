@@ -95,6 +95,7 @@ export class RealizationService {
         language: toPrismaRealizationLanguage(validated.language),
         customLanguage: validated.customLanguage,
         introText: validated.introText,
+        gameRules: validated.gameRules,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -188,6 +189,9 @@ export class RealizationService {
         customLanguage: validated.customLanguage,
         introText: Object.prototype.hasOwnProperty.call(payload, 'introText')
           ? validated.introText ?? null
+          : undefined,
+        gameRules: Object.prototype.hasOwnProperty.call(payload, 'gameRules')
+          ? validated.gameRules ?? null
           : undefined,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,

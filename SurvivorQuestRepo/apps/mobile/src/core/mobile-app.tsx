@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import type { OnboardingSession } from "../features/onboarding/model/types";
@@ -20,6 +20,200 @@ type OnboardingRecoveryIntent = {
   apiBaseUrl: string | null;
   notice: string;
 };
+
+type RulesBlock = {
+  kind: "paragraph" | "unordered" | "ordered";
+  text: string;
+  order?: number;
+};
+
+type InlineRulesPart = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+};
+
+function parseRulesBlocks(rawText: string): RulesBlock[] {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  return lines.map((line) => {
+    const unorderedMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (unorderedMatch) {
+      return { kind: "unordered", text: unorderedMatch[1].trim() };
+    }
+
+    const orderedMatch = /^(\d+)\.\s+(.*)$/.exec(line);
+    if (orderedMatch) {
+      return {
+        kind: "ordered",
+        order: Number(orderedMatch[1]),
+        text: orderedMatch[2].trim(),
+      };
+    }
+
+    return { kind: "paragraph", text: line.trim() };
+  });
+}
+
+function parseInlineRules(text: string): InlineRulesPart[] {
+  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const parts: InlineRulesPart[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(tokenPattern)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, index) });
+    }
+
+    if (token.startsWith("**") && token.endsWith("**")) {
+      parts.push({ text: token.slice(2, -2), bold: true });
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      parts.push({ text: token.slice(1, -1), italic: true });
+    } else {
+      parts.push({ text: token });
+    }
+
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex) });
+  }
+
+  return parts;
+}
+
+type GameRulesScreenProps = {
+  rulesText: string;
+  onClose: () => void;
+};
+
+function GameRulesPopup({ rulesText, onClose }: GameRulesScreenProps) {
+  const blocks = parseRulesBlocks(rulesText);
+
+  return (
+    <View
+      className="absolute inset-0 items-center justify-center px-5"
+      style={{ backgroundColor: "rgba(5, 10, 8, 0.58)" }}
+    >
+      <View
+        className="w-full max-w-[380px] rounded-3xl border px-4 py-4"
+        style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+      >
+        <Text className="text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+          Zasady gry
+        </Text>
+
+        <ScrollView
+          className="mt-2 rounded-2xl border px-3 py-3"
+          style={{
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panelMuted,
+            maxHeight: 280,
+          }}
+        >
+          {blocks.length === 0 ? (
+            <Text className="text-xs leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
+              Brak zasad gry dla tej realizacji.
+            </Text>
+          ) : (
+            blocks.map((block, blockIndex) => {
+              const parts = parseInlineRules(block.text);
+              const prefix = block.kind === "unordered" ? "• " : block.kind === "ordered" ? `${block.order ?? 1}. ` : "";
+
+              return (
+                <Text
+                  key={`${block.kind}-${blockIndex}`}
+                  className="mb-1.5 text-xs leading-5"
+                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                >
+                  {prefix ? (
+                    <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                      {prefix}
+                    </Text>
+                  ) : null}
+                  {parts.map((part, partIndex) => (
+                    <Text
+                      key={`${blockIndex}-${partIndex}`}
+                      style={{
+                        fontWeight: part.bold ? "700" : "400",
+                        fontStyle: part.italic ? "italic" : "normal",
+                      }}
+                    >
+                      {part.text}
+                    </Text>
+                  ))}
+                </Text>
+              );
+            })
+          )}
+        </ScrollView>
+
+        <Pressable
+          className="mt-3 rounded-2xl border px-4 py-2.5"
+          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+          onPress={onClose}
+        >
+          <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            Zamknij
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function IntroTextPreview({ text }: { text: string }) {
+  const blocks = parseRulesBlocks(text);
+
+  if (blocks.length === 0) {
+    return (
+      <Text className="mt-3 text-base leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
+        Przygotujcie się do gry. Czekajcie na globalny start aplikacji od administratora.
+      </Text>
+    );
+  }
+
+  return (
+    <View className="mt-3">
+      {blocks.map((block, blockIndex) => {
+        const parts = parseInlineRules(block.text);
+        const prefix = block.kind === "unordered" ? "• " : block.kind === "ordered" ? `${block.order ?? 1}. ` : "";
+
+        return (
+          <Text
+            key={`intro-${block.kind}-${blockIndex}`}
+            className="mb-1 text-base leading-6"
+            style={{ color: EXPEDITION_THEME.textPrimary }}
+          >
+            {prefix ? (
+              <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                {prefix}
+              </Text>
+            ) : null}
+            {parts.map((part, partIndex) => (
+              <Text
+                key={`intro-${blockIndex}-${partIndex}`}
+                style={{
+                  fontWeight: part.bold ? "700" : "400",
+                  fontStyle: part.italic ? "italic" : "normal",
+                }}
+              >
+                {part.text}
+              </Text>
+            ))}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}
 
 export function MobileApp() {
   const [onboardingSession, setOnboardingSession] = useState<OnboardingSession | null>(null);
@@ -125,16 +319,20 @@ export function MobileApp() {
         }
 
         if (nextState.realization.status === "in-progress") {
+          const nextGameRules =
+            nextState.realization.gameRules ?? onboardingSession.realization?.gameRules;
           const nextSession: OnboardingSession = {
             ...onboardingSession,
             awaitingAdminStart: false,
+            showGameRulesAfterStart: Boolean(nextGameRules?.trim()),
             realization: onboardingSession.realization
               ? {
                   ...onboardingSession.realization,
                   status: "in-progress",
                   introText: nextState.realization.introText ?? onboardingSession.realization.introText,
+                  gameRules: nextGameRules,
                 }
-              : onboardingSession.realization,
+              : null,
           };
           setIsWaitingForAdminStart(false);
           setWaitingError(null);
@@ -200,10 +398,7 @@ export function MobileApp() {
               <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
                 Tekst wstępu
               </Text>
-              <Text className="mt-3 text-base leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {onboardingSession.realization?.introText?.trim() ||
-                  "Przygotujcie się do gry. Czekajcie na globalny start aplikacji od administratora."}
-              </Text>
+              <IntroTextPreview text={onboardingSession.realization?.introText?.trim() || ""} />
               <View className="mt-5 flex-row items-center gap-2">
                 <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
                 <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
@@ -217,6 +412,13 @@ export function MobileApp() {
       </SafeAreaProvider>
     );
   }
+
+  const shouldShowRulesPopup = Boolean(
+    onboardingSession &&
+      !isWaitingForAdminStart &&
+      onboardingSession.showGameRulesAfterStart &&
+      onboardingSession.realization?.gameRules?.trim(),
+  );
 
   return (
     <SafeAreaProvider>
@@ -235,6 +437,19 @@ export function MobileApp() {
             onRecoveryConsumed={() => setRecoveryIntent(null)}
           />
         )}
+        {onboardingSession && shouldShowRulesPopup ? (
+          <GameRulesPopup
+            rulesText={onboardingSession.realization?.gameRules?.trim() || ""}
+            onClose={() => {
+              const nextSession: OnboardingSession = {
+                ...onboardingSession,
+                showGameRulesAfterStart: false,
+              };
+              setOnboardingSession(nextSession);
+              void AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+            }}
+          />
+        ) : null}
         <StatusBar style="light" />
       </SafeAreaView>
     </SafeAreaProvider>
