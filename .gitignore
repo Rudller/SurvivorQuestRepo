@@ -25,6 +25,9 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.production.example
+.env.production
+.env.production.local
 
 # logs
 npm-debug.log*
@@ -35,3 +38,9 @@ pnpm-debug.log*
 
 # OS
 .DS_Store
+
+# docker / deployment overrides
+docker-compose.override.yml
+docker-compose.local.yml
+.docker/
+.docker-data/

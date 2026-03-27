@@ -4,6 +4,13 @@
   "scripts": {
     "start": "pnpm --dir \"SurvivorQuestRepo\" start",
     "start:dev": "pnpm --dir \"SurvivorQuestRepo\" start:dev",
-    "dev": "pnpm --dir \"SurvivorQuestRepo\" dev:all"
+    "dev": "pnpm --dir \"SurvivorQuestRepo\" dev:all",
+    "docker:prod:build": "docker compose --env-file .env.production -f docker-compose.prod.yml build",
+    "docker:prod:up": "docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build",
+    "docker:prod:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down",
+    "docker:migrate": "docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend pnpm prisma migrate deploy",
+    "docker:dev:up": "docker compose -f docker-compose.dev.yml up -d --build",
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:dev:migrate": "docker compose -f docker-compose.dev.yml exec -T backend pnpm prisma migrate deploy"
   }
 }

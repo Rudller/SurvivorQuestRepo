@@ -116,6 +116,8 @@ type MobileApiError = {
   };
 };
 
+const MOBILE_API_REQUEST_TIMEOUT_MS = 7000;
+
 type MobileSessionStateResponse = {
   customizationOccupancy?: {
     colors?: Record<string, number>;
@@ -302,13 +304,32 @@ function resolveApiBaseUrlCandidates(overrideBaseUrl?: string | null) {
 }
 
 async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    timeoutController.abort();
+  }, MOBILE_API_REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      signal: timeoutController.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        `Timeout przy połączeniu z API (${baseUrl}). Sprawdź adres i sieć.`,
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 
@@ -1153,17 +1174,20 @@ export function RealizationOnboardingScreen({
       return;
     }
 
+    setApiBaseUrlOverride(normalized);
+    setApiBaseUrlDraft(normalized);
+    setApiConnectionTarget(normalized);
+    setApiConnectionStatus("checking");
+    triggerApiProbe();
+    setIsApiConfigOpen(false);
+
     try {
       await AsyncStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, normalized);
-      setApiBaseUrlOverride(normalized);
-      setApiBaseUrlDraft(normalized);
-      setApiConnectionTarget(normalized);
-      setApiConnectionStatus("checking");
-      triggerApiProbe();
       setApiConfigMessage("Zapisano adres serwera API.");
-      setIsApiConfigOpen(false);
     } catch {
-      setApiConfigMessage("Nie udało się zapisać adresu serwera.");
+      setApiConfigMessage(
+        "Adres ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
+      );
     }
   }
 
