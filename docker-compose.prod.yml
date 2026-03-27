@@ -2,7 +2,7 @@ name: survivorquest
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.6.6
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -44,7 +44,7 @@ services:
       NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
-      CORS_ORIGIN_ALLOWLIST: https://${DOMAIN}
+      CORS_ORIGIN_ALLOWLIST: https://${DOMAIN},https://www.${DOMAIN}
       AUTH_COOKIE_SAME_SITE: none
       AUTH_COOKIE_SECURE: "true"
       JOIN_CODE_PEPPER: ${JOIN_CODE_PEPPER}
@@ -61,7 +61,7 @@ services:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.routers.backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/api`)
       - traefik.http.routers.backend.entrypoints=websecure
       - traefik.http.routers.backend.tls=true
       - traefik.http.routers.backend.tls.certresolver=letsencrypt
@@ -84,7 +84,7 @@ services:
       - backend
     labels:
       - traefik.enable=true
-      - traefik.http.routers.admin.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.admin.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
       - traefik.http.routers.admin.entrypoints=websecure
       - traefik.http.routers.admin.tls=true
       - traefik.http.routers.admin.tls.certresolver=letsencrypt

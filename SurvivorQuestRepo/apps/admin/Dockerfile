@@ -27,4 +27,4 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3100
 
-CMD ["pnpm", "start", "--", "-p", "3100"]
+CMD ["pnpm", "exec", "next", "start", "-p", "3100"]
