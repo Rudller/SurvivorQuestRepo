@@ -27,11 +27,13 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.PROD_R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.PROD_R2_BUCKET }}
           R2_PUBLIC_BASE_URL: ${{ secrets.PROD_R2_PUBLIC_BASE_URL }}
+          PGADMIN_DEFAULT_EMAIL: ${{ secrets.PROD_PGADMIN_DEFAULT_EMAIL }}
+          PGADMIN_DEFAULT_PASSWORD: ${{ secrets.PROD_PGADMIN_DEFAULT_PASSWORD }}
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
-          envs: DOMAIN,LETSENCRYPT_EMAIL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,JOIN_CODE_PEPPER,STATION_QR_SECRET,JOIN_CODE_LEGACY_PEPPER,MOBILE_QR_ENTRY_BASE_URL,R2_ENDPOINT,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_BUCKET,R2_PUBLIC_BASE_URL
+          envs: DOMAIN,LETSENCRYPT_EMAIL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,JOIN_CODE_PEPPER,STATION_QR_SECRET,JOIN_CODE_LEGACY_PEPPER,MOBILE_QR_ENTRY_BASE_URL,R2_ENDPOINT,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_BUCKET,R2_PUBLIC_BASE_URL,PGADMIN_DEFAULT_EMAIL,PGADMIN_DEFAULT_PASSWORD
           script_stop: true
           script: |
             set -eu
@@ -41,22 +43,28 @@ jobs:
             git checkout main
             git pull --ff-only origin main
 
-            cat > .env.production <<EOF
-            DOMAIN=${DOMAIN}
-            LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
-            POSTGRES_DB=${POSTGRES_DB}
-            POSTGRES_USER=${POSTGRES_USER}
-            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-            JOIN_CODE_PEPPER=${JOIN_CODE_PEPPER}
-            STATION_QR_SECRET=${STATION_QR_SECRET}
-            JOIN_CODE_LEGACY_PEPPER=${JOIN_CODE_LEGACY_PEPPER}
-            MOBILE_QR_ENTRY_BASE_URL=${MOBILE_QR_ENTRY_BASE_URL}
-            R2_ENDPOINT=${R2_ENDPOINT}
-            R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-            R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-            R2_BUCKET=${R2_BUCKET}
-            R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL}
-            EOF
+            sanitize() {
+              printf '%s' "$1" | tr -d '\r\n'
+            }
+
+            {
+              printf 'DOMAIN=%s\n' "$(sanitize "${DOMAIN}")"
+              printf 'LETSENCRYPT_EMAIL=%s\n' "$(sanitize "${LETSENCRYPT_EMAIL}")"
+              printf 'POSTGRES_DB=%s\n' "$(sanitize "${POSTGRES_DB}")"
+              printf 'POSTGRES_USER=%s\n' "$(sanitize "${POSTGRES_USER}")"
+              printf 'POSTGRES_PASSWORD=%s\n' "$(sanitize "${POSTGRES_PASSWORD}")"
+              printf 'JOIN_CODE_PEPPER=%s\n' "$(sanitize "${JOIN_CODE_PEPPER}")"
+              printf 'STATION_QR_SECRET=%s\n' "$(sanitize "${STATION_QR_SECRET}")"
+              printf 'JOIN_CODE_LEGACY_PEPPER=%s\n' "$(sanitize "${JOIN_CODE_LEGACY_PEPPER}")"
+              printf 'MOBILE_QR_ENTRY_BASE_URL=%s\n' "$(sanitize "${MOBILE_QR_ENTRY_BASE_URL}")"
+              printf 'R2_ENDPOINT=%s\n' "$(sanitize "${R2_ENDPOINT}")"
+              printf 'R2_ACCESS_KEY_ID=%s\n' "$(sanitize "${R2_ACCESS_KEY_ID}")"
+              printf 'R2_SECRET_ACCESS_KEY=%s\n' "$(sanitize "${R2_SECRET_ACCESS_KEY}")"
+              printf 'R2_BUCKET=%s\n' "$(sanitize "${R2_BUCKET}")"
+              printf 'R2_PUBLIC_BASE_URL=%s\n' "$(sanitize "${R2_PUBLIC_BASE_URL}")"
+              printf 'PGADMIN_DEFAULT_EMAIL=%s\n' "$(sanitize "${PGADMIN_DEFAULT_EMAIL}")"
+              printf 'PGADMIN_DEFAULT_PASSWORD=%s\n' "$(sanitize "${PGADMIN_DEFAULT_PASSWORD}")"
+            } > .env.production
 
             docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build --remove-orphans
             docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend pnpm prisma migrate deploy

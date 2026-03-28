@@ -20,8 +20,8 @@ export function LoginForm() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "test@mail.com",
-      password: "hasło123",
+      email: "",
+      password: "",
     },
   });
 
@@ -63,7 +63,7 @@ export function LoginForm() {
           autoFocus
           disabled={isLoading || isLoginSuccess}
           autoComplete="email"
-          placeholder="test@mail.com"
+          placeholder="np. admin@survivorquest.pl"
           className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100 outline-none transition focus:border-amber-400/80 focus:ring-2 focus:ring-amber-500/40"
         />
       </div>
@@ -84,7 +84,7 @@ export function LoginForm() {
             type={isPasswordVisible ? "text" : "password"}
             disabled={isLoading || isLoginSuccess}
             autoComplete="current-password"
-            placeholder="hasło123"
+            placeholder="Wpisz hasło"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 pr-20 text-zinc-100 outline-none transition focus:border-amber-400/80 focus:ring-2 focus:ring-amber-500/40"
           />
           <button

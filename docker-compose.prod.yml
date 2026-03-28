@@ -92,6 +92,27 @@ services:
       - traefik.http.services.admin.loadbalancer.server.port=3100
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:9.7
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pgadmin.rule=Host(`pgadmin.${DOMAIN}`)
+      - traefik.http.routers.pgadmin.entrypoints=websecure
+      - traefik.http.routers.pgadmin.tls=true
+      - traefik.http.routers.pgadmin.tls.certresolver=letsencrypt
+      - traefik.http.services.pgadmin.loadbalancer.server.port=80
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   traefik_letsencrypt:
+  pgadmin_data:
