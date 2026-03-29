@@ -21,6 +21,7 @@ import { TeamCustomizationStep } from "./team-customization-step";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
+type ApiServerPreset = "local" | "production" | "custom";
 
 type MobileBootstrapRealization = {
   id: string;
@@ -133,6 +134,7 @@ type MobileSessionStateResponse = {
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
+const PRODUCTION_API_BASE_URL = "https://survivorquest.pl";
 
 const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team", "customization"];
 
@@ -303,6 +305,19 @@ function resolveApiBaseUrlCandidates(overrideBaseUrl?: string | null) {
   return candidates;
 }
 
+function resolveApiServerPreset(baseUrl: string | null): ApiServerPreset {
+  const normalizedProductionBaseUrl = normalizeApiBaseUrl(PRODUCTION_API_BASE_URL);
+  if (baseUrl && normalizedProductionBaseUrl && baseUrl === normalizedProductionBaseUrl) {
+    return "production";
+  }
+
+  if (!baseUrl) {
+    return "local";
+  }
+
+  return "custom";
+}
+
 async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => {
@@ -406,6 +421,7 @@ export function RealizationOnboardingScreen({
 
   const [realizationCode, setRealizationCode] = useState("");
   const [apiBaseUrlOverride, setApiBaseUrlOverride] = useState<string | null>(null);
+  const [apiServerPreset, setApiServerPreset] = useState<ApiServerPreset>("local");
   const [apiBaseUrlDraft, setApiBaseUrlDraft] = useState("");
   const [apiConfigMessage, setApiConfigMessage] = useState<string | null>(null);
   const [isApiConfigOpen, setIsApiConfigOpen] = useState(false);
@@ -497,6 +513,7 @@ export function RealizationOnboardingScreen({
 
         const normalizedOverride = normalizeApiBaseUrl(storedOverride);
         setApiBaseUrlOverride(normalizedOverride);
+        setApiServerPreset(resolveApiServerPreset(normalizedOverride));
         const initialCandidates = resolveApiBaseUrlCandidates(normalizedOverride);
         setApiBaseUrlDraft(normalizedOverride ?? initialCandidates[0] ?? "");
       } catch {
@@ -526,7 +543,9 @@ export function RealizationOnboardingScreen({
 
     setRealizationCode(recoveryIntent.realizationCode);
     if (typeof recoveryIntent.apiBaseUrl === "string") {
-      setApiBaseUrlOverride(normalizeApiBaseUrl(recoveryIntent.apiBaseUrl));
+      const normalizedRecoveryApiBaseUrl = normalizeApiBaseUrl(recoveryIntent.apiBaseUrl);
+      setApiBaseUrlOverride(normalizedRecoveryApiBaseUrl);
+      setApiServerPreset(resolveApiServerPreset(normalizedRecoveryApiBaseUrl));
     }
     setSetupMessage(recoveryIntent.notice);
     setSetupState("loading");
@@ -1175,6 +1194,7 @@ export function RealizationOnboardingScreen({
     }
 
     setApiBaseUrlOverride(normalized);
+    setApiServerPreset(resolveApiServerPreset(normalized));
     setApiBaseUrlDraft(normalized);
     setApiConnectionTarget(normalized);
     setApiConnectionStatus("checking");
@@ -1191,10 +1211,41 @@ export function RealizationOnboardingScreen({
     }
   }
 
+  async function applyApiServerPreset(preset: "local" | "production") {
+    if (preset === "production") {
+      const normalizedProductionBaseUrl = normalizeApiBaseUrl(PRODUCTION_API_BASE_URL);
+      if (!normalizedProductionBaseUrl) {
+        setApiConfigMessage("Nie udało się ustawić serwera produkcyjnego.");
+        return;
+      }
+
+      setApiServerPreset("production");
+      setApiBaseUrlOverride(normalizedProductionBaseUrl);
+      setApiBaseUrlDraft(normalizedProductionBaseUrl);
+      setApiConnectionTarget(normalizedProductionBaseUrl);
+      setApiConnectionStatus("checking");
+      triggerApiProbe();
+      setIsApiConfigOpen(false);
+
+      try {
+        await AsyncStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, normalizedProductionBaseUrl);
+        setApiConfigMessage("Wybrano serwer produkcyjny API.");
+      } catch {
+        setApiConfigMessage(
+          "Serwer produkcyjny ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
+        );
+      }
+      return;
+    }
+
+    await resetApiServerOverride();
+  }
+
   async function resetApiServerOverride() {
     try {
       await AsyncStorage.removeItem(API_BASE_URL_OVERRIDE_STORAGE_KEY);
       const fallbackCandidates = resolveApiBaseUrlCandidates(null);
+      setApiServerPreset("local");
       setApiBaseUrlOverride(null);
       setApiBaseUrlDraft(fallbackCandidates[0] ?? "");
       setApiConnectionTarget(fallbackCandidates[0] ?? null);
@@ -1371,6 +1422,36 @@ export function RealizationOnboardingScreen({
 
                 {isApiConfigOpen && (
                   <View className="mt-3 gap-2">
+                    <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                      Szybki wybór
+                    </Text>
+                    <View className="flex-row gap-2">
+                      <Pressable
+                        className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
+                        style={{
+                          borderColor: apiServerPreset === "local" ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                          backgroundColor: apiServerPreset === "local" ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
+                        }}
+                        onPress={() => void applyApiServerPreset("local")}
+                      >
+                        <Text className="text-center text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                          Lokalna baza testowa
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
+                        style={{
+                          borderColor: apiServerPreset === "production" ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                          backgroundColor: apiServerPreset === "production" ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
+                        }}
+                        onPress={() => void applyApiServerPreset("production")}
+                      >
+                        <Text className="text-center text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                          Produkcja
+                        </Text>
+                      </Pressable>
+                    </View>
+
                     <TextInput
                       className="rounded-xl border px-3 py-2 text-sm"
                       style={{
