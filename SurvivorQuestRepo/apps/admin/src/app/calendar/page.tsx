@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { DashboardCalendar } from "@/features/dashboard/components/dashboard-calendar";
-import { AdminSidebar } from "@/shared/components/admin-sidebar";
+import { AdminShell } from "@/shared/components/admin-shell";
 
 export default function CalendarPage() {
   const router = useRouter();
@@ -34,23 +34,18 @@ export default function CalendarPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <AdminSidebar
-        userEmail={meData?.user.email}
-        isLoggingOut={isLoggingOut}
-        onLogout={async () => {
-          await logout().unwrap();
-          router.replace("/login");
-        }}
-      />
-
-      <div className="min-h-screen pl-72">
-        <section className="space-y-6 p-6 lg:p-8">
-          <h1 className="text-xl font-semibold tracking-tight">Kalendarz realizacji</h1>
-          <DashboardCalendar />
-        </section>
-      </div>
-    </main>
+    <AdminShell
+      userEmail={meData?.user.email}
+      isLoggingOut={isLoggingOut}
+      onLogout={async () => {
+        await logout().unwrap();
+        router.replace("/login");
+      }}
+      contentClassName="space-y-6 p-4 sm:p-6 lg:p-8"
+    >
+      <h1 className="text-xl font-semibold tracking-tight">Kalendarz realizacji</h1>
+      <DashboardCalendar />
+    </AdminShell>
   );
 }
 

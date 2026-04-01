@@ -182,7 +182,9 @@ export class UsersService {
     }
 
     if (current.email !== input.confirmEmail.trim()) {
-      throw new BadRequestException('Confirmation email does not match user email');
+      throw new BadRequestException(
+        'Confirmation email does not match user email',
+      );
     }
 
     await this.prisma.user.delete({

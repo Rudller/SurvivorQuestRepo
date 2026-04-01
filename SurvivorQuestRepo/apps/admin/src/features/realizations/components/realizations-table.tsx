@@ -126,7 +126,7 @@ export function RealizationsTable({
       {sortedRealizations.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-245 text-sm">
+            <table className="w-full min-w-[1300px] text-sm">
               <thead className="bg-zinc-900 text-zinc-300">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Firma</th>

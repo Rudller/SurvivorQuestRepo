@@ -136,7 +136,10 @@ function ensureStationQuiz(
   const quiz = value as Record<string, unknown>;
   const question = ensureTrimmedString(quiz.question);
 
-  if (!Array.isArray(quiz.answers) || quiz.answers.length !== QUIZ_ANSWER_COUNT) {
+  if (
+    !Array.isArray(quiz.answers) ||
+    quiz.answers.length !== QUIZ_ANSWER_COUNT
+  ) {
     throw new BadRequestException('Invalid payload');
   }
 

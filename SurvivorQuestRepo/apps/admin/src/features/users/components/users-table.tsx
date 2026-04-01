@@ -23,8 +23,8 @@ export function UsersTable({ data, onEdit }: UsersTableProps) {
   });
 
   return (
-    <div className="mt-2 w-full max-w-5xl overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/80">
-      <table className="w-full min-w-245 text-sm">
+    <div className="mt-2 w-full overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/80">
+      <table className="w-full min-w-[980px] text-sm">
         <thead className="bg-zinc-900 text-zinc-300">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="border-b border-zinc-800">

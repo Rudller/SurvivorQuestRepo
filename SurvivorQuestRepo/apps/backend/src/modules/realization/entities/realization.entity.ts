@@ -1,6 +1,7 @@
 import type {
   StationEntity,
   StationQuiz,
+  StationTranslations,
   StationType,
 } from '../../station/station.service';
 
@@ -72,6 +73,7 @@ export type ScenarioStationDraftPayload = {
   timeLimitSeconds?: number;
   completionCode?: string;
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

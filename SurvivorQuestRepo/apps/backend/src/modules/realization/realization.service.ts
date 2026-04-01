@@ -10,6 +10,7 @@ import {
   requireRealizationId,
   validateRealizationPayload,
   type CreateRealizationDto,
+  type TranslateRealizationStationDto,
   type UpdateRealizationDto,
 } from './dto/realization.dto';
 import type { ScenarioStationDraftPayload } from './entities/realization.entity';
@@ -28,6 +29,7 @@ import {
 } from '../scenario/scenario.service';
 import {
   StationService,
+  type StationTranslations,
   type StationDraftInput,
   type StationEntity,
   type StationQuiz,
@@ -166,9 +168,9 @@ export class RealizationService {
         ? requestedScenario
         : currentScenarioTemplateId === requestedScenario.id && currentScenario
           ? currentScenario
-        : await this.scenarioService.cloneScenario(requestedScenario.id, {
-            realizationId,
-          });
+          : await this.scenarioService.cloneScenario(requestedScenario.id, {
+              realizationId,
+            });
 
     if (!scenario) {
       throw new BadRequestException('Scenario not found');
@@ -188,10 +190,10 @@ export class RealizationService {
         language: toPrismaRealizationLanguage(validated.language),
         customLanguage: validated.customLanguage,
         introText: Object.prototype.hasOwnProperty.call(payload, 'introText')
-          ? validated.introText ?? null
+          ? (validated.introText ?? null)
           : undefined,
         gameRules: Object.prototype.hasOwnProperty.call(payload, 'gameRules')
-          ? validated.gameRules ?? null
+          ? (validated.gameRules ?? null)
           : undefined,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
@@ -233,6 +235,13 @@ export class RealizationService {
     return entity;
   }
 
+  async translateStation(payload: TranslateRealizationStationDto) {
+    void payload;
+    throw new BadRequestException(
+      'Auto-translate is not implemented yet.',
+    );
+  }
+
   private async syncScenarioStations(
     realizationId: string,
     scenario: ScenarioEntity,
@@ -265,6 +274,10 @@ export class RealizationService {
         draft.quiz,
         draft.type,
       );
+      const normalizedTranslations = this.normalizeStationTranslationsDraft(
+        draft.translations,
+        draft.type,
+      );
 
       if (
         !draft.name?.trim() ||
@@ -293,6 +306,7 @@ export class RealizationService {
           ? normalizedCompletionCode
           : undefined,
         quiz: normalizedQuiz,
+        translations: normalizedTranslations,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,
@@ -510,7 +524,11 @@ export class RealizationService {
     }
 
     for (const pepper of this.getJoinCodePepperCandidates()) {
-      const publicCode = this.generateJoinCode(realizationId, parsed.attempt, pepper);
+      const publicCode = this.generateJoinCode(
+        realizationId,
+        parsed.attempt,
+        pepper,
+      );
       const publicCodeHash = this.hashJoinCode(publicCode);
       if (publicCodeHash === parsed.hash) {
         return publicCode;
@@ -572,4 +590,54 @@ export class RealizationService {
       correctAnswerIndex,
     };
   }
+
+  private normalizeStationTranslationsDraft(
+    translations: unknown,
+    stationType: StationType | undefined,
+  ): StationTranslations | undefined {
+    if (!translations || typeof translations !== 'object') {
+      return undefined;
+    }
+
+    const payload = translations as Record<string, unknown>;
+    const result: StationTranslations = {};
+
+    for (const language of [
+      'polish',
+      'english',
+      'ukrainian',
+      'russian',
+      'other',
+    ] as const) {
+      const raw = payload[language];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        continue;
+      }
+
+      const entry = raw as Record<string, unknown>;
+      const name =
+        typeof entry.name === 'string' ? entry.name.trim() : undefined;
+      const description =
+        typeof entry.description === 'string'
+          ? entry.description.trim()
+          : undefined;
+      const quiz = this.normalizeStationQuizDraft(
+        entry.quiz as StationQuiz | undefined,
+        stationType,
+      );
+
+      if (!name && !description && !quiz) {
+        continue;
+      }
+
+      result[language] = {
+        name,
+        description,
+        quiz,
+      };
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  }
+
 }

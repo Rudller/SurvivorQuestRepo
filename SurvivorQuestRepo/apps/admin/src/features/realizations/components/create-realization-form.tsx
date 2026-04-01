@@ -3,8 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Realization, RealizationLanguage, RealizationStatus, RealizationType } from "../types/realization";
 import {
-  getRealizationLanguageLabel,
+  formatRealizationLanguageSummary,
+  getRealizationLanguageFlag,
+  isRealizationLanguageSelectionInvalid,
+  parseRealizationLanguageSelection,
   realizationLanguageOptions,
+  toRealizationLanguagePayload,
   realizationTypeOptions,
 } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
@@ -64,7 +68,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [contactPerson, setContactPerson] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
+  const [selectedLanguages, setSelectedLanguages] = useState<RealizationLanguage[]>(["polish"]);
   const [customLanguage, setCustomLanguage] = useState("");
   const [introText, setIntroText] = useState("");
   const [gameRules, setGameRules] = useState("");
@@ -112,7 +116,20 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const isScenarioInvalid = submitAttempted && !selectedScenarioId;
   const isContactPersonInvalid = submitAttempted && !contactPerson.trim();
   const isContactChannelInvalid = submitAttempted && !contactPhone.trim() && !contactEmail.trim();
-  const isCustomLanguageInvalid = submitAttempted && selectedLanguage === "other" && !customLanguage.trim();
+  const languageSelection = useMemo(
+    () => ({
+      selectedLanguages,
+      customLanguage,
+    }),
+    [selectedLanguages, customLanguage],
+  );
+  const selectedLanguagesSet = useMemo(() => new Set(selectedLanguages), [selectedLanguages]);
+  const languagePayload = useMemo(
+    () => toRealizationLanguagePayload(languageSelection),
+    [languageSelection],
+  );
+  const isLanguageSelectionInvalid = submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
+  const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
   const isScheduledAtInvalid = submitAttempted && !scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(durationMinutes) || durationMinutes < 1);
   const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
@@ -172,7 +189,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
         onClick={onClose}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
         <form
           className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
           onSubmit={async (event) => {
@@ -184,7 +201,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           !selectedScenarioId ||
           !contactPerson.trim() ||
           (!contactPhone.trim() && !contactEmail.trim()) ||
-          (selectedLanguage === "other" && !customLanguage.trim()) ||
+          isRealizationLanguageSelectionInvalid(languageSelection) ||
           !scheduledAt ||
           !Number.isFinite(durationMinutes) ||
           durationMinutes < 1 ||
@@ -220,8 +237,6 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
         const normalizedContactPerson = contactPerson.trim() || "Brak osoby kontaktowej";
         const normalizedContactEmail = contactEmail.trim() || undefined;
         const normalizedContactPhone = contactPhone.trim() || (normalizedContactEmail ? undefined : "Nie podano");
-        const normalizedCustomLanguage =
-          selectedLanguage === "other" ? customLanguage.trim() || "Nieokreślony" : undefined;
         const normalizedScheduledAt = toIsoFromDateTimeLocal(scheduledAt) || new Date().toISOString();
         const normalizedTeamCount = Math.max(1, Math.round(teamCount) || 1);
         const normalizedPeopleCount = Math.max(1, Math.round(peopleCount) || 1);
@@ -246,8 +261,8 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           const createdRealization = await createRealization({
             companyName: normalizedCompanyName,
             location: location.trim() || undefined,
-            language: selectedLanguage,
-            customLanguage: normalizedCustomLanguage,
+            language: languagePayload.language,
+            customLanguage: languagePayload.customLanguage,
             introText: introText || undefined,
             gameRules: gameRules.trim() || undefined,
             contactPerson: normalizedContactPerson,
@@ -274,8 +289,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           setContactPerson("");
           setContactPhone("");
           setContactEmail("");
-          setSelectedLanguage("polish");
-          setCustomLanguage("");
+          const defaultLanguageSelection = parseRealizationLanguageSelection("polish");
+          setSelectedLanguages(defaultLanguageSelection.selectedLanguages);
+          setCustomLanguage(defaultLanguageSelection.customLanguage);
           setIntroText("");
           setGameRules("");
           setInstructors([]);
@@ -296,7 +312,6 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
         }
           }}
         >
-        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Nowa realizacja</h2>
             <button
@@ -356,26 +371,42 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
-              <select
-                value={selectedLanguage}
-                onChange={(event) => {
-                  const nextLanguage = event.target.value as RealizationLanguage;
-                  setSelectedLanguage(nextLanguage);
-                  if (nextLanguage !== "other") {
-                    setCustomLanguage("");
-                  }
-                }}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              <div
+                className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
+                  isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
+                }`}
               >
-                {realizationLanguageOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                {realizationLanguageOptions.map((option) => {
+                  const isChecked = selectedLanguagesSet.has(option.value);
+                  return (
+                    <label key={option.value} className="inline-flex items-center gap-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(event) => {
+                          setSelectedLanguages((current) => {
+                            if (event.target.checked) {
+                              return [...current, option.value].filter(
+                                (value, index, list) => list.indexOf(value) === index,
+                              );
+                            }
+                            return current.filter((value) => value !== option.value);
+                          });
+                        }}
+                        className="h-4 w-4 accent-amber-400"
+                      />
+                      <span>{getRealizationLanguageFlag(option.value)}</span>
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {isLanguageSelectionInvalid ? (
+                <p className="text-xs text-red-300">Wybierz co najmniej jeden język realizacji.</p>
+              ) : null}
             </label>
 
-            {selectedLanguage === "other" && (
+            {selectedLanguagesSet.has("other") && (
               <label className="space-y-1.5 md:col-span-2">
                 <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
                 <input
@@ -622,7 +653,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
               <p className="mb-2 text-xs text-zinc-500">
                 Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
               </p>
-              <RealizationStationsEditor stations={scenarioStations} onChange={setScenarioStations} showValidation={submitAttempted} />
+              <RealizationStationsEditor
+                stations={scenarioStations}
+                onChange={setScenarioStations}
+                showValidation={submitAttempted}
+                selectedLanguages={selectedLanguages}
+              />
               {isScenarioStationsEmpty ? (
                 <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
               ) : null}
@@ -714,9 +750,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
                 : "Dodaj realizację"}
           </button>
         </div>
-      </div>
-
-      <aside className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+      <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
         <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Podsumowanie</p>
         <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-300">
           <p>
@@ -730,9 +764,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           </p>
           <p>
             <span className="text-zinc-500">Język realizacji:</span>{" "}
-            {selectedLanguage === "other"
-              ? customLanguage.trim() || "Inne"
-              : getRealizationLanguageLabel(selectedLanguage)}
+            {formatRealizationLanguageSummary(languagePayload.language, languagePayload.customLanguage)}
           </p>
           <p>
             <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
@@ -771,7 +803,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             <span className="text-zinc-500">Instruktorzy:</span> {instructors.length}
           </p>
         </div>
-      </aside>
+      </section>
         </form>
       </aside>
     </>

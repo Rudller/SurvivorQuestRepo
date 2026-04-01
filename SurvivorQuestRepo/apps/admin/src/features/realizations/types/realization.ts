@@ -34,11 +34,144 @@ export const realizationLanguageOptions: { value: RealizationLanguage; label: st
   { value: "other", label: "Inne" },
 ];
 
+export const realizationLanguageFlagByValue: Record<RealizationLanguage, string> = {
+  polish: "🇵🇱",
+  english: "🇬🇧",
+  ukrainian: "🇺🇦",
+  russian: "🇷🇺",
+  other: "🌐",
+};
+
 export function getRealizationLanguageLabel(language: RealizationLanguage) {
   return (
     realizationLanguageOptions.find((option) => option.value === language)?.label ??
     realizationLanguageOptions[0].label
   );
+}
+
+export function getRealizationLanguageFlag(language: RealizationLanguage) {
+  return realizationLanguageFlagByValue[language] ?? realizationLanguageFlagByValue.polish;
+}
+
+export type RealizationLanguageSelection = {
+  selectedLanguages: RealizationLanguage[];
+  customLanguage: string;
+};
+
+const REALIZATION_LANGUAGE_ORDER = realizationLanguageOptions.map((option) => option.value);
+
+const LANGUAGE_TOKEN_TO_VALUE = new Map<string, RealizationLanguage>(
+  realizationLanguageOptions.flatMap((option) => [
+    [option.value.toLowerCase(), option.value],
+    [option.label.toLowerCase(), option.value],
+  ]),
+);
+
+function splitLanguageTokens(value: string) {
+  return value
+    .split(/\s*(?:\+|,|;|\n)\s*/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeLanguageSelection(languages: RealizationLanguage[]) {
+  const selected = new Set(languages);
+  return REALIZATION_LANGUAGE_ORDER.filter((value) => selected.has(value));
+}
+
+function normalizeCustomLanguage(value: string) {
+  return splitLanguageTokens(value).join(", ");
+}
+
+export function parseRealizationLanguageSelection(
+  language: RealizationLanguage,
+  customLanguage?: string,
+): RealizationLanguageSelection {
+  if (language !== "other") {
+    return {
+      selectedLanguages: [language],
+      customLanguage: "",
+    };
+  }
+
+  const tokens = splitLanguageTokens(customLanguage ?? "");
+  const selectedKnown = new Set<RealizationLanguage>();
+  const customParts: string[] = [];
+
+  for (const token of tokens) {
+    const mappedValue = LANGUAGE_TOKEN_TO_VALUE.get(token.toLowerCase());
+    if (mappedValue && mappedValue !== "other") {
+      selectedKnown.add(mappedValue);
+      continue;
+    }
+
+    if (mappedValue === "other") {
+      continue;
+    }
+
+    customParts.push(token);
+  }
+
+  const selectedCandidates: RealizationLanguage[] = [...selectedKnown];
+  if (customParts.length > 0 || selectedKnown.size === 0) {
+    selectedCandidates.push("other");
+  }
+
+  const selectedLanguages = normalizeLanguageSelection(selectedCandidates);
+
+  return {
+    selectedLanguages,
+    customLanguage: customParts.join(", "),
+  };
+}
+
+export function isRealizationLanguageSelectionInvalid(selection: RealizationLanguageSelection) {
+  const selectedSet = new Set(selection.selectedLanguages);
+  const hasKnownLanguage = selection.selectedLanguages.some((value) => value !== "other");
+  const hasOtherLanguage = selectedSet.has("other");
+  const normalizedCustomLanguage = normalizeCustomLanguage(selection.customLanguage);
+
+  if (!hasKnownLanguage && !hasOtherLanguage) {
+    return true;
+  }
+
+  if (hasOtherLanguage && !normalizedCustomLanguage) {
+    return true;
+  }
+
+  return false;
+}
+
+export function toRealizationLanguagePayload(selection: RealizationLanguageSelection): {
+  language: RealizationLanguage;
+  customLanguage?: string;
+} {
+  const selectedLanguages = normalizeLanguageSelection(selection.selectedLanguages);
+  const selectedSet = new Set(selectedLanguages);
+  const knownLanguages = selectedLanguages.filter((value) => value !== "other");
+  const customParts = splitLanguageTokens(selection.customLanguage);
+
+  if (knownLanguages.length === 1 && !selectedSet.has("other") && customParts.length === 0) {
+    return {
+      language: knownLanguages[0],
+    };
+  }
+
+  const displayParts = [
+    ...knownLanguages.map((value) => getRealizationLanguageLabel(value)),
+    ...customParts,
+  ];
+
+  return {
+    language: "other",
+    customLanguage: displayParts.length > 0 ? displayParts.join(" + ") : "Inne",
+  };
+}
+
+export function formatRealizationLanguageSummary(language: RealizationLanguage, customLanguage?: string) {
+  return language === "other"
+    ? customLanguage?.trim() || "Inne"
+    : getRealizationLanguageLabel(language);
 }
 
 export type RealizationLog = {
@@ -94,6 +227,7 @@ export type RealizationStationDraft = {
   timeLimitSeconds: number;
   completionCode?: string;
   quiz?: Station["quiz"];
+  translations?: Station["translations"];
   latitude?: number;
   longitude?: number;
 };

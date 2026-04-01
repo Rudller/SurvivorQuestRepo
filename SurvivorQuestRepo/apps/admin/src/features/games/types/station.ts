@@ -7,6 +7,16 @@ export type StationQuiz = {
   correctAnswerIndex: number;
 };
 
+export type StationTranslation = {
+  name?: string;
+  description?: string;
+  quiz?: StationQuiz;
+};
+
+export type StationTranslations = Partial<
+  Record<"polish" | "english" | "ukrainian" | "russian" | "other", StationTranslation>
+>;
+
 export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "time", label: "Na czas" },
   { value: "points", label: "Na punkty" },
@@ -23,6 +33,7 @@ export type Station = {
   timeLimitSeconds: number;
   completionCode?: string;
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

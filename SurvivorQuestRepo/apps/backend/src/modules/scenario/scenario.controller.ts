@@ -60,9 +60,7 @@ export class ScenarioController {
       throw new BadRequestException('Invalid station ids');
     }
 
-    const currentScenario = await this.scenarioService.findScenarioById(
-      dto.id,
-    );
+    const currentScenario = await this.scenarioService.findScenarioById(dto.id);
 
     if (!currentScenario) {
       throw new NotFoundException('Scenario not found');

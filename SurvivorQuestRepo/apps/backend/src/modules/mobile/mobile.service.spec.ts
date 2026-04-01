@@ -20,7 +20,11 @@ describe('MobileService team selection', () => {
       },
     };
 
-    const service = new MobileService(prisma as never, {} as never, {} as never);
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
     return { service, prisma };
   }
 
@@ -50,7 +54,9 @@ describe('MobileService team selection', () => {
       badgeKey: null,
       points: 0,
     });
-    prisma.teamAssignment.findMany.mockResolvedValue([{ id: 'assignment-old' }]);
+    prisma.teamAssignment.findMany.mockResolvedValue([
+      { id: 'assignment-old' },
+    ]);
     prisma.team.findMany.mockResolvedValueOnce([
       { slotNumber: 1, color: 'red', badgeKey: 'beaver-01' },
       { slotNumber: 2, color: null, badgeKey: null },

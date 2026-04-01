@@ -22,7 +22,12 @@ import {
   completionCodeModeOptions,
   isValidCompletionCodeForMode,
 } from "@/features/games/station.utils";
-import type { RealizationStationDraft } from "../types/realization";
+import {
+  getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
+  type RealizationLanguage,
+  type RealizationStationDraft,
+} from "../types/realization";
 
 const RealizationLocationPickerMap = dynamic(
   () => import("./realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -40,6 +45,29 @@ interface RealizationStationsEditorProps {
   stations: RealizationStationDraft[];
   onChange: (stations: RealizationStationDraft[]) => void;
   showValidation?: boolean;
+  selectedLanguages?: RealizationLanguage[];
+}
+
+const supportedStationTranslationLanguages: RealizationLanguage[] = [
+  "polish",
+  "english",
+  "ukrainian",
+  "russian",
+  "other",
+];
+
+function isRealizationLanguage(value: string): value is RealizationLanguage {
+  return (
+    value === "polish" ||
+    value === "english" ||
+    value === "ukrainian" ||
+    value === "russian" ||
+    value === "other"
+  );
+}
+
+function toQuizAnswersTuple(answers: string[]) {
+  return [answers[0] ?? "", answers[1] ?? "", answers[2] ?? "", answers[3] ?? ""] as [string, string, string, string];
 }
 
 export function createEmptyRealizationStationDraft(): RealizationStationDraft {
@@ -61,6 +89,89 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
   };
 }
 
+function cloneStationTranslations(translations: Station["translations"] | undefined) {
+  if (!translations) {
+    return undefined;
+  }
+
+  const cloned = Object.entries(translations).reduce<NonNullable<Station["translations"]>>((acc, [language, value]) => {
+    if (!value) {
+      return acc;
+    }
+
+    if (
+      language === "polish" ||
+      language === "english" ||
+      language === "ukrainian" ||
+      language === "russian" ||
+      language === "other"
+    ) {
+      acc[language] = {
+        name: value.name,
+        description: value.description,
+        quiz: value.quiz
+          ? {
+              question: value.quiz.question,
+              answers: [...value.quiz.answers],
+              correctAnswerIndex: value.quiz.correctAnswerIndex,
+            }
+          : undefined,
+      };
+    }
+
+    return acc;
+  }, {});
+
+  return Object.keys(cloned).length > 0 ? cloned : undefined;
+}
+
+function normalizeStationTranslations(translations: RealizationStationDraft["translations"]) {
+  if (!translations) {
+    return undefined;
+  }
+
+  const normalized = Object.entries(translations).reduce<NonNullable<RealizationStationDraft["translations"]>>(
+    (acc, [language, value]) => {
+      if (!value || typeof value !== "object") {
+        return acc;
+      }
+
+      const name = typeof value.name === "string" ? value.name.trim() : "";
+      const description = typeof value.description === "string" ? value.description.trim() : "";
+      const normalizedQuiz = value.quiz ? normalizeStationQuiz(value.quiz) ?? undefined : undefined;
+
+      if (!name && !description && !normalizedQuiz) {
+        return acc;
+      }
+
+      if (
+        language === "polish" ||
+        language === "english" ||
+        language === "ukrainian" ||
+        language === "russian" ||
+        language === "other"
+      ) {
+        acc[language] = {
+          name: name || undefined,
+          description: description || undefined,
+          quiz: normalizedQuiz
+            ? {
+                question: normalizedQuiz.question,
+                answers: toQuizAnswersTuple(normalizedQuiz.answers),
+                correctAnswerIndex: normalizedQuiz.correctAnswerIndex,
+              }
+            : undefined,
+        };
+      }
+
+      return acc;
+    },
+    {},
+  );
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export function toRealizationStationDraft(station: Station): RealizationStationDraft {
   return {
     id: station.id,
@@ -74,7 +185,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     quiz: station.quiz
       ? {
           question: station.quiz.question,
-          answers: station.quiz.answers,
+          answers: toQuizAnswersTuple(station.quiz.answers),
           correctAnswerIndex: station.quiz.correctAnswerIndex,
         }
       : {
@@ -82,6 +193,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
           answers: createEmptyQuizAnswers(),
           correctAnswerIndex: 0,
         },
+    translations: cloneStationTranslations(station.translations),
     latitude: station.latitude,
     longitude: station.longitude,
   };
@@ -101,6 +213,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
       station.type === "quiz" && station.quiz
         ? normalizeStationQuiz(station.quiz) ?? undefined
         : undefined,
+    translations: normalizeStationTranslations(station.translations),
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   }));
@@ -188,7 +301,12 @@ export function getRealizationStationValidation(station: RealizationStationDraft
   };
 }
 
-export function RealizationStationsEditor({ stations, onChange, showValidation = false }: RealizationStationsEditorProps) {
+export function RealizationStationsEditor({
+  stations,
+  onChange,
+  showValidation = false,
+  selectedLanguages,
+}: RealizationStationsEditorProps) {
   const [expandedStationIndex, setExpandedStationIndex] = useState<number | null>(null);
   const [stationImageModes, setStationImageModes] = useState<Record<string, ImageInputMode>>({});
   const [stationCompletionCodeModes, setStationCompletionCodeModes] = useState<Record<string, CompletionCodeGeneratorMode>>({});
@@ -201,6 +319,24 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
   const stationTypeLabelByValue = useMemo(
     () => new Map(stationTypeOptions.map((option) => [option.value, option.label])),
     [],
+  );
+  const availableLanguages = useMemo<RealizationLanguage[]>(() => {
+    const source = selectedLanguages?.length ? selectedLanguages : ["polish"];
+    const filtered = supportedStationTranslationLanguages.filter((language) => source.includes(language));
+    if (!filtered.includes("polish")) {
+      return ["polish", ...filtered];
+    }
+    return filtered;
+  }, [selectedLanguages]);
+  const [baseLanguage, setBaseLanguage] = useState<RealizationLanguage>("polish");
+  const [editingLanguage, setEditingLanguage] = useState<RealizationLanguage>("polish");
+  const translationLanguages = useMemo(
+    () => availableLanguages.filter((language) => language !== baseLanguage),
+    [availableLanguages, baseLanguage],
+  );
+  const editableLanguages = useMemo(
+    () => [baseLanguage, ...translationLanguages],
+    [baseLanguage, translationLanguages],
   );
 
   const activeExpandedStationIndex =
@@ -216,8 +352,93 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
     });
   }, [stations.length]);
 
+  useEffect(() => {
+    if (!availableLanguages.includes(baseLanguage)) {
+      const fallbackLanguage = availableLanguages[0];
+      setBaseLanguage(
+        fallbackLanguage === "polish" ||
+          fallbackLanguage === "english" ||
+          fallbackLanguage === "ukrainian" ||
+          fallbackLanguage === "russian" ||
+          fallbackLanguage === "other"
+          ? fallbackLanguage
+          : "polish",
+      );
+    }
+  }, [availableLanguages, baseLanguage]);
+
+  useEffect(() => {
+    if (!editableLanguages.includes(editingLanguage)) {
+      setEditingLanguage(baseLanguage);
+    }
+  }, [baseLanguage, editableLanguages, editingLanguage]);
+
   function updateStation(index: number, patch: Partial<RealizationStationDraft>) {
     onChange(stations.map((station, currentIndex) => (currentIndex === index ? { ...station, ...patch } : station)));
+  }
+
+  function updateStationTranslation(
+    index: number,
+    language: RealizationLanguage,
+    patch: Partial<NonNullable<RealizationStationDraft["translations"]>[RealizationLanguage]>,
+  ) {
+    onChange(
+      stations.map((station, currentIndex) => {
+        if (currentIndex !== index) {
+          return station;
+        }
+
+        const currentTranslation = station.translations?.[language] ?? {};
+        const nextTranslation = {
+          ...currentTranslation,
+          ...patch,
+        };
+
+        const hasTranslationValue =
+          Boolean(nextTranslation.name?.trim()) ||
+          Boolean(nextTranslation.description?.trim()) ||
+          Boolean(nextTranslation.quiz);
+
+        const nextTranslations = {
+          ...(station.translations ?? {}),
+        };
+
+        if (hasTranslationValue) {
+          nextTranslations[language] = nextTranslation;
+        } else {
+          delete nextTranslations[language];
+        }
+
+        return {
+          ...station,
+          translations: Object.keys(nextTranslations).length > 0 ? nextTranslations : undefined,
+        };
+      }),
+    );
+  }
+
+  function updateStationForSelectedLanguage(
+    index: number,
+    patch: Partial<Pick<RealizationStationDraft, "name" | "description" | "quiz">>,
+  ) {
+    if (editingLanguage === baseLanguage) {
+      updateStation(index, patch);
+      return;
+    }
+
+    const translationPatch: Partial<NonNullable<RealizationStationDraft["translations"]>[RealizationLanguage]> = {};
+
+    if (Object.prototype.hasOwnProperty.call(patch, "name")) {
+      translationPatch.name = patch.name;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "description")) {
+      translationPatch.description = patch.description;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "quiz")) {
+      translationPatch.quiz = patch.quiz;
+    }
+
+    updateStationTranslation(index, editingLanguage, translationPatch);
   }
 
   function getStationKey(index: number, station: RealizationStationDraft) {
@@ -273,6 +494,10 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
       ...current,
       [stationKey]: (current[stationKey] ?? 0) + 1,
     }));
+  }
+
+  function showAutoTranslateNotImplemented() {
+    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
   }
 
   function requestCurrentLocation(index: number, stationKey: string) {
@@ -415,15 +640,70 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
   }
 
   return (
-    <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
-      <div className="flex items-center justify-between">
+    <fieldset className="min-w-0 space-y-3 overflow-x-hidden rounded-lg border border-zinc-800 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <legend className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Stanowiska realizacji</legend>
+        <div className="flex items-center justify-end gap-2">
+          <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200">
+            <span>Język podstawowy</span>
+            <select
+              value={baseLanguage}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                if (isRealizationLanguage(nextValue)) {
+                  setBaseLanguage(nextValue);
+                }
+              }}
+              className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+            >
+              {availableLanguages.map((language) => (
+                <option key={language} value={language}>
+                  {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={addStation}
+            className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
+          >
+            + Dodaj stanowisko
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+          <span>{getRealizationLanguageFlag(baseLanguage)}</span>
+          <span>Podstawowy: {getRealizationLanguageLabel(baseLanguage)}</span>
+        </span>
+        <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+          <span>Edytowany język</span>
+          <select
+            value={editingLanguage}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (isRealizationLanguage(nextValue)) {
+                setEditingLanguage(nextValue);
+              }
+            }}
+            className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+          >
+            {editableLanguages.map((language) => (
+              <option key={`editing-${language}`} value={language}>
+                {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                {language === baseLanguage ? " (podstawowy)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
-          onClick={addStation}
-          className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
+          onClick={showAutoTranslateNotImplemented}
+          className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
         >
-          + Dodaj stanowisko
+          Auto-tłumacz
         </button>
       </div>
 
@@ -445,6 +725,16 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
           const locationError = stationLocationErrors[stationKey];
           const isLocating = stationLocationLoading[stationKey] === true;
           const recenterToken = stationMapRecenterTokens[stationKey];
+          const isEditingBaseLanguage = editingLanguage === baseLanguage;
+          const selectedTranslation = isEditingBaseLanguage ? undefined : station.translations?.[editingLanguage];
+          const selectedStationName = isEditingBaseLanguage ? station.name : selectedTranslation?.name ?? "";
+          const selectedStationDescription = isEditingBaseLanguage
+            ? station.description
+            : selectedTranslation?.description ?? "";
+          const selectedStationQuiz = isEditingBaseLanguage ? station.quiz : selectedTranslation?.quiz;
+          const selectedStationQuizAnswers = selectedStationQuiz?.answers ?? createEmptyQuizAnswers();
+          const selectedStationCorrectAnswerIndex = selectedStationQuiz?.correctAnswerIndex ?? 0;
+          const shouldValidateLanguageFields = showValidation && isEditingBaseLanguage;
           const hasCoordinates =
             typeof station.latitude === "number" &&
             Number.isFinite(station.latitude) &&
@@ -458,17 +748,17 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                 showValidation && hasStationValidationError ? "border-red-500/60" : "border-zinc-700"
               }`}
             >
-              <div className="flex items-start justify-between gap-2 px-3 py-2">
+              <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between">
                 <button
                   type="button"
                   onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
-                  className="flex-1 text-left"
+                  className="min-w-0 flex-1 text-left"
                 >
-                  <p className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-zinc-100">
                     <span className="inline-flex min-w-9 justify-center rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-zinc-300">
                       #{index + 1}
                     </span>
-                    <span>{station.name.trim() || `Stanowisko ${index + 1}`}</span>
+                    <span className="min-w-0 break-words">{station.name.trim() || `Stanowisko ${index + 1}`}</span>
                   </p>
                   <p className="text-xs text-zinc-500">
                     {stationTypeLabelByValue.get(station.type) ?? "Quiz"} • {Number.isFinite(station.points) ? station.points : 0} pkt •{" "}
@@ -479,8 +769,8 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                   </p>
                 </button>
 
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="w-full sm:w-auto">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => moveStation(index, "up")}
@@ -523,15 +813,15 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
                       <input
-                        value={station.name}
-                        onChange={(event) => updateStation(index, { name: event.target.value })}
+                        value={selectedStationName}
+                        onChange={(event) => updateStationForSelectedLanguage(index, { name: event.target.value })}
                         className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                          showValidation && stationValidation.missingName
+                          shouldValidateLanguageFields && stationValidation.missingName
                             ? "border-red-500/70 focus:border-red-400/80"
                             : "border-zinc-700 focus:border-amber-400/80"
                         }`}
                       />
-                      {showValidation && stationValidation.missingName ? (
+                      {shouldValidateLanguageFields && stationValidation.missingName ? (
                         <p className="text-xs text-red-300">Uzupełnij nazwę stanowiska.</p>
                       ) : null}
                     </label>
@@ -572,7 +862,7 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                   {isCompletionCodeRequired(station.type) ? (
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
-                      <div className="inline-flex w-fit rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                      <div className="flex w-full flex-wrap rounded-lg border border-zinc-700 bg-zinc-900 p-1 sm:inline-flex sm:w-fit">
                         {completionCodeModeOptions.map((option) => (
                           <button
                             key={option.value}
@@ -631,18 +921,18 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                         <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
                         <textarea
                           rows={2}
-                          value={station.quiz?.question ?? ""}
+                          value={selectedStationQuiz?.question ?? ""}
                           onChange={(event) =>
-                            updateStation(index, {
+                            updateStationForSelectedLanguage(index, {
                               quiz: {
                                 question: event.target.value,
-                                answers: station.quiz?.answers ?? createEmptyQuizAnswers(),
-                                correctAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
+                                answers: selectedStationQuizAnswers,
+                                correctAnswerIndex: selectedStationCorrectAnswerIndex,
                               },
                             })
                           }
                           className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                            showValidation && stationValidation.invalidQuiz
+                            shouldValidateLanguageFields && stationValidation.invalidQuiz
                               ? "border-red-500/70 focus:border-red-400/80"
                               : "border-zinc-700 focus:border-amber-400/80"
                           }`}
@@ -650,7 +940,7 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                       </label>
 
                       <div className="space-y-2">
-                        {(station.quiz?.answers ?? createEmptyQuizAnswers()).map((answer, answerIndex) => (
+                        {selectedStationQuizAnswers.map((answer, answerIndex) => (
                           <label
                             key={answerIndex}
                             className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 p-2"
@@ -658,12 +948,12 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                             <input
                               type="radio"
                               name={`realization-station-quiz-correct-${stationKey}`}
-                              checked={(station.quiz?.correctAnswerIndex ?? 0) === answerIndex}
+                              checked={selectedStationCorrectAnswerIndex === answerIndex}
                               onChange={() =>
-                                updateStation(index, {
+                                updateStationForSelectedLanguage(index, {
                                   quiz: {
-                                    question: station.quiz?.question ?? "",
-                                    answers: station.quiz?.answers ?? createEmptyQuizAnswers(),
+                                    question: selectedStationQuiz?.question ?? "",
+                                    answers: selectedStationQuizAnswers,
                                     correctAnswerIndex: answerIndex,
                                   },
                                 })
@@ -673,19 +963,19 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                             <input
                               value={answer}
                               onChange={(event) =>
-                                updateStation(index, {
+                                updateStationForSelectedLanguage(index, {
                                   quiz: {
-                                    question: station.quiz?.question ?? "",
-                                    answers: (station.quiz?.answers ?? createEmptyQuizAnswers()).map((item, idx) =>
+                                    question: selectedStationQuiz?.question ?? "",
+                                    answers: selectedStationQuizAnswers.map((item, idx) =>
                                       idx === answerIndex ? event.target.value : item,
                                     ),
-                                    correctAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
+                                    correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                   },
                                 })
                               }
                               placeholder={`Odpowiedź ${answerIndex + 1}`}
                               className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                                showValidation && stationValidation.invalidQuiz
+                                shouldValidateLanguageFields && stationValidation.invalidQuiz
                                   ? "border-red-500/70 focus:border-red-400/80"
                                   : "border-zinc-700 focus:border-amber-400/80"
                               }`}
@@ -696,7 +986,7 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                       <p className="text-xs text-zinc-500">
                         Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
                       </p>
-                      {showValidation && stationValidation.invalidQuiz ? (
+                      {shouldValidateLanguageFields && stationValidation.invalidQuiz ? (
                         <p className="text-xs text-red-300">Quiz wymaga pytania, 4 odpowiedzi i jednej poprawnej.</p>
                       ) : null}
                     </div>
@@ -706,15 +996,15 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
                     <textarea
                       rows={3}
-                      value={station.description}
-                      onChange={(event) => updateStation(index, { description: event.target.value })}
+                      value={selectedStationDescription}
+                      onChange={(event) => updateStationForSelectedLanguage(index, { description: event.target.value })}
                       className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                        showValidation && stationValidation.missingDescription
+                        shouldValidateLanguageFields && stationValidation.missingDescription
                           ? "border-red-500/70 focus:border-red-400/80"
                           : "border-zinc-700 focus:border-amber-400/80"
                       }`}
                     />
-                    {showValidation && stationValidation.missingDescription ? (
+                    {shouldValidateLanguageFields && stationValidation.missingDescription ? (
                       <p className="text-xs text-red-300">Uzupełnij opis stanowiska.</p>
                     ) : null}
                   </label>
@@ -739,7 +1029,7 @@ export function RealizationStationsEditor({ stations, onChange, showValidation =
                       </div>
 
                       <div className="flex justify-center">
-                        <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                        <div className="flex flex-wrap rounded-lg border border-zinc-700 bg-zinc-900 p-1 sm:inline-flex">
                           {imageModeOptions.map((option) => (
                             <button
                               key={option.value}

@@ -235,7 +235,9 @@ export class MobileService {
           slotNumber: existingAssignment.team.slotNumber,
           name: existingAssignment.team.name,
           color: existingAssignment.team.color,
-          badgeKey: this.normalizeTeamBadgeKey(existingAssignment.team.badgeKey),
+          badgeKey: this.normalizeTeamBadgeKey(
+            existingAssignment.team.badgeKey,
+          ),
           points: existingAssignment.team.points,
         },
         customizationOccupancy,
@@ -373,8 +375,10 @@ export class MobileService {
       return {
         stationId,
         status:
-          this.fromTaskStatus(progress?.status, failedStationIds.has(stationId)) ||
-          'todo',
+          this.fromTaskStatus(
+            progress?.status,
+            failedStationIds.has(stationId),
+          ) || 'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
@@ -1455,8 +1459,10 @@ export class MobileService {
       task: {
         stationId: station.id,
         status:
-          this.fromTaskStatus(progress?.status, failedStationIds.has(station.id)) ||
-          'todo',
+          this.fromTaskStatus(
+            progress?.status,
+            failedStationIds.has(station.id),
+          ) || 'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
@@ -1518,7 +1524,8 @@ export class MobileService {
       }
 
       const teamOutcome =
-        latestTaskOutcomeByTeam.get(log.teamId) || new Map<string, 'failed' | 'done'>();
+        latestTaskOutcomeByTeam.get(log.teamId) ||
+        new Map<string, 'failed' | 'done'>();
       if (!latestTaskOutcomeByTeam.has(log.teamId)) {
         latestTaskOutcomeByTeam.set(log.teamId, teamOutcome);
       }
@@ -1586,12 +1593,12 @@ export class MobileService {
     });
 
     return {
-        realization: {
-          id: realization.id,
-          companyName: realization.companyName,
-          introText: realization.introText,
-          gameRules: realization.gameRules,
-          status: normalizedRealizationStatus,
+      realization: {
+        id: realization.id,
+        companyName: realization.companyName,
+        introText: realization.introText,
+        gameRules: realization.gameRules,
+        status: normalizedRealizationStatus,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
@@ -2312,7 +2319,9 @@ export class MobileService {
       return null;
     }
 
-    return TEAM_COLORS.includes(color as TeamColor) ? (color as TeamColor) : null;
+    return TEAM_COLORS.includes(color as TeamColor)
+      ? (color as TeamColor)
+      : null;
   }
 
   private async getCustomizationOccupancyByRealization(realizationId: string) {

@@ -62,78 +62,80 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
       )}
 
       {!isLoading && scenarios.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
-          <div className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
-            <span>Nazwa</span>
-            <span>Stanowiska / aktywności</span>
-            <span>Kody</span>
-            <span>Aktualizacja</span>
-            <span>Akcje</span>
-          </div>
+        <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/60">
+          <div className="min-w-[820px]">
+            <div className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+              <span>Nazwa</span>
+              <span>Stanowiska / aktywności</span>
+              <span>Kody</span>
+              <span>Aktualizacja</span>
+              <span>Akcje</span>
+            </div>
 
-          <div className="divide-y divide-zinc-800">
-            {scenarios.map((scenario) => (
-              <div key={scenario.id} className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-100">{scenario.name}</p>
-                  <p className="mt-1 text-xs text-zinc-400">{scenario.description || "Brak opisu scenariusza."}</p>
-                </div>
+            <div className="divide-y divide-zinc-800">
+              {scenarios.map((scenario) => (
+                <div key={scenario.id} className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">{scenario.name}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{scenario.description || "Brak opisu scenariusza."}</p>
+                  </div>
 
-                <div className="space-y-1">
-                  {scenario.stationIds.length === 0 ? (
-                    <p className="text-xs text-zinc-500">Brak przypisanych stanowisk.</p>
-                  ) : (
-                    scenario.stationIds.slice(0, 3).map((stationId) => {
-                      const station = stationById.get(stationId);
+                  <div className="space-y-1">
+                    {scenario.stationIds.length === 0 ? (
+                      <p className="text-xs text-zinc-500">Brak przypisanych stanowisk.</p>
+                    ) : (
+                      scenario.stationIds.slice(0, 3).map((stationId) => {
+                        const station = stationById.get(stationId);
 
-                      if (!station) {
+                        if (!station) {
+                          return (
+                            <p key={stationId} className="text-xs text-zinc-500">
+                              • Stanowisko {stationId} (brak w katalogu)
+                            </p>
+                          );
+                        }
+
                         return (
-                          <p key={stationId} className="text-xs text-zinc-500">
-                            • Stanowisko {stationId} (brak w katalogu)
+                          <p key={station.id} className="text-xs text-zinc-300">
+                            • {station.name}: {station.description || "Brak opisu aktywności"}
                           </p>
                         );
+                      })
+                    )}
+                    {scenario.stationIds.length > 3 && (
+                      <p className="text-xs text-zinc-500">+{scenario.stationIds.length - 3} więcej...</p>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-zinc-300">
+                    {(() => {
+                      const coverage = getCodeCoverage(scenario.stationIds);
+                      if (coverage.required === 0) {
+                        return "Niewymagane";
                       }
+                      return `${coverage.configured}/${coverage.required}`;
+                    })()}
+                  </div>
 
-                      return (
-                        <p key={station.id} className="text-xs text-zinc-300">
-                          • {station.name}: {station.description || "Brak opisu aktywności"}
-                        </p>
-                      );
-                    })
-                  )}
-                  {scenario.stationIds.length > 3 && (
-                    <p className="text-xs text-zinc-500">+{scenario.stationIds.length - 3} więcej...</p>
-                  )}
-                </div>
+                  <div className="text-xs text-zinc-400">
+                    {new Date(scenario.updatedAt).toLocaleString("pl-PL", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </div>
 
-                <div className="text-xs text-zinc-300">
-                  {(() => {
-                    const coverage = getCodeCoverage(scenario.stationIds);
-                    if (coverage.required === 0) {
-                      return "Niewymagane";
-                    }
-                    return `${coverage.configured}/${coverage.required}`;
-                  })()}
+                  <div className="flex items-start justify-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(scenario)}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
+                    >
+                      Edytuj
+                    </button>
+                  </div>
                 </div>
-
-                <div className="text-xs text-zinc-400">
-                  {new Date(scenario.updatedAt).toLocaleString("pl-PL", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  })}
-                </div>
-
-                <div className="flex items-start justify-start gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(scenario)}
-                    className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
-                  >
-                    Edytuj
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}

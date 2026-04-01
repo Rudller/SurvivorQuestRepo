@@ -104,6 +104,7 @@ model Station {
   timeLimitSeconds Int                @default(0)
   completionCode   String?
   quizData         Json?
+  translations     Json?
   latitude         Float?
   longitude        Float?
   sourceTemplateId String?

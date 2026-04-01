@@ -8,8 +8,12 @@ import type {
   RealizationType,
 } from "../types/realization";
 import {
-  getRealizationLanguageLabel,
+  formatRealizationLanguageSummary,
+  getRealizationLanguageFlag,
+  isRealizationLanguageSelectionInvalid,
+  parseRealizationLanguageSelection,
   realizationLanguageOptions,
+  toRealizationLanguagePayload,
   realizationTypeOptions,
 } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
@@ -78,6 +82,10 @@ export function EditRealizationPanel({
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
+  const initialLanguageSelection = useMemo(
+    () => parseRealizationLanguageSelection(realization.language, realization.customLanguage),
+    [realization.customLanguage, realization.language],
+  );
   const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
   const [editValues, setEditValues] = useState({
     companyName: realization.companyName,
@@ -129,6 +137,10 @@ export function EditRealizationPanel({
   const [scenarioStations, setScenarioStations] = useState(() =>
     mapScenarioStations(realization.scenarioTemplateId ?? realization.scenarioId),
   );
+  const [selectedLanguages, setSelectedLanguages] = useState<RealizationLanguage[]>(
+    initialLanguageSelection.selectedLanguages,
+  );
+  const [customLanguageInput, setCustomLanguageInput] = useState(initialLanguageSelection.customLanguage);
   const positionsCount = scenarioStations.length;
   const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isUpdating || isUploadingLogo || isUploadingOffer;
@@ -137,7 +149,20 @@ export function EditRealizationPanel({
   const isScenarioInvalid = submitAttempted && !editValues.scenarioId;
   const isContactPersonInvalid = submitAttempted && !editValues.contactPerson.trim();
   const isContactChannelInvalid = submitAttempted && !editValues.contactPhone.trim() && !editValues.contactEmail.trim();
-  const isCustomLanguageInvalid = submitAttempted && editValues.language === "other" && !editValues.customLanguage.trim();
+  const languageSelection = useMemo(
+    () => ({
+      selectedLanguages,
+      customLanguage: customLanguageInput,
+    }),
+    [customLanguageInput, selectedLanguages],
+  );
+  const selectedLanguagesSet = useMemo(() => new Set(selectedLanguages), [selectedLanguages]);
+  const languagePayload = useMemo(
+    () => toRealizationLanguagePayload(languageSelection),
+    [languageSelection],
+  );
+  const isLanguageSelectionInvalid = submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
+  const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
   const isScheduledAtInvalid = submitAttempted && !editValues.scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(editValues.durationMinutes) || editValues.durationMinutes < 1);
   const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
@@ -214,8 +239,7 @@ export function EditRealizationPanel({
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
 
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
-        <div className="space-y-5">
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-zinc-100">Edytuj realizację</h2>
@@ -242,7 +266,7 @@ export function EditRealizationPanel({
                 !editValues.scheduledAt ||
                 !editValues.contactPerson.trim() ||
                 (!editValues.contactPhone.trim() && !editValues.contactEmail.trim()) ||
-                (editValues.language === "other" && !editValues.customLanguage.trim()) ||
+                isRealizationLanguageSelectionInvalid(languageSelection) ||
                 !Number.isFinite(editValues.durationMinutes) ||
                 editValues.durationMinutes < 1 ||
                 scenarioStations.length === 0;
@@ -289,10 +313,6 @@ export function EditRealizationPanel({
               const normalizedContactEmail = editValues.contactEmail.trim() || undefined;
               const normalizedContactPhone =
                 editValues.contactPhone.trim() || (normalizedContactEmail ? undefined : "Nie podano");
-              const normalizedCustomLanguage =
-                editValues.language === "other"
-                  ? editValues.customLanguage.trim() || "Nieokreślony"
-                  : undefined;
               const normalizedScheduledAt =
                 toIsoFromDateTimeLocal(editValues.scheduledAt) || new Date().toISOString();
               const normalizedTeamCount = Math.max(1, Math.round(editValues.teamCount) || 1);
@@ -322,8 +342,8 @@ export function EditRealizationPanel({
                   id: realization.id,
                   companyName: normalizedCompanyName,
                   location: editValues.location.trim() || undefined,
-                  language: editValues.language,
-                  customLanguage: normalizedCustomLanguage,
+                  language: languagePayload.language,
+                  customLanguage: languagePayload.customLanguage,
                   introText: editValues.introText || undefined,
                   gameRules: editValues.gameRules.trim() || undefined,
                   contactPerson: normalizedContactPerson,
@@ -351,9 +371,8 @@ export function EditRealizationPanel({
                 setEditError("Nie udało się zapisać zmian realizacji.");
               }
             }}
-            className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+            className="min-w-0 space-y-4 overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
           >
-            <div className="space-y-4">
               <section className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-xs uppercase tracking-wider text-zinc-500">ID realizacji</p>
@@ -382,7 +401,7 @@ export function EditRealizationPanel({
               </section>
 
               {/* ── Klient ── */}
-              <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
+              <fieldset className="min-w-0 space-y-3 overflow-x-hidden rounded-lg border border-zinc-800 p-4">
                 <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Klient</legend>
 
                 <label className="block space-y-1.5">
@@ -414,37 +433,48 @@ export function EditRealizationPanel({
 
                 <label className="block space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
-                  <select
-                    value={editValues.language}
-                    onChange={(event) =>
-                      setEditValues((prev) => {
-                        const nextLanguage = event.target.value as RealizationLanguage;
-                        return {
-                          ...prev,
-                          language: nextLanguage,
-                          customLanguage: nextLanguage === "other" ? prev.customLanguage : "",
-                        };
-                      })
-                    }
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  <div
+                    className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
+                      isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
+                    }`}
                   >
-                    {realizationLanguageOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    {realizationLanguageOptions.map((option) => {
+                      const isChecked = selectedLanguagesSet.has(option.value);
+                      return (
+                        <label key={option.value} className="inline-flex items-center gap-2 text-sm text-zinc-200">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(event) => {
+                              setSelectedLanguages((current) => {
+                                if (event.target.checked) {
+                                  return [...current, option.value].filter(
+                                    (value, index, list) => list.indexOf(value) === index,
+                                  );
+                                }
+                                return current.filter((value) => value !== option.value);
+                              });
+                            }}
+                            className="h-4 w-4 accent-amber-400"
+                          />
+                          <span>{getRealizationLanguageFlag(option.value)}</span>
+                          <span>{option.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {isLanguageSelectionInvalid ? (
+                    <p className="text-xs text-red-300">Wybierz co najmniej jeden język realizacji.</p>
+                  ) : null}
                 </label>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {editValues.language === "other" && (
+                  {selectedLanguagesSet.has("other") && (
                     <label className="space-y-1.5 sm:col-span-2">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
                       <input
-                        value={editValues.customLanguage}
-                        onChange={(event) =>
-                          setEditValues((prev) => ({ ...prev, customLanguage: event.target.value }))
-                        }
+                        value={customLanguageInput}
+                        onChange={(event) => setCustomLanguageInput(event.target.value)}
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
                           isCustomLanguageInvalid
                             ? "border-red-500/70 focus:border-red-400/80"
@@ -549,7 +579,7 @@ export function EditRealizationPanel({
               </fieldset>
 
               {/* ── Instruktorzy ── */}
-              <fieldset className="space-y-3 rounded-lg border border-zinc-800 p-4">
+              <fieldset className="min-w-0 space-y-3 overflow-x-hidden rounded-lg border border-zinc-800 p-4">
                 <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Instruktorzy</legend>
                 <div className="flex gap-2">
                   <input
@@ -709,7 +739,7 @@ export function EditRealizationPanel({
                   Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
                 </p>
                 <div
-                  className={`rounded-lg border ${
+                  className={`min-w-0 overflow-hidden rounded-lg border ${
                     isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations)
                       ? "border-red-500/60"
                       : "border-transparent"
@@ -719,6 +749,7 @@ export function EditRealizationPanel({
                     stations={scenarioStations}
                     onChange={setScenarioStations}
                     showValidation={submitAttempted}
+                    selectedLanguages={selectedLanguages}
                   />
                 </div>
                 {isScenarioStationsEmpty ? (
@@ -728,7 +759,9 @@ export function EditRealizationPanel({
                 <div className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
                   {(pendingOfferPdfFile?.name ?? editValues.offerPdfName) && (
-                    <p className="mb-1 text-xs text-zinc-300">📄 {pendingOfferPdfFile?.name ?? editValues.offerPdfName}</p>
+                    <p className="mb-1 break-all text-xs text-zinc-300">
+                      📄 {pendingOfferPdfFile?.name ?? editValues.offerPdfName}
+                    </p>
                   )}
                   <input
                     type="file"
@@ -797,7 +830,6 @@ export function EditRealizationPanel({
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
               </fieldset>
-            </div>
 
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm text-zinc-300">
               <p>
@@ -808,9 +840,7 @@ export function EditRealizationPanel({
               </p>
               <p>
                 <span className="text-zinc-500">Język realizacji:</span>{" "}
-                {editValues.language === "other"
-                  ? editValues.customLanguage.trim() || "Inne"
-                  : getRealizationLanguageLabel(editValues.language)}
+                {formatRealizationLanguageSummary(languagePayload.language, languagePayload.customLanguage)}
               </p>
               <p>
                 <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
@@ -879,7 +909,6 @@ export function EditRealizationPanel({
               {realization.logs.length === 0 && <p className="text-xs text-zinc-500">Brak logów zmian.</p>}
             </div>
           </section>
-        </div>
       </aside>
     </>
   );

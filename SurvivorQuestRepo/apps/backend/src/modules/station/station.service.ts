@@ -13,6 +13,19 @@ export type StationQuiz = {
   correctAnswerIndex: number;
 };
 
+export type StationTranslation = {
+  name?: string;
+  description?: string;
+  quiz?: StationQuiz;
+};
+
+export type StationTranslations = Partial<
+  Record<
+    'polish' | 'english' | 'ukrainian' | 'russian' | 'other',
+    StationTranslation
+  >
+>;
+
 export type StationKind =
   | 'template'
   | 'scenario-instance'
@@ -28,6 +41,7 @@ export type StationEntity = {
   timeLimitSeconds: number;
   completionCode?: string;
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -48,6 +62,7 @@ export type StationDraftInput = {
   timeLimitSeconds: number;
   completionCode?: string;
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -124,6 +139,110 @@ function parseStationQuizData(
   };
 }
 
+function toPrismaStationTranslationsData(
+  translations: StationTranslations | undefined,
+) {
+  if (!translations) {
+    return Prisma.DbNull;
+  }
+
+  const normalized = Object.entries(translations).reduce<
+    Record<string, Prisma.InputJsonValue>
+  >((acc, [key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return acc;
+    }
+
+    const next: Record<string, Prisma.InputJsonValue> = {};
+
+    if (typeof value.name === 'string' && value.name.trim()) {
+      next.name = value.name.trim();
+    }
+
+    if (typeof value.description === 'string' && value.description.trim()) {
+      next.description = value.description.trim();
+    }
+
+    if (value.quiz) {
+      next.quiz = {
+        question: value.quiz.question,
+        answers: value.quiz.answers,
+        correctAnswerIndex: value.quiz.correctAnswerIndex,
+      } as Prisma.InputJsonValue;
+    }
+
+    if (Object.keys(next).length === 0) {
+      return acc;
+    }
+
+    acc[key] = next;
+    return acc;
+  }, {});
+
+  if (Object.keys(normalized).length === 0) {
+    return Prisma.DbNull;
+  }
+
+  return normalized as Prisma.InputJsonValue;
+}
+
+function parseStationTranslationsData(
+  translationsData: Prisma.JsonValue | null,
+): StationTranslations | undefined {
+  if (
+    !translationsData ||
+    typeof translationsData !== 'object' ||
+    Array.isArray(translationsData)
+  ) {
+    return undefined;
+  }
+
+  const payload = translationsData as Record<string, unknown>;
+  const parsed = Object.entries(payload).reduce<StationTranslations>(
+    (acc, [key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return acc;
+      }
+
+      const item = value as Record<string, unknown>;
+      const translation: StationTranslation = {};
+
+      if (typeof item.name === 'string' && item.name.trim()) {
+        translation.name = item.name.trim();
+      }
+
+      if (typeof item.description === 'string' && item.description.trim()) {
+        translation.description = item.description.trim();
+      }
+
+      const parsedQuiz = parseStationQuizData(
+        (item.quiz as Prisma.JsonValue | null) ?? null,
+      );
+      if (parsedQuiz) {
+        translation.quiz = parsedQuiz;
+      }
+
+      if (Object.keys(translation).length === 0) {
+        return acc;
+      }
+
+      if (
+        key === 'polish' ||
+        key === 'english' ||
+        key === 'ukrainian' ||
+        key === 'russian' ||
+        key === 'other'
+      ) {
+        acc[key] = translation;
+      }
+      return acc;
+    },
+    {},
+  );
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function deriveStationKind(input: {
   scenarioInstanceId: string | null;
   realizationId: string | null;
@@ -161,6 +280,7 @@ function mapStation(input: {
   timeLimitSeconds: number;
   completionCode: string | null;
   quizData: Prisma.JsonValue | null;
+  translations: Prisma.JsonValue | null;
   latitude: number | null;
   longitude: number | null;
   sourceTemplateId: string | null;
@@ -181,8 +301,10 @@ function mapStation(input: {
     timeLimitSeconds: input.timeLimitSeconds,
     completionCode: input.completionCode || undefined,
     quiz: parseStationQuizData(input.quizData),
+    translations: parseStationTranslationsData(input.translations),
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
-    longitude: typeof input.longitude === 'number' ? input.longitude : undefined,
+    longitude:
+      typeof input.longitude === 'number' ? input.longitude : undefined,
     sourceTemplateId: input.sourceTemplateId || undefined,
     scenarioInstanceId: input.scenarioInstanceId || undefined,
     realizationId: input.realizationId || undefined,
@@ -269,6 +391,7 @@ export class StationService {
         timeLimitSeconds: station.timeLimitSeconds,
         completionCode: station.completionCode,
         quizData: toPrismaStationQuizData(station.quiz),
+        translations: toPrismaStationTranslationsData(station.translations),
         latitude: station.latitude,
         longitude: station.longitude,
         sourceTemplateId: station.id,
@@ -290,6 +413,9 @@ export class StationService {
         timeLimitSeconds: updatedStation.timeLimitSeconds,
         completionCode: updatedStation.completionCode,
         quizData: toPrismaStationQuizData(updatedStation.quiz),
+        translations: toPrismaStationTranslationsData(
+          updatedStation.translations,
+        ),
         latitude: updatedStation.latitude,
         longitude: updatedStation.longitude,
       },
@@ -339,6 +465,7 @@ export class StationService {
           timeLimitSeconds: source.timeLimitSeconds,
           completionCode: source.completionCode,
           quizData: toPrismaStationQuizData(source.quiz),
+          translations: toPrismaStationTranslationsData(source.translations),
           latitude: source.latitude,
           longitude: source.longitude,
           sourceTemplateId: source.sourceTemplateId ?? source.id,
@@ -371,6 +498,7 @@ export class StationService {
         timeLimitSeconds: normalized.timeLimitSeconds,
         completionCode: normalized.completionCode,
         quizData: toPrismaStationQuizData(normalized.quiz),
+        translations: toPrismaStationTranslationsData(normalized.translations),
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId: normalized.sourceTemplateId,
@@ -400,6 +528,7 @@ export class StationService {
         timeLimitSeconds: normalized.timeLimitSeconds,
         completionCode: normalized.completionCode,
         quizData: toPrismaStationQuizData(normalized.quiz),
+        translations: toPrismaStationTranslationsData(normalized.translations),
         latitude: normalized.latitude,
         longitude: normalized.longitude,
         sourceTemplateId:
@@ -434,6 +563,7 @@ export class StationService {
       timeLimitSeconds: Math.round(input.timeLimitSeconds),
       completionCode: normalizedCompletionCode,
       quiz: normalizedQuiz,
+      translations: input.translations,
       latitude:
         typeof input.latitude === 'number' && Number.isFinite(input.latitude)
           ? input.latitude

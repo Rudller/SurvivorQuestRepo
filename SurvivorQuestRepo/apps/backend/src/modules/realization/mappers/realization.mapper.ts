@@ -75,7 +75,8 @@ export function resolveRealizationStatus(
 ) {
   const scheduledTimestamp = new Date(scheduledAt).getTime();
   const safeDurationMinutes = Math.max(1, Math.round(durationMinutes));
-  const autoDoneTimestamp = scheduledTimestamp + safeDurationMinutes * MINUTES_TO_MS + DAY_TO_MS;
+  const autoDoneTimestamp =
+    scheduledTimestamp + safeDurationMinutes * MINUTES_TO_MS + DAY_TO_MS;
 
   if (Number.isFinite(scheduledTimestamp) && autoDoneTimestamp < Date.now()) {
     return 'done' as const;
@@ -119,13 +120,13 @@ export function mapRealizationLogs(
 export function buildRealizationEntity(input: {
   realization: {
     id: string;
-      companyName: string;
-      location: string | null;
-      language: PrismaRealizationLanguage;
-      customLanguage: string | null;
-      introText: string | null;
-      gameRules: string | null;
-      contactPerson: string;
+    companyName: string;
+    location: string | null;
+    language: PrismaRealizationLanguage;
+    customLanguage: string | null;
+    introText: string | null;
+    gameRules: string | null;
+    contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
     instructors: unknown;

@@ -80,54 +80,56 @@ export function StationsTable({
       )}
 
       {sortedGames.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
-          <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
-            <span>Obraz</span>
-            <span>Nazwa</span>
-            <span>Typ</span>
-            <span>Opis</span>
-            <span>Punkty</span>
-            <span>Czas</span>
-            <span>Kod</span>
-            <span>Aktualizacja</span>
-            <span>Akcje</span>
-          </div>
+        <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/60">
+          <div className="min-w-[1180px]">
+            <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+              <span>Obraz</span>
+              <span>Nazwa</span>
+              <span>Typ</span>
+              <span>Opis</span>
+              <span>Punkty</span>
+              <span>Czas</span>
+              <span>Kod</span>
+              <span>Aktualizacja</span>
+              <span>Akcje</span>
+            </div>
 
-          <div className="divide-y divide-zinc-800">
-            {sortedGames.map((game) => (
-              <div key={game.id} className="px-4 py-3">
-                <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] items-center gap-3">
-                  <Image
-                    src={game.imageUrl}
-                    alt={game.name}
-                    width={72}
-                    height={72}
-                    unoptimized={isSvgImageUrl(game.imageUrl)}
-                    className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
-                  />
-                  <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
-                  <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                    {getStationTypeLabel(game.type)}
-                  </span>
-                  <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
-                  <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
-                  <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
-                  <p className="text-xs text-zinc-300">
-                    {isCompletionCodeRequired(game.type) ? (game.completionCode ? "Skonfigurowany" : "Brak") : "Niewymagany"}
-                  </p>
-                  <p className="text-xs text-zinc-500">{new Date(game.updatedAt).toLocaleDateString("pl-PL")}</p>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => onEdit(game)}
-                      className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                    >
-                      Edytuj
-                    </button>
+            <div className="divide-y divide-zinc-800">
+              {sortedGames.map((game) => (
+                <div key={game.id} className="px-4 py-3">
+                  <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] items-center gap-3">
+                    <Image
+                      src={game.imageUrl}
+                      alt={game.name}
+                      width={72}
+                      height={72}
+                      unoptimized={isSvgImageUrl(game.imageUrl)}
+                      className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
+                    />
+                    <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
+                    <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
+                      {getStationTypeLabel(game.type)}
+                    </span>
+                    <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
+                    <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
+                    <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
+                    <p className="text-xs text-zinc-300">
+                      {isCompletionCodeRequired(game.type) ? (game.completionCode ? "Skonfigurowany" : "Brak") : "Niewymagany"}
+                    </p>
+                    <p className="text-xs text-zinc-500">{new Date(game.updatedAt).toLocaleDateString("pl-PL")}</p>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => onEdit(game)}
+                        className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                      >
+                        Edytuj
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}

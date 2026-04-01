@@ -78,7 +78,9 @@ async function closeApp() {
   try {
     await appInstance.close();
   } catch (error) {
-    bootstrapLogger.error(`Failed to close application gracefully: ${getErrorMessage(error)}`);
+    bootstrapLogger.error(
+      `Failed to close application gracefully: ${getErrorMessage(error)}`,
+    );
   }
 }
 
@@ -88,7 +90,9 @@ async function handleFatalError(source: string, error: unknown) {
   }
 
   isShuttingDown = true;
-  bootstrapLogger.error(`Fatal error from ${source}: ${getErrorMessage(error)}`);
+  bootstrapLogger.error(
+    `Fatal error from ${source}: ${getErrorMessage(error)}`,
+  );
   await closeApp();
   process.exit(1);
 }
@@ -151,7 +155,10 @@ async function bootstrap() {
         return;
       }
 
-      if (process.env.NODE_ENV !== 'production' && isDevLocalNetworkOrigin(origin)) {
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        isDevLocalNetworkOrigin(origin)
+      ) {
         callback(null, true);
         return;
       }

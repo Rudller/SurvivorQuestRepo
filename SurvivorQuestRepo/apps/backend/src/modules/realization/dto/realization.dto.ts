@@ -61,6 +61,12 @@ export type UpdateRealizationDto = CreateRealizationDto & {
   id?: string;
 };
 
+export type TranslateRealizationStationDto = {
+  sourceLanguage?: RealizationLanguage;
+  targetLanguage?: RealizationLanguage;
+  station?: ScenarioStationDraftPayload;
+};
+
 function sanitizeInstructors(value: unknown) {
   if (!Array.isArray(value)) {
     return [] as string[];
@@ -122,12 +128,12 @@ export function validateRealizationPayload(
 
   if (
     !companyName ||
-      !contactPerson ||
-      (!contactPhone && !contactEmail) ||
-      !isValidRealizationType(payload.type) ||
-      !isValidRealizationLanguage(payload.language) ||
-      !isValidRealizationStatus(payload.status) ||
-      !scenarioId ||
+    !contactPerson ||
+    (!contactPhone && !contactEmail) ||
+    !isValidRealizationType(payload.type) ||
+    !isValidRealizationLanguage(payload.language) ||
+    !isValidRealizationStatus(payload.status) ||
+    !scenarioId ||
     !Number.isFinite(teamCount) ||
     teamCount < 1 ||
     !Number.isFinite(peopleCount) ||

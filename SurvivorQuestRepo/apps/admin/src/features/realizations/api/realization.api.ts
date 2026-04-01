@@ -26,6 +26,22 @@ type StationDto = {
         correctAnswerIndex?: number;
       }
     | null;
+  translations?:
+    | Partial<
+        Record<
+          "polish" | "english" | "ukrainian" | "russian" | "other",
+          {
+            name?: string;
+            description?: string;
+            quiz?: {
+              question?: string;
+              answers?: string[];
+              correctAnswerIndex?: number;
+            };
+          }
+        >
+      >
+    | null;
   latitude?: number | null;
   longitude?: number | null;
   sourceTemplateId?: string;
@@ -302,6 +318,45 @@ function normalizeStation(station: StationDto): Station {
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
           }) ?? undefined
+        : undefined,
+    translations:
+      station.translations && typeof station.translations === "object"
+        ? Object.entries(station.translations).reduce<NonNullable<Station["translations"]>>((acc, [language, value]) => {
+            if (!value || typeof value !== "object") {
+              return acc;
+            }
+
+            const quiz =
+              value.quiz && typeof value.quiz.question === "string" && Array.isArray(value.quiz.answers)
+                ? normalizeStationQuiz({
+                    question: value.quiz.question,
+                    answers: value.quiz.answers,
+                    correctAnswerIndex: Number(value.quiz.correctAnswerIndex),
+                  }) ?? undefined
+                : undefined;
+
+            const name = typeof value.name === "string" ? value.name.trim() : "";
+            const description = typeof value.description === "string" ? value.description.trim() : "";
+            if (!name && !description && !quiz) {
+              return acc;
+            }
+
+            if (
+              language === "polish" ||
+              language === "english" ||
+              language === "ukrainian" ||
+              language === "russian" ||
+              language === "other"
+            ) {
+              acc[language] = {
+                name: name || undefined,
+                description: description || undefined,
+                quiz,
+              };
+            }
+
+            return acc;
+          }, {})
         : undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
     longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,

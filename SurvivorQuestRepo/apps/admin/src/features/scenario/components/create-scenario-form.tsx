@@ -37,7 +37,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
         onClick={onClose}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-6">
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
         <form
           className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
           onSubmit={async (event) => {

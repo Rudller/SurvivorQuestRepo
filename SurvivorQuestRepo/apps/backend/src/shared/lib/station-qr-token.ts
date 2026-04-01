@@ -80,7 +80,9 @@ function decodePayload(encoded: string): StationQrTokenPayload | null {
 }
 
 function signEncodedPayload(encodedPayload: string, secret: string) {
-  return createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  return createHmac('sha256', secret)
+    .update(encodedPayload)
+    .digest('base64url');
 }
 
 function signaturesEqual(left: string, right: string) {
