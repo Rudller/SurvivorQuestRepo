@@ -24,6 +24,7 @@ type StationDto = {
         question?: string;
         answers?: string[];
         correctAnswerIndex?: number;
+        audioUrl?: string;
       }
     | null;
   translations?:
@@ -37,6 +38,7 @@ type StationDto = {
               question?: string;
               answers?: string[];
               correctAnswerIndex?: number;
+              audioUrl?: string;
             };
           }
         >
@@ -317,6 +319,7 @@ function normalizeStation(station: StationDto): Station {
             question: station.quiz.question,
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
+            audioUrl: station.quiz.audioUrl,
           }) ?? undefined
         : undefined,
     translations:
@@ -332,6 +335,7 @@ function normalizeStation(station: StationDto): Station {
                     question: value.quiz.question,
                     answers: value.quiz.answers,
                     correctAnswerIndex: Number(value.quiz.correctAnswerIndex),
+                    audioUrl: value.quiz.audioUrl,
                   }) ?? undefined
                 : undefined;
 

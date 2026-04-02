@@ -1,6 +1,7 @@
 import type {
   ExpeditionRealizationStation,
   ExpeditionSessionState,
+  ExpeditionStationType,
   ExpeditionTaskStatus,
   PlayerLocation,
 } from "../model/types";
@@ -32,6 +33,30 @@ function normalizeTaskStatus(value: unknown): ExpeditionTaskStatus {
   return value === "done" || value === "in-progress" || value === "failed" ? value : "todo";
 }
 
+function normalizeStationType(value: unknown): ExpeditionStationType {
+  if (
+    value === "quiz" ||
+    value === "audio-quiz" ||
+    value === "time" ||
+    value === "points" ||
+    value === "wordle" ||
+    value === "hangman" ||
+    value === "mastermind" ||
+    value === "anagram" ||
+    value === "caesar-cipher" ||
+    value === "memory" ||
+    value === "simon" ||
+    value === "rebus" ||
+    value === "boggle" ||
+    value === "mini-sudoku" ||
+    value === "matching"
+  ) {
+    return value;
+  }
+
+  return "quiz";
+}
+
 function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["quiz"] | undefined {
   if (!value) {
     return undefined;
@@ -57,6 +82,7 @@ function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["qui
     question,
     answers: [answers[0], answers[1], answers[2], answers[3]],
     correctAnswerIndex,
+    audioUrl: asString(parsed.audioUrl ?? parsed.audio_url).trim() || undefined,
   };
 }
 
@@ -110,7 +136,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
     return {
       id,
       name,
-      type: asString(station.type, "quiz"),
+      type: normalizeStationType(station.type),
       description: asString(station.description, "Opis stanowiska jest dostępny po skanie QR."),
       imageUrl:
         asString(station.imageUrl ?? station.image_url) ||
@@ -172,10 +198,10 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       return existingStation;
     }
 
-    return {
-      id: stationId,
-      name: `Stanowisko ${stationId}`,
-      type: "quiz",
+      return {
+        id: stationId,
+        name: `Stanowisko ${stationId}`,
+        type: "quiz",
       description: "Opis stanowiska jest dostępny po skanie QR.",
       imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationId)}`,
       points: 100,
@@ -415,19 +441,35 @@ export async function postMobileResolveStationQr(
 ) {
   return requestMobileApi<{
     realizationId: string;
-    station: {
-      id: string;
-      name: string;
-      type: "quiz" | "time" | "points";
-      description: string;
-      imageUrl: string;
-      points: number;
+      station: {
+        id: string;
+        name: string;
+        type:
+          | "quiz"
+          | "audio-quiz"
+          | "time"
+          | "points"
+          | "wordle"
+          | "hangman"
+          | "mastermind"
+          | "anagram"
+          | "caesar-cipher"
+          | "memory"
+          | "simon"
+          | "rebus"
+          | "boggle"
+          | "mini-sudoku"
+          | "matching";
+        description: string;
+        imageUrl: string;
+        points: number;
       timeLimitSeconds: number;
       completionCodeInputMode?: "numeric" | "alphanumeric";
       quiz?: {
         question: string;
         answers: [string, string, string, string];
         correctAnswerIndex: number;
+        audioUrl?: string;
       };
       latitude?: number;
       longitude?: number;

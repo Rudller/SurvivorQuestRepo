@@ -3,13 +3,17 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
-import { useUploadStationImageMutation } from "@/features/games/api/station.api";
+import { useUploadStationAudioMutation, useUploadStationImageMutation } from "@/features/games/api/station.api";
 import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
-  normalizeStationQuiz,
+  normalizeStationQuizForType,
   QUIZ_ANSWER_COUNT,
   isCompletionCodeRequired,
+  isQuizStationType,
+  isWordPuzzleStationType,
+  isMatchingStationType,
+  isImageSupportedStationType,
   formatTimeLimit,
   handleImageFile,
   handleImagePaste,
@@ -17,10 +21,13 @@ import {
   normalizeCompletionCode,
   generateSampleCompletionCode,
   type ImageInputMode,
+  splitMatchingPairAnswer,
+  joinMatchingPairAnswer,
   resolveCompletionCodeGeneratorMode,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
   isValidCompletionCodeForMode,
+  getQuizLikeStationCopy,
 } from "@/features/games/station.utils";
 import {
   getRealizationLanguageFlag,
@@ -48,6 +55,8 @@ interface RealizationStationsEditorProps {
   selectedLanguages?: RealizationLanguage[];
 }
 
+const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
+
 const supportedStationTranslationLanguages: RealizationLanguage[] = [
   "polish",
   "english",
@@ -74,7 +83,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
   return {
     name: "",
     type: "quiz",
-    description: "",
+    description: DEFAULT_STATION_DESCRIPTION,
     imageUrl: "",
     points: 100,
     timeLimitSeconds: 0,
@@ -83,6 +92,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
       question: "",
       answers: createEmptyQuizAnswers(),
       correctAnswerIndex: 0,
+      audioUrl: "",
     },
     latitude: undefined,
     longitude: undefined,
@@ -114,6 +124,7 @@ function cloneStationTranslations(translations: Station["translations"] | undefi
               question: value.quiz.question,
               answers: [...value.quiz.answers],
               correctAnswerIndex: value.quiz.correctAnswerIndex,
+              audioUrl: value.quiz.audioUrl,
             }
           : undefined,
       };
@@ -125,7 +136,10 @@ function cloneStationTranslations(translations: Station["translations"] | undefi
   return Object.keys(cloned).length > 0 ? cloned : undefined;
 }
 
-function normalizeStationTranslations(translations: RealizationStationDraft["translations"]) {
+function normalizeStationTranslations(
+  translations: RealizationStationDraft["translations"],
+  stationType: RealizationStationDraft["type"],
+) {
   if (!translations) {
     return undefined;
   }
@@ -138,7 +152,7 @@ function normalizeStationTranslations(translations: RealizationStationDraft["tra
 
       const name = typeof value.name === "string" ? value.name.trim() : "";
       const description = typeof value.description === "string" ? value.description.trim() : "";
-      const normalizedQuiz = value.quiz ? normalizeStationQuiz(value.quiz) ?? undefined : undefined;
+      const normalizedQuiz = value.quiz ? normalizeStationQuizForType(stationType, value.quiz) ?? undefined : undefined;
 
       if (!name && !description && !normalizedQuiz) {
         return acc;
@@ -159,6 +173,7 @@ function normalizeStationTranslations(translations: RealizationStationDraft["tra
                 question: normalizedQuiz.question,
                 answers: toQuizAnswersTuple(normalizedQuiz.answers),
                 correctAnswerIndex: normalizedQuiz.correctAnswerIndex,
+                audioUrl: normalizedQuiz.audioUrl,
               }
             : undefined,
         };
@@ -183,15 +198,17 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
     quiz: station.quiz
-      ? {
-          question: station.quiz.question,
-          answers: toQuizAnswersTuple(station.quiz.answers),
-          correctAnswerIndex: station.quiz.correctAnswerIndex,
-        }
+        ? {
+            question: station.quiz.question,
+            answers: toQuizAnswersTuple(station.quiz.answers),
+            correctAnswerIndex: station.quiz.correctAnswerIndex,
+            audioUrl: station.quiz.audioUrl ?? "",
+          }
       : {
           question: "",
           answers: createEmptyQuizAnswers(),
           correctAnswerIndex: 0,
+          audioUrl: "",
         },
     translations: cloneStationTranslations(station.translations),
     latitude: station.latitude,
@@ -204,16 +221,21 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     id: station.id,
     name: station.name.trim(),
     type: station.type,
-    description: station.description.trim(),
-    imageUrl: station.imageUrl.trim(),
+    description: station.description.trim() || DEFAULT_STATION_DESCRIPTION,
+    imageUrl: isImageSupportedStationType(station.type) ? station.imageUrl.trim() : "",
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
     completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
     quiz:
-      station.type === "quiz" && station.quiz
-        ? normalizeStationQuiz(station.quiz) ?? undefined
+      isQuizStationType(station.type) && station.quiz
+        ? normalizeStationQuizForType(station.type, {
+            question: station.quiz.question,
+            answers: station.quiz.answers,
+            correctAnswerIndex: station.quiz.correctAnswerIndex,
+            audioUrl: station.quiz.audioUrl,
+          }) ?? undefined
         : undefined,
-    translations: normalizeStationTranslations(station.translations),
+    translations: normalizeStationTranslations(station.translations, station.type),
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   }));
@@ -221,7 +243,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
 
 export function hasInvalidRealizationStationDrafts(stations: RealizationStationDraft[]) {
   return stations.some((station) => {
-    if (!station.name.trim() || !station.description.trim()) {
+    if (!station.name.trim()) {
       return true;
     }
 
@@ -238,8 +260,16 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
       return true;
     }
 
-    if (station.type === "quiz") {
-      if (!station.quiz || !normalizeStationQuiz(station.quiz)) {
+    if (isQuizStationType(station.type)) {
+      if (
+        !station.quiz ||
+        !normalizeStationQuizForType(station.type, {
+          question: station.quiz.question,
+          answers: station.quiz.answers,
+          correctAnswerIndex: station.quiz.correctAnswerIndex,
+          audioUrl: station.quiz.audioUrl,
+        })
+      ) {
         return true;
       }
     }
@@ -265,7 +295,6 @@ export function hasInvalidRealizationStationDrafts(stations: RealizationStationD
 
 export type RealizationStationValidation = {
   missingName: boolean;
-  missingDescription: boolean;
   invalidPoints: boolean;
   invalidTimeLimit: boolean;
   invalidCompletionCode: boolean;
@@ -275,14 +304,21 @@ export type RealizationStationValidation = {
 
 export function getRealizationStationValidation(station: RealizationStationDraft): RealizationStationValidation {
   const missingName = !station.name.trim();
-  const missingDescription = !station.description.trim();
   const invalidPoints = !Number.isFinite(station.points) || station.points <= 0;
   const invalidTimeLimit =
     !Number.isFinite(station.timeLimitSeconds) || station.timeLimitSeconds < 0 || station.timeLimitSeconds > 600;
   const completionCodeMode = resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
   const invalidCompletionCode =
     isCompletionCodeRequired(station.type) && !isValidCompletionCodeForMode(station.completionCode ?? "", completionCodeMode);
-  const invalidQuiz = station.type === "quiz" && (!station.quiz || !normalizeStationQuiz(station.quiz));
+  const invalidQuiz =
+    isQuizStationType(station.type) &&
+    (!station.quiz ||
+      !normalizeStationQuizForType(station.type, {
+        question: station.quiz.question,
+        answers: station.quiz.answers,
+        correctAnswerIndex: station.quiz.correctAnswerIndex,
+        audioUrl: station.quiz.audioUrl,
+      }));
   const hasLatitude = typeof station.latitude === "number" && Number.isFinite(station.latitude);
   const hasLongitude = typeof station.longitude === "number" && Number.isFinite(station.longitude);
   const invalidCoordinates =
@@ -292,7 +328,6 @@ export function getRealizationStationValidation(station: RealizationStationDraft
 
   return {
     missingName,
-    missingDescription,
     invalidPoints,
     invalidTimeLimit,
     invalidCompletionCode,
@@ -311,10 +346,14 @@ export function RealizationStationsEditor({
   const [stationImageModes, setStationImageModes] = useState<Record<string, ImageInputMode>>({});
   const [stationCompletionCodeModes, setStationCompletionCodeModes] = useState<Record<string, CompletionCodeGeneratorMode>>({});
   const [stationImageErrors, setStationImageErrors] = useState<Record<string, string>>({});
+  const [stationAudioModes, setStationAudioModes] = useState<Record<string, "upload" | "url">>({});
+  const [stationAudioFiles, setStationAudioFiles] = useState<Record<string, File | null>>({});
+  const [stationAudioErrors, setStationAudioErrors] = useState<Record<string, string>>({});
   const [stationLocationErrors, setStationLocationErrors] = useState<Record<string, string>>({});
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
+  const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
 
   const stationTypeLabelByValue = useMemo(
     () => new Map(stationTypeOptions.map((option) => [option.value, option.label])),
@@ -453,6 +492,14 @@ export function RealizationStationsEditor({
     setStationCompletionCodeModes((current) => ({ ...current, [stationKey]: mode }));
   }
 
+  function setStationAudioMode(stationKey: string, mode: "upload" | "url") {
+    setStationAudioModes((current) => ({ ...current, [stationKey]: mode }));
+  }
+
+  function setStationAudioFile(stationKey: string, file: File | null) {
+    setStationAudioFiles((current) => ({ ...current, [stationKey]: file }));
+  }
+
   function setStationImageError(stationKey: string, error: string | null) {
     setStationImageErrors((current) => {
       if (!error) {
@@ -467,6 +514,18 @@ export function RealizationStationsEditor({
 
   function setStationLocationError(stationKey: string, error: string | null) {
     setStationLocationErrors((current) => {
+      if (!error) {
+        const next = { ...current };
+        delete next[stationKey];
+        return next;
+      }
+
+      return { ...current, [stationKey]: error };
+    });
+  }
+
+  function setStationAudioError(stationKey: string, error: string | null) {
+    setStationAudioErrors((current) => {
       if (!error) {
         const next = { ...current };
         delete next[stationKey];
@@ -560,6 +619,21 @@ export function RealizationStationsEditor({
 
     onChange(stations.filter((_, currentIndex) => currentIndex !== index));
     setStationImageModes((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
+    setStationAudioModes((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
+    setStationAudioFiles((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
+    setStationAudioErrors((current) => {
       const next = { ...current };
       delete next[stationKey];
       return next;
@@ -717,11 +791,14 @@ export function RealizationStationsEditor({
         {stations.map((station, index) => {
           const stationKey = getStationKey(index, station);
           const imageMode = stationImageModes[stationKey] ?? "upload";
+          const audioMode = stationAudioModes[stationKey] ?? "upload";
+          const audioFile = stationAudioFiles[stationKey] ?? null;
           const completionCodeMode =
             stationCompletionCodeModes[stationKey] ?? resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
           const stationValidation = getRealizationStationValidation(station);
           const hasStationValidationError = Object.values(stationValidation).some(Boolean);
           const imageError = stationImageErrors[stationKey];
+          const audioError = stationAudioErrors[stationKey];
           const locationError = stationLocationErrors[stationKey];
           const isLocating = stationLocationLoading[stationKey] === true;
           const recenterToken = stationMapRecenterTokens[stationKey];
@@ -734,6 +811,7 @@ export function RealizationStationsEditor({
           const selectedStationQuiz = isEditingBaseLanguage ? station.quiz : selectedTranslation?.quiz;
           const selectedStationQuizAnswers = selectedStationQuiz?.answers ?? createEmptyQuizAnswers();
           const selectedStationCorrectAnswerIndex = selectedStationQuiz?.correctAnswerIndex ?? 0;
+          const quizLikeCopy = getQuizLikeStationCopy(station.type);
           const shouldValidateLanguageFields = showValidation && isEditingBaseLanguage;
           const hasCoordinates =
             typeof station.latitude === "number" &&
@@ -835,14 +913,16 @@ export function RealizationStationsEditor({
                           updateStation(index, {
                             type: nextType,
                             completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
+                            imageUrl: isImageSupportedStationType(nextType) ? station.imageUrl : "",
                             quiz:
-                              nextType === "quiz"
-                                ? station.quiz ?? {
-                                    question: "",
-                                    answers: createEmptyQuizAnswers(),
-                                    correctAnswerIndex: 0,
-                                  }
-                                : station.quiz,
+                              isQuizStationType(nextType)
+                                 ? station.quiz ?? {
+                                     question: "",
+                                     answers: createEmptyQuizAnswers(),
+                                     correctAnswerIndex: 0,
+                                     audioUrl: "",
+                                   }
+                                 : station.quiz,
                           });
                           if (!isCompletionCodeRequired(nextType)) {
                             setStationCompletionCodeMode(stationKey, "letters");
@@ -914,80 +994,255 @@ export function RealizationStationsEditor({
                     </label>
                   ) : null}
 
-                  {station.type === "quiz" ? (
+                  {isQuizStationType(station.type) ? (
                     <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-900/70 p-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Pytanie i odpowiedzi</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
+                      {station.type === "audio-quiz" ? (
+                        <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs uppercase tracking-wider text-zinc-400">Audio (upload lub URL)</span>
+                            <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-900 p-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStationAudioMode(stationKey, "upload");
+                                  setStationAudioError(stationKey, null);
+                                }}
+                                className={`rounded px-2.5 py-1 text-xs transition ${
+                                  audioMode === "upload" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                                }`}
+                              >
+                                Upload
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStationAudioMode(stationKey, "url");
+                                  setStationAudioFile(stationKey, null);
+                                  setStationAudioError(stationKey, null);
+                                }}
+                                className={`rounded px-2.5 py-1 text-xs transition ${
+                                  audioMode === "url" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                                }`}
+                              >
+                                URL
+                              </button>
+                            </div>
+                          </div>
+
+                          {audioMode === "upload" ? (
+                            <div className="space-y-2">
+                              <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                                Wybierz plik audio
+                                <input
+                                  type="file"
+                                  accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    const selected = event.target.files?.[0] ?? null;
+                                    setStationAudioFile(stationKey, selected);
+                                    setStationAudioError(stationKey, null);
+                                    event.currentTarget.value = "";
+                                  }}
+                                />
+                              </label>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-zinc-500">
+                                  Obsługiwane: MP3, WAV, OGG. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
+                                </p>
+                                {audioFile ? (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const uploaded = await uploadStationAudio(audioFile).unwrap();
+                                        updateStationForSelectedLanguage(index, {
+                                          quiz: {
+                                            question: selectedStationQuiz?.question ?? "",
+                                            answers: selectedStationQuizAnswers,
+                                            correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                            audioUrl: uploaded.url,
+                                          },
+                                        });
+                                        setStationAudioError(stationKey, null);
+                                      } catch {
+                                        setStationAudioError(stationKey, "Nie udało się przesłać pliku audio.");
+                                      }
+                                    }}
+                                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                                  >
+                                    Wyślij audio
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="space-y-1.5">
+                              <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
+                              <input
+                                type="url"
+                                value={selectedStationQuiz?.audioUrl ?? ""}
+                                onChange={(event) =>
+                                  updateStationForSelectedLanguage(index, {
+                                    quiz: {
+                                      question: selectedStationQuiz?.question ?? "",
+                                      answers: selectedStationQuizAnswers,
+                                      correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                      audioUrl: event.target.value,
+                                    },
+                                  })
+                                }
+                                placeholder="https://..."
+                                className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                  shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                    ? "border-red-500/70 focus:border-red-400/80"
+                                    : "border-zinc-700 focus:border-amber-400/80"
+                                }`}
+                              />
+                            </label>
+                          )}
+
+                          {audioError ? <p className="text-xs text-red-300">{audioError}</p> : null}
+                          {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
+                        </div>
+                      ) : null}
                       <label className="space-y-1.5">
-                        <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                         <textarea
                           rows={2}
                           value={selectedStationQuiz?.question ?? ""}
                           onChange={(event) =>
                             updateStationForSelectedLanguage(index, {
-                              quiz: {
-                                question: event.target.value,
-                                answers: selectedStationQuizAnswers,
-                                correctAnswerIndex: selectedStationCorrectAnswerIndex,
-                              },
-                            })
-                          }
+                                quiz: {
+                                  question: event.target.value,
+                                  answers: selectedStationQuizAnswers,
+                                  correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                  audioUrl: selectedStationQuiz?.audioUrl,
+                                },
+                              })
+                            }
                           className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
                             shouldValidateLanguageFields && stationValidation.invalidQuiz
                               ? "border-red-500/70 focus:border-red-400/80"
                               : "border-zinc-700 focus:border-amber-400/80"
                           }`}
+                          placeholder={quizLikeCopy.questionPlaceholder}
                         />
                       </label>
 
-                      <div className="space-y-2">
-                        {selectedStationQuizAnswers.map((answer, answerIndex) => (
-                          <label
-                            key={answerIndex}
-                            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 p-2"
-                          >
-                            <input
-                              type="radio"
-                              name={`realization-station-quiz-correct-${stationKey}`}
-                              checked={selectedStationCorrectAnswerIndex === answerIndex}
-                              onChange={() =>
-                                updateStationForSelectedLanguage(index, {
-                                  quiz: {
-                                    question: selectedStationQuiz?.question ?? "",
-                                    answers: selectedStationQuizAnswers,
-                                    correctAnswerIndex: answerIndex,
-                                  },
-                                })
-                              }
-                              className="h-4 w-4 accent-amber-400"
-                            />
-                            <input
-                              value={answer}
-                              onChange={(event) =>
-                                updateStationForSelectedLanguage(index, {
-                                  quiz: {
-                                    question: selectedStationQuiz?.question ?? "",
-                                    answers: selectedStationQuizAnswers.map((item, idx) =>
-                                      idx === answerIndex ? event.target.value : item,
-                                    ),
-                                    correctAnswerIndex: selectedStationCorrectAnswerIndex,
-                                  },
-                                })
-                              }
-                              placeholder={`Odpowiedź ${answerIndex + 1}`}
-                              className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                                shouldValidateLanguageFields && stationValidation.invalidQuiz
-                                  ? "border-red-500/70 focus:border-red-400/80"
-                                  : "border-zinc-700 focus:border-amber-400/80"
-                              }`}
-                            />
-                          </label>
-                        ))}
-                      </div>
+                      {!isWordPuzzleStationType(station.type) && !isMatchingStationType(station.type) ? (
+                        <div className="space-y-2">
+                          {selectedStationQuizAnswers.map((answer, answerIndex) => (
+                            <label
+                              key={answerIndex}
+                              className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/80 p-2"
+                            >
+                              <input
+                                type="radio"
+                                name={`realization-station-quiz-correct-${stationKey}`}
+                                checked={selectedStationCorrectAnswerIndex === answerIndex}
+                                onChange={() =>
+                                  updateStationForSelectedLanguage(index, {
+                                    quiz: {
+                                      question: selectedStationQuiz?.question ?? "",
+                                      answers: selectedStationQuizAnswers,
+                                      correctAnswerIndex: answerIndex,
+                                      audioUrl: selectedStationQuiz?.audioUrl,
+                                    },
+                                  })
+                                }
+                                className="h-4 w-4 accent-amber-400"
+                              />
+                              <input
+                                value={answer}
+                                onChange={(event) =>
+                                  updateStationForSelectedLanguage(index, {
+                                    quiz: {
+                                      question: selectedStationQuiz?.question ?? "",
+                                      answers: selectedStationQuizAnswers.map((item, idx) =>
+                                        idx === answerIndex ? event.target.value : item,
+                                      ),
+                                      correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                      audioUrl: selectedStationQuiz?.audioUrl,
+                                    },
+                                  })
+                                }
+                                placeholder={`Odpowiedź ${answerIndex + 1}`}
+                                className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                  shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                    ? "border-red-500/70 focus:border-red-400/80"
+                                    : "border-zinc-700 focus:border-amber-400/80"
+                                }`}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                      {isMatchingStationType(station.type) ? (
+                        <div className="space-y-2">
+                          {selectedStationQuizAnswers.map((answer, answerIndex) => {
+                            const pair = splitMatchingPairAnswer(answer);
+                            return (
+                              <div key={answerIndex} className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-2">
+                                <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Para {answerIndex + 1}</p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <input
+                                    value={pair.left}
+                                    onChange={(event) =>
+                                      updateStationForSelectedLanguage(index, {
+                                        quiz: {
+                                          question: selectedStationQuiz?.question ?? "",
+                                          answers: selectedStationQuizAnswers.map((item, idx) =>
+                                            idx === answerIndex
+                                              ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right)
+                                              : item,
+                                          ),
+                                          correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                          audioUrl: selectedStationQuiz?.audioUrl,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Lewa strona"
+                                    className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                      shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                        ? "border-red-500/70 focus:border-red-400/80"
+                                        : "border-zinc-700 focus:border-amber-400/80"
+                                    }`}
+                                  />
+                                  <input
+                                    value={pair.right}
+                                    onChange={(event) =>
+                                      updateStationForSelectedLanguage(index, {
+                                        quiz: {
+                                          question: selectedStationQuiz?.question ?? "",
+                                          answers: selectedStationQuizAnswers.map((item, idx) =>
+                                            idx === answerIndex
+                                              ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value)
+                                              : item,
+                                          ),
+                                          correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                          audioUrl: selectedStationQuiz?.audioUrl,
+                                        },
+                                      })
+                                    }
+                                    placeholder="Prawa strona"
+                                    className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                      shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                        ? "border-red-500/70 focus:border-red-400/80"
+                                        : "border-zinc-700 focus:border-amber-400/80"
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                       <p className="text-xs text-zinc-500">
-                        Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
+                        {quizLikeCopy.answersHint}
                       </p>
                       {shouldValidateLanguageFields && stationValidation.invalidQuiz ? (
-                        <p className="text-xs text-red-300">Quiz wymaga pytania, 4 odpowiedzi i jednej poprawnej.</p>
+                        <p className="text-xs text-red-300">{quizLikeCopy.validationMessage}</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -999,16 +1254,12 @@ export function RealizationStationsEditor({
                       value={selectedStationDescription}
                       onChange={(event) => updateStationForSelectedLanguage(index, { description: event.target.value })}
                       className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                        shouldValidateLanguageFields && stationValidation.missingDescription
-                          ? "border-red-500/70 focus:border-red-400/80"
-                          : "border-zinc-700 focus:border-amber-400/80"
+                        "border-zinc-700 focus:border-amber-400/80"
                       }`}
                     />
-                    {shouldValidateLanguageFields && stationValidation.missingDescription ? (
-                      <p className="text-xs text-red-300">Uzupełnij opis stanowiska.</p>
-                    ) : null}
                   </label>
 
+                  {isImageSupportedStationType(station.type) ? (
                   <div className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
                     <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
@@ -1128,6 +1379,7 @@ export function RealizationStationsEditor({
                       {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
                     </div>
                   </div>
+                  ) : null}
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">

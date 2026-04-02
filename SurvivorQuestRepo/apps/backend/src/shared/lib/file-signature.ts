@@ -20,6 +20,23 @@ const FILE_SIGNATURE_RULES: FileSignatureRule[] = [
     mimeType: 'application/pdf',
     signatures: [[0x25, 0x50, 0x44, 0x46, 0x2d]],
   },
+  {
+    mimeType: 'audio/mpeg',
+    signatures: [
+      [0x49, 0x44, 0x33],
+      [0xff, 0xfb],
+      [0xff, 0xf3],
+      [0xff, 0xf2],
+    ],
+  },
+  {
+    mimeType: 'audio/wav',
+    signatures: [[0x52, 0x49, 0x46, 0x46]],
+  },
+  {
+    mimeType: 'audio/ogg',
+    signatures: [[0x4f, 0x67, 0x67, 0x53]],
+  },
 ];
 
 function matchesPrefix(bytes: Uint8Array, prefix: number[]) {
@@ -50,6 +67,15 @@ export function hasExpectedFileSignature(mimeType: string, buffer: Buffer) {
 
     const webpHeader = Buffer.from(buffer.subarray(8, 12)).toString('ascii');
     return webpHeader === 'WEBP';
+  }
+
+  if (rule.mimeType === 'audio/wav') {
+    if (!matchesPrefix(bytes, rule.signatures[0])) {
+      return false;
+    }
+
+    const wavHeader = Buffer.from(buffer.subarray(8, 12)).toString('ascii');
+    return wavHeader === 'WAVE';
   }
 
   return rule.signatures.some((signature) => matchesPrefix(bytes, signature));

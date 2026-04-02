@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
@@ -27,15 +26,12 @@ import {
   ScenarioService,
   type ScenarioEntity,
 } from '../scenario/scenario.service';
+import { StationService, type StationEntity } from '../station/station.service';
+import { RealizationJoinCodeService } from './domain/realization.join-code';
 import {
-  StationService,
-  type StationTranslations,
-  type StationDraftInput,
-  type StationEntity,
-  type StationQuiz,
-  type StationType,
-} from '../station/station.service';
-import { readRuntimeSecret } from '../../shared/lib/runtime-secret';
+  normalizeScenarioStationDrafts,
+  type ParseTimeLimitResult,
+} from './normalizers/realization-station-draft.normalizer';
 
 export type {
   RealizationEntity,
@@ -44,14 +40,23 @@ export type {
   RealizationType,
 } from './entities/realization.entity';
 
-const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-const JOIN_CODE_LENGTH = 6;
-const STORED_JOIN_CODE_VERSION_PREFIX = 'v2';
-const QUIZ_ANSWER_COUNT = 4;
-const LEGACY_JOIN_CODE_PEPPERS = ['survivorquest-join-code'];
+function isStationEntity(value: unknown): value is StationEntity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.type === 'string'
+  );
+}
 
 @Injectable()
 export class RealizationService {
+  private readonly joinCodeService = new RealizationJoinCodeService();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scenarioService: ScenarioService,
@@ -121,7 +126,26 @@ export class RealizationService {
         ),
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
-        joinCode: (await this.createUniqueJoinCode(realizationId)).storedCode,
+        joinCode: (
+          await this.joinCodeService.createUniqueJoinCode(realizationId, {
+            findExistingByStoredOrLegacy: async (
+              storedCode: string,
+              publicCode: string,
+              hashedCode: string,
+            ) =>
+              (await this.prisma.realization.findFirst({
+                where: {
+                  OR: [
+                    { joinCode: storedCode },
+                    { joinCode: publicCode },
+                    { joinCode: hashedCode },
+                    { joinCode: { endsWith: `:${hashedCode}` } },
+                  ],
+                },
+                select: { id: true },
+              })) ?? null,
+          })
+        ).storedCode,
       },
     });
 
@@ -235,11 +259,9 @@ export class RealizationService {
     return entity;
   }
 
-  async translateStation(payload: TranslateRealizationStationDto) {
+  translateStation(payload: TranslateRealizationStationDto) {
     void payload;
-    throw new BadRequestException(
-      'Auto-translate is not implemented yet.',
-    );
+    throw new BadRequestException('Auto-translate is not implemented yet.');
   }
 
   private async syncScenarioStations(
@@ -247,102 +269,53 @@ export class RealizationService {
     scenario: ScenarioEntity,
     drafts: ScenarioStationDraftPayload[] | undefined,
   ) {
-    if (!drafts) {
+    const normalizedDrafts = normalizeScenarioStationDrafts(
+      drafts,
+      (value): ParseTimeLimitResult =>
+        this.stationService.parseTimeLimitSeconds(value),
+    );
+
+    if (!normalizedDrafts) {
       return this.stationService.findStationsByIds(scenario.stationIds);
     }
-
-    if (drafts.length === 0) {
-      throw new BadRequestException(
-        'Realization must include at least one station',
-      );
-    }
-
-    const normalized: StationDraftInput[] = drafts.map((draft) => {
-      const parsedTimeLimit = this.stationService.parseTimeLimitSeconds(
-        draft.timeLimitSeconds,
-      );
-      const hasLatitude = typeof draft.latitude === 'number';
-      const hasLongitude = typeof draft.longitude === 'number';
-      const hasCoordinates = hasLatitude || hasLongitude;
-      const requiresCompletionCode =
-        draft.type === 'time' || draft.type === 'points';
-      const normalizedCompletionCode =
-        typeof draft.completionCode === 'string'
-          ? draft.completionCode.trim().toUpperCase()
-          : '';
-      const normalizedQuiz = this.normalizeStationQuizDraft(
-        draft.quiz,
-        draft.type,
-      );
-      const normalizedTranslations = this.normalizeStationTranslationsDraft(
-        draft.translations,
-        draft.type,
-      );
-
-      if (
-        !draft.name?.trim() ||
-        !draft.description?.trim() ||
-        !this.isValidStationType(draft.type) ||
-        typeof draft.points !== 'number' ||
-        draft.points <= 0 ||
-        !parsedTimeLimit.ok ||
-        (draft.type === 'quiz' && !normalizedQuiz) ||
-        (requiresCompletionCode &&
-          !/^[A-Z0-9-]{3,32}$/.test(normalizedCompletionCode)) ||
-        (hasCoordinates &&
-          !this.isValidStationCoordinate(draft.latitude, draft.longitude))
-      ) {
-        throw new BadRequestException('Invalid payload');
-      }
-
-      return {
-        name: draft.name.trim(),
-        type: draft.type,
-        description: draft.description.trim(),
-        imageUrl: draft.imageUrl?.trim() || undefined,
-        points: Math.round(draft.points),
-        timeLimitSeconds: parsedTimeLimit.value,
-        completionCode: requiresCompletionCode
-          ? normalizedCompletionCode
-          : undefined,
-        quiz: normalizedQuiz,
-        translations: normalizedTranslations,
-        latitude: hasCoordinates ? draft.latitude : undefined,
-        longitude: hasCoordinates ? draft.longitude : undefined,
-        sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,
-      };
-    });
 
     const currentStations = await this.stationService.findStationsByIds(
       scenario.stationIds,
     );
     const nextStations: StationEntity[] = [];
 
-    for (let index = 0; index < normalized.length; index += 1) {
+    for (let index = 0; index < normalizedDrafts.length; index += 1) {
       const existing = currentStations[index];
       if (existing) {
-        const updated = await this.stationService.updateScenarioStationInstance(
-          existing.id,
-          normalized[index],
-        );
-        if (!updated) {
+        const maybeUpdated: unknown =
+          await this.stationService.updateScenarioStationInstance(
+            existing.id,
+            normalizedDrafts[index],
+          );
+        const updated = isStationEntity(maybeUpdated) ? maybeUpdated : null;
+        if (!isStationEntity(updated)) {
           throw new BadRequestException('Station not found');
         }
         nextStations.push(updated);
       } else {
-        const created = await this.stationService.createScenarioStationInstance(
-          normalized[index],
-          {
-            scenarioInstanceId: scenario.id,
-            realizationId,
-          },
-        );
+        const maybeCreated: unknown =
+          await this.stationService.createScenarioStationInstance(
+            normalizedDrafts[index],
+            {
+              scenarioInstanceId: scenario.id,
+              realizationId,
+            },
+          );
+        const created = isStationEntity(maybeCreated) ? maybeCreated : null;
+        if (!isStationEntity(created)) {
+          throw new BadRequestException('Station not found');
+        }
         nextStations.push(created);
       }
     }
 
     const toRemove = currentStations
-      .slice(normalized.length)
+      .slice(normalizedDrafts.length)
       .map((item) => item.id);
     if (toRemove.length > 0) {
       await this.stationService.removeStationsByIds(toRemove);
@@ -386,7 +359,7 @@ export class RealizationService {
       where: { realizationId },
       orderBy: { createdAt: 'asc' },
     });
-    const publicJoinCode = this.resolvePublicJoinCode(
+    const publicJoinCode = this.joinCodeService.resolvePublicJoinCode(
       realization.id,
       realization.joinCode,
     );
@@ -424,220 +397,4 @@ export class RealizationService {
       },
     });
   }
-
-  private generateJoinCode(
-    realizationId: string,
-    attempt: number,
-    pepper = this.getJoinCodePepper(),
-  ) {
-    const seed = `${realizationId}:${attempt}:${pepper}`;
-    const hash = this.hashJoinCode(seed);
-    const bytes = Buffer.from(hash, 'hex');
-    let code = '';
-
-    for (let index = 0; index < JOIN_CODE_LENGTH; index += 1) {
-      code += JOIN_CODE_ALPHABET[bytes[index] % JOIN_CODE_ALPHABET.length];
-    }
-
-    return code;
-  }
-
-  private hashJoinCode(value: string) {
-    return createHash('sha256').update(value).digest('hex');
-  }
-
-  private getJoinCodePepper() {
-    return readRuntimeSecret({
-      key: 'JOIN_CODE_PEPPER',
-      developmentFallback: 'dev-join-code-pepper-change-me-123456',
-    });
-  }
-
-  private getJoinCodePepperCandidates() {
-    const legacyPepperFromEnv = process.env.JOIN_CODE_LEGACY_PEPPER?.trim();
-
-    return Array.from(
-      new Set([
-        this.getJoinCodePepper(),
-        ...(legacyPepperFromEnv ? [legacyPepperFromEnv] : []),
-        ...LEGACY_JOIN_CODE_PEPPERS,
-      ]),
-    );
-  }
-
-  private parseStoredJoinCode(stored: string) {
-    const normalized = stored.trim();
-    const parts = normalized.split(':');
-
-    if (
-      parts.length === 3 &&
-      parts[0] === STORED_JOIN_CODE_VERSION_PREFIX &&
-      /^\d+$/.test(parts[1]) &&
-      /^[a-f0-9]{64}$/i.test(parts[2])
-    ) {
-      return {
-        attempt: Number(parts[1]),
-        hash: parts[2].toLowerCase(),
-      };
-    }
-
-    return null;
-  }
-
-  private async createUniqueJoinCode(realizationId: string) {
-    let attempt = 0;
-
-    while (attempt < 100) {
-      const publicCode = this.generateJoinCode(realizationId, attempt);
-      const hashedCode = this.hashJoinCode(publicCode);
-      const storedCode = `${STORED_JOIN_CODE_VERSION_PREFIX}:${attempt}:${hashedCode}`;
-
-      const existing = await this.prisma.realization.findFirst({
-        where: {
-          OR: [
-            { joinCode: storedCode },
-            { joinCode: publicCode },
-            { joinCode: hashedCode },
-            { joinCode: { endsWith: `:${hashedCode}` } },
-          ],
-        },
-        select: { id: true },
-      });
-
-      if (!existing) {
-        return {
-          publicCode,
-          storedCode,
-        };
-      }
-
-      attempt += 1;
-    }
-
-    throw new BadRequestException('Failed to generate unique join code');
-  }
-
-  resolvePublicJoinCode(realizationId: string, storedJoinCode: string) {
-    const parsed = this.parseStoredJoinCode(storedJoinCode);
-    if (!parsed) {
-      return storedJoinCode;
-    }
-
-    for (const pepper of this.getJoinCodePepperCandidates()) {
-      const publicCode = this.generateJoinCode(
-        realizationId,
-        parsed.attempt,
-        pepper,
-      );
-      const publicCodeHash = this.hashJoinCode(publicCode);
-      if (publicCodeHash === parsed.hash) {
-        return publicCode;
-      }
-    }
-
-    return '------';
-  }
-
-  private isValidStationType(value: unknown): value is StationType {
-    return value === 'quiz' || value === 'time' || value === 'points';
-  }
-
-  private isValidStationCoordinate(latitude: unknown, longitude: unknown) {
-    return (
-      typeof latitude === 'number' &&
-      Number.isFinite(latitude) &&
-      latitude >= -90 &&
-      latitude <= 90 &&
-      typeof longitude === 'number' &&
-      Number.isFinite(longitude) &&
-      longitude >= -180 &&
-      longitude <= 180
-    );
-  }
-
-  private normalizeStationQuizDraft(
-    quiz: StationQuiz | undefined,
-    stationType: StationType | undefined,
-  ): StationQuiz | undefined {
-    if (stationType !== 'quiz') {
-      return undefined;
-    }
-
-    if (!quiz) {
-      return undefined;
-    }
-
-    const question = quiz.question?.trim();
-    const answers = quiz.answers?.map((answer) => answer.trim());
-    const correctAnswerIndex = Math.round(quiz.correctAnswerIndex);
-
-    if (
-      typeof question !== 'string' ||
-      !question ||
-      !Array.isArray(answers) ||
-      answers.length !== QUIZ_ANSWER_COUNT ||
-      answers.some((answer) => !answer) ||
-      !Number.isInteger(correctAnswerIndex) ||
-      correctAnswerIndex < 0 ||
-      correctAnswerIndex >= QUIZ_ANSWER_COUNT
-    ) {
-      return undefined;
-    }
-
-    return {
-      question,
-      answers: [answers[0], answers[1], answers[2], answers[3]],
-      correctAnswerIndex,
-    };
-  }
-
-  private normalizeStationTranslationsDraft(
-    translations: unknown,
-    stationType: StationType | undefined,
-  ): StationTranslations | undefined {
-    if (!translations || typeof translations !== 'object') {
-      return undefined;
-    }
-
-    const payload = translations as Record<string, unknown>;
-    const result: StationTranslations = {};
-
-    for (const language of [
-      'polish',
-      'english',
-      'ukrainian',
-      'russian',
-      'other',
-    ] as const) {
-      const raw = payload[language];
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        continue;
-      }
-
-      const entry = raw as Record<string, unknown>;
-      const name =
-        typeof entry.name === 'string' ? entry.name.trim() : undefined;
-      const description =
-        typeof entry.description === 'string'
-          ? entry.description.trim()
-          : undefined;
-      const quiz = this.normalizeStationQuizDraft(
-        entry.quiz as StationQuiz | undefined,
-        stationType,
-      );
-
-      if (!name && !description && !quiz) {
-        continue;
-      }
-
-      result[language] = {
-        name,
-        description,
-        quiz,
-      };
-    }
-
-    return Object.keys(result).length > 0 ? result : undefined;
-  }
-
 }

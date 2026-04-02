@@ -17,6 +17,12 @@ function getStationTypeLabel(type: string) {
   if (type === "points") {
     return "Na punkty";
   }
+  if (type === "wordle") {
+    return "Wordle";
+  }
+  if (type === "hangman") {
+    return "Wisielec";
+  }
   return "Quiz";
 }
 

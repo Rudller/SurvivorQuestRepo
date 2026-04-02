@@ -59,16 +59,34 @@ export type ExpeditionTask = {
   finishedAt: string | null;
 };
 
+export type ExpeditionStationType =
+  | "quiz"
+  | "audio-quiz"
+  | "time"
+  | "points"
+  | "wordle"
+  | "hangman"
+  | "mastermind"
+  | "anagram"
+  | "caesar-cipher"
+  | "memory"
+  | "simon"
+  | "rebus"
+  | "boggle"
+  | "mini-sudoku"
+  | "matching";
+
 export type ExpeditionStationQuiz = {
   question: string;
   answers: [string, string, string, string];
   correctAnswerIndex: number;
+  audioUrl?: string;
 };
 
 export type ExpeditionRealizationStation = {
   id: string;
   name: string;
-  type: string;
+  type: ExpeditionStationType;
   description: string;
   imageUrl: string;
   points: number;

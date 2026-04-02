@@ -20,8 +20,20 @@ enum UserStatus {
 
 enum StationType {
   QUIZ
+  AUDIO_QUIZ
   TIME
   POINTS
+  WORDLE
+  HANGMAN
+  MASTERMIND
+  ANAGRAM
+  CAESAR_CIPHER
+  MEMORY
+  SIMON
+  REBUS
+  BOGGLE
+  MINI_SUDOKU
+  MATCHING
 }
 
 enum RealizationStatus {

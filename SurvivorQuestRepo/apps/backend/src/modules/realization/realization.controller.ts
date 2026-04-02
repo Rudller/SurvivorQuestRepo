@@ -48,7 +48,7 @@ export class RealizationController {
   }
 
   @Post('translate-station')
-  async translateStation(@Body() payload: TranslateRealizationStationDto) {
+  translateStation(@Body() payload: TranslateRealizationStationDto) {
     return this.realizationService.translateStation(payload);
   }
 

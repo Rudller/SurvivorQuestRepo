@@ -4,7 +4,12 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
-import { useUpdateStationMutation, useDeleteStationMutation, useUploadStationImageMutation } from "../api/station.api";
+import {
+  useUpdateStationMutation,
+  useDeleteStationMutation,
+  useUploadStationAudioMutation,
+  useUploadStationImageMutation,
+} from "../api/station.api";
 import {
   imageModeOptions,
   type ImageInputMode,
@@ -13,13 +18,20 @@ import {
   handleImageFile,
   handleImagePaste,
   isCompletionCodeRequired,
+  isQuizStationType,
+  isWordPuzzleStationType,
+  isImageSupportedStationType,
   isValidCompletionCodeForMode,
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
-  normalizeStationQuiz,
+  normalizeStationQuizForType,
   QUIZ_ANSWER_COUNT,
+  getQuizLikeStationCopy,
   resolveCompletionCodeGeneratorMode,
+  isMatchingStationType,
+  splitMatchingPairAnswer,
+  joinMatchingPairAnswer,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -28,6 +40,8 @@ interface EditStationModalProps {
   station: Station;
   onClose: () => void;
 }
+
+const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
 
 const RealizationLocationPickerMap = dynamic(
   () => import("../../realizations/components/realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -45,10 +59,14 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
+  const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
 
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [editImageError, setEditImageError] = useState<string | null>(null);
+  const [editAudioError, setEditAudioError] = useState<string | null>(null);
   const [editImageMode, setEditImageMode] = useState<ImageInputMode>("upload");
+  const [editAudioMode, setEditAudioMode] = useState<"upload" | "url">("upload");
+  const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>(
@@ -66,12 +84,14 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     quizQuestion: station.quiz?.question ?? "",
     quizAnswers: station.quiz?.answers?.length === QUIZ_ANSWER_COUNT ? station.quiz.answers : createEmptyQuizAnswers(),
     quizCorrectAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
+    quizAudioUrl: station.quiz?.audioUrl ?? "",
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
   const hasLatitude = typeof editValues.latitude === "number" && Number.isFinite(editValues.latitude);
   const hasLongitude = typeof editValues.longitude === "number" && Number.isFinite(editValues.longitude);
   const hasCoordinates = hasLatitude && hasLongitude;
+  const quizLikeCopy = getQuizLikeStationCopy(editValues.type);
 
   return (
     <>
@@ -103,8 +123,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               event.preventDefault();
               setEditFormError(null);
 
-              if (!editValues.name.trim() || !editValues.description.trim() || editValues.points <= 0) {
-                setEditFormError("Uzupełnij nazwę, opis i poprawną liczbę punktów.");
+              if (!editValues.name.trim() || editValues.points <= 0) {
+                setEditFormError("Uzupełnij nazwę i poprawną liczbę punktów.");
                 return;
               }
 
@@ -123,16 +143,17 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               }
 
               const quizConfig =
-                editValues.type === "quiz"
-                  ? normalizeStationQuiz({
+                isQuizStationType(editValues.type)
+                  ? normalizeStationQuizForType(editValues.type, {
                       question: editValues.quizQuestion,
                       answers: editValues.quizAnswers,
                       correctAnswerIndex: editValues.quizCorrectAnswerIndex,
+                      audioUrl: editValues.type === "audio-quiz" ? editValues.quizAudioUrl : undefined,
                     })
                   : null;
 
-              if (editValues.type === "quiz" && !quizConfig) {
-                setEditFormError("Dla stanowiska Quiz uzupełnij pytanie, 4 odpowiedzi i wskaż jedną poprawną.");
+              if (isQuizStationType(editValues.type) && !quizConfig) {
+                setEditFormError(quizLikeCopy.validationMessage);
                 return;
               }
 
@@ -161,18 +182,30 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               }
 
               try {
+                let nextAudioUrl = editValues.quizAudioUrl.trim();
+                if (editValues.type === "audio-quiz" && editAudioMode === "upload" && editAudioFile) {
+                  const uploadedAudio = await uploadStationAudio(editAudioFile).unwrap();
+                  nextAudioUrl = uploadedAudio.url;
+                }
+
                 await updateStation({
                   id: station.id,
                   name: editValues.name.trim(),
                   type: editValues.type,
-                  description: editValues.description.trim(),
-                  imageUrl: editValues.imageUrl.trim() || undefined,
+                  description: editValues.description.trim() || DEFAULT_STATION_DESCRIPTION,
+                  imageUrl: isImageSupportedStationType(editValues.type) ? editValues.imageUrl.trim() || undefined : undefined,
                   points: editValues.points,
                   timeLimitSeconds: clampTimeLimitSeconds(editValues.timeLimitSeconds),
                   completionCode: isCompletionCodeRequired(editValues.type)
                     ? normalizeCompletionCode(editValues.completionCode)
                     : undefined,
-                  quiz: editValues.type === "quiz" ? quizConfig ?? undefined : undefined,
+                  quiz:
+                    isQuizStationType(editValues.type) && quizConfig
+                      ? {
+                          ...quizConfig,
+                          audioUrl: editValues.type === "audio-quiz" ? nextAudioUrl || undefined : undefined,
+                        }
+                      : undefined,
                   latitude: nextLatitude,
                   longitude: nextLongitude,
                 }).unwrap();
@@ -267,48 +300,168 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </label>
             ) : null}
 
-            {editValues.type === "quiz" ? (
+            {isQuizStationType(editValues.type) ? (
               <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Pytanie i odpowiedzi</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
+                {editValues.type === "audio-quiz" ? (
+                  <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Audio (upload lub URL)</span>
+                      <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-900 p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditAudioMode("upload");
+                            setEditAudioError(null);
+                          }}
+                          className={`rounded px-2.5 py-1 text-xs transition ${
+                            editAudioMode === "upload" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                          }`}
+                        >
+                          Upload
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditAudioMode("url");
+                            setEditAudioFile(null);
+                            setEditAudioError(null);
+                          }}
+                          className={`rounded px-2.5 py-1 text-xs transition ${
+                            editAudioMode === "url" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                          }`}
+                        >
+                          URL
+                        </button>
+                      </div>
+                    </div>
+
+                    {editAudioMode === "upload" ? (
+                      <div className="space-y-2">
+                        <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                          Wybierz plik audio
+                          <input
+                            type="file"
+                            accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                            className="hidden"
+                            onChange={(event) => {
+                              const selected = event.target.files?.[0] ?? null;
+                              setEditAudioFile(selected);
+                              setEditAudioError(null);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                        <p className="text-xs text-zinc-500">
+                          Obsługiwane: MP3, WAV, OGG.{" "}
+                          {editAudioFile ? `Wybrano: ${editAudioFile.name}` : "Brak wybranego pliku."}
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="space-y-1.5">
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
+                        <input
+                          type="url"
+                          value={editValues.quizAudioUrl}
+                          onChange={(event) => {
+                            setEditValues((prev) => ({ ...prev, quizAudioUrl: event.target.value }));
+                            setEditAudioError(null);
+                          }}
+                          placeholder="https://..."
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                      </label>
+                    )}
+
+                    {editAudioError ? <p className="text-xs text-red-300">{editAudioError}</p> : null}
+                    {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
+                  </div>
+                ) : null}
                 <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Pytanie</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                   <textarea
                     value={editValues.quizQuestion}
                     onChange={(event) => setEditValues((prev) => ({ ...prev, quizQuestion: event.target.value }))}
                     rows={2}
-                    placeholder="Wpisz pytanie quizowe"
+                    placeholder={quizLikeCopy.questionPlaceholder}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 </label>
 
-                <div className="space-y-2">
-                  {editValues.quizAnswers.map((answer, index) => (
-                    <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
-                      <input
-                        type="radio"
-                        name={`quiz-correct-answer-${station.id}`}
-                        checked={editValues.quizCorrectAnswerIndex === index}
-                        onChange={() => setEditValues((prev) => ({ ...prev, quizCorrectAnswerIndex: index }))}
-                        className="h-4 w-4 accent-amber-400"
-                      />
-                      <input
-                        value={answer}
-                        onChange={(event) =>
-                          setEditValues((prev) => ({
-                            ...prev,
-                            quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
-                              answerIndex === index ? event.target.value : item,
-                            ),
-                          }))
-                        }
-                        placeholder={`Odpowiedź ${index + 1}`}
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
-                    </label>
-                  ))}
-                </div>
+                {!isWordPuzzleStationType(editValues.type) && !isMatchingStationType(editValues.type) ? (
+                  <div className="space-y-2">
+                    {editValues.quizAnswers.map((answer, index) => (
+                      <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                        <input
+                          type="radio"
+                          name={`quiz-correct-answer-${station.id}`}
+                          checked={editValues.quizCorrectAnswerIndex === index}
+                          onChange={() => setEditValues((prev) => ({ ...prev, quizCorrectAnswerIndex: index }))}
+                          className="h-4 w-4 accent-amber-400"
+                        />
+                        <input
+                          value={answer}
+                          onChange={(event) =>
+                            setEditValues((prev) => ({
+                              ...prev,
+                              quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                                answerIndex === index ? event.target.value : item,
+                              ),
+                            }))
+                          }
+                          placeholder={`Odpowiedź ${index + 1}`}
+                          className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+                {isMatchingStationType(editValues.type) ? (
+                  <div className="space-y-2">
+                    {editValues.quizAnswers.map((answer, index) => {
+                      const pair = splitMatchingPairAnswer(answer);
+                      return (
+                        <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                          <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Para {index + 1}</p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <input
+                              value={pair.left}
+                              onChange={(event) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                                    answerIndex === index
+                                      ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right)
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              placeholder="Lewa strona"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                            />
+                            <input
+                              value={pair.right}
+                              onChange={(event) =>
+                                setEditValues((prev) => ({
+                                  ...prev,
+                                  quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                                    answerIndex === index
+                                      ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value)
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              placeholder="Prawa strona"
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <p className="text-xs text-zinc-500">
-                  Uzupełnij {QUIZ_ANSWER_COUNT} odpowiedzi i zaznacz jedną prawidłową.
+                  {quizLikeCopy.answersHint}
                 </p>
               </div>
             ) : null}
@@ -324,6 +477,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               />
             </label>
 
+            {isImageSupportedStationType(editValues.type) ? (
             <div className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
               <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
@@ -443,6 +597,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 {isUploadingImage && <p className="text-sm text-amber-300">Przesyłanie obrazu...</p>}
               </div>
             </div>
+            ) : null}
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Punkty</span>
@@ -566,10 +721,16 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </button>
               <button
                 type="submit"
-                disabled={isUpdating || isUploadingImage}
+                disabled={isUpdating || isUploadingImage || isUploadingAudio}
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
               >
-                {isUpdating ? "Zapisywanie..." : isUploadingImage ? "Przesyłanie obrazu..." : "Zapisz"}
+                {isUpdating
+                  ? "Zapisywanie..."
+                  : isUploadingImage
+                    ? "Przesyłanie obrazu..."
+                    : isUploadingAudio
+                      ? "Przesyłanie audio..."
+                      : "Zapisz"}
               </button>
             </div>
 

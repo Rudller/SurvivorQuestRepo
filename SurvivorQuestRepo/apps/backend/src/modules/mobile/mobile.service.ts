@@ -5,7 +5,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHmac } from 'node:crypto';
 import {
   EventActorType,
   Prisma,
@@ -18,131 +17,50 @@ import {
   getOpaqueTokenCandidates,
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
-import { readRuntimeSecret } from '../../shared/lib/runtime-secret';
 import {
   signStationQrToken,
   verifyStationQrToken,
-  type VerifyStationQrTokenResult,
 } from '../../shared/lib/station-qr-token';
 import {
   RealizationService,
   type RealizationStatus,
 } from '../realization/realization.service';
 import { StationService } from '../station/station.service';
-
-type TeamColor =
-  | 'red'
-  | 'rose'
-  | 'pink'
-  | 'magenta'
-  | 'violet'
-  | 'purple'
-  | 'indigo'
-  | 'navy'
-  | 'blue'
-  | 'sky'
-  | 'cyan'
-  | 'turquoise'
-  | 'teal'
-  | 'mint'
-  | 'aquamarine'
-  | 'emerald'
-  | 'green'
-  | 'lime'
-  | 'orange'
-  | 'amber'
-  | 'gold'
-  | 'yellow'
-  | 'brown'
-  | 'gray'
-  | 'slate'
-  | 'black'
-  | 'white';
-
-const TEAM_COLORS: TeamColor[] = [
-  'red',
-  'rose',
-  'pink',
-  'magenta',
-  'violet',
-  'purple',
-  'indigo',
-  'navy',
-  'blue',
-  'sky',
-  'cyan',
-  'turquoise',
-  'teal',
-  'mint',
-  'aquamarine',
-  'emerald',
-  'green',
-  'lime',
-  'orange',
-  'amber',
-  'gold',
-  'yellow',
-  'brown',
-  'gray',
-  'slate',
-  'black',
-  'white',
-];
-
-const BADGE_KEYS = [
-  'beaver-01',
-  'fox-01',
-  'owl-01',
-  'wolf-01',
-  'otter-01',
-  'capybara-02',
-  'falcon-01',
-  'lynx-01',
-];
-
-const LEGACY_BADGE_KEY_TO_ICON: Record<string, string> = {
-  'beaver-01': '🦫',
-  'fox-01': '🦊',
-  'owl-01': '🦉',
-  'wolf-01': '🐺',
-  'otter-01': '🦦',
-  'capybara-02': '🦬',
-  'falcon-01': '🦅',
-  'lynx-01': '🐯',
-};
-
-const FUNNY_TEAM_NAMES = [
-  'Turbo Bobry',
-  'Galaktyczne Kapibary',
-  'Leśne Ninja',
-  'Błyskawiczne Borsuki',
-  'Szturmowe Wiewióry',
-  'Kompasowe Czosnki',
-  'Dzikie Lampiony',
-  'Sokole Klapki',
-  'Niewyspani Tropiciele',
-  'Biegnące Jeże',
-  'Oddział Chrupka',
-  'Ekipa Bez GPS',
-];
+import {
+  buildDeterministicStationQrNonce,
+  buildStationQrEntryUrl,
+  getStationQrSecret,
+  isCodeProtectedStationType,
+  isTimedStartRequiredStationType,
+  parseCompletionCode,
+  resolveCompletionCodeInputMode,
+  resolveStaticStationQrWindow,
+  resolveStationQrTtlSeconds,
+  toStationQrRejectedMessage,
+} from './domain/mobile-station.helpers';
+import {
+  parseIsoOrNow,
+  parseOptionalNumberInRange,
+  shouldSkipLocationUpdate,
+  isLatitude,
+  isLongitude,
+} from './domain/mobile-location.helpers';
+import {
+  BADGE_KEYS,
+  FUNNY_TEAM_NAMES,
+  TEAM_COLORS,
+  type TeamColor,
+  normalizeTeamBadgeKey,
+  normalizeTeamColor,
+  parseTeamColor,
+  toLowerSafe,
+} from './domain/mobile-team.helpers';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const LOCATION_DEDUP_MIN_INTERVAL_MS = 4_000;
-const LOCATION_DEDUP_MIN_DISTANCE_METERS = 3;
 const LOCATION_MAX_ACCURACY_METERS = 10_000;
 const LOCATION_MAX_SPEED_MPS = 120;
-const DEFAULT_STATION_QR_TTL_SECONDS = 12 * 60 * 60;
-const MIN_STATION_QR_TTL_SECONDS = 5 * 60;
-const MAX_STATION_QR_TTL_SECONDS = 24 * 60 * 60;
-const STATIC_STATION_QR_VALIDITY_YEARS = 20;
-const STATIC_STATION_QR_NONCE_LENGTH = 24;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
-const COMPLETION_CODE_DIGITS_ONLY_REGEX = /^\d{3,32}$/;
-type StationQrRejectReason = Exclude<
-  VerifyStationQrTokenResult,
-  { ok: true }
->['reason'];
 
 @Injectable()
 export class MobileService {
@@ -235,9 +153,7 @@ export class MobileService {
           slotNumber: existingAssignment.team.slotNumber,
           name: existingAssignment.team.name,
           color: existingAssignment.team.color,
-          badgeKey: this.normalizeTeamBadgeKey(
-            existingAssignment.team.badgeKey,
-          ),
+          badgeKey: normalizeTeamBadgeKey(existingAssignment.team.badgeKey),
           points: existingAssignment.team.points,
         },
         customizationOccupancy,
@@ -346,7 +262,7 @@ export class MobileService {
         slotNumber: selectedTeam.slotNumber,
         name: selectedTeam.name,
         color: selectedTeam.color,
-        badgeKey: this.normalizeTeamBadgeKey(selectedTeam.badgeKey),
+        badgeKey: normalizeTeamBadgeKey(selectedTeam.badgeKey),
         points: selectedTeam.points,
       },
       customizationOccupancy,
@@ -432,7 +348,7 @@ export class MobileService {
           imageUrl: station.imageUrl,
           points: station.points,
           timeLimitSeconds: station.timeLimitSeconds,
-          completionCodeInputMode: this.resolveCompletionCodeInputMode(
+          completionCodeInputMode: resolveCompletionCodeInputMode(
             station.completionCode,
           ),
           quiz:
@@ -452,7 +368,7 @@ export class MobileService {
         slotNumber: team.slotNumber,
         name: team.name,
         color: team.color,
-        badgeKey: this.normalizeTeamBadgeKey(team.badgeKey),
+        badgeKey: normalizeTeamBadgeKey(team.badgeKey),
         points: team.points,
         lastLocation: this.toLastLocation(team),
       },
@@ -478,8 +394,8 @@ export class MobileService {
     const teamName = input.name?.trim();
     const requestedColor = input.color?.trim();
     const color = requestedColor
-      ? this.parseTeamColor(requestedColor)
-      : this.normalizeTeamColor(team.color);
+      ? parseTeamColor(requestedColor)
+      : normalizeTeamColor(team.color);
 
     if (!teamName) {
       throw new BadRequestException('Team name is required');
@@ -496,9 +412,7 @@ export class MobileService {
     });
 
     if (
-      peers.some(
-        (item) => this.toLowerSafe(item.name) === teamName.toLowerCase(),
-      )
+      peers.some((item) => toLowerSafe(item.name) === teamName.toLowerCase())
     ) {
       throw new ConflictException('Team name already taken');
     }
@@ -508,16 +422,16 @@ export class MobileService {
     }
 
     const changedFields: string[] = [];
-    const normalizedCurrentBadgeKey = this.normalizeTeamBadgeKey(team.badgeKey);
+    const normalizedCurrentBadgeKey = normalizeTeamBadgeKey(team.badgeKey);
     if (team.name !== teamName) changedFields.push('name');
     if (team.color !== color) changedFields.push('color');
 
-    const nextBadgeKey = this.normalizeTeamBadgeKey(input.badgeKey);
+    const nextBadgeKey = normalizeTeamBadgeKey(input.badgeKey);
     const nextBadgeImageUrl = input.badgeImageUrl?.trim() || null;
     if (
       nextBadgeKey &&
       peers.some(
-        (item) => this.normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
+        (item) => normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
       )
     ) {
       throw new ConflictException('Team icon already taken');
@@ -574,19 +488,19 @@ export class MobileService {
     const hasBadgeKeyInput = typeof input.badgeKey !== 'undefined';
     const requestedColor = input.color?.trim();
     const requestedBadgeKey = input.badgeKey?.trim();
-    const currentColor = this.normalizeTeamColor(team.color);
-    const currentBadgeKey = this.normalizeTeamBadgeKey(team.badgeKey);
+    const currentColor = normalizeTeamColor(team.color);
+    const currentBadgeKey = normalizeTeamBadgeKey(team.badgeKey);
 
     const nextColor = hasColorInput
       ? (() => {
           if (!requestedColor) {
             throw new BadRequestException('Team color is required');
           }
-          return this.parseTeamColor(requestedColor);
+          return parseTeamColor(requestedColor);
         })()
       : currentColor;
     const nextBadgeKey = hasBadgeKeyInput
-      ? this.normalizeTeamBadgeKey(requestedBadgeKey)
+      ? normalizeTeamBadgeKey(requestedBadgeKey)
       : currentBadgeKey;
 
     const peers = await this.prisma.team.findMany({
@@ -607,7 +521,7 @@ export class MobileService {
       hasBadgeKeyInput &&
       nextBadgeKey &&
       peers.some(
-        (item) => this.normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
+        (item) => normalizeTeamBadgeKey(item.badgeKey) === nextBadgeKey,
       )
     ) {
       throw new ConflictException('Team icon already taken');
@@ -721,7 +635,7 @@ export class MobileService {
         slotNumber: requestedTeam.slotNumber,
         name: requestedTeam.name,
         color: requestedTeam.color,
-        badgeKey: this.normalizeTeamBadgeKey(requestedTeam.badgeKey),
+        badgeKey: normalizeTeamBadgeKey(requestedTeam.badgeKey),
         points: requestedTeam.points,
       },
       customizationOccupancy,
@@ -749,7 +663,7 @@ export class MobileService {
     });
 
     const usedNames = new Set(
-      peers.map((item) => this.toLowerSafe(item.name)).filter(Boolean),
+      peers.map((item) => toLowerSafe(item.name)).filter(Boolean),
     );
     const availableNames = FUNNY_TEAM_NAMES.filter(
       (name) => !usedNames.has(name.toLowerCase()),
@@ -762,7 +676,7 @@ export class MobileService {
     const randomName =
       availableNames[Math.floor(Math.random() * availableNames.length)];
     const usedBadgeKeys = new Set(
-      peers.map((item) => this.toLowerSafe(item.badgeKey)).filter(Boolean),
+      peers.map((item) => toLowerSafe(item.badgeKey)).filter(Boolean),
     );
     const availableBadgeKeys = BADGE_KEYS.filter(
       (badgeKey) => !usedBadgeKeys.has(badgeKey.toLowerCase()),
@@ -779,7 +693,7 @@ export class MobileService {
       (color) => !usedColors.has(color),
     );
     const color =
-      this.normalizeTeamColor(team.color) ||
+      normalizeTeamColor(team.color) ||
       availableColors[0] ||
       TEAM_COLORS[(Math.max(1, team.slotNumber) - 1) % TEAM_COLORS.length];
 
@@ -826,37 +740,37 @@ export class MobileService {
       input.sessionToken,
     );
 
-    if (!this.isLatitude(input.lat) || !this.isLongitude(input.lng)) {
+    if (!isLatitude(input.lat) || !isLongitude(input.lng)) {
       throw new BadRequestException('Invalid coordinates');
     }
 
-    const accuracy = this.parseOptionalNumberInRange({
+    const accuracy = parseOptionalNumberInRange({
       value: input.accuracy,
       min: 0,
       max: LOCATION_MAX_ACCURACY_METERS,
       field: 'accuracy',
     });
-    const speed = this.parseOptionalNumberInRange({
+    const speed = parseOptionalNumberInRange({
       value: input.speed,
       min: 0,
       max: LOCATION_MAX_SPEED_MPS,
       field: 'speed',
     });
-    const heading = this.parseOptionalNumberInRange({
+    const heading = parseOptionalNumberInRange({
       value: input.heading,
       min: 0,
       max: 360,
       field: 'heading',
     });
 
-    const locationAt = this.parseIsoOrNow(input.at);
+    const locationAt = parseIsoOrNow(input.at);
 
     if (!locationAt) {
       throw new BadRequestException('Invalid payload');
     }
 
     const serverReceivedAt = new Date().toISOString();
-    const deduplicated = this.shouldSkipLocationUpdate(team, {
+    const deduplicated = shouldSkipLocationUpdate(team, {
       lat: input.lat,
       lng: input.lng,
       at: locationAt,
@@ -930,7 +844,7 @@ export class MobileService {
       throw new NotFoundException('Station not found');
     }
 
-    const startedAt = this.parseIsoOrNow(input.startedAt);
+    const startedAt = parseIsoOrNow(input.startedAt);
     if (!startedAt) {
       throw new BadRequestException('Invalid payload');
     }
@@ -1021,7 +935,7 @@ export class MobileService {
       );
     }
 
-    const finishedAt = this.parseIsoOrNow(input.finishedAt);
+    const finishedAt = parseIsoOrNow(input.finishedAt);
     if (!finishedAt) {
       throw new BadRequestException('Invalid payload');
     }
@@ -1045,18 +959,16 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const requiresCompletionCode = this.isCodeProtectedStationType(
-      station.type,
-    );
+    const requiresCompletionCode = isCodeProtectedStationType(station.type);
     if (requiresCompletionCode) {
-      const expectedCode = this.parseCompletionCode(station.completionCode);
-      const inputCode = this.parseCompletionCode(input.completionCode);
+      const expectedCode = parseCompletionCode(station.completionCode);
+      const inputCode = parseCompletionCode(input.completionCode);
       if (!expectedCode || !inputCode || expectedCode !== inputCode) {
         throw new BadRequestException('Invalid completion code');
       }
     }
 
-    const startedAtIso = this.parseIsoOrNow(input.startedAt);
+    const startedAtIso = parseIsoOrNow(input.startedAt);
     if (input.startedAt && !startedAtIso) {
       throw new BadRequestException('Invalid payload');
     }
@@ -1064,19 +976,18 @@ export class MobileService {
     const startedAtSource =
       existingProgress?.startedAt?.toISOString() || startedAtIso || null;
 
-    if (station.type === 'time' && !startedAtSource) {
+    if (isTimedStartRequiredStationType(station.type) && !startedAtSource) {
       throw new BadRequestException('Task timer not started');
     }
 
-    const awardedPoints =
-      station.type === 'time'
-        ? this.computeLinearTimePoints({
-            basePoints: station.points,
-            timeLimitSeconds: station.timeLimitSeconds,
-            startedAtIso: startedAtSource || finishedAt,
-            finishedAtIso: finishedAt,
-          })
-        : Math.max(0, Math.round(station.points));
+    const awardedPoints = isTimedStartRequiredStationType(station.type)
+      ? this.computeLinearTimePoints({
+          basePoints: station.points,
+          timeLimitSeconds: station.timeLimitSeconds,
+          startedAtIso: startedAtSource || finishedAt,
+          finishedAtIso: finishedAt,
+        })
+      : Math.max(0, Math.round(station.points));
 
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
@@ -1106,25 +1017,24 @@ export class MobileService {
       });
     }
 
-    const scoringMeta =
-      station.type === 'time'
-        ? {
-            mode: 'time-linear',
-            basePoints: station.points,
-            timeLimitSeconds: station.timeLimitSeconds,
-            elapsedSeconds: Math.max(
-              0,
-              Math.round(
-                (new Date(finishedAt).getTime() -
-                  new Date(startedAtSource || finishedAt).getTime()) /
-                  1000,
-              ),
+    const scoringMeta = isTimedStartRequiredStationType(station.type)
+      ? {
+          mode: 'time-linear',
+          basePoints: station.points,
+          timeLimitSeconds: station.timeLimitSeconds,
+          elapsedSeconds: Math.max(
+            0,
+            Math.round(
+              (new Date(finishedAt).getTime() -
+                new Date(startedAtSource || finishedAt).getTime()) /
+                1000,
             ),
-          }
-        : {
-            mode: 'fixed',
-            basePoints: station.points,
-          };
+          ),
+        }
+      : {
+          mode: 'fixed',
+          basePoints: station.points,
+        };
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -1177,7 +1087,7 @@ export class MobileService {
       );
     }
 
-    const finishedAt = this.parseIsoOrNow(input.finishedAt);
+    const finishedAt = parseIsoOrNow(input.finishedAt);
     if (!finishedAt) {
       throw new BadRequestException('Invalid payload');
     }
@@ -1214,7 +1124,7 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const startedAtIso = this.parseIsoOrNow(input.startedAt);
+    const startedAtIso = parseIsoOrNow(input.startedAt);
     if (input.startedAt && !startedAtIso) {
       throw new BadRequestException('Invalid payload');
     }
@@ -1285,10 +1195,10 @@ export class MobileService {
   async getMobileAdminStationQrs(realizationId: string, ttlSeconds?: number) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
-    this.resolveStationQrTtlSeconds(ttlSeconds);
-    const stationQrSecret = this.getStationQrSecret();
+    resolveStationQrTtlSeconds(ttlSeconds);
+    const stationQrSecret = getStationQrSecret();
     const { issuedAtMs, expiresAtMs, tokenTtlSeconds } =
-      this.resolveStaticStationQrWindow(realization.createdAt);
+      resolveStaticStationQrWindow(realization.createdAt);
     const stationById = new Map(
       realization.scenarioStations.map((station) => [station.id, station]),
     );
@@ -1306,7 +1216,7 @@ export class MobileService {
             stationId,
             issuedAtMs,
             expiresAtMs,
-            nonce: this.buildDeterministicStationQrNonce(
+            nonce: buildDeterministicStationQrNonce(
               realization.id,
               stationId,
               stationQrSecret,
@@ -1321,7 +1231,7 @@ export class MobileService {
           stationType: station?.type || 'quiz',
           completionCode: station?.completionCode?.trim() || null,
           qrToken,
-          entryUrl: this.buildStationQrEntryUrl(qrToken),
+          entryUrl: buildStationQrEntryUrl(qrToken),
         };
       }),
     };
@@ -1338,7 +1248,7 @@ export class MobileService {
 
     const verified = verifyStationQrToken(
       normalizedToken,
-      this.getStationQrSecret(),
+      getStationQrSecret(),
     );
     if (!verified.ok) {
       await this.emitEvent({
@@ -1350,7 +1260,7 @@ export class MobileService {
         payload: { reason: verified.reason },
       });
       throw new BadRequestException(
-        this.toStationQrRejectedMessage(verified.reason),
+        toStationQrRejectedMessage(verified.reason),
       );
     }
 
@@ -1442,7 +1352,7 @@ export class MobileService {
         imageUrl: station.imageUrl,
         points: station.points,
         timeLimitSeconds: station.timeLimitSeconds,
-        completionCodeInputMode: this.resolveCompletionCodeInputMode(
+        completionCodeInputMode: resolveCompletionCodeInputMode(
           station.completionCode,
         ),
         quiz:
@@ -2175,103 +2085,6 @@ export class MobileService {
     };
   }
 
-  private resolveStationQrTtlSeconds(ttlSeconds?: number) {
-    if (!Number.isFinite(ttlSeconds)) {
-      return DEFAULT_STATION_QR_TTL_SECONDS;
-    }
-
-    const normalized = Math.round(ttlSeconds as number);
-    return Math.min(
-      MAX_STATION_QR_TTL_SECONDS,
-      Math.max(MIN_STATION_QR_TTL_SECONDS, normalized),
-    );
-  }
-
-  private resolveStaticStationQrWindow(createdAtIso: string) {
-    const parsedCreatedAt = new Date(createdAtIso).getTime();
-    const issuedAtMs = Number.isFinite(parsedCreatedAt)
-      ? Math.round(parsedCreatedAt)
-      : Date.UTC(2024, 0, 1);
-    const tokenTtlSeconds =
-      STATIC_STATION_QR_VALIDITY_YEARS * 365 * 24 * 60 * 60;
-    const expiresAtMs = issuedAtMs + tokenTtlSeconds * 1000;
-
-    return {
-      issuedAtMs,
-      expiresAtMs,
-      tokenTtlSeconds,
-    };
-  }
-
-  private buildDeterministicStationQrNonce(
-    realizationId: string,
-    stationId: string,
-    secret: string,
-  ) {
-    return createHmac('sha256', secret)
-      .update(`${realizationId.trim()}:${stationId.trim()}`)
-      .digest('base64url')
-      .slice(0, STATIC_STATION_QR_NONCE_LENGTH);
-  }
-
-  private getStationQrSecret() {
-    return readRuntimeSecret({
-      key: 'STATION_QR_SECRET',
-      developmentFallback: 'dev-station-qr-secret-change-me-123456',
-    });
-  }
-
-  private buildStationQrEntryUrl(token: string) {
-    const base =
-      process.env.MOBILE_QR_ENTRY_BASE_URL?.trim() || 'sq://station-entry';
-    const separator = base.includes('?') ? '&' : '?';
-    return `${base}${separator}token=${encodeURIComponent(token)}`;
-  }
-
-  private toStationQrRejectedMessage(reason: StationQrRejectReason) {
-    if (reason === 'expired_token') {
-      return 'QR expired';
-    }
-
-    if (reason === 'invalid_signature') {
-      return 'Invalid QR signature';
-    }
-
-    if (reason === 'invalid_payload') {
-      return 'Invalid QR payload';
-    }
-
-    return 'Invalid QR token format';
-  }
-
-  private isCodeProtectedStationType(stationType: string) {
-    return stationType === 'time' || stationType === 'points';
-  }
-
-  private parseCompletionCode(value?: string | null) {
-    if (typeof value !== 'string') {
-      return null;
-    }
-
-    const normalized = value.trim().toUpperCase();
-    if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
-      return null;
-    }
-
-    return normalized;
-  }
-
-  private resolveCompletionCodeInputMode(value?: string | null) {
-    const normalized = this.parseCompletionCode(value);
-    if (!normalized) {
-      return 'alphanumeric' as const;
-    }
-
-    return COMPLETION_CODE_DIGITS_ONLY_REGEX.test(normalized)
-      ? ('numeric' as const)
-      : ('alphanumeric' as const);
-  }
-
   private computeLinearTimePoints(input: {
     basePoints: number;
     timeLimitSeconds: number;
@@ -2306,24 +2119,6 @@ export class MobileService {
     return Math.max(0, Math.round(safeBasePoints * ratio));
   }
 
-  private parseTeamColor(color: string): TeamColor {
-    if (!TEAM_COLORS.includes(color as TeamColor)) {
-      throw new BadRequestException('Invalid team color');
-    }
-
-    return color as TeamColor;
-  }
-
-  private normalizeTeamColor(color?: string | null): TeamColor | null {
-    if (!color) {
-      return null;
-    }
-
-    return TEAM_COLORS.includes(color as TeamColor)
-      ? (color as TeamColor)
-      : null;
-  }
-
   private async getCustomizationOccupancyByRealization(realizationId: string) {
     const teams = await this.prisma.team.findMany({
       where: { realizationId },
@@ -2338,28 +2133,19 @@ export class MobileService {
     const colors: Partial<Record<TeamColor, number>> = {};
     const icons: Record<string, number> = {};
     for (const item of teams) {
-      const normalizedColor = this.normalizeTeamColor(item.color);
+      const normalizedColor = normalizeTeamColor(item.color);
       if (normalizedColor && typeof colors[normalizedColor] !== 'number') {
         colors[normalizedColor] = item.slotNumber;
       }
 
       const normalizedBadgeKey = item.badgeKey?.trim();
-      const normalizedIcon = this.normalizeTeamBadgeKey(normalizedBadgeKey);
+      const normalizedIcon = normalizeTeamBadgeKey(normalizedBadgeKey);
       if (normalizedIcon && typeof icons[normalizedIcon] !== 'number') {
         icons[normalizedIcon] = item.slotNumber;
       }
     }
 
     return { colors, icons };
-  }
-
-  private normalizeTeamBadgeKey(value?: string | null) {
-    const trimmed = value?.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    return LEGACY_BADGE_KEY_TO_ICON[trimmed] || trimmed;
   }
 
   private async emitEvent(log: {
@@ -2405,118 +2191,6 @@ export class MobileService {
 
   private isExpired(iso: string) {
     return new Date(iso).getTime() < Date.now();
-  }
-
-  private isFiniteNumber(value: unknown): value is number {
-    return typeof value === 'number' && Number.isFinite(value);
-  }
-
-  private isLatitude(value: unknown): value is number {
-    return this.isFiniteNumber(value) && value >= -90 && value <= 90;
-  }
-
-  private isLongitude(value: unknown): value is number {
-    return this.isFiniteNumber(value) && value >= -180 && value <= 180;
-  }
-
-  private parseOptionalNumberInRange(input: {
-    value: unknown;
-    min: number;
-    max: number;
-    field: string;
-  }) {
-    if (input.value === null || typeof input.value === 'undefined') {
-      return undefined;
-    }
-
-    if (
-      !this.isFiniteNumber(input.value) ||
-      input.value < input.min ||
-      input.value > input.max
-    ) {
-      throw new BadRequestException(`Invalid ${input.field}`);
-    }
-
-    return input.value;
-  }
-
-  private shouldSkipLocationUpdate(
-    team: {
-      lastLocationLat: number | null;
-      lastLocationLng: number | null;
-      lastLocationAt: Date | null;
-    },
-    next: {
-      lat: number;
-      lng: number;
-      at: string;
-    },
-  ) {
-    if (
-      typeof team.lastLocationLat !== 'number' ||
-      typeof team.lastLocationLng !== 'number' ||
-      !team.lastLocationAt
-    ) {
-      return false;
-    }
-
-    const nextTimestamp = new Date(next.at).getTime();
-    if (!Number.isFinite(nextTimestamp)) {
-      return false;
-    }
-
-    const elapsedMs = Math.abs(nextTimestamp - team.lastLocationAt.getTime());
-    const distanceMeters = this.getDistanceMetersBetweenCoordinates(
-      team.lastLocationLat,
-      team.lastLocationLng,
-      next.lat,
-      next.lng,
-    );
-
-    return (
-      elapsedMs < LOCATION_DEDUP_MIN_INTERVAL_MS &&
-      distanceMeters < LOCATION_DEDUP_MIN_DISTANCE_METERS
-    );
-  }
-
-  private getDistanceMetersBetweenCoordinates(
-    fromLat: number,
-    fromLng: number,
-    toLat: number,
-    toLng: number,
-  ) {
-    const earthRadiusMeters = 6_371_000;
-    const toRadians = (value: number) => (value * Math.PI) / 180;
-
-    const latDelta = toRadians(toLat - fromLat);
-    const lngDelta = toRadians(toLng - fromLng);
-    const startLatRad = toRadians(fromLat);
-    const endLatRad = toRadians(toLat);
-
-    const haversine =
-      Math.sin(latDelta / 2) ** 2 +
-      Math.cos(startLatRad) * Math.cos(endLatRad) * Math.sin(lngDelta / 2) ** 2;
-    const centralAngle =
-      2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-
-    return earthRadiusMeters * centralAngle;
-  }
-
-  private parseIsoOrNow(value?: string) {
-    if (!value) {
-      return new Date().toISOString();
-    }
-
-    const parsed = new Date(value);
-    if (!Number.isFinite(parsed.getTime())) {
-      return null;
-    }
-
-    return parsed.toISOString();
-  }
-
-  private toLowerSafe(value: string | null | undefined) {
-    return (value || '').trim().toLowerCase();
   }
 
   private toLastLocation(team: {

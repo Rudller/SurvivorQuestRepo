@@ -13,6 +13,12 @@ const DOCUMENT_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 
+const AUDIO_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+};
+
 @Injectable()
 export class StationStorageService {
   private client: S3Client | null = null;
@@ -44,6 +50,18 @@ export class StationStorageService {
   async uploadRealizationOfferPdf(file: Express.Multer.File) {
     const extension = DOCUMENT_EXTENSION_BY_MIME_TYPE[file.mimetype];
     const objectKey = this.buildObjectKey('realizations/offers', extension);
+
+    await this.uploadObject(file, objectKey);
+
+    return {
+      key: objectKey,
+      url: `${this.getPublicBaseUrl()}/${objectKey}`,
+    };
+  }
+
+  async uploadStationAudio(file: Express.Multer.File) {
+    const extension = AUDIO_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    const objectKey = this.buildObjectKey('stations/audio', extension);
 
     await this.uploadObject(file, objectKey);
 

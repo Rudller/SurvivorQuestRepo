@@ -17,6 +17,7 @@ type StationDto = {
         question?: string;
         answers?: string[];
         correctAnswerIndex?: number;
+        audioUrl?: string;
       }
     | null;
   latitude?: number | null;
@@ -66,6 +67,7 @@ type UploadStationImageResponse = {
   key: string;
   url: string;
 };
+type UploadStationAudioResponse = UploadStationImageResponse;
 
 function getFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
@@ -111,6 +113,7 @@ function normalizeStation(station: StationDto): Station {
             question: station.quiz.question,
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
+            audioUrl: station.quiz.audioUrl,
           }) ?? undefined
         : undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
@@ -169,6 +172,17 @@ export const stationApi = baseApi.injectEndpoints({
         };
       },
     }),
+    uploadStationAudio: build.mutation<UploadStationAudioResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath("/station/upload-audio"),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
   }),
 });
 
@@ -178,4 +192,5 @@ export const {
   useUpdateStationMutation,
   useDeleteStationMutation,
   useUploadStationImageMutation,
+  useUploadStationAudioMutation,
 } = stationApi;

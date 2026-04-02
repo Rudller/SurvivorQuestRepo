@@ -10,8 +10,83 @@ function buildStationFallbackImage(seed: string) {
   return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}`;
 }
 
-const STATION_TYPES: StationType[] = ['quiz', 'time', 'points'];
+const STATION_TYPES: StationType[] = [
+  'quiz',
+  'audio-quiz',
+  'time',
+  'points',
+  'wordle',
+  'hangman',
+  'mastermind',
+  'anagram',
+  'caesar-cipher',
+  'memory',
+  'simon',
+  'rebus',
+  'boggle',
+  'mini-sudoku',
+  'matching',
+];
 const QUIZ_ANSWER_COUNT = 4;
+const DEFAULT_STATION_DESCRIPTION =
+  'Opis stanowiska będzie dostępny po rozpoczęciu zadania.';
+
+function isCompletionCodeRequired(type: StationType) {
+  return type === 'time' || type === 'points';
+}
+
+function isQuizDataStationType(type: StationType) {
+  return (
+    type === 'quiz' ||
+    type === 'audio-quiz' ||
+    type === 'wordle' ||
+    type === 'hangman' ||
+    type === 'mastermind' ||
+    type === 'anagram' ||
+    type === 'caesar-cipher' ||
+    type === 'memory' ||
+    type === 'simon' ||
+    type === 'rebus' ||
+    type === 'boggle' ||
+    type === 'mini-sudoku' ||
+    type === 'matching'
+  );
+}
+
+function isWordPuzzleStationType(type: StationType) {
+  return (
+    type === 'wordle' ||
+    type === 'hangman' ||
+    type === 'mastermind' ||
+    type === 'anagram' ||
+    type === 'caesar-cipher' ||
+    type === 'rebus' ||
+    type === 'boggle' ||
+    type === 'memory' ||
+    type === 'simon' ||
+    type === 'mini-sudoku'
+  );
+}
+
+function isMatchingStationType(type: StationType) {
+  return type === 'matching';
+}
+
+function normalizeMatchingAnswer(value: string) {
+  const normalized = value.trim();
+  const match = normalized.match(/^(.+?)\s*(?:->|=|:)\s*(.+)$/);
+  if (!match) {
+    return '';
+  }
+
+  const left = match[1].trim();
+  const right = match[2].trim();
+  if (!left || !right) {
+    return '';
+  }
+
+  return `${left} -> ${right}`;
+}
 
 export type CreateStationDto = {
   name: string;
@@ -56,7 +131,7 @@ function ensureStringAllowingEmpty(value: unknown) {
     throw new BadRequestException('Invalid payload');
   }
 
-  return value.trim();
+  return value.trim() || DEFAULT_STATION_DESCRIPTION;
 }
 
 function ensurePositiveNumber(value: unknown) {
@@ -105,7 +180,7 @@ function ensureCompletionCode(
   value: unknown,
   type: StationType,
 ): string | undefined {
-  if (type === 'quiz') {
+  if (!isCompletionCodeRequired(type)) {
     return undefined;
   }
 
@@ -125,7 +200,7 @@ function ensureStationQuiz(
   value: unknown,
   type: StationType,
 ): StationQuiz | undefined {
-  if (type !== 'quiz') {
+  if (!isQuizDataStationType(type)) {
     return undefined;
   }
 
@@ -136,6 +211,14 @@ function ensureStationQuiz(
   const quiz = value as Record<string, unknown>;
   const question = ensureTrimmedString(quiz.question);
 
+  if (isWordPuzzleStationType(type)) {
+    return {
+      question,
+      answers: [question, 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+    };
+  }
+
   if (
     !Array.isArray(quiz.answers) ||
     quiz.answers.length !== QUIZ_ANSWER_COUNT
@@ -144,9 +227,17 @@ function ensureStationQuiz(
   }
 
   const answers = quiz.answers.map((answer) => ensureTrimmedString(answer));
+  const normalizedAnswers = isMatchingStationType(type)
+    ? answers.map((answer) => normalizeMatchingAnswer(answer))
+    : answers;
   const correctAnswerIndex = Math.round(Number(quiz.correctAnswerIndex));
+  const audioUrl =
+    typeof quiz.audioUrl === 'string' && quiz.audioUrl.trim()
+      ? quiz.audioUrl.trim()
+      : undefined;
 
   if (
+    normalizedAnswers.some((answer) => !answer) ||
     !Number.isInteger(correctAnswerIndex) ||
     correctAnswerIndex < 0 ||
     correctAnswerIndex >= QUIZ_ANSWER_COUNT
@@ -156,8 +247,14 @@ function ensureStationQuiz(
 
   return {
     question,
-    answers: [answers[0], answers[1], answers[2], answers[3]],
-    correctAnswerIndex,
+    answers: [
+      normalizedAnswers[0],
+      normalizedAnswers[1],
+      normalizedAnswers[2],
+      normalizedAnswers[3],
+    ],
+    correctAnswerIndex: isMatchingStationType(type) ? 0 : correctAnswerIndex,
+    audioUrl,
   };
 }
 

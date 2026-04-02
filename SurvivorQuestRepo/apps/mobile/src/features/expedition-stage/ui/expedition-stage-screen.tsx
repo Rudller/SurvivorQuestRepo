@@ -16,12 +16,13 @@ import {
   WelcomePreviewOverlay,
   type StationTestType,
   type StationTestViewModel,
-} from "../components/station-test-overlays";
+} from "../components/station-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import {
   DEFAULT_STATION_PIN_CUSTOMIZATION,
+  type ExpeditionStationType,
   resolveDefaultStationPoints,
   type ExpeditionTaskStatus,
   type MapCoordinate,
@@ -77,7 +78,7 @@ function resolveCoordinateCentroid(coordinates: MapCoordinate[]) {
   } satisfies MapCoordinate;
 }
 
-function resolveStationVisual(stationType: string | undefined, status: ExpeditionTaskStatus) {
+function resolveStationVisual(stationType: ExpeditionStationType | undefined, status: ExpeditionTaskStatus) {
   if (status === "done") {
     return { icon: "✅", color: "#10b981" };
   }
@@ -94,7 +95,68 @@ function resolveStationVisual(stationType: string | undefined, status: Expeditio
     return { icon: "🎯", color: "#a855f7" };
   }
 
-  if (stationType === "quiz") {
+  if (stationType === "wordle") {
+    return { icon: "🔤", color: "#22c55e" };
+  }
+
+  if (stationType === "hangman") {
+    return { icon: "🪢", color: "#f97316" };
+  }
+
+  if (stationType === "mastermind") {
+    return { icon: "🧠", color: "#6366f1" };
+  }
+
+  if (stationType === "anagram") {
+    return { icon: "🔀", color: "#14b8a6" };
+  }
+
+  if (stationType === "caesar-cipher") {
+    return { icon: "🔐", color: "#0ea5e9" };
+  }
+
+  if (stationType === "memory") {
+    return { icon: "🃏", color: "#8b5cf6" };
+  }
+
+  if (stationType === "simon") {
+    return { icon: "🎛️", color: "#ec4899" };
+  }
+
+  if (stationType === "rebus") {
+    return { icon: "🧩", color: "#f59e0b" };
+  }
+
+  if (stationType === "boggle") {
+    return { icon: "🔠", color: "#10b981" };
+  }
+
+  if (stationType === "mini-sudoku") {
+    return { icon: "🔢", color: "#ef4444" };
+  }
+
+  if (stationType === "matching") {
+    return { icon: "🔗", color: "#22c55e" };
+  }
+
+  if (stationType === "audio-quiz") {
+    return { icon: "🎧", color: "#06b6d4" };
+  }
+
+  if (
+    stationType === "quiz" ||
+    stationType === "wordle" ||
+    stationType === "hangman" ||
+    stationType === "mastermind" ||
+    stationType === "anagram" ||
+    stationType === "caesar-cipher" ||
+    stationType === "memory" ||
+    stationType === "simon" ||
+    stationType === "rebus" ||
+    stationType === "boggle" ||
+    stationType === "mini-sudoku" ||
+    stationType === "matching"
+  ) {
     return { icon: "❓", color: "#f59e0b" };
   }
 
@@ -105,7 +167,7 @@ function resolveStationLabel(stationId: string, stationName?: string) {
   return stationName?.trim() ? stationName : `Stanowisko ${stationId}`;
 }
 
-function resolveStationTypeLabel(stationType?: string) {
+function resolveStationTypeLabel(stationType?: ExpeditionStationType) {
   if (stationType === "time") {
     return "Na czas";
   }
@@ -114,11 +176,77 @@ function resolveStationTypeLabel(stationType?: string) {
     return "Na punkty";
   }
 
+  if (stationType === "wordle") {
+    return "Wordle";
+  }
+
+  if (stationType === "hangman") {
+    return "Wisielec";
+  }
+
+  if (stationType === "audio-quiz") {
+    return "Quiz audio";
+  }
+
+  if (stationType === "mastermind") {
+    return "Mastermind";
+  }
+
+  if (stationType === "anagram") {
+    return "Anagram";
+  }
+
+  if (stationType === "caesar-cipher") {
+    return "Szyfr Cezara";
+  }
+
+  if (stationType === "memory") {
+    return "Memory";
+  }
+
+  if (stationType === "simon") {
+    return "Simon";
+  }
+
+  if (stationType === "rebus") {
+    return "Rebus";
+  }
+
+  if (stationType === "boggle") {
+    return "Boggle";
+  }
+
+  if (stationType === "mini-sudoku") {
+    return "Mini Sudoku";
+  }
+
+  if (stationType === "matching") {
+    return "Łączenie par";
+  }
+
   return "Quiz";
 }
 
-function normalizeStationType(stationType?: string): StationTestType {
-  if (stationType === "time" || stationType === "points") {
+function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
+  return (
+    stationType === "quiz" ||
+    stationType === "audio-quiz" ||
+    stationType === "wordle" ||
+    stationType === "hangman" ||
+    stationType === "mastermind" ||
+    stationType === "anagram" ||
+    stationType === "caesar-cipher" ||
+    stationType === "memory" ||
+    stationType === "simon" ||
+    stationType === "rebus" ||
+    stationType === "boggle" ||
+    stationType === "mini-sudoku" ||
+    stationType === "matching"
+  );
+}
+
+function normalizeStationType(stationType?: ExpeditionStationType): StationTestType {
+  if (stationType && (isInteractiveQuizStationType(stationType) || stationType === "time" || stationType === "points")) {
     return stationType;
   }
 
@@ -256,7 +384,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   const stationMetadataMap = useMemo(
     () =>
       sessionState.realization.stations.reduce<
-        Record<string, { name: string; type: string; coordinate: MapCoordinate | null }>
+        Record<string, { name: string; type: ExpeditionStationType; coordinate: MapCoordinate | null }>
       >((accumulator, station) => {
         accumulator[station.id] = {
           name: station.name,
@@ -512,6 +640,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
+                quizAudioUrl: stationCatalog.quiz?.audioUrl,
                 status: task?.status ?? "todo",
                 quizFailed: (task?.status ?? "todo") === "failed",
                 startedAt: task?.startedAt ?? null,
@@ -537,6 +666,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
                 quizQuestion: undefined,
                 quizAnswers: undefined,
                 quizCorrectAnswerIndex: undefined,
+                quizAudioUrl: undefined,
                 status: task.status,
                 quizFailed: task.status === "failed",
                 startedAt: task.startedAt,
@@ -694,7 +824,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
 
         const scannedStationId = result.station.id;
         setSelectedStationId(scannedStationId);
-        if (result.station.type === "quiz") {
+        if (isInteractiveQuizStationType(result.station.type)) {
           setPendingQuizStartStationId(scannedStationId);
           setPendingTimeStartStationId(null);
           setActiveStationTestId(null);
@@ -727,13 +857,13 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     if (stationIds.includes(stationId)) {
       setSelectedStationId(stationId);
     }
-    if (selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0) {
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(stationId);
-      setActiveStationTestId(null);
-    } else if (selectedStation?.stationType === "quiz") {
+    if (isInteractiveQuizStationType(selectedStation?.stationType)) {
       setPendingQuizStartStationId(stationId);
       setPendingTimeStartStationId(null);
+      setActiveStationTestId(null);
+    } else if (selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0) {
+      setPendingQuizStartStationId(null);
+      setPendingTimeStartStationId(stationId);
       setActiveStationTestId(null);
     } else if (selectedStation?.stationType === "time") {
       setPendingQuizStartStationId(null);
@@ -1026,9 +1156,9 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         onClose={() => setActiveStationTestId(null)}
         onRequestClose={handleRequestCloseActiveStation}
         onCompleteTask={handleCompleteStationTestTask}
-        onQuizFailed={(stationId) => {
+        onQuizFailed={(stationId, reason) => {
           const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
-          void failStationTask(stationId, "quiz_incorrect_answer", startedAt).then((error) => {
+          void failStationTask(stationId, reason ?? "quiz_incorrect_answer", startedAt).then((error) => {
             if (error) {
               setActionError(error);
             }
@@ -1040,7 +1170,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       <QuizPrestartOverlay
         visible={Boolean(pendingQuizStartStation)}
         stationName={pendingQuizStartStation?.name ?? null}
-        stationType="quiz"
+        stationType={pendingQuizStartStation?.stationType ?? "quiz"}
         isStarting={isStartingPendingQuiz}
         onClose={() => {
           setPendingQuizStartStationId(null);

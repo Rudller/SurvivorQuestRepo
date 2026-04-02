@@ -26,10 +26,16 @@ import { StationStorageService } from './station-storage.service';
 import { StationService } from './station.service';
 
 const MAX_IMAGE_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_AUDIO_UPLOAD_SIZE_BYTES = 12 * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+]);
+const ALLOWED_AUDIO_MIME_TYPES = new Set([
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
 ]);
 
 @Controller(['station', 'api/station'])
@@ -87,6 +93,34 @@ export class StationController {
     }
 
     return this.stationStorageService.uploadStationImage(file);
+  }
+
+  @Post('upload-audio')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_AUDIO_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadStationAudio(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Audio file is required');
+    }
+
+    if (!ALLOWED_AUDIO_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Unsupported audio type');
+    }
+
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      throw new BadRequestException('Invalid audio file');
+    }
+
+    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+      throw new BadRequestException('Invalid audio file signature');
+    }
+
+    return this.stationStorageService.uploadStationAudio(file);
   }
 
   @Put()

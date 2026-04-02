@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { useGetCurrentRealizationStationQrsQuery } from "../api/current-realization.api";
 import type { CurrentRealizationOverview } from "../types/current-realization-overview";
@@ -16,6 +16,12 @@ function getStationTypeLabel(type: string) {
   }
   if (type === "points") {
     return "Na punkty";
+  }
+  if (type === "wordle") {
+    return "Wordle";
+  }
+  if (type === "hangman") {
+    return "Wisielec";
   }
   return "Quiz";
 }
@@ -37,12 +43,10 @@ export function CurrentRealizationStationQrPanel({ realization, onClose }: Curre
 
   useEffect(() => {
     if (!data) {
-      setQrImagesByStationId({});
       return;
     }
 
     let cancelled = false;
-    setQrImagesByStationId({});
 
     void Promise.all(
       data.entries.map(async (entry) => [
@@ -73,12 +77,7 @@ export function CurrentRealizationStationQrPanel({ realization, onClose }: Curre
     };
   }, [data]);
 
-  const expiresLabel = useMemo(() => {
-    if (!data?.expiresAt) {
-      return null;
-    }
-    return new Date(data.expiresAt).toLocaleString("pl-PL");
-  }, [data?.expiresAt]);
+  const expiresLabel = data?.expiresAt ? new Date(data.expiresAt).toLocaleString("pl-PL") : null;
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -167,7 +166,7 @@ export function CurrentRealizationStationQrPanel({ realization, onClose }: Curre
                       <p className="text-xs text-zinc-500">{getStationTypeLabel(entry.stationType)}</p>
                     </div>
 
-                    <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
+                    <div className="mt-3 flex min-h-70 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
                       {qrImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={qrImage} alt={`QR ${entry.stationName}`} className="h-64 w-64 rounded-md bg-white p-1" />
