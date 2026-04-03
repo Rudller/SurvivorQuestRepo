@@ -3,6 +3,14 @@ type FileSignatureRule = {
   signatures: number[][];
 };
 
+const MIME_TYPE_ALIASES: Record<string, string> = {
+  'audio/wave': 'audio/wav',
+  'audio/x-wav': 'audio/wav',
+  'audio/m4a': 'audio/mp4',
+  'audio/x-m4a': 'audio/mp4',
+  'application/ogg': 'audio/ogg',
+};
+
 const FILE_SIGNATURE_RULES: FileSignatureRule[] = [
   {
     mimeType: 'image/jpeg',
@@ -37,6 +45,21 @@ const FILE_SIGNATURE_RULES: FileSignatureRule[] = [
     mimeType: 'audio/ogg',
     signatures: [[0x4f, 0x67, 0x67, 0x53]],
   },
+  {
+    mimeType: 'audio/mp4',
+    signatures: [[0x66, 0x74, 0x79, 0x70]],
+  },
+  {
+    mimeType: 'audio/webm',
+    signatures: [[0x1a, 0x45, 0xdf, 0xa3]],
+  },
+  {
+    mimeType: 'audio/aac',
+    signatures: [
+      [0xff, 0xf1],
+      [0xff, 0xf9],
+    ],
+  },
 ];
 
 function matchesPrefix(bytes: Uint8Array, prefix: number[]) {
@@ -54,7 +77,12 @@ function matchesPrefix(bytes: Uint8Array, prefix: number[]) {
 }
 
 export function hasExpectedFileSignature(mimeType: string, buffer: Buffer) {
-  const rule = FILE_SIGNATURE_RULES.find((item) => item.mimeType === mimeType);
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const canonicalMimeType =
+    MIME_TYPE_ALIASES[normalizedMimeType] ?? normalizedMimeType;
+  const rule = FILE_SIGNATURE_RULES.find(
+    (item) => item.mimeType === canonicalMimeType,
+  );
   if (!rule) {
     return false;
   }
@@ -76,6 +104,15 @@ export function hasExpectedFileSignature(mimeType: string, buffer: Buffer) {
 
     const wavHeader = Buffer.from(buffer.subarray(8, 12)).toString('ascii');
     return wavHeader === 'WAVE';
+  }
+
+  if (rule.mimeType === 'audio/mp4') {
+    if (bytes.length < 8) {
+      return false;
+    }
+
+    const mp4Header = Buffer.from(buffer.subarray(4, 8)).toString('ascii');
+    return mp4Header === 'ftyp';
   }
 
   return rule.signatures.some((signature) => matchesPrefix(bytes, signature));

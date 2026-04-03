@@ -8,9 +8,16 @@ export type SortDirection = "asc" | "desc";
 export type CompletionCodeGeneratorMode = "digits" | "letters";
 export type UploadImageFileFn = (file: File) => Promise<string>;
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
+export const MEMORY_SYSTEM_STATION_PROMPT = "Znajdź wszystkie pary ikon w maksymalnie 6 pomyłkach.";
+export const MINI_SUDOKU_SYSTEM_STATION_PROMPT =
+  "to jest placeholder, treść tego inputu nie zmieni zadania bo jest generowane po stronie mobilki a musi coś być w tym inpucie w celu walidacji :)";
+export const MATCHING_SYSTEM_STATION_PROMPT =
+  "Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.";
 const COMPLETION_CODE_DIGITS_ONLY_REGEX = /^\d{3,32}$/;
 const COMPLETION_CODE_LETTERS_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const COMPLETION_CODE_DIGITS_ALPHABET = "0123456789";
+const SIMON_SEQUENCE_DIGITS_ALPHABET = "123456789";
+const SIMON_SEQUENCE_LENGTH = 10;
 export const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
 const WORDLE_DEFAULT_STATION_DESCRIPTION =
@@ -188,7 +195,11 @@ export function isImageSupportedStationType(stationType: StationType) {
     stationType !== "hangman" &&
     stationType !== "anagram" &&
     stationType !== "caesar-cipher" &&
-    stationType !== "boggle"
+    stationType !== "boggle" &&
+    stationType !== "memory" &&
+    stationType !== "simon" &&
+    stationType !== "mini-sudoku" &&
+    stationType !== "matching"
   );
 }
 
@@ -254,9 +265,10 @@ export function getQuizLikeStationCopy(stationType: StationType) {
       return {
         sectionTitle: "Sekwencja Simon",
         questionLabel: "Sekwencja (Simon)",
-        questionPlaceholder: "Wpisz sekwencję lub polecenie dla gry Simon",
-        answersHint: "Simon używa wyłącznie sekwencji/polecenia jako treści zadania.",
-        validationMessage: "Simon wymaga sekwencji/polecenia.",
+        questionPlaceholder: "Wpisz sekwencję cyfr 1-9, np. 1-5-9-3",
+        answersHint:
+          "Wprowadź dokładnie 10 cyfr z zakresu 1-9 (np. 1-5-9-3-2-8-4-7-6-1) lub użyj przycisku generowania.",
+        validationMessage: "Simon wymaga sekwencji 10 cyfr (1-9).",
       };
     case "rebus":
       return {
@@ -277,18 +289,18 @@ export function getQuizLikeStationCopy(stationType: StationType) {
     case "mini-sudoku":
       return {
         sectionTitle: "Mini Sudoku",
-        questionLabel: "Układ Sudoku",
-        questionPlaceholder: "Wpisz układ lub pytanie dla mini Sudoku",
-        answersHint: "Mini Sudoku używa wyłącznie treści zadania jako instrukcji.",
-        validationMessage: "Mini Sudoku wymaga treści zadania.",
+        questionLabel: "Treść techniczna (Mini Sudoku)",
+        questionPlaceholder: MINI_SUDOKU_SYSTEM_STATION_PROMPT,
+        answersHint: "Mini Sudoku ma stały układ generowany po stronie mobilki. To pole jest technicznym placeholderem.",
+        validationMessage: "Mini Sudoku wymaga placeholdera technicznego.",
       };
     case "matching":
       return {
         sectionTitle: "Dopasowywanie par",
-        questionLabel: "Polecenie dopasowania",
-        questionPlaceholder: "Wpisz elementy do dopasowania lub pytanie",
+        questionLabel: "Treść techniczna (Dopasowywanie)",
+        questionPlaceholder: MATCHING_SYSTEM_STATION_PROMPT,
         answersHint: "Uzupełnij 4 pary w formacie lewa -> prawa.",
-        validationMessage: "Dopasowywanie wymaga treści i 4 pełnych par.",
+        validationMessage: "Dopasowywanie wymaga placeholdera technicznego i 4 pełnych par.",
       };
     case "quiz":
     default:
@@ -384,6 +396,41 @@ export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | nul
 }
 
 export function normalizeStationQuizForType(stationType: StationType, input: StationQuizInput): StationQuiz | null {
+  if (stationType === "memory") {
+    const nextQuestion = input.question.trim() || MEMORY_SYSTEM_STATION_PROMPT;
+    return normalizeStationQuiz({
+      ...input,
+      question: nextQuestion,
+      answers: [nextQuestion, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
+  if (stationType === "mini-sudoku") {
+    const nextQuestion = input.question.trim() || MINI_SUDOKU_SYSTEM_STATION_PROMPT;
+    return normalizeStationQuiz({
+      ...input,
+      question: nextQuestion,
+      answers: [nextQuestion, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
+  if (stationType === "simon") {
+    const simonDigits = extractSimonSequenceDigits(input.question);
+    if (simonDigits.length !== SIMON_SEQUENCE_LENGTH) {
+      return null;
+    }
+
+    const normalizedSequence = simonDigits.join("-");
+    return normalizeStationQuiz({
+      ...input,
+      question: normalizedSequence,
+      answers: [normalizedSequence, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
   if (isWordPuzzleStationType(stationType)) {
     return normalizeStationQuiz({
       ...input,
@@ -393,8 +440,10 @@ export function normalizeStationQuizForType(stationType: StationType, input: Sta
   }
 
   if (isMatchingStationType(stationType)) {
+    const nextQuestion = input.question.trim() || MATCHING_SYSTEM_STATION_PROMPT;
     return normalizeStationQuiz({
       ...input,
+      question: nextQuestion,
       answers: normalizeMatchingPairAnswers(input.answers),
       correctAnswerIndex: 0,
     });
@@ -429,6 +478,10 @@ export function resolveCompletionCodeGeneratorMode(value: string): CompletionCod
 
 function getRandomCompletionCodeChar(mode: CompletionCodeGeneratorMode) {
   const alphabet = mode === "digits" ? COMPLETION_CODE_DIGITS_ALPHABET : COMPLETION_CODE_LETTERS_ALPHABET;
+  return getRandomCharFromAlphabet(alphabet);
+}
+
+function getRandomCharFromAlphabet(alphabet: string) {
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
     const random = new Uint32Array(1);
     crypto.getRandomValues(random);
@@ -439,6 +492,23 @@ function getRandomCompletionCodeChar(mode: CompletionCodeGeneratorMode) {
 
 function generateCompletionCodeSuffix(length: number, mode: CompletionCodeGeneratorMode) {
   return Array.from({ length }, () => getRandomCompletionCodeChar(mode)).join("");
+}
+
+export function extractSimonSequenceDigits(value: string) {
+  return value.match(/[1-9]/g) ?? [];
+}
+
+export function normalizeSimonSequenceInput(value: string, maxLength = SIMON_SEQUENCE_LENGTH) {
+  return extractSimonSequenceDigits(value)
+    .slice(0, Math.max(1, Math.round(maxLength)))
+    .join("-");
+}
+
+export function generateSimonSequence(length = SIMON_SEQUENCE_LENGTH) {
+  const normalizedLength = Math.max(1, Math.round(length));
+  return Array.from({ length: normalizedLength }, () => getRandomCharFromAlphabet(SIMON_SEQUENCE_DIGITS_ALPHABET)).join(
+    "-",
+  );
 }
 
 export function generateSampleCompletionCode(length = 8, mode: CompletionCodeGeneratorMode = "letters") {

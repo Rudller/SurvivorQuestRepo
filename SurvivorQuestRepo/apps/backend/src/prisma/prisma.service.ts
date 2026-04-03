@@ -47,7 +47,16 @@ function loadEnvFile(filePath: string) {
 }
 
 function loadBackendEnv() {
+  const isProduction = process.env.NODE_ENV === 'production';
   const candidates = [
+    ...(isProduction
+      ? [
+          resolve(process.cwd(), '.env.production.local'),
+          resolve(process.cwd(), '.env.production'),
+          resolve(process.cwd(), 'apps/backend/.env.production.local'),
+          resolve(process.cwd(), 'apps/backend/.env.production'),
+        ]
+      : []),
     resolve(process.cwd(), '.env.local'),
     resolve(process.cwd(), '.env'),
     resolve(process.cwd(), 'apps/backend/.env.local'),

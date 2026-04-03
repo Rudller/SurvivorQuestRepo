@@ -7,6 +7,7 @@ import type { CurrentRealizationOverview } from "../types/current-realization-ov
 
 type CurrentRealizationStationQrPanelProps = {
   realization: CurrentRealizationOverview["realization"];
+  selectedRealizationId?: string;
   onClose: () => void;
 };
 
@@ -26,7 +27,11 @@ function getStationTypeLabel(type: string) {
   return "Quiz";
 }
 
-export function CurrentRealizationStationQrPanel({ realization, onClose }: CurrentRealizationStationQrPanelProps) {
+export function CurrentRealizationStationQrPanel({
+  realization,
+  selectedRealizationId,
+  onClose,
+}: CurrentRealizationStationQrPanelProps) {
   const {
     data,
     isLoading,
@@ -34,7 +39,7 @@ export function CurrentRealizationStationQrPanel({ realization, onClose }: Curre
     isError,
     error,
     refetch,
-  } = useGetCurrentRealizationStationQrsQuery(undefined, {
+  } = useGetCurrentRealizationStationQrsQuery({ realizationId: selectedRealizationId }, {
     refetchOnMountOrArgChange: true,
   });
   const [qrImagesByStationId, setQrImagesByStationId] = useState<Record<string, string>>({});

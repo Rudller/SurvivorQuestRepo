@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, type ClipboardEvent } from "react";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
 import { useCreateStationMutation, useUploadStationAudioMutation, useUploadStationImageMutation } from "../api/station.api";
@@ -28,6 +29,11 @@ import {
   isMatchingStationType,
   splitMatchingPairAnswer,
   joinMatchingPairAnswer,
+  MEMORY_SYSTEM_STATION_PROMPT,
+  MINI_SUDOKU_SYSTEM_STATION_PROMPT,
+  MATCHING_SYSTEM_STATION_PROMPT,
+  generateSimonSequence,
+  normalizeSimonSequenceInput,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -47,6 +53,41 @@ const RealizationLocationPickerMap = dynamic(
     ),
   },
 );
+
+function resolveApiErrorMessage(error: unknown) {
+  const base = error as FetchBaseQueryError & {
+    data?: {
+      message?: string | string[];
+      error?: { message?: string; details?: unknown };
+    };
+    error?: string;
+  };
+
+  if (Array.isArray(base?.data?.message) && base.data.message.length > 0) {
+    return base.data.message[0];
+  }
+
+  if (typeof base?.data?.message === "string" && base.data.message.trim()) {
+    return base.data.message;
+  }
+
+  if (typeof base?.data?.error?.message === "string" && base.data.error.message.trim()) {
+    return base.data.error.message;
+  }
+
+  if (Array.isArray(base?.data?.error?.details) && base.data.error.details.length > 0) {
+    const firstDetail = base.data.error.details[0];
+    if (typeof firstDetail === "string" && firstDetail.trim()) {
+      return firstDetail;
+    }
+  }
+
+  if (typeof base?.error === "string" && base.error.trim()) {
+    return base.error;
+  }
+
+  return null;
+}
 
 export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
@@ -168,6 +209,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 if (createAudioMode === "upload" && audioFile) {
                   const uploadedAudio = await uploadStationAudio(audioFile).unwrap();
                   nextAudioUrl = uploadedAudio.url;
+                  setQuizAudioUrl(uploadedAudio.url);
+                  setAudioFile(null);
                 }
               }
 
@@ -204,8 +247,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setCreateImageMode("upload");
               setCreateAudioMode("upload");
               onClose();
-            } catch {
-              setFormError("Nie udało się utworzyć stanowiska.");
+            } catch (error) {
+              setFormError(resolveApiErrorMessage(error) ?? "Nie udało się utworzyć stanowiska.");
             }
           }}
         >
@@ -247,6 +290,15 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 if (!isCompletionCodeRequired(nextType)) {
                   setCompletionCode("");
                   setCompletionCodeMode("letters");
+                }
+                if (nextType === "memory" && !quizQuestion.trim()) {
+                  setQuizQuestion(MEMORY_SYSTEM_STATION_PROMPT);
+                }
+                if (nextType === "mini-sudoku" && !quizQuestion.trim()) {
+                  setQuizQuestion(MINI_SUDOKU_SYSTEM_STATION_PROMPT);
+                }
+                if (nextType === "matching" && !quizQuestion.trim()) {
+                  setQuizQuestion(MATCHING_SYSTEM_STATION_PROMPT);
                 }
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -343,7 +395,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                         Wybierz plik audio
                         <input
                           type="file"
-                          accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                          accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                           className="hidden"
                           onChange={(event) => {
                             const selected = event.target.files?.[0] ?? null;
@@ -354,7 +406,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                         />
                       </label>
                       <p className="text-xs text-zinc-500">
-                        Obsługiwane: MP3, WAV, OGG. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
+                        Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
                       </p>
                     </div>
                   ) : (
@@ -381,12 +433,36 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                 <textarea
                   value={quizQuestion}
-                  onChange={(event) => setQuizQuestion(event.target.value)}
+                  onChange={(event) =>
+                    setQuizQuestion(
+                      type === "memory" && !event.target.value.trim()
+                        ? MEMORY_SYSTEM_STATION_PROMPT
+                        : type === "mini-sudoku" && !event.target.value.trim()
+                          ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                        : type === "matching" && !event.target.value.trim()
+                          ? MATCHING_SYSTEM_STATION_PROMPT
+                        : type === "simon"
+                          ? normalizeSimonSequenceInput(event.target.value)
+                          : event.target.value,
+                    )
+                  }
                   rows={2}
                   placeholder={quizLikeCopy.questionPlaceholder}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                 />
               </label>
+              {type === "simon" ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                  <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
+                  <button
+                    type="button"
+                    onClick={() => setQuizQuestion(generateSimonSequence(10))}
+                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Generuj sekwencję
+                  </button>
+                </div>
+              ) : null}
 
               {!isWordPuzzleStationType(type) && !isMatchingStationType(type) ? (
                 <div className="space-y-2">

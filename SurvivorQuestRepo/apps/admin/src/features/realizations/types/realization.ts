@@ -230,4 +230,6 @@ export type RealizationStationDraft = {
   translations?: Station["translations"];
   latitude?: number;
   longitude?: number;
+  pendingAudioFile?: File | null;
+  pendingAudioLanguage?: RealizationLanguage;
 };

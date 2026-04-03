@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
+import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
 import {
   useGetCurrentRealizationOverviewQuery,
   useFinishCurrentRealizationMutation,
@@ -193,10 +194,23 @@ function renderLogDescription(
   return null;
 }
 
+function toLocalDateKey(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function CurrentRealizationPage() {
   const router = useRouter();
   const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [selectedRealizationId, setSelectedRealizationId] = useState<"current" | string>("current");
 
   const {
     data: meData,
@@ -210,6 +224,13 @@ export default function CurrentRealizationPage() {
   const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
   const [resetCurrentRealization, { isLoading: isResettingRealization }] = useResetCurrentRealizationMutation();
+  const {
+    data: realizations,
+    isLoading: isRealizationsLoading,
+  } = useGetRealizationsQuery(undefined, {
+    skip: !meData,
+    pollingInterval: 30_000,
+  });
 
   const {
     data: overview,
@@ -217,10 +238,25 @@ export default function CurrentRealizationPage() {
     isError: isOverviewError,
     error: overviewError,
     refetch,
-  } = useGetCurrentRealizationOverviewQuery(undefined, {
+  } = useGetCurrentRealizationOverviewQuery(
+    selectedRealizationId === "current" ? undefined : { realizationId: selectedRealizationId },
+    {
     skip: !meData,
     pollingInterval: 10_000,
-  });
+    },
+  );
+  const selectedRealizationArg =
+    selectedRealizationId === "current" ? undefined : { realizationId: selectedRealizationId };
+  const overviewDayKey = overview ? toLocalDateKey(overview.realization.scheduledAt) : "";
+  const sameDayRealizations = useMemo(() => {
+    if (!realizations || !overviewDayKey) {
+      return [];
+    }
+
+    return realizations
+      .filter((realization) => toLocalDateKey(realization.scheduledAt) === overviewDayKey)
+      .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime());
+  }, [realizations, overviewDayKey]);
 
   const topTeams = useMemo(
     () => [...(overview?.teams ?? [])].sort((left, right) => right.points - left.points),
@@ -252,6 +288,21 @@ export default function CurrentRealizationPage() {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
+
+  useEffect(() => {
+    if (selectedRealizationId === "current") {
+      return;
+    }
+
+    if (sameDayRealizations.length === 0) {
+      setSelectedRealizationId("current");
+      return;
+    }
+
+    if (!sameDayRealizations.some((realization) => realization.id === selectedRealizationId)) {
+      setSelectedRealizationId("current");
+    }
+  }, [sameDayRealizations, selectedRealizationId]);
 
   if (isMeLoading) {
     return <main className="p-8">Sprawdzanie sesji...</main>;
@@ -292,6 +343,34 @@ export default function CurrentRealizationPage() {
                 Status realizacji: {overview.realization.status}
               </p>
             )}
+            {overview && sameDayRealizations.length > 1 ? (
+              <div className="mt-3 max-w-96 space-y-1.5">
+                <label className="text-[11px] uppercase tracking-wider text-zinc-500">
+                  Wybór realizacji z tego dnia
+                </label>
+                <select
+                  value={selectedRealizationId === "current" ? overview.realization.id : selectedRealizationId}
+                  onChange={(event) => {
+                    setIsActionsMenuOpen(false);
+                    setIsQrPanelOpen(false);
+                    setSelectedRealizationId(event.target.value);
+                  }}
+                  disabled={isOverviewLoading || isRealizationsLoading}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-60"
+                >
+                  {sameDayRealizations.map((realization) => (
+                    <option key={realization.id} value={realization.id}>
+                      {realization.companyName} •{" "}
+                      {new Date(realization.scheduledAt).toLocaleTimeString("pl-PL", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      • {realization.status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -341,7 +420,7 @@ export default function CurrentRealizationPage() {
 
                     try {
                       setIsActionsMenuOpen(false);
-                      await startCurrentRealization().unwrap();
+                      await startCurrentRealization(selectedRealizationArg).unwrap();
                     } catch {
                       // handled by query error rendering/refetch path
                     }
@@ -364,7 +443,7 @@ export default function CurrentRealizationPage() {
 
                     try {
                       setIsActionsMenuOpen(false);
-                      await finishCurrentRealization().unwrap();
+                      await finishCurrentRealization(selectedRealizationArg).unwrap();
                     } catch {
                       // handled by query error rendering/refetch path
                     }
@@ -391,7 +470,7 @@ export default function CurrentRealizationPage() {
 
                     try {
                       setIsActionsMenuOpen(false);
-                      await resetCurrentRealization().unwrap();
+                      await resetCurrentRealization(selectedRealizationArg).unwrap();
                     } catch {
                       // handled by query error rendering/refetch path
                     }
@@ -410,7 +489,7 @@ export default function CurrentRealizationPage() {
 
                     try {
                       setIsActionsMenuOpen(false);
-                      await resetCompletedTasks().unwrap();
+                      await resetCompletedTasks(selectedRealizationArg).unwrap();
                     } catch {
                       // handled by query error rendering/refetch path
                     }
@@ -571,6 +650,7 @@ export default function CurrentRealizationPage() {
       {overview && isQrPanelOpen ? (
         <CurrentRealizationStationQrPanel
           realization={overview.realization}
+          selectedRealizationId={selectedRealizationId === "current" ? undefined : selectedRealizationId}
           onClose={() => setIsQrPanelOpen(false)}
         />
       ) : null}

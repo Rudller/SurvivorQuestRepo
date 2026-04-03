@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Realization,
   RealizationLanguage,
+  RealizationStationDraft,
   RealizationStatus,
   RealizationType,
 } from "../types/realization";
@@ -18,6 +19,7 @@ import {
 } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import type { Station } from "@/features/games/types/station";
+import { useUploadStationAudioMutation } from "@/features/games/api/station.api";
 import {
   useUpdateRealizationMutation,
   useUploadRealizationLogoMutation,
@@ -74,6 +76,7 @@ export function EditRealizationPanel({
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
+  const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
 
   const [editError, setEditError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -134,6 +137,59 @@ export function EditRealizationPanel({
       .map(toRealizationStationDraft);
   }
 
+  async function uploadPendingStationAudioFiles(stationDrafts: RealizationStationDraft[]) {
+    return Promise.all(
+      stationDrafts.map(async (station) => {
+        if (station.type !== "audio-quiz" || !station.pendingAudioFile) {
+          return station;
+        }
+
+        const uploadedAudio = await uploadStationAudio(station.pendingAudioFile).unwrap();
+        const targetLanguage = station.pendingAudioLanguage ?? "polish";
+        const clearedPending = {
+          pendingAudioFile: null,
+          pendingAudioLanguage: undefined,
+        } as const;
+
+        if (targetLanguage === "polish") {
+          if (!station.quiz) {
+            return { ...station, ...clearedPending };
+          }
+
+          return {
+            ...station,
+            quiz: {
+              ...station.quiz,
+              audioUrl: uploadedAudio.url,
+            },
+            ...clearedPending,
+          };
+        }
+
+        const currentTranslation = station.translations?.[targetLanguage];
+        const sourceQuiz = currentTranslation?.quiz ?? station.quiz;
+        if (!sourceQuiz) {
+          return { ...station, ...clearedPending };
+        }
+
+        return {
+          ...station,
+          translations: {
+            ...(station.translations ?? {}),
+            [targetLanguage]: {
+              ...(currentTranslation ?? {}),
+              quiz: {
+                ...sourceQuiz,
+                audioUrl: uploadedAudio.url,
+              },
+            },
+          },
+          ...clearedPending,
+        };
+      }),
+    );
+  }
+
   const [scenarioStations, setScenarioStations] = useState(() =>
     mapScenarioStations(realization.scenarioTemplateId ?? realization.scenarioId),
   );
@@ -143,7 +199,7 @@ export function EditRealizationPanel({
   const [customLanguageInput, setCustomLanguageInput] = useState(initialLanguageSelection.customLanguage);
   const positionsCount = scenarioStations.length;
   const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const isBusy = isUpdating || isUploadingLogo || isUploadingOffer;
+  const isBusy = isUpdating || isUploadingLogo || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !editValues.companyName.trim();
   const isScenarioInvalid = submitAttempted && !editValues.scenarioId;
@@ -301,7 +357,8 @@ export function EditRealizationPanel({
                 return;
               }
 
-              const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStations);
+              const scenarioStationsWithUploadedAudio = await uploadPendingStationAudioFiles(scenarioStations);
+              const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStationsWithUploadedAudio);
               const useCustomScenarioStations = scenarioStations.length > 0;
               const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
               const positionsCountForSubmit = Math.max(
@@ -888,7 +945,7 @@ export function EditRealizationPanel({
               >
                 {isUpdating
                   ? "Zapisywanie..."
-                  : isUploadingLogo || isUploadingOffer
+                  : isUploadingLogo || isUploadingOffer || isUploadingStationAudio
                     ? "Przesyłanie plików..."
                     : "Zapisz"}
               </button>

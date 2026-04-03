@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
 import {
@@ -32,6 +33,11 @@ import {
   isMatchingStationType,
   splitMatchingPairAnswer,
   joinMatchingPairAnswer,
+  MEMORY_SYSTEM_STATION_PROMPT,
+  MINI_SUDOKU_SYSTEM_STATION_PROMPT,
+  MATCHING_SYSTEM_STATION_PROMPT,
+  generateSimonSequence,
+  normalizeSimonSequenceInput,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -54,6 +60,41 @@ const RealizationLocationPickerMap = dynamic(
     ),
   },
 );
+
+function resolveApiErrorMessage(error: unknown) {
+  const base = error as FetchBaseQueryError & {
+    data?: {
+      message?: string | string[];
+      error?: { message?: string; details?: unknown };
+    };
+    error?: string;
+  };
+
+  if (Array.isArray(base?.data?.message) && base.data.message.length > 0) {
+    return base.data.message[0];
+  }
+
+  if (typeof base?.data?.message === "string" && base.data.message.trim()) {
+    return base.data.message;
+  }
+
+  if (typeof base?.data?.error?.message === "string" && base.data.error.message.trim()) {
+    return base.data.error.message;
+  }
+
+  if (Array.isArray(base?.data?.error?.details) && base.data.error.details.length > 0) {
+    const firstDetail = base.data.error.details[0];
+    if (typeof firstDetail === "string" && firstDetail.trim()) {
+      return firstDetail;
+    }
+  }
+
+  if (typeof base?.error === "string" && base.error.trim()) {
+    return base.error;
+  }
+
+  return null;
+}
 
 export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
@@ -81,7 +122,14 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
-    quizQuestion: station.quiz?.question ?? "",
+    quizQuestion:
+      station.type === "memory" && !(station.quiz?.question ?? "").trim()
+        ? MEMORY_SYSTEM_STATION_PROMPT
+        : station.type === "mini-sudoku" && !(station.quiz?.question ?? "").trim()
+          ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+          : station.type === "matching" && !(station.quiz?.question ?? "").trim()
+            ? MATCHING_SYSTEM_STATION_PROMPT
+        : station.quiz?.question ?? "",
     quizAnswers: station.quiz?.answers?.length === QUIZ_ANSWER_COUNT ? station.quiz.answers : createEmptyQuizAnswers(),
     quizCorrectAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
     quizAudioUrl: station.quiz?.audioUrl ?? "",
@@ -210,8 +258,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   longitude: nextLongitude,
                 }).unwrap();
                 onClose();
-              } catch {
-                setEditFormError("Nie udało się zapisać zmian stanowiska.");
+              } catch (error) {
+                setEditFormError(resolveApiErrorMessage(error) ?? "Nie udało się zapisać zmian stanowiska.");
               }
             }}
             className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
@@ -237,6 +285,14 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       ...prev,
                       type: nextType,
                       completionCode: isCompletionCodeRequired(nextType) ? prev.completionCode : "",
+                      quizQuestion:
+                        nextType === "memory" && !prev.quizQuestion.trim()
+                          ? MEMORY_SYSTEM_STATION_PROMPT
+                          : nextType === "mini-sudoku" && !prev.quizQuestion.trim()
+                            ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                            : nextType === "matching" && !prev.quizQuestion.trim()
+                              ? MATCHING_SYSTEM_STATION_PROMPT
+                          : prev.quizQuestion,
                     };
                   });
                   if (!isCompletionCodeRequired(event.target.value as StationType)) {
@@ -342,7 +398,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                           Wybierz plik audio
                           <input
                             type="file"
-                            accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                            accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                             className="hidden"
                             onChange={(event) => {
                               const selected = event.target.files?.[0] ?? null;
@@ -353,7 +409,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                           />
                         </label>
                         <p className="text-xs text-zinc-500">
-                          Obsługiwane: MP3, WAV, OGG.{" "}
+                          Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM.{" "}
                           {editAudioFile ? `Wybrano: ${editAudioFile.name}` : "Brak wybranego pliku."}
                         </p>
                       </div>
@@ -381,12 +437,43 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                   <textarea
                     value={editValues.quizQuestion}
-                    onChange={(event) => setEditValues((prev) => ({ ...prev, quizQuestion: event.target.value }))}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({
+                        ...prev,
+                        quizQuestion:
+                          editValues.type === "memory" && !event.target.value.trim()
+                            ? MEMORY_SYSTEM_STATION_PROMPT
+                            : editValues.type === "mini-sudoku" && !event.target.value.trim()
+                              ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                              : editValues.type === "matching" && !event.target.value.trim()
+                                ? MATCHING_SYSTEM_STATION_PROMPT
+                            : editValues.type === "simon"
+                              ? normalizeSimonSequenceInput(event.target.value)
+                              : event.target.value,
+                      }))
+                    }
                     rows={2}
                     placeholder={quizLikeCopy.questionPlaceholder}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                 </label>
+                {editValues.type === "simon" ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                    <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          quizQuestion: generateSimonSequence(10),
+                        }))
+                      }
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                    >
+                      Generuj sekwencję
+                    </button>
+                  </div>
+                ) : null}
 
                 {!isWordPuzzleStationType(editValues.type) && !isMatchingStationType(editValues.type) ? (
                   <div className="space-y-2">

@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS, type AVPlaybackStatus } from "expo-av";
-import { ActivityIndicator, Alert, Animated, Image, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from "expo-audio";
+import { Alert, Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
+import { AnagramStationPanel } from "./station-panels/anagram-station-panel";
+import { BoggleStationPanel } from "./station-panels/boggle-station-panel";
+import { CaesarStationPanel } from "./station-panels/caesar-station-panel";
+import { CodeStationPanel } from "./station-panels/code-station-panel";
+import { HangmanStationPanel } from "./station-panels/hangman-station-panel";
+import { MatchingStationPanel } from "./station-panels/matching-station-panel";
+import { MastermindStationPanel, type MastermindAttempt } from "./station-panels/mastermind-station-panel";
+import { MemoryStationPanel } from "./station-panels/memory-station-panel";
+import { MiniSudokuStationPanel } from "./station-panels/mini-sudoku-station-panel";
+import { QuizAudioPanel, resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
+import { RebusStationPanel } from "./station-panels/rebus-station-panel";
+import { SimonStationPanel } from "./station-panels/simon-station-panel";
+import { WordleInteractionPanel, WordleMediaBoard, type WordleAttempt } from "./station-panels/wordle-station-panel";
 import type {
   StationPreviewOverlayProps,
   StationTestType,
@@ -10,18 +23,12 @@ import type {
 
 import {
   CAESAR_SHIFT,
-  HANGMAN_ALPHABET,
   HANGMAN_MAX_MISSES,
-  MASTERMIND_SYMBOLS,
   MASTERMIND_MAX_ATTEMPTS,
   MEMORY_MAX_MISTAKES,
-  NUMERIC_PINPAD_LAYOUT,
-  NUMERIC_PINPAD_SUBLABELS,
   QUIZ_BRAIN_ICON_URI,
-  SIMON_BUTTONS,
   TEXT_PUZZLE_MAX_ATTEMPTS,
   WORDLE_MAX_ATTEMPTS,
-  type MatchingPair,
   type MemoryCard,
   type WordleCellState,
   blendHexColors,
@@ -51,20 +58,6 @@ import {
   shuffleDeterministic,
 } from "./puzzle-helpers";
 
-type WordleAttempt = {
-  guess: string;
-  evaluation: WordleCellState[];
-};
-type MastermindAttempt = {
-  guess: string;
-  exact: number;
-  misplaced: number;
-};
-
-function getCodePlaceholder(stationType: StationTestType) {
-  return stationType === "time" ? "np. TIME-2048" : "np. POINTS-2048";
-}
-
 function isQuizStationType(stationType: StationTestType) {
   return (
     stationType === "quiz" ||
@@ -93,7 +86,7 @@ export function StationPreviewOverlay({
   onQuizPassed,
   onTimeExpired,
 }: StationPreviewOverlayProps) {
-  const { height: viewportHeight } = useWindowDimensions();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [wordleInput, setWordleInput] = useState("");
@@ -138,7 +131,6 @@ export function StationPreviewOverlay({
   const [quizSubmitError, setQuizSubmitError] = useState<string | null>(null);
   const [audioLoadError, setAudioLoadError] = useState<string | null>(null);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
-  const [isAudioReady, setIsAudioReady] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [quizIconLoadFailed, setQuizIconLoadFailed] = useState(false);
@@ -166,7 +158,8 @@ export function StationPreviewOverlay({
   const codeInputShakeAnimation = useRef(new Animated.Value(0)).current;
   const codeInputResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeInputSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioSoundRef = useRef<Audio.Sound | null>(null);
+  const audioPlayerRef = useRef<AudioPlayer | null>(null);
+  const audioPlaybackSubscriptionRef = useRef<{ remove: () => void } | null>(null);
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const memoryHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const simonHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,22 +175,25 @@ export function StationPreviewOverlay({
     [displayedStation?.quizAnswers],
   );
   const unloadAudioSound = useCallback(async () => {
-    const activeSound = audioSoundRef.current;
-    audioSoundRef.current = null;
-    setIsAudioReady(false);
+    const activePlayer = audioPlayerRef.current;
+    audioPlayerRef.current = null;
     setIsAudioPlaying(false);
-    if (!activeSound) {
+    if (audioPlaybackSubscriptionRef.current) {
+      audioPlaybackSubscriptionRef.current.remove();
+      audioPlaybackSubscriptionRef.current = null;
+    }
+    if (!activePlayer) {
       return;
     }
 
     try {
-      await activeSound.stopAsync();
+      activePlayer.pause();
     } catch {
       // noop
     }
 
     try {
-      await activeSound.unloadAsync();
+      activePlayer.remove();
     } catch {
       // noop
     }
@@ -208,7 +204,6 @@ export function StationPreviewOverlay({
       if (!normalizedAudioUrl) {
         setAudioLoadError("Brak źródła audio dla tego stanowiska.");
         setIsAudioLoading(false);
-        setIsAudioReady(false);
         return null;
       }
 
@@ -216,38 +211,38 @@ export function StationPreviewOverlay({
       setAudioLoadError(null);
       setIsAudioLoading(true);
       try {
-        const { sound } = await Audio.Sound.createAsync(
+        const player = createAudioPlayer(
           { uri: normalizedAudioUrl },
           {
-            shouldPlay: false,
-            progressUpdateIntervalMillis: 250,
-            positionMillis: 0,
+            updateInterval: 250,
           },
-          (status: AVPlaybackStatus) => {
+        );
+        audioPlayerRef.current = player;
+        audioPlaybackSubscriptionRef.current = player.addListener(
+          "playbackStatusUpdate",
+          (status: AudioStatus) => {
             if (!status.isLoaded) {
               setIsAudioPlaying(false);
-              if (status.error) {
-                setAudioLoadError("Nie udało się odtworzyć nagrania audio.");
-              }
               return;
             }
 
-            setIsAudioPlaying(status.isPlaying);
+            setIsAudioLoading(false);
+            setIsAudioPlaying(status.playing);
             if (status.didJustFinish) {
-              void audioSoundRef.current?.setPositionAsync(0).catch(() => undefined);
+              void audioPlayerRef.current?.seekTo(0).catch(() => undefined);
               setIsAudioPlaying(false);
             }
           },
         );
-        audioSoundRef.current = sound;
-        setIsAudioReady(true);
-        return sound;
+        setIsAudioLoading(!player.isLoaded);
+        return player;
       } catch {
         setAudioLoadError("Nie udało się załadować nagrania audio.");
-        setIsAudioReady(false);
         return null;
       } finally {
-        setIsAudioLoading(false);
+        if (!audioPlayerRef.current) {
+          setIsAudioLoading(false);
+        }
       }
     },
     [unloadAudioSound],
@@ -258,17 +253,18 @@ export function StationPreviewOverlay({
     }
 
     const audioUrl = displayedStation.quizAudioUrl?.trim() ?? "";
-    let activeSound = audioSoundRef.current;
-    if (!activeSound) {
-      activeSound = await loadAudioSound(audioUrl);
+    let activePlayer = audioPlayerRef.current;
+    if (!activePlayer) {
+      activePlayer = await loadAudioSound(audioUrl);
     }
 
-    if (!activeSound) {
+    if (!activePlayer) {
       return;
     }
 
     try {
-      await activeSound.replayAsync();
+      await activePlayer.seekTo(0);
+      activePlayer.play();
     } catch {
       setAudioLoadError("Nie udało się odtworzyć nagrania audio.");
       setIsAudioPlaying(false);
@@ -346,7 +342,6 @@ export function StationPreviewOverlay({
     setQuizSubmitError(null);
     setAudioLoadError(null);
     setIsAudioLoading(false);
-    setIsAudioReady(false);
     setIsAudioPlaying(false);
     setImageLoadFailed(false);
     setQuizIconLoadFailed(false);
@@ -390,14 +385,12 @@ export function StationPreviewOverlay({
   }, [codeInputShakeAnimation, displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
 
   useEffect(() => {
-    void Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-      shouldDuckAndroid: true,
-      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: false,
+    void setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      interruptionMode: "duckOthers",
+      shouldRouteThroughEarpiece: false,
+      shouldPlayInBackground: false,
     }).catch(() => undefined);
 
     return () => {
@@ -424,9 +417,18 @@ export function StationPreviewOverlay({
         return;
       }
 
-      void loadedSound.unloadAsync().catch(() => undefined);
-      if (audioSoundRef.current === loadedSound) {
-        audioSoundRef.current = null;
+      try {
+        loadedSound.pause();
+      } catch {
+        // noop
+      }
+      try {
+        loadedSound.remove();
+      } catch {
+        // noop
+      }
+      if (audioPlayerRef.current === loadedSound) {
+        audioPlayerRef.current = null;
       }
     });
 
@@ -740,7 +742,6 @@ export function StationPreviewOverlay({
   const isMatchingStation = station.stationType === "matching";
   const isQuizStation = isQuizStationType(station.stationType);
   const requiresCode = station.stationType === "time" || station.stationType === "points";
-  const isTimeStation = station.stationType === "time";
   const isNumericCodeStation =
     requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
@@ -756,16 +757,53 @@ export function StationPreviewOverlay({
     if (requiresCode) {
       return Math.max(128, Math.round(viewportHeight * 0.2));
     }
+    if (isWordleStation) {
+      return Math.max(230, Math.round(viewportHeight * 0.4));
+    }
     return Math.max(190, Math.round(viewportHeight * 0.33));
   })();
   const hasTimerStarted = Boolean(station.startedAt);
   const hasQuizAnswer = selectedQuizOption !== null;
   const wordleSecret = isWordleStation ? resolvePuzzleSecret(station, "wordle") : "";
   const wordleLength = Array.from(wordleSecret).length;
+  const wordleDisplayLength = Math.max(1, wordleLength || 5);
   const normalizedWordleInput = normalizeWordleSecret(wordleInput).slice(0, wordleLength || 32);
+  const wordleInputCharacters = useMemo(() => Array.from(normalizedWordleInput), [normalizedWordleInput]);
   const normalizedWordleAttemptsCount = wordleAttempts.length;
   const wordleSolved = wordleAttempts.some((attempt) => attempt.evaluation.every((cell) => cell === "correct"));
   const wordleAttemptsLeft = Math.max(0, WORDLE_MAX_ATTEMPTS - normalizedWordleAttemptsCount);
+  const wordleKeyStateByLetter = useMemo(() => {
+    const statePriority: Record<WordleCellState, number> = {
+      absent: 1,
+      present: 2,
+      correct: 3,
+    };
+    const map = new Map<string, WordleCellState>();
+
+    wordleAttempts.forEach((attempt) => {
+      const guessCharacters = Array.from(attempt.guess);
+      attempt.evaluation.forEach((state, index) => {
+        const letter = (guessCharacters[index] ?? "").toUpperCase();
+        if (!letter) {
+          return;
+        }
+        const current = map.get(letter);
+        if (!current || statePriority[state] > statePriority[current]) {
+          map.set(letter, state);
+        }
+      });
+    });
+
+    return map;
+  }, [wordleAttempts]);
+  const [wordleKeyboardContainerWidth, setWordleKeyboardContainerWidth] = useState(0);
+  const wordleKeyboardKeyGap = 2;
+  const wordleKeyboardKeyWidth = useMemo(() => {
+    const availableWidth =
+      wordleKeyboardContainerWidth > 0 ? wordleKeyboardContainerWidth : Math.max(260, viewportWidth - 72);
+    return Math.max(24, Math.floor((availableWidth - 9 * wordleKeyboardKeyGap) / 10));
+  }, [viewportWidth, wordleKeyboardContainerWidth, wordleKeyboardKeyGap]);
+  const wordleBoardCellSize = wordleKeyboardKeyWidth;
   const guessedHangmanSet = new Set(hangmanGuessedLetters);
   const hangmanSecret = isHangmanStation ? resolvePuzzleSecret(station, "hangman") : "";
   const hangmanMaskedSecret = isHangmanStation
@@ -804,6 +842,7 @@ export function StationPreviewOverlay({
   const memoryAllMatched = isMemoryStation && memoryDeck.length > 0 && memoryMatchedCount === memoryDeck.length;
   const memoryAttemptsLeft = Math.max(0, MEMORY_MAX_MISTAKES - memoryMistakes);
   const simonSequence = isSimonStation ? resolveSimonSequence(station) : [];
+  const simonHiddenHint = simonSequence.map(() => "•").join(" ");
   const simonProgress = simonInput.length;
   const rebusAnswer = isRebusStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "SURVIVOR") : "";
   const normalizedRebusInput = normalizePuzzleText(rebusInput);
@@ -826,17 +865,6 @@ export function StationPreviewOverlay({
   const matchingAttemptsLeft = Math.max(0, MEMORY_MAX_MISTAKES - matchingAttempts);
   const feedbackTone =
     hasQuizAnswer && station.quizCorrectAnswerIndex === selectedQuizOption ? "success" : hasQuizAnswer ? "error" : null;
-  const quizFeedbackStyle = {
-    opacity: quizFeedbackAnimation,
-    transform: [
-      {
-        translateY: quizFeedbackAnimation.interpolate({
-          inputRange: [0, 1],
-          outputRange: [8, 0],
-        }),
-      },
-    ],
-  } as const;
   const remainingTimeLabel = remainingTimeSeconds !== null ? formatRemainingTimeLabel(remainingTimeSeconds) : null;
   const timerScalePeak = 1.04 + finalTenSecondsProgress * 0.14;
   const timerMinOpacity = 0.94 - finalTenSecondsProgress * 0.18;
@@ -869,6 +897,14 @@ export function StationPreviewOverlay({
     hasTimerStarted &&
     remainingTimeSeconds !== null &&
     remainingTimeSeconds <= 0;
+  const isWordleInteractiveDisabled =
+    station.status === "done" ||
+    station.status === "failed" ||
+    isSubmittingWordleGuess ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired ||
+    wordleAttemptsLeft <= 0 ||
+    wordleSolved;
   const hasAudioSource = Boolean(station.quizAudioUrl?.trim());
   const isCodeActionDisabled =
     station.status === "done" ||
@@ -1042,6 +1078,14 @@ export function StationPreviewOverlay({
       },
     ]);
   };
+  useEffect(() => {
+    if (wordleResult !== null) {
+      setWordleResult(null);
+    }
+    if (quizSubmitError !== null) {
+      setQuizSubmitError(null);
+    }
+  }, [normalizedWordleInput]);
   const submitQuizAnswer = async (index: number) => {
     if (!isClassicQuizStation && !isAudioQuizStation) {
       return;
@@ -1890,7 +1934,15 @@ export function StationPreviewOverlay({
                   backgroundColor: EXPEDITION_THEME.panelMuted,
                 }}
               >
-                {shouldShowQuizFallbackGraphic ? (
+                {isWordleStation ? (
+                  <WordleMediaBoard
+                    stationId={station.stationId}
+                    attemptsCount={normalizedWordleAttemptsCount}
+                    displayLength={wordleDisplayLength}
+                    attempts={wordleAttempts}
+                    cellSize={wordleBoardCellSize}
+                  />
+                ) : shouldShowQuizFallbackGraphic ? (
                   <View className="flex-1 items-center justify-center">
                     {!quizIconLoadFailed ? (
                       <Image
@@ -1945,911 +1997,292 @@ export function StationPreviewOverlay({
                   style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
                 >
                   <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    {isClassicQuizStation
-                      ? station.quizQuestion?.trim() || "Quiz: wybierz jedną z 4 odpowiedzi"
-                      : isAudioQuizStation
-                        ? station.quizQuestion?.trim() || "Quiz audio: odtwórz nagranie i wybierz poprawną odpowiedź."
-                      : isWordleStation
-                        ? station.quizQuestion?.trim() || `Wordle: odgadnij słowo (${wordleLength} liter).`
-                        : isHangmanStation
-                          ? station.quizQuestion?.trim() || "Wisielec: odgadnij hasło litera po literze."
-                          : isMastermindStation
-                            ? station.quizQuestion?.trim() || "Mastermind: odgadnij 4-znakowy kod z liter A-F."
-                            : isAnagramStation
-                              ? station.quizQuestion?.trim() || "Anagram: ułóż poprawne słowo."
-                              : isCaesarStation
-                                ? station.quizQuestion?.trim() || "Szyfr Cezara: odszyfruj tekst (przesunięcie +3)."
-                                : isMemoryStation
-                                  ? station.quizQuestion?.trim() || "Memory: znajdź wszystkie pary."
-                                  : isSimonStation
-                                    ? station.quizQuestion?.trim() || "Simon: odtwórz sekwencję."
-                                    : isRebusStation
-                                      ? station.quizQuestion?.trim() || "Rebus: wpisz hasło."
-                                      : isBoggleStation
-                                        ? station.quizQuestion?.trim() || "Boggle: znajdź docelowe słowo na planszy."
-                                        : isMiniSudokuStation
-                                          ? station.quizQuestion?.trim() || "Mini Sudoku: uzupełnij siatkę 2x2."
-                                          : station.quizQuestion?.trim() || "Łączenie par: dopasuj elementy."}
+                    {resolveStationQuizPrompt({ station, wordleLength })}
                   </Text>
 
                   {(isClassicQuizStation || isAudioQuizStation) ? (
-                    <>
-                      {isAudioQuizStation ? (
-                        <View className="mt-3 rounded-xl border px-3 py-3" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}>
-                          <Pressable
-                            className="items-center rounded-xl py-2.5 active:opacity-90"
-                            style={{
-                              backgroundColor:
-                                station.status === "done" ||
-                                station.status === "failed" ||
-                                isSubmittingQuizAnswer ||
-                                isAudioLoading ||
-                                (hasTimedLimit && !hasTimerStarted) ||
-                                isTimeExpired ||
-                                !hasAudioSource
-                                  ? EXPEDITION_THEME.panelMuted
-                                  : EXPEDITION_THEME.accent,
-                            }}
-                            onPress={() => {
-                              void handlePlayAudio();
-                            }}
-                            disabled={
-                              station.status === "done" ||
-                              station.status === "failed" ||
-                              isSubmittingQuizAnswer ||
-                              isAudioLoading ||
-                              (hasTimedLimit && !hasTimerStarted) ||
-                              isTimeExpired ||
-                              !hasAudioSource
-                            }
-                          >
-                            <Text className="text-sm font-semibold text-zinc-950">
-                              {isAudioPlaying ? "Odtwarzanie..." : "▶️ Odtwórz / odtwórz ponownie audio"}
-                            </Text>
-                          </Pressable>
-                          {isAudioLoading ? (
-                            <View className="mt-2 flex-row items-center gap-2">
-                              <ActivityIndicator size="small" color={EXPEDITION_THEME.accentStrong} />
-                              <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                                Ładowanie nagrania...
-                              </Text>
-                            </View>
-                          ) : null}
-                          {audioLoadError ? (
-                            <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.danger }}>
-                              {audioLoadError}
-                            </Text>
-                          ) : null}
-                        </View>
-                      ) : null}
-                      <View className="mt-3 flex-row flex-wrap justify-between gap-y-2">
-                        {quizOptions.map((option, index) => {
-                          const isSelected = selectedQuizOption === index;
-                          const isCorrect = station.quizCorrectAnswerIndex === index;
-                          const showCorrect = isSelected && isCorrect;
-                          const showWrong = isSelected && !isCorrect;
-
-                          return (
-                            <Pressable
-                              key={`${station.stationId}-quiz-${index}`}
-                              className="rounded-2xl border px-3 py-3 active:opacity-90"
-                              style={{
-                                width: "49%",
-                                minHeight: 92,
-                                justifyContent: "center",
-                                alignItems: "center",
-                                shadowColor: "#000000",
-                                shadowOpacity: 0.22,
-                                shadowRadius: 7,
-                                shadowOffset: { width: 0, height: 4 },
-                                elevation: 4,
-                                borderColor: showCorrect
-                                  ? "rgba(52, 211, 153, 0.8)"
-                                  : showWrong
-                                    ? EXPEDITION_THEME.danger
-                                    : isSelected
-                                      ? EXPEDITION_THEME.accentStrong
-                                      : EXPEDITION_THEME.border,
-                                backgroundColor: showCorrect
-                                  ? "rgba(22, 163, 74, 0.24)"
-                                  : showWrong
-                                    ? "rgba(239, 111, 108, 0.22)"
-                                    : EXPEDITION_THEME.panelStrong,
-                              }}
-                              onPress={() => {
-                                void submitQuizAnswer(index);
-                              }}
-                              disabled={
-                                selectedQuizOption !== null ||
-                                isSubmittingQuizAnswer ||
-                                station.status === "done" ||
-                                station.status === "failed" ||
-                                (hasTimedLimit && !hasTimerStarted) ||
-                                isTimeExpired
-                              }
-                            >
-                              <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                {option}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-
-                      {quizResult && feedbackTone ? (
-                        <Animated.View
-                          className="mt-3 rounded-2xl border px-3 py-2"
-                          style={[
-                            {
-                              borderColor: feedbackTone === "success" ? "rgba(52, 211, 153, 0.82)" : EXPEDITION_THEME.danger,
-                              backgroundColor: feedbackTone === "success" ? "rgba(52, 211, 153, 0.18)" : "rgba(239, 111, 108, 0.18)",
-                            },
-                            quizFeedbackStyle,
-                          ]}
-                        >
-                          <Text
-                            className="text-center text-xs font-semibold"
-                            style={{ color: EXPEDITION_THEME.textPrimary }}
-                          >
-                            {quizResult}
-                          </Text>
-                        </Animated.View>
-                      ) : null}
-                    </>
+                    <QuizAudioPanel
+                      station={station}
+                      isAudioQuizStation={isAudioQuizStation}
+                      quizOptions={quizOptions}
+                      selectedQuizOption={selectedQuizOption}
+                      isSubmittingQuizAnswer={isSubmittingQuizAnswer}
+                      hasTimedLimit={hasTimedLimit}
+                      hasTimerStarted={hasTimerStarted}
+                      isTimeExpired={isTimeExpired}
+                      hasAudioSource={hasAudioSource}
+                      isAudioLoading={isAudioLoading}
+                      isAudioPlaying={isAudioPlaying}
+                      audioLoadError={audioLoadError}
+                      quizResult={quizResult}
+                      feedbackTone={feedbackTone}
+                      quizFeedbackAnimation={quizFeedbackAnimation}
+                      onPlayAudio={() => {
+                        void handlePlayAudio();
+                      }}
+                      onSubmitQuizAnswer={(index) => {
+                        void submitQuizAnswer(index);
+                      }}
+                    />
                   ) : null}
 
                   {isWordleStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Próby: {normalizedWordleAttemptsCount}/{WORDLE_MAX_ATTEMPTS} • Pozostało: {wordleAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 gap-2">
-                        {Array.from({ length: WORDLE_MAX_ATTEMPTS }).map((_, rowIndex) => {
-                          const attempt = wordleAttempts[rowIndex];
-                          const guessCharacters = Array.from(attempt?.guess ?? "");
-                          const evaluation = attempt?.evaluation ?? [];
-                          const secretLength = Math.max(1, wordleLength || 5);
-
-                          return (
-                            <View key={`${station.stationId}-wordle-row-${rowIndex}`} className="flex-row gap-1">
-                              {Array.from({ length: secretLength }).map((__, columnIndex) => {
-                                const letter = guessCharacters[columnIndex] ?? "";
-                                const state = evaluation[columnIndex];
-                                const backgroundColor =
-                                  state === "correct"
-                                    ? "rgba(34, 197, 94, 0.35)"
-                                    : state === "present"
-                                      ? "rgba(245, 158, 11, 0.28)"
-                                      : state === "absent"
-                                        ? "rgba(120, 120, 120, 0.25)"
-                                        : EXPEDITION_THEME.panelStrong;
-                                const borderColor =
-                                  state === "correct"
-                                    ? "rgba(34, 197, 94, 0.72)"
-                                    : state === "present"
-                                      ? "rgba(245, 158, 11, 0.72)"
-                                      : state === "absent"
-                                        ? "rgba(161, 161, 170, 0.5)"
-                                        : EXPEDITION_THEME.border;
-
-                                return (
-                                  <View
-                                    key={`${station.stationId}-wordle-cell-${rowIndex}-${columnIndex}`}
-                                    className="h-10 flex-1 items-center justify-center rounded-lg border"
-                                    style={{ borderColor, backgroundColor }}
-                                  >
-                                    <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                      {letter || " "}
-                                    </Text>
-                                  </View>
-                                );
-                              })}
-                            </View>
-                          );
-                        })}
-                      </View>
-
-                      <TextInput
-                        className="mt-3 rounded-xl border px-3 py-2 text-sm"
-                        style={{
-                          borderColor: EXPEDITION_THEME.border,
-                          backgroundColor: EXPEDITION_THEME.panelStrong,
-                          color: EXPEDITION_THEME.textPrimary,
-                        }}
-                        placeholder={`Wpisz ${wordleLength || 5}-literowe słowo`}
-                        placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        value={wordleInput}
-                        onChangeText={(value) => {
-                          setWordleInput(value);
-                          setWordleResult(null);
-                          setQuizSubmitError(null);
-                        }}
-                        editable={station.status !== "done" && station.status !== "failed" && !isSubmittingWordleGuess}
-                        onSubmitEditing={() => {
-                          void submitWordleGuess();
-                        }}
-                      />
-                      <Pressable
-                        className="mt-2 items-center rounded-xl py-2.5 active:opacity-90"
-                        style={{
-                          backgroundColor:
-                            station.status === "done" ||
-                            station.status === "failed" ||
-                            isSubmittingWordleGuess ||
-                            (hasTimedLimit && !hasTimerStarted) ||
-                            isTimeExpired ||
-                            wordleAttemptsLeft <= 0 ||
-                            wordleSolved
-                              ? EXPEDITION_THEME.panelStrong
-                              : EXPEDITION_THEME.accent,
-                        }}
-                        onPress={() => {
-                          void submitWordleGuess();
-                        }}
-                        disabled={
-                          station.status === "done" ||
-                          station.status === "failed" ||
-                          isSubmittingWordleGuess ||
-                          (hasTimedLimit && !hasTimerStarted) ||
-                          isTimeExpired ||
-                          wordleAttemptsLeft <= 0 ||
-                          wordleSolved
+                    <WordleInteractionPanel
+                      stationId={station.stationId}
+                      displayLength={wordleDisplayLength}
+                      inputCharacters={wordleInputCharacters}
+                      boardCellSize={wordleBoardCellSize}
+                      keyboardKeySize={wordleKeyboardKeyWidth}
+                      keyboardKeyGap={wordleKeyboardKeyGap}
+                      keyStateByLetter={wordleKeyStateByLetter}
+                      isInteractiveDisabled={isWordleInteractiveDisabled}
+                      isSubmitting={isSubmittingWordleGuess}
+                      canSubmit={!isWordleInteractiveDisabled && normalizedWordleInput.length === (wordleLength || 0)}
+                      canBackspace={!isWordleInteractiveDisabled && normalizedWordleInput.length > 0}
+                      result={wordleResult}
+                      onLayoutKeyboard={(nextWidth) => {
+                        if (Math.abs(nextWidth - wordleKeyboardContainerWidth) > 1) {
+                          setWordleKeyboardContainerWidth(nextWidth);
                         }
-                      >
-                        <Text className="text-sm font-semibold text-zinc-950">
-                          {isSubmittingWordleGuess ? "Sprawdzanie..." : "Sprawdź słowo"}
-                        </Text>
-                      </Pressable>
-                      {wordleResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {wordleResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                      }}
+                      onPressKey={(key) => {
+                        setWordleInput((current) => {
+                          const nextValue = `${current}${key}`.slice(0, wordleLength || 32);
+                          return nextValue === current ? current : nextValue;
+                        });
+                      }}
+                      onBackspace={() => {
+                        setWordleInput((current) => {
+                          if (!current.length) {
+                            return current;
+                          }
+                          return current.slice(0, -1);
+                        });
+                      }}
+                      onSubmit={() => {
+                        void submitWordleGuess();
+                      }}
+                    />
                   ) : null}
 
                   {isHangmanStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Pudła: {hangmanMisses.length}/{HANGMAN_MAX_MISSES} • Pozostało: {hangmanAttemptsLeft}
-                      </Text>
-                      <Text
-                        className="mt-2 text-lg font-bold"
-                        style={{ color: EXPEDITION_THEME.textPrimary, letterSpacing: 1.8 }}
-                      >
-                        {hangmanMaskedSecret}
-                      </Text>
-                      {hangmanMisses.length > 0 ? (
-                        <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.danger }}>
-                          Błędne litery: {hangmanMisses.join(", ")}
-                        </Text>
-                      ) : null}
-
-                      <View className="mt-3 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="Wpisz literę"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={hangmanInput}
-                          onChangeText={(value) => {
-                            setHangmanInput(value);
-                            setHangmanResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={station.status !== "done" && station.status !== "failed" && !isSubmittingHangmanGuess}
-                          onSubmitEditing={() => {
-                            void submitHangmanGuess();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              station.status === "done" ||
-                              station.status === "failed" ||
-                              isSubmittingHangmanGuess ||
-                              (hasTimedLimit && !hasTimerStarted) ||
-                              isTimeExpired ||
-                              hangmanAttemptsLeft <= 0 ||
-                              hangmanHasWon
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitHangmanGuess();
-                          }}
-                          disabled={
-                            station.status === "done" ||
-                            station.status === "failed" ||
-                            isSubmittingHangmanGuess ||
-                            (hasTimedLimit && !hasTimerStarted) ||
-                            isTimeExpired ||
-                            hangmanAttemptsLeft <= 0 ||
-                            hangmanHasWon
-                          }
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">
-                            {isSubmittingHangmanGuess ? "..." : "Zgadnij"}
-                          </Text>
-                        </Pressable>
-                      </View>
-
-                      <View className="mt-3 flex-row flex-wrap gap-1.5">
-                        {HANGMAN_ALPHABET.map((letter) => {
-                          const used = guessedHangmanSet.has(letter) || hangmanMisses.includes(letter);
-                          return (
-                            <Pressable
-                              key={`${station.stationId}-hangman-letter-${letter}`}
-                              className="h-8 w-8 items-center justify-center rounded-md border active:opacity-90"
-                              style={{
-                                borderColor: used ? "rgba(161, 161, 170, 0.6)" : EXPEDITION_THEME.border,
-                                backgroundColor: used ? "rgba(113, 113, 122, 0.22)" : EXPEDITION_THEME.panelStrong,
-                              }}
-                              onPress={() => {
-                                void submitHangmanGuess(letter);
-                              }}
-                              disabled={
-                                used ||
-                                station.status === "done" ||
-                                station.status === "failed" ||
-                                isSubmittingHangmanGuess ||
-                                (hasTimedLimit && !hasTimerStarted) ||
-                                isTimeExpired ||
-                                hangmanAttemptsLeft <= 0 ||
-                                hangmanHasWon
-                              }
-                            >
-                              <Text className="text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                {letter}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      {hangmanResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {hangmanResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <HangmanStationPanel
+                      stationId={station.stationId}
+                      hangmanMisses={hangmanMisses}
+                      hangmanAttemptsLeft={hangmanAttemptsLeft}
+                      hangmanMaskedSecret={hangmanMaskedSecret}
+                      hangmanInput={hangmanInput}
+                      hangmanResult={hangmanResult}
+                      guessedHangmanSet={guessedHangmanSet}
+                      isInputEditable={station.status !== "done" && station.status !== "failed" && !isSubmittingHangmanGuess}
+                      isGuessDisabled={
+                        station.status === "done" ||
+                        station.status === "failed" ||
+                        isSubmittingHangmanGuess ||
+                        (hasTimedLimit && !hasTimerStarted) ||
+                        isTimeExpired ||
+                        hangmanAttemptsLeft <= 0 ||
+                        hangmanHasWon
+                      }
+                      isSubmittingHangmanGuess={isSubmittingHangmanGuess}
+                      onChangeInput={(value) => {
+                        setHangmanInput(value);
+                        setHangmanResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmitGuess={() => {
+                        void submitHangmanGuess();
+                      }}
+                      onSubmitLetter={(letter) => {
+                        void submitHangmanGuess(letter);
+                      }}
+                    />
                   ) : null}
 
                   {isMastermindStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Kod składa się z 4 znaków (A-F). Próby: {mastermindAttempts.length}/{MASTERMIND_MAX_ATTEMPTS}
-                      </Text>
-                      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                        Pozostało: {mastermindAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 gap-1.5">
-                        {mastermindAttempts.map((attempt, index) => (
-                          <View
-                            key={`${station.stationId}-mastermind-${index}`}
-                            className="flex-row items-center justify-between rounded-xl border px-3 py-2"
-                            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
-                          >
-                            <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                              {attempt.guess}
-                            </Text>
-                            <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                              ● trafione: {attempt.exact} • ◐ miejsce: {attempt.misplaced}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                      <View className="mt-2 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="np. ABCD"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={mastermindInput}
-                          onChangeText={(value) => {
-                            setMastermindInput(value);
-                            setMastermindResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={!isInteractiveLocked && !isSubmittingMastermindGuess && !mastermindSolved}
-                          onSubmitEditing={() => {
-                            void submitMastermindGuess();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitMastermindGuess();
-                          }}
-                          disabled={isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0}
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingMastermindGuess ? "..." : "Sprawdź"}</Text>
-                        </Pressable>
-                      </View>
-                      <View className="mt-2 flex-row flex-wrap gap-1.5">
-                        {MASTERMIND_SYMBOLS.map((symbol) => (
-                          <Pressable
-                            key={`${station.stationId}-mastermind-symbol-${symbol}`}
-                            className="h-8 w-8 items-center justify-center rounded-md border active:opacity-90"
-                            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
-                            onPress={() => {
-                              if (isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0) {
-                                return;
-                              }
-                              setMastermindInput((current) => `${current}${symbol}`.slice(0, 4));
-                              setMastermindResult(null);
-                            }}
-                            disabled={isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0}
-                          >
-                            <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                              {symbol}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      {mastermindResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {mastermindResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <MastermindStationPanel
+                      stationId={station.stationId}
+                      mastermindAttempts={mastermindAttempts}
+                      mastermindAttemptsLeft={mastermindAttemptsLeft}
+                      mastermindInput={mastermindInput}
+                      mastermindResult={mastermindResult}
+                      isInputEditable={!isInteractiveLocked && !isSubmittingMastermindGuess && !mastermindSolved}
+                      isActionDisabled={isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0}
+                      isSymbolDisabled={isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0}
+                      isSubmittingMastermindGuess={isSubmittingMastermindGuess}
+                      onChangeInput={(value) => {
+                        setMastermindInput(value);
+                        setMastermindResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmitGuess={() => {
+                        void submitMastermindGuess();
+                      }}
+                      onAddSymbol={(symbol) => {
+                        if (isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0) {
+                          return;
+                        }
+                        setMastermindInput((current) => `${current}${symbol}`.slice(0, 4));
+                        setMastermindResult(null);
+                      }}
+                    />
                   ) : null}
 
                   {isAnagramStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Rozsypanka: <Text className="font-bold">{anagramScrambled || "—"}</Text> • Pozostało prób: {anagramAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="Wpisz poprawne słowo"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={anagramInput}
-                          onChangeText={(value) => {
-                            setAnagramInput(value);
-                            setAnagramResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={!isInteractiveLocked && !isSubmittingAnagram && anagramAttemptsLeft > 0}
-                          onSubmitEditing={() => {
-                            void submitAnagram();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitAnagram();
-                          }}
-                          disabled={isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0}
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingAnagram ? "..." : "Sprawdź"}</Text>
-                        </Pressable>
-                      </View>
-                      {anagramResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {anagramResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <AnagramStationPanel
+                      anagramScrambled={anagramScrambled}
+                      anagramAttemptsLeft={anagramAttemptsLeft}
+                      anagramInput={anagramInput}
+                      anagramResult={anagramResult}
+                      isActionDisabled={isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0}
+                      isSubmittingAnagram={isSubmittingAnagram}
+                      onChangeInput={(value) => {
+                        setAnagramInput(value);
+                        setAnagramResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmit={() => {
+                        void submitAnagram();
+                      }}
+                    />
                   ) : null}
 
                   {isCaesarStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Odszyfruj: <Text className="font-bold">{caesarEncoded}</Text>
-                      </Text>
-                      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                        Wskazówka: przesunięcie +3 • Pozostało prób: {caesarAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="Wpisz odszyfrowaną frazę"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={caesarInput}
-                          onChangeText={(value) => {
-                            setCaesarInput(value);
-                            setCaesarResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={!isInteractiveLocked && !isSubmittingCaesar && caesarAttemptsLeft > 0}
-                          onSubmitEditing={() => {
-                            void submitCaesar();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitCaesar();
-                          }}
-                          disabled={isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0}
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingCaesar ? "..." : "Sprawdź"}</Text>
-                        </Pressable>
-                      </View>
-                      {caesarResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {caesarResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <CaesarStationPanel
+                      caesarEncoded={caesarEncoded}
+                      caesarAttemptsLeft={caesarAttemptsLeft}
+                      caesarInput={caesarInput}
+                      caesarResult={caesarResult}
+                      isActionDisabled={isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0}
+                      isSubmittingCaesar={isSubmittingCaesar}
+                      onChangeInput={(value) => {
+                        setCaesarInput(value);
+                        setCaesarResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmit={() => {
+                        void submitCaesar();
+                      }}
+                    />
                   ) : null}
 
                   {isMemoryStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Pary: {memoryMatchedCount / 2}/{memoryDeck.length / 2} • Błędy: {memoryMistakes}/{MEMORY_MAX_MISTAKES}
-                      </Text>
-                      <View className="mt-2 flex-row flex-wrap justify-between gap-y-2">
-                        {memoryDeck.map((card) => (
-                          <Pressable
-                            key={card.id}
-                            className="h-16 w-[31.5%] items-center justify-center rounded-xl border active:opacity-90"
-                            style={{
-                              borderColor: card.matched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
-                              backgroundColor: card.matched
-                                ? "rgba(34, 197, 94, 0.2)"
-                                : card.revealed
-                                  ? "rgba(59, 130, 246, 0.2)"
-                                  : EXPEDITION_THEME.panelStrong,
-                              opacity: isInteractiveLocked || memoryBusy ? 0.85 : 1,
-                            }}
-                            onPress={() => {
-                              void handleMemoryCardPress(card.id);
-                            }}
-                            disabled={isInteractiveLocked || memoryBusy || card.matched || card.revealed || memoryAttemptsLeft <= 0}
-                          >
-                            <Text className="text-xl">{card.revealed || card.matched ? card.symbol : "?"}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      {memoryResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {memoryResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <MemoryStationPanel
+                      memoryDeck={memoryDeck}
+                      memoryMatchedCount={memoryMatchedCount}
+                      memoryMistakes={memoryMistakes}
+                      memoryAttemptsLeft={memoryAttemptsLeft}
+                      memoryBusy={memoryBusy}
+                      memoryResult={memoryResult}
+                      isInteractiveLocked={isInteractiveLocked}
+                      onPressCard={(cardId) => {
+                        void handleMemoryCardPress(cardId);
+                      }}
+                    />
                   ) : null}
 
                   {isSimonStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Zapamiętaj sekwencję:{" "}
-                        <Text className="font-bold">{simonHintVisible ? simonSequence.map((id) => SIMON_BUTTONS.find((button) => button.id === id)?.label ?? "").join(" ") : "•••••"}</Text>
-                      </Text>
-                      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                        Postęp: {simonProgress}/{simonSequence.length}
-                      </Text>
-                      <View className="mt-2 flex-row flex-wrap justify-between gap-y-2">
-                        {SIMON_BUTTONS.map((button) => (
-                          <Pressable
-                            key={`${station.stationId}-simon-${button.id}`}
-                            className="h-16 w-[48.5%] items-center justify-center rounded-xl border active:opacity-90"
-                            style={{
-                              borderColor: EXPEDITION_THEME.border,
-                              backgroundColor: button.color,
-                              opacity: isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length ? 0.55 : 1,
-                            }}
-                            onPress={() => {
-                              void handleSimonPress(button.id);
-                            }}
-                            disabled={isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length}
-                          >
-                            <Text className="text-2xl">{button.label}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      {simonResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {simonResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <SimonStationPanel
+                      stationId={station.stationId}
+                      simonSequence={simonSequence}
+                      simonHiddenHint={simonHiddenHint}
+                      simonHintVisible={simonHintVisible}
+                      simonProgress={simonProgress}
+                      simonResult={simonResult}
+                      isInteractiveLocked={isInteractiveLocked}
+                      isSubmittingSimon={isSubmittingSimon}
+                      onPressButton={(buttonId) => {
+                        void handleSimonPress(buttonId);
+                      }}
+                    />
                   ) : null}
 
                   {isRebusStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Rebus: <Text className="font-bold">{station.quizQuestion?.trim() || "🏕️ + QUEST = ?"}</Text>
-                      </Text>
-                      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                        Pozostało prób: {rebusAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="Wpisz rozwiązanie"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={rebusInput}
-                          onChangeText={(value) => {
-                            setRebusInput(value);
-                            setRebusResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={!isInteractiveLocked && !isSubmittingRebus && rebusAttemptsLeft > 0}
-                          onSubmitEditing={() => {
-                            void submitRebus();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitRebus();
-                          }}
-                          disabled={isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0}
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingRebus ? "..." : "Sprawdź"}</Text>
-                        </Pressable>
-                      </View>
-                      {rebusResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {rebusResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <RebusStationPanel
+                      rebusQuestion={station.quizQuestion?.trim() || "🏕️ + QUEST = ?"}
+                      rebusAttemptsLeft={rebusAttemptsLeft}
+                      rebusInput={rebusInput}
+                      rebusResult={rebusResult}
+                      isActionDisabled={isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0}
+                      isSubmittingRebus={isSubmittingRebus}
+                      onChangeInput={(value) => {
+                        setRebusInput(value);
+                        setRebusResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmit={() => {
+                        void submitRebus();
+                      }}
+                    />
                   ) : null}
 
                   {isBoggleStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Wpisz docelowe słowo z planszy • Pozostało prób: {boggleAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row flex-wrap justify-between gap-y-1.5">
-                        {boggleBoardLetters.map((letter, index) => (
-                          <View
-                            key={`${station.stationId}-boggle-${index}`}
-                            className="h-10 w-[31.5%] items-center justify-center rounded-lg border"
-                            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
-                          >
-                            <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                              {letter}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                      <View className="mt-2 flex-row gap-2">
-                        <TextInput
-                          className="flex-1 rounded-xl border px-3 py-2 text-sm"
-                          style={{
-                            borderColor: EXPEDITION_THEME.border,
-                            backgroundColor: EXPEDITION_THEME.panelStrong,
-                            color: EXPEDITION_THEME.textPrimary,
-                          }}
-                          placeholder="Wpisz słowo"
-                          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          value={boggleInput}
-                          onChangeText={(value) => {
-                            setBoggleInput(value);
-                            setBoggleResult(null);
-                            setQuizSubmitError(null);
-                          }}
-                          editable={!isInteractiveLocked && !isSubmittingBoggle && boggleAttemptsLeft > 0}
-                          onSubmitEditing={() => {
-                            void submitBoggle();
-                          }}
-                        />
-                        <Pressable
-                          className="items-center justify-center rounded-xl px-4 active:opacity-90"
-                          style={{
-                            backgroundColor:
-                              isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0
-                                ? EXPEDITION_THEME.panelStrong
-                                : EXPEDITION_THEME.accent,
-                          }}
-                          onPress={() => {
-                            void submitBoggle();
-                          }}
-                          disabled={isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0}
-                        >
-                          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingBoggle ? "..." : "Sprawdź"}</Text>
-                        </Pressable>
-                      </View>
-                      {boggleResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {boggleResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <BoggleStationPanel
+                      stationId={station.stationId}
+                      boggleBoardLetters={boggleBoardLetters}
+                      boggleAttemptsLeft={boggleAttemptsLeft}
+                      boggleInput={boggleInput}
+                      boggleResult={boggleResult}
+                      isActionDisabled={isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0}
+                      isSubmittingBoggle={isSubmittingBoggle}
+                      onChangeInput={(value) => {
+                        setBoggleInput(value);
+                        setBoggleResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmit={() => {
+                        void submitBoggle();
+                      }}
+                    />
                   ) : null}
 
                   {isMiniSudokuStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Uzupełnij siatkę 2x2 cyframi 1 i 2 (bez powtórzeń w wierszach i kolumnach).
-                      </Text>
-                      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                        Pozostało prób: {miniSudokuAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row flex-wrap gap-2">
-                        {Array.from({ length: 4 }).map((_, index) => {
-                          const givenValue = miniSudokuPuzzle?.given[index] ?? null;
-                          const value = givenValue ?? normalizedMiniSudokuValues[index] ?? "";
-                          return (
-                            <View
-                              key={`${station.stationId}-sudoku-${index}`}
-                              className="w-[48%] rounded-xl border px-3 py-2"
-                              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
-                            >
-                              {givenValue ? (
-                                <Text className="text-center text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                  {givenValue}
-                                </Text>
-                              ) : (
-                                <TextInput
-                                  className="text-center text-lg font-bold"
-                                  style={{ color: EXPEDITION_THEME.textPrimary }}
-                                  keyboardType="number-pad"
-                                  value={value}
-                                  onChangeText={(nextValue) => {
-                                    setMiniSudokuValues((current) => {
-                                      const next = [...current];
-                                      next[index] = nextValue.replace(/[^1-2]/g, "").slice(0, 1);
-                                      return next;
-                                    });
-                                    setMiniSudokuResult(null);
-                                    setQuizSubmitError(null);
-                                  }}
-                                  editable={!isInteractiveLocked && !isSubmittingMiniSudoku && miniSudokuAttemptsLeft > 0}
-                                />
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-                      <Pressable
-                        className="mt-2 items-center rounded-xl py-2.5 active:opacity-90"
-                        style={{
-                          backgroundColor:
-                            isInteractiveLocked || isSubmittingMiniSudoku || miniSudokuAttemptsLeft <= 0
-                              ? EXPEDITION_THEME.panelStrong
-                              : EXPEDITION_THEME.accent,
-                        }}
-                        onPress={() => {
-                          void submitMiniSudoku();
-                        }}
-                        disabled={isInteractiveLocked || isSubmittingMiniSudoku || miniSudokuAttemptsLeft <= 0}
-                      >
-                        <Text className="text-sm font-semibold text-zinc-950">{isSubmittingMiniSudoku ? "..." : "Sprawdź układ"}</Text>
-                      </Pressable>
-                      {miniSudokuResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {miniSudokuResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <MiniSudokuStationPanel
+                      stationId={station.stationId}
+                      miniSudokuPuzzle={miniSudokuPuzzle}
+                      normalizedMiniSudokuValues={normalizedMiniSudokuValues}
+                      miniSudokuAttemptsLeft={miniSudokuAttemptsLeft}
+                      miniSudokuResult={miniSudokuResult}
+                      isActionDisabled={isInteractiveLocked || isSubmittingMiniSudoku || miniSudokuAttemptsLeft <= 0}
+                      isSubmittingMiniSudoku={isSubmittingMiniSudoku}
+                      onChangeCell={(index, nextValue) => {
+                        setMiniSudokuValues((current) => {
+                          const next = [...current];
+                          next[index] = nextValue.replace(/[^1-2]/g, "").slice(0, 1);
+                          return next;
+                        });
+                        setMiniSudokuResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSubmit={() => {
+                        void submitMiniSudoku();
+                      }}
+                    />
                   ) : null}
 
                   {isMatchingStation ? (
-                    <View className="mt-3">
-                      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                        Połącz elementy. Pozostało prób: {matchingAttemptsLeft}
-                      </Text>
-                      <View className="mt-2 flex-row gap-2">
-                        <View className="flex-1 gap-1.5">
-                          {matchingPairs.map((pair) => {
-                            const isMatched = matchingMatchedLeft.includes(pair.left);
-                            const isSelected = matchingSelectionLeft === pair.left;
-                            return (
-                              <Pressable
-                                key={`${station.stationId}-matching-left-${pair.left}`}
-                                className="rounded-xl border px-3 py-2 active:opacity-90"
-                                style={{
-                                  borderColor: isMatched
-                                    ? "rgba(52, 211, 153, 0.8)"
-                                    : isSelected
-                                      ? EXPEDITION_THEME.accentStrong
-                                      : EXPEDITION_THEME.border,
-                                  backgroundColor: isMatched ? "rgba(34, 197, 94, 0.2)" : EXPEDITION_THEME.panelStrong,
-                                }}
-                                onPress={() => {
-                                  if (isInteractiveLocked || isMatched || matchingAttemptsLeft <= 0) {
-                                    return;
-                                  }
-                                  setMatchingSelectionLeft(pair.left);
-                                  setMatchingResult(null);
-                                  setQuizSubmitError(null);
-                                }}
-                                disabled={isInteractiveLocked || isMatched || matchingAttemptsLeft <= 0}
-                              >
-                                <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                  {pair.left}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                        <View className="flex-1 gap-1.5">
-                          {matchingRightOptions.map((rightOption) => {
-                            const isMatched = matchedRightSet.has(rightOption);
-                            return (
-                              <Pressable
-                                key={`${station.stationId}-matching-right-${rightOption}`}
-                                className="rounded-xl border px-3 py-2 active:opacity-90"
-                                style={{
-                                  borderColor: isMatched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
-                                  backgroundColor: isMatched ? "rgba(34, 197, 94, 0.2)" : EXPEDITION_THEME.panelStrong,
-                                }}
-                                onPress={() => {
-                                  void handleMatchingRightSelect(rightOption);
-                                }}
-                                disabled={isInteractiveLocked || isMatched || matchingAttemptsLeft <= 0}
-                              >
-                                <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                                  {rightOption}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      </View>
-                      {matchingResult ? (
-                        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {matchingResult}
-                        </Text>
-                      ) : null}
-                    </View>
+                    <MatchingStationPanel
+                      stationId={station.stationId}
+                      matchingAttemptsLeft={matchingAttemptsLeft}
+                      matchingPairs={matchingPairs}
+                      matchingMatchedLeft={matchingMatchedLeft}
+                      matchingSelectionLeft={matchingSelectionLeft}
+                      matchingRightOptions={matchingRightOptions}
+                      matchedRightSet={matchedRightSet}
+                      matchingResult={matchingResult}
+                      isInteractiveLocked={isInteractiveLocked}
+                      onSelectLeft={(left) => {
+                        if (isInteractiveLocked || matchingMatchedLeft.includes(left) || matchingAttemptsLeft <= 0) {
+                          return;
+                        }
+                        setMatchingSelectionLeft(left);
+                        setMatchingResult(null);
+                        setQuizSubmitError(null);
+                      }}
+                      onSelectRight={(right) => {
+                        void handleMatchingRightSelect(right);
+                      }}
+                    />
                   ) : null}
 
                   {quizSubmitError ? (
@@ -2862,188 +2295,37 @@ export function StationPreviewOverlay({
             </View>
 
             {requiresCode ? (
-              <View
-                className={`${isNumericCodeStation ? "mt-2" : "mt-3"} rounded-2xl border px-3 ${isNumericCodeStation ? "py-2" : "py-3"}`}
-                style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-              >
-                {station.completionCodeInputMode === "numeric" ? (
-                  <View className={isNumericCodeStation ? "mt-1" : "mt-2"}>
-                    <View className="items-center">
-                      <Animated.View
-                        className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} w-full max-w-[320px] rounded-2xl border px-4 ${isNumericCodeStation ? "py-2.5" : "py-3"}`}
-                        style={[
-                          codeInputShakeStyle,
-                            {
-                             borderColor: isCodeInputSuccess
-                               ? "#34d399"
-                               : isCodeInputInvalid
-                                 ? EXPEDITION_THEME.danger
-                                 : EXPEDITION_THEME.border,
-                             backgroundColor: isCodeInputSuccess
-                               ? "rgba(52, 211, 153, 0.2)"
-                               : isCodeInputInvalid
-                                 ? "rgba(239, 111, 108, 0.16)"
-                                 : EXPEDITION_THEME.panelStrong,
-                           },
-                         ]}
-                       >
-                        <Text
-                          className="text-center text-2xl font-semibold tracking-[0.35em]"
-                          style={{ color: EXPEDITION_THEME.textPrimary }}
-                          numberOfLines={1}
-                        >
-                          {verificationCode || "• • • •"}
-                        </Text>
-                      </Animated.View>
-                    </View>
-
-                    <View className={`mx-auto ${isNumericCodeStation ? "mt-2" : "mt-3"} w-full max-w-[320px] flex-row flex-wrap justify-between gap-y-2`}>
-                      {NUMERIC_PINPAD_LAYOUT.map((key) => {
-                        const isBackspaceKey = key === "backspace";
-                        const isSubmitKey = key === "submit";
-                        const isDisabled =
-                          isCodeActionDisabled ||
-                          (isBackspaceKey && verificationCode.length === 0);
-                        const label = isBackspaceKey ? "⌫" : isSubmitKey ? "OK" : key;
-                        const isDigitKey = /^\d$/.test(label);
-                        const sublabel = isDigitKey ? NUMERIC_PINPAD_SUBLABELS[label] : "";
-
-                        return (
-                          <Pressable
-                            key={`${station.stationId}-pin-${key}`}
-                            className="items-center justify-center rounded-full active:opacity-85"
-                            style={{
-                              width: "31%",
-                              aspectRatio: 1,
-                              borderWidth: 1,
-                              borderColor: EXPEDITION_THEME.border,
-                              backgroundColor: isSubmitKey
-                                ? isDisabled
-                                  ? EXPEDITION_THEME.panelStrong
-                                  : EXPEDITION_THEME.accent
-                                : EXPEDITION_THEME.panelStrong,
-                              opacity: isDisabled ? 0.45 : 1,
-                            }}
-                            disabled={isDisabled}
-                        onPress={() => {
-                          if (isBackspaceKey) {
-                            setVerificationCode((current) => current.slice(0, -1));
-                            setIsCodeInputInvalid(false);
-                            setIsCodeInputSuccess(false);
-                            setCodeResult(null);
-                            return;
-                          }
-                              if (isSubmitKey) {
-                                void submitVerificationCode();
-                                return;
-                              }
-
-                              setVerificationCode((current) => {
-                                const nextValue = `${current}${key}`;
-                                return nextValue.slice(0, 32);
-                              });
-                              setIsCodeInputInvalid(false);
-                              setIsCodeInputSuccess(false);
-                              setCodeResult(null);
-                            }}
-                          >
-                            {isDigitKey ? (
-                              <View className="h-full w-full items-center justify-center">
-                                <Text
-                                  className="text-[30px] font-medium text-center"
-                                  style={{
-                                    color: EXPEDITION_THEME.textPrimary,
-                                    textAlign: "center",
-                                    fontVariant: ["tabular-nums"],
-                                  }}
-                                >
-                                  {label}
-                                </Text>
-                                <Text
-                                  className="mt-[-2px] text-[9px] font-semibold tracking-[1.6px] text-center"
-                                  style={{ color: EXPEDITION_THEME.textSubtle }}
-                                >
-                                  {sublabel}
-                                </Text>
-                              </View>
-                            ) : (
-                              <Text
-                                className={`${isSubmitKey ? "text-xl" : "text-base"} font-semibold text-center`}
-                                style={{
-                                  color: isSubmitKey ? "#09090b" : EXPEDITION_THEME.textPrimary,
-                                  width: "100%",
-                                  textAlign: "center",
-                                  textAlignVertical: "center",
-                                }}
-                              >
-                                {label}
-                              </Text>
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ) : (
-                  <Animated.View style={codeInputShakeStyle}>
-                    <TextInput
-                      className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} rounded-xl border px-3 py-2 text-sm`}
-                      style={{
-                         borderColor: isCodeInputSuccess
-                           ? "#34d399"
-                           : isCodeInputInvalid
-                             ? EXPEDITION_THEME.danger
-                             : EXPEDITION_THEME.border,
-                         backgroundColor: isCodeInputSuccess
-                           ? "rgba(52, 211, 153, 0.2)"
-                           : isCodeInputInvalid
-                             ? "rgba(239, 111, 108, 0.16)"
-                             : EXPEDITION_THEME.panelStrong,
-                         color: EXPEDITION_THEME.textPrimary,
-                       }}
-                      placeholder={getCodePlaceholder(station.stationType)}
-                      placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                       autoCapitalize="characters"
-                       autoCorrect={false}
-                         value={verificationCode}
-                         editable={
-                           station.status !== "done" &&
-                           station.status !== "failed" &&
-                           (!hasTimedLimit || (hasTimerStarted && !isTimeExpired))
-                         }
-                       onChangeText={(value) => {
-                        setVerificationCode(value);
-                        setIsCodeInputInvalid(false);
-                        setIsCodeInputSuccess(false);
-                        setCodeResult(null);
-                      }}
-                    />
-                  </Animated.View>
-                )}
-
-                {station.completionCodeInputMode !== "numeric" ? (
-                  <Pressable
-                    className={`${isNumericCodeStation ? "mt-2" : "mt-3"} items-center rounded-xl py-2.5 active:opacity-90`}
-                    style={{
-                      backgroundColor: isCodeActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
-                    }}
-                    disabled={isCodeActionDisabled}
-                    onPress={() => {
-                      void submitVerificationCode();
-                    }}
-                  >
-                    <Text className="text-sm font-semibold text-zinc-950">
-                      {isSubmittingCode ? "Zatwierdzanie..." : "Zatwierdź kod"}
-                    </Text>
-                  </Pressable>
-                ) : null}
-
-                {codeResult && !isInvalidCompletionCodeErrorMessage(codeResult) ? (
-                  <Text className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} text-xs`} style={{ color: EXPEDITION_THEME.textMuted }}>
-                    {codeResult}
-                  </Text>
-                ) : null}
-              </View>
+              <CodeStationPanel
+                station={station}
+                isNumericCodeStation={isNumericCodeStation}
+                hasTimedLimit={hasTimedLimit}
+                hasTimerStarted={hasTimerStarted}
+                isTimeExpired={isTimeExpired}
+                isCodeActionDisabled={isCodeActionDisabled}
+                verificationCode={verificationCode}
+                isCodeInputInvalid={isCodeInputInvalid}
+                isCodeInputSuccess={isCodeInputSuccess}
+                codeResult={codeResult}
+                isSubmittingCode={isSubmittingCode}
+                codeInputShakeAnimation={codeInputShakeAnimation}
+                onChangeVerificationCode={(value) => {
+                  setVerificationCode(value);
+                }}
+                onBackspaceVerificationCode={() => {
+                  setVerificationCode((current) => current.slice(0, -1));
+                }}
+                onAppendVerificationCode={(value) => {
+                  setVerificationCode((current) => `${current}${value}`.slice(0, 32));
+                }}
+                onSubmitVerificationCode={() => {
+                  void submitVerificationCode();
+                }}
+                onResetCodeFeedback={() => {
+                  setIsCodeInputInvalid(false);
+                  setIsCodeInputSuccess(false);
+                  setCodeResult(null);
+                }}
+              />
             ) : null}
 
           </View>

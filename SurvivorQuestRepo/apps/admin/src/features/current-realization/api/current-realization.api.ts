@@ -25,6 +25,15 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function toMobileAdminRealizationPath(realizationId: string | undefined, suffix = "") {
+  const normalizedId = realizationId?.trim();
+  if (!normalizedId || normalizedId === "current") {
+    return buildApiPath(`/mobile/admin/realizations/current${suffix}`);
+  }
+
+  return buildApiPath(`/mobile/admin/realizations/${encodeURIComponent(normalizedId)}${suffix}`);
+}
+
 function normalizeOverview(raw: unknown): CurrentRealizationOverview {
   const source = asRecord(raw);
   const realization = asRecord(source.realization);
@@ -159,37 +168,40 @@ export type CurrentRealizationStationQrResponse = {
 
 export const currentRealizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    getCurrentRealizationOverview: build.query<CurrentRealizationOverview, void>({
-      query: () => buildApiPath("/mobile/admin/realizations/current"),
+    getCurrentRealizationOverview: build.query<
+      CurrentRealizationOverview,
+      { realizationId?: string } | void
+    >({
+      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId),
       transformResponse: (response: unknown) => normalizeOverview(response),
       providesTags: ["Realization"],
     }),
     resetCurrentRealizationCompletedTasks: build.mutation<
       { realizationId: string; resetCount: number; affectedTeams: number },
-      void
+      { realizationId?: string } | void
     >({
-      query: () => ({
-        url: buildApiPath("/mobile/admin/realizations/current/reset-completed-tasks"),
+      query: (arg) => ({
+        url: toMobileAdminRealizationPath(arg?.realizationId, "/reset-completed-tasks"),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
     }),
     startCurrentRealization: build.mutation<
       { realizationId: string; status: "in-progress"; started: boolean; startedAt: string },
-      void
+      { realizationId?: string } | void
     >({
-      query: () => ({
-        url: buildApiPath("/mobile/admin/realizations/current/start"),
+      query: (arg) => ({
+        url: toMobileAdminRealizationPath(arg?.realizationId, "/start"),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
     }),
     finishCurrentRealization: build.mutation<
       { realizationId: string; status: "done"; finished: boolean; finishedAt: string },
-      void
+      { realizationId?: string } | void
     >({
-      query: () => ({
-        url: buildApiPath("/mobile/admin/realizations/current/finish"),
+      query: (arg) => ({
+        url: toMobileAdminRealizationPath(arg?.realizationId, "/finish"),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
@@ -203,25 +215,26 @@ export const currentRealizationApi = baseApi.injectEndpoints({
         deletedTaskProgress: number;
         deletedRuntimeEvents: number;
       },
-      void
+      { realizationId?: string } | void
     >({
-      query: () => ({
-        url: buildApiPath("/mobile/admin/realizations/current/reset"),
+      query: (arg) => ({
+        url: toMobileAdminRealizationPath(arg?.realizationId, "/reset"),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
     }),
     getCurrentRealizationStationQrs: build.query<
       CurrentRealizationStationQrResponse,
-      { ttlSeconds?: number } | void
+      { realizationId?: string; ttlSeconds?: number } | void
     >({
       query: (arg) => {
+        const realizationId = arg?.realizationId;
         const ttlSeconds = arg?.ttlSeconds;
         const suffix =
           typeof ttlSeconds === "number" && Number.isFinite(ttlSeconds)
             ? `?ttlSeconds=${Math.max(1, Math.round(ttlSeconds))}`
             : "";
-        return buildApiPath(`/mobile/admin/realizations/current/station-qr${suffix}`);
+        return toMobileAdminRealizationPath(realizationId, `/station-qr${suffix}`);
       },
     }),
   }),

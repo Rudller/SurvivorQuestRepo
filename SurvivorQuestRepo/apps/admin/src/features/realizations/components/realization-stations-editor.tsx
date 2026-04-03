@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
-import { useUploadStationAudioMutation, useUploadStationImageMutation } from "@/features/games/api/station.api";
+import { useUploadStationImageMutation } from "@/features/games/api/station.api";
 import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
@@ -28,6 +28,11 @@ import {
   completionCodeModeOptions,
   isValidCompletionCodeForMode,
   getQuizLikeStationCopy,
+  MEMORY_SYSTEM_STATION_PROMPT,
+  MINI_SUDOKU_SYSTEM_STATION_PROMPT,
+  MATCHING_SYSTEM_STATION_PROMPT,
+  generateSimonSequence,
+  normalizeSimonSequenceInput,
 } from "@/features/games/station.utils";
 import {
   getRealizationLanguageFlag,
@@ -199,13 +204,27 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     completionCode: station.completionCode ?? "",
     quiz: station.quiz
         ? {
-            question: station.quiz.question,
+            question:
+              station.type === "memory" && !station.quiz.question.trim()
+                ? MEMORY_SYSTEM_STATION_PROMPT
+                : station.type === "mini-sudoku" && !station.quiz.question.trim()
+                  ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                  : station.type === "matching" && !station.quiz.question.trim()
+                    ? MATCHING_SYSTEM_STATION_PROMPT
+                : station.quiz.question,
             answers: toQuizAnswersTuple(station.quiz.answers),
             correctAnswerIndex: station.quiz.correctAnswerIndex,
             audioUrl: station.quiz.audioUrl ?? "",
           }
       : {
-          question: "",
+          question:
+            station.type === "memory"
+              ? MEMORY_SYSTEM_STATION_PROMPT
+              : station.type === "mini-sudoku"
+                ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                : station.type === "matching"
+                  ? MATCHING_SYSTEM_STATION_PROMPT
+                : "",
           answers: createEmptyQuizAnswers(),
           correctAnswerIndex: 0,
           audioUrl: "",
@@ -347,13 +366,11 @@ export function RealizationStationsEditor({
   const [stationCompletionCodeModes, setStationCompletionCodeModes] = useState<Record<string, CompletionCodeGeneratorMode>>({});
   const [stationImageErrors, setStationImageErrors] = useState<Record<string, string>>({});
   const [stationAudioModes, setStationAudioModes] = useState<Record<string, "upload" | "url">>({});
-  const [stationAudioFiles, setStationAudioFiles] = useState<Record<string, File | null>>({});
   const [stationAudioErrors, setStationAudioErrors] = useState<Record<string, string>>({});
   const [stationLocationErrors, setStationLocationErrors] = useState<Record<string, string>>({});
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
-  const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
 
   const stationTypeLabelByValue = useMemo(
     () => new Map(stationTypeOptions.map((option) => [option.value, option.label])),
@@ -496,10 +513,6 @@ export function RealizationStationsEditor({
     setStationAudioModes((current) => ({ ...current, [stationKey]: mode }));
   }
 
-  function setStationAudioFile(stationKey: string, file: File | null) {
-    setStationAudioFiles((current) => ({ ...current, [stationKey]: file }));
-  }
-
   function setStationImageError(stationKey: string, error: string | null) {
     setStationImageErrors((current) => {
       if (!error) {
@@ -624,11 +637,6 @@ export function RealizationStationsEditor({
       return next;
     });
     setStationAudioModes((current) => {
-      const next = { ...current };
-      delete next[stationKey];
-      return next;
-    });
-    setStationAudioFiles((current) => {
       const next = { ...current };
       delete next[stationKey];
       return next;
@@ -792,7 +800,7 @@ export function RealizationStationsEditor({
           const stationKey = getStationKey(index, station);
           const imageMode = stationImageModes[stationKey] ?? "upload";
           const audioMode = stationAudioModes[stationKey] ?? "upload";
-          const audioFile = stationAudioFiles[stationKey] ?? null;
+          const audioFile = station.pendingAudioFile ?? null;
           const completionCodeMode =
             stationCompletionCodeModes[stationKey] ?? resolveCompletionCodeGeneratorMode(station.completionCode ?? "");
           const stationValidation = getRealizationStationValidation(station);
@@ -910,19 +918,27 @@ export function RealizationStationsEditor({
                         value={station.type}
                         onChange={(event) => {
                           const nextType = event.target.value as RealizationStationDraft["type"];
+                          const existingQuiz = station.quiz;
                           updateStation(index, {
                             type: nextType,
                             completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
                             imageUrl: isImageSupportedStationType(nextType) ? station.imageUrl : "",
                             quiz:
                               isQuizStationType(nextType)
-                                 ? station.quiz ?? {
-                                     question: "",
-                                     answers: createEmptyQuizAnswers(),
-                                     correctAnswerIndex: 0,
-                                     audioUrl: "",
-                                   }
-                                 : station.quiz,
+                                ? {
+                                    question:
+                                      nextType === "memory"
+                                        ? existingQuiz?.question?.trim() || MEMORY_SYSTEM_STATION_PROMPT
+                                        : nextType === "mini-sudoku"
+                                          ? existingQuiz?.question?.trim() || MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                                          : nextType === "matching"
+                                            ? existingQuiz?.question?.trim() || MATCHING_SYSTEM_STATION_PROMPT
+                                        : existingQuiz?.question ?? "",
+                                    answers: existingQuiz?.answers ?? createEmptyQuizAnswers(),
+                                    correctAnswerIndex: existingQuiz?.correctAnswerIndex ?? 0,
+                                    audioUrl: existingQuiz?.audioUrl ?? "",
+                                  }
+                                  : station.quiz,
                           });
                           if (!isCompletionCodeRequired(nextType)) {
                             setStationCompletionCodeMode(stationKey, "letters");
@@ -1018,7 +1034,10 @@ export function RealizationStationsEditor({
                                 type="button"
                                 onClick={() => {
                                   setStationAudioMode(stationKey, "url");
-                                  setStationAudioFile(stationKey, null);
+                                  updateStation(index, {
+                                    pendingAudioFile: null,
+                                    pendingAudioLanguage: undefined,
+                                  });
                                   setStationAudioError(stationKey, null);
                                 }}
                                 className={`rounded px-2.5 py-1 text-xs transition ${
@@ -1036,45 +1055,25 @@ export function RealizationStationsEditor({
                                 Wybierz plik audio
                                 <input
                                   type="file"
-                                  accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                                  accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                                   className="hidden"
                                   onChange={(event) => {
                                     const selected = event.target.files?.[0] ?? null;
-                                    setStationAudioFile(stationKey, selected);
+                                    updateStation(index, {
+                                      pendingAudioFile: selected,
+                                      pendingAudioLanguage: selected ? editingLanguage : undefined,
+                                    });
                                     setStationAudioError(stationKey, null);
                                     event.currentTarget.value = "";
                                   }}
                                 />
                               </label>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs text-zinc-500">
-                                  Obsługiwane: MP3, WAV, OGG. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
-                                </p>
-                                {audioFile ? (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      try {
-                                        const uploaded = await uploadStationAudio(audioFile).unwrap();
-                                        updateStationForSelectedLanguage(index, {
-                                          quiz: {
-                                            question: selectedStationQuiz?.question ?? "",
-                                            answers: selectedStationQuizAnswers,
-                                            correctAnswerIndex: selectedStationCorrectAnswerIndex,
-                                            audioUrl: uploaded.url,
-                                          },
-                                        });
-                                        setStationAudioError(stationKey, null);
-                                      } catch {
-                                        setStationAudioError(stationKey, "Nie udało się przesłać pliku audio.");
-                                      }
-                                    }}
-                                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-                                  >
-                                    Wyślij audio
-                                  </button>
-                                ) : null}
-                              </div>
+                              <p className="text-xs text-zinc-500">
+                                Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM.{" "}
+                                {audioFile
+                                  ? `Wybrano: ${audioFile.name} (zostanie przesłane przy zapisie realizacji).`
+                                  : "Brak wybranego pliku."}
+                              </p>
                             </div>
                           ) : (
                             <label className="space-y-1.5">
@@ -1103,18 +1102,34 @@ export function RealizationStationsEditor({
                           )}
 
                           {audioError ? <p className="text-xs text-red-300">{audioError}</p> : null}
-                          {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
                         </div>
                       ) : null}
                       <label className="space-y-1.5">
                         <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                         <textarea
                           rows={2}
-                          value={selectedStationQuiz?.question ?? ""}
+                          value={
+                            station.type === "memory"
+                              ? selectedStationQuiz?.question?.trim() || MEMORY_SYSTEM_STATION_PROMPT
+                              : station.type === "mini-sudoku"
+                                ? selectedStationQuiz?.question?.trim() || MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                                : station.type === "matching"
+                                  ? selectedStationQuiz?.question?.trim() || MATCHING_SYSTEM_STATION_PROMPT
+                              : selectedStationQuiz?.question ?? ""
+                          }
                           onChange={(event) =>
                             updateStationForSelectedLanguage(index, {
                                 quiz: {
-                                  question: event.target.value,
+                                  question:
+                                    station.type === "memory" && !event.target.value.trim()
+                                      ? MEMORY_SYSTEM_STATION_PROMPT
+                                      : station.type === "mini-sudoku" && !event.target.value.trim()
+                                        ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                                        : station.type === "matching" && !event.target.value.trim()
+                                          ? MATCHING_SYSTEM_STATION_PROMPT
+                                        : station.type === "simon"
+                                          ? normalizeSimonSequenceInput(event.target.value)
+                                        : event.target.value,
                                   answers: selectedStationQuizAnswers,
                                   correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                   audioUrl: selectedStationQuiz?.audioUrl,
@@ -1129,6 +1144,27 @@ export function RealizationStationsEditor({
                           placeholder={quizLikeCopy.questionPlaceholder}
                         />
                       </label>
+                      {station.type === "simon" ? (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                          <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateStationForSelectedLanguage(index, {
+                                quiz: {
+                                  question: generateSimonSequence(10),
+                                  answers: selectedStationQuizAnswers,
+                                  correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                  audioUrl: selectedStationQuiz?.audioUrl,
+                                },
+                              })
+                            }
+                            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                          >
+                            Generuj sekwencję
+                          </button>
+                        </div>
+                      ) : null}
 
                       {!isWordPuzzleStationType(station.type) && !isMatchingStationType(station.type) ? (
                         <div className="space-y-2">

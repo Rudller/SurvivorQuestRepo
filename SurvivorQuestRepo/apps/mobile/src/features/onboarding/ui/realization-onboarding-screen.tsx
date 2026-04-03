@@ -134,7 +134,12 @@ type MobileSessionStateResponse = {
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
-const PRODUCTION_API_BASE_URL = "https://survivorquest.pl";
+const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.34:3001";
+const PRODUCTION_API_BASE_URL_CANDIDATES = [
+  "https://survivorquest.pl/api",
+  "https://www.survivorquest.pl/api",
+] as const;
+const PRODUCTION_API_BASE_URL = PRODUCTION_API_BASE_URL_CANDIDATES[0];
 
 const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team", "customization"];
 
@@ -164,7 +169,34 @@ type RealizationOnboardingScreenProps = {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
+    const rawMessage = error.message.trim();
+    const statusMatch = rawMessage.match(/\bHTTP\s+(\d{3})\b/i);
+    const statusCode = statusMatch ? Number(statusMatch[1]) : null;
+
+    if (statusCode === 401) {
+      return `HTTP 401: brak autoryzacji lub wygasła sesja. ${rawMessage}`;
+    }
+    if (statusCode === 403) {
+      return `HTTP 403: dostęp zabroniony. ${rawMessage}`;
+    }
+    if (statusCode === 404) {
+      return `HTTP 404: endpoint API nie istnieje (sprawdź bazowy URL i prefiks /api). ${rawMessage}`;
+    }
+    if (statusCode === 409) {
+      return `HTTP 409: konflikt danych po stronie serwera. ${rawMessage}`;
+    }
+    if (statusCode === 429) {
+      return `HTTP 429: limit zapytań został przekroczony. ${rawMessage}`;
+    }
+    if (statusCode !== null && statusCode >= 500) {
+      return `HTTP ${statusCode}: błąd serwera backend. ${rawMessage}`;
+    }
+
+    if (rawMessage.includes("Network request failed") || rawMessage.includes("Failed to fetch")) {
+      return `Brak połączenia z API (network failure). Sprawdź HTTPS/certyfikat, DNS i dostępność serwera. ${rawMessage}`;
+    }
+
+    return rawMessage;
   }
 
   return "Wystąpił nieoczekiwany błąd połączenia.";
@@ -219,7 +251,26 @@ function normalizeApiBaseUrl(value: string | null | undefined) {
     return null;
   }
 
-  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  const hasExplicitProtocol = /^https?:\/\//i.test(trimmed);
+  const hostCandidate = hasExplicitProtocol
+    ? (() => {
+        try {
+          return new URL(trimmed).hostname.toLowerCase();
+        } catch {
+          return "";
+        }
+      })()
+    : trimmed.split("/")[0]?.split(":")[0]?.trim().toLowerCase() ?? "";
+  const shouldUseHttpByDefault =
+    hostCandidate === "localhost" ||
+    hostCandidate === "10.0.2.2" ||
+    hostCandidate === "127.0.0.1" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostCandidate);
+  const inferredProtocol = shouldUseHttpByDefault ? "http" : "https";
+  const candidate = hasExplicitProtocol ? trimmed : `${inferredProtocol}://${trimmed}`;
   let parsed: URL;
   try {
     parsed = new URL(candidate);
@@ -245,9 +296,28 @@ function addBaseUrlCandidate(list: string[], candidate: string | null) {
   }
 }
 
-function resolveApiBaseUrlCandidates(overrideBaseUrl?: string | null) {
+function resolveProductionApiBaseUrlCandidates(preferredBaseUrl?: string | null) {
   const candidates: string[] = [];
-  addBaseUrlCandidate(candidates, normalizeApiBaseUrl(overrideBaseUrl));
+
+  addBaseUrlCandidate(candidates, normalizeApiBaseUrl(preferredBaseUrl));
+  for (const candidate of PRODUCTION_API_BASE_URL_CANDIDATES) {
+    addBaseUrlCandidate(candidates, normalizeApiBaseUrl(candidate));
+  }
+
+  return candidates;
+}
+
+function isProductionApiBaseUrl(baseUrl: string | null) {
+  if (!baseUrl) {
+    return false;
+  }
+
+  return resolveProductionApiBaseUrlCandidates().includes(baseUrl);
+}
+
+function resolveLocalApiBaseUrlCandidates() {
+  const candidates: string[] = [];
+  addBaseUrlCandidate(candidates, normalizeApiBaseUrl(LOCAL_DEFAULT_API_BASE_URL));
   const envBaseUrl = normalizeApiBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
 
   if (envBaseUrl) {
@@ -305,9 +375,21 @@ function resolveApiBaseUrlCandidates(overrideBaseUrl?: string | null) {
   return candidates;
 }
 
+function resolveApiBaseUrlCandidates(overrideBaseUrl?: string | null) {
+  const normalizedOverride = normalizeApiBaseUrl(overrideBaseUrl);
+  if (normalizedOverride) {
+    if (isProductionApiBaseUrl(normalizedOverride)) {
+      return resolveProductionApiBaseUrlCandidates(normalizedOverride);
+    }
+
+    return [normalizedOverride];
+  }
+
+  return resolveLocalApiBaseUrlCandidates();
+}
+
 function resolveApiServerPreset(baseUrl: string | null): ApiServerPreset {
-  const normalizedProductionBaseUrl = normalizeApiBaseUrl(PRODUCTION_API_BASE_URL);
-  if (baseUrl && normalizedProductionBaseUrl && baseUrl === normalizedProductionBaseUrl) {
+  if (isProductionApiBaseUrl(baseUrl)) {
     return "production";
   }
 
@@ -319,6 +401,18 @@ function resolveApiServerPreset(baseUrl: string | null): ApiServerPreset {
 }
 
 async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const baseHasApiSuffix = normalizedBaseUrl.endsWith("/api");
+  const requestPath = baseHasApiSuffix
+    ? normalizedPath === "/api"
+      ? ""
+      : normalizedPath.startsWith("/api/")
+        ? normalizedPath.slice(4)
+        : normalizedPath
+    : normalizedPath;
+  const requestUrl = `${normalizedBaseUrl}${requestPath}`;
+
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => {
     timeoutController.abort();
@@ -326,7 +420,7 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
+    response = await fetch(requestUrl, {
       ...init,
       signal: timeoutController.signal,
       headers: {
@@ -354,7 +448,9 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
       (typeof data.error?.message === "string" && data.error.message.trim()) ||
       (typeof data.data?.error?.message === "string" && data.data.error.message.trim()) ||
       null;
-    throw new Error(errorMessage || `HTTP ${response.status}`);
+    throw new Error(
+      `HTTP ${response.status} [${requestUrl}]${errorMessage ? ` ${errorMessage}` : ""}`,
+    );
   }
 
   return data as T;
@@ -615,6 +711,7 @@ export function RealizationOnboardingScreen({
     const probeConnection = async () => {
       setApiConnectionStatus("checking");
       setApiConnectionTarget(baseUrlCandidates[0]);
+      let lastProbeError: unknown = null;
 
       for (const candidate of baseUrlCandidates) {
         if (isCancelled) {
@@ -628,15 +725,20 @@ export function RealizationOnboardingScreen({
 
           if (!isCancelled) {
             setApiConnectionStatus("connected");
+            setApiConfigMessage(null);
           }
           return;
-        } catch {
+        } catch (error) {
+          lastProbeError = error;
           // try next candidate
         }
       }
 
       if (!isCancelled) {
         setApiConnectionStatus("disconnected");
+        if (lastProbeError) {
+          setApiConfigMessage(getErrorMessage(lastProbeError));
+        }
       }
     };
 
@@ -1189,7 +1291,7 @@ export function RealizationOnboardingScreen({
   async function saveApiServerOverride() {
     const normalized = normalizeApiBaseUrl(apiBaseUrlDraft);
     if (!normalized) {
-      setApiConfigMessage("Podaj poprawny adres serwera, np. http://192.168.18.11:3001.");
+      setApiConfigMessage("Podaj poprawny adres serwera, np. http://192.168.18.34:3001.");
       return;
     }
 
@@ -1242,19 +1344,22 @@ export function RealizationOnboardingScreen({
   }
 
   async function resetApiServerOverride() {
+    const fallbackCandidates = resolveLocalApiBaseUrlCandidates();
+    setApiServerPreset("local");
+    setApiBaseUrlOverride(null);
+    setApiBaseUrlDraft(fallbackCandidates[0] ?? "");
+    setApiConnectionTarget(fallbackCandidates[0] ?? null);
+    setApiConnectionStatus(fallbackCandidates.length > 0 ? "checking" : "config-missing");
+    triggerApiProbe();
+    setIsApiConfigOpen(false);
+
     try {
       await AsyncStorage.removeItem(API_BASE_URL_OVERRIDE_STORAGE_KEY);
-      const fallbackCandidates = resolveApiBaseUrlCandidates(null);
-      setApiServerPreset("local");
-      setApiBaseUrlOverride(null);
-      setApiBaseUrlDraft(fallbackCandidates[0] ?? "");
-      setApiConnectionTarget(fallbackCandidates[0] ?? null);
-      setApiConnectionStatus(fallbackCandidates.length > 0 ? "checking" : "config-missing");
-      triggerApiProbe();
       setApiConfigMessage("Przywrócono domyślną konfigurację serwera.");
-      setIsApiConfigOpen(false);
     } catch {
-      setApiConfigMessage("Nie udało się przywrócić domyślnego serwera.");
+      setApiConfigMessage(
+        "Przywrócono domyślną konfigurację dla tej sesji, ale nie udało się zapisać jej na stałe.",
+      );
     }
   }
 
@@ -1419,6 +1524,22 @@ export function RealizationOnboardingScreen({
                     Status: {apiConnectionStatus}
                   </Text>
                 </View>
+                {apiConfigMessage ? (
+                  <Text
+                    className="mt-2 text-xs"
+                    style={{
+                      color:
+                        apiConnectionStatus === "disconnected" ||
+                        /^HTTP\s+\d{3}/i.test(apiConfigMessage) ||
+                        apiConfigMessage.startsWith("Nie") ||
+                        apiConfigMessage.startsWith("Brak połączenia")
+                          ? EXPEDITION_THEME.danger
+                          : EXPEDITION_THEME.textMuted,
+                    }}
+                  >
+                    {apiConfigMessage}
+                  </Text>
+                ) : null}
 
                 {isApiConfigOpen && (
                   <View className="mt-3 gap-2">
@@ -1464,7 +1585,7 @@ export function RealizationOnboardingScreen({
                         setApiBaseUrlDraft(value);
                         setApiConfigMessage(null);
                       }}
-                      placeholder="http://192.168.18.11:3001"
+                      placeholder="http://192.168.18.34:3001"
                       placeholderTextColor={EXPEDITION_THEME.textSubtle}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -1489,11 +1610,6 @@ export function RealizationOnboardingScreen({
                       </Pressable>
                     </View>
 
-                    {apiConfigMessage && (
-                      <Text className="text-xs" style={{ color: apiConfigMessage.startsWith("Nie") ? EXPEDITION_THEME.danger : EXPEDITION_THEME.textMuted }}>
-                        {apiConfigMessage}
-                      </Text>
-                    )}
                   </View>
                 )}
               </View>

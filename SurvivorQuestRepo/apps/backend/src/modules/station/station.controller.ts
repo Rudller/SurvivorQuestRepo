@@ -35,7 +35,15 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 const ALLOWED_AUDIO_MIME_TYPES = new Set([
   'audio/mpeg',
   'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
   'audio/ogg',
+  'application/ogg',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/webm',
 ]);
 
 @Controller(['station', 'api/station'])

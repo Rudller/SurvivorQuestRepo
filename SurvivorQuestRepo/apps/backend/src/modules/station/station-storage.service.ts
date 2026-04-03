@@ -16,7 +16,15 @@ const DOCUMENT_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
 const AUDIO_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'audio/mpeg': 'mp3',
   'audio/wav': 'wav',
+  'audio/wave': 'wav',
+  'audio/x-wav': 'wav',
   'audio/ogg': 'ogg',
+  'application/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/m4a': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac',
+  'audio/webm': 'webm',
 };
 
 @Injectable()
@@ -61,6 +69,9 @@ export class StationStorageService {
 
   async uploadStationAudio(file: Express.Multer.File) {
     const extension = AUDIO_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    if (!extension) {
+      throw new InternalServerErrorException('Unsupported audio type');
+    }
     const objectKey = this.buildObjectKey('stations/audio', extension);
 
     await this.uploadObject(file, objectKey);

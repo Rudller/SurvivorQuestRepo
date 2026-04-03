@@ -27,6 +27,7 @@ export type MatchingPair = {
 type StationPuzzleViewModel = {
   stationId: string;
   name: string;
+  quizQuestion?: string;
   quizAnswers?: readonly string[];
   quizCorrectAnswerIndex?: number;
 };
@@ -71,10 +72,15 @@ export const MASTERMIND_SYMBOLS = ["A", "B", "C", "D", "E", "F"] as const;
 const BOGGLE_FILLER_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MEMORY_SYMBOL_POOL = ["🍀", "🔥", "💧", "🌙", "⭐", "⚡", "🎯", "🧭"];
 export const SIMON_BUTTONS = [
-  { id: "red", label: "🔴", color: "#ef4444" },
-  { id: "blue", label: "🔵", color: "#3b82f6" },
-  { id: "green", label: "🟢", color: "#22c55e" },
-  { id: "yellow", label: "🟡", color: "#eab308" },
+  { id: "1", label: "1", color: "#ef4444" },
+  { id: "2", label: "2", color: "#f97316" },
+  { id: "3", label: "3", color: "#eab308" },
+  { id: "4", label: "4", color: "#22c55e" },
+  { id: "5", label: "5", color: "#14b8a6" },
+  { id: "6", label: "6", color: "#3b82f6" },
+  { id: "7", label: "7", color: "#6366f1" },
+  { id: "8", label: "8", color: "#a855f7" },
+  { id: "9", label: "9", color: "#ec4899" },
 ] as const;
 const MINI_SUDOKU_PUZZLES = [
   {
@@ -280,9 +286,19 @@ export function resolveMemoryDeck(station: StationPuzzleViewModel): MemoryCard[]
 }
 
 export function resolveSimonSequence(station: StationPuzzleViewModel) {
+  const sequenceFromQuestion =
+    station.quizQuestion
+      ?.match(/[1-9]/g)
+      ?.map((token) => token.trim())
+      .filter((token) => token.length > 0) ?? [];
+
+  if (sequenceFromQuestion.length === 10) {
+    return sequenceFromQuestion;
+  }
+
   const seed = resolveSeed(station.stationId);
   return Array.from(
-    { length: 5 },
+    { length: 10 },
     (_, index) => SIMON_BUTTONS[(seed + index * 7) % SIMON_BUTTONS.length].id,
   );
 }
