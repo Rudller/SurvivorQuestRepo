@@ -48,15 +48,38 @@ function loadEnvFile(filePath: string) {
 
 function loadBackendEnv() {
   const isProduction = process.env.NODE_ENV === 'production';
+  const backendRootCandidates = [
+    resolve(__dirname, '../..'),
+    resolve(__dirname, '../../..'),
+  ];
+  const workspaceRootCandidates = backendRootCandidates.map((candidate) =>
+    resolve(candidate, '../..'),
+  );
   const candidates = [
     ...(isProduction
       ? [
+          ...workspaceRootCandidates.flatMap((candidate) => [
+            resolve(candidate, '.env.production.local'),
+            resolve(candidate, '.env.production'),
+          ]),
+          ...backendRootCandidates.flatMap((candidate) => [
+            resolve(candidate, '.env.production.local'),
+            resolve(candidate, '.env.production'),
+          ]),
           resolve(process.cwd(), '.env.production.local'),
           resolve(process.cwd(), '.env.production'),
           resolve(process.cwd(), 'apps/backend/.env.production.local'),
           resolve(process.cwd(), 'apps/backend/.env.production'),
         ]
       : []),
+    ...workspaceRootCandidates.flatMap((candidate) => [
+      resolve(candidate, '.env.local'),
+      resolve(candidate, '.env'),
+    ]),
+    ...backendRootCandidates.flatMap((candidate) => [
+      resolve(candidate, '.env.local'),
+      resolve(candidate, '.env'),
+    ]),
     resolve(process.cwd(), '.env.local'),
     resolve(process.cwd(), '.env'),
     resolve(process.cwd(), 'apps/backend/.env.local'),
