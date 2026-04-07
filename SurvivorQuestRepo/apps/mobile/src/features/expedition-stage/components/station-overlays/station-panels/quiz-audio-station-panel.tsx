@@ -25,7 +25,7 @@ export function resolveStationQuizPrompt({ station, wordleLength }: QuizPromptAr
     return station.quizQuestion?.trim() || "Mastermind: odgadnij 4-znakowy kod z liter A-F.";
   }
   if (station.stationType === "anagram") {
-    return station.quizQuestion?.trim() || "Anagram: ułóż poprawne słowo.";
+    return "Anagram: ułóż poprawne słowo z rozsypanki.";
   }
   if (station.stationType === "caesar-cipher") {
     return station.quizQuestion?.trim() || "Szyfr Cezara: odszyfruj tekst (przesunięcie +3).";

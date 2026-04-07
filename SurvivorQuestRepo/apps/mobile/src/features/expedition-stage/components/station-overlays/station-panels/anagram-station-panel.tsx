@@ -3,10 +3,8 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 
 type AnagramStationPanelProps = {
-  anagramScrambled: string;
   anagramAttemptsLeft: number;
   anagramInput: string;
-  anagramResult: string | null;
   isActionDisabled: boolean;
   isSubmittingAnagram: boolean;
   onChangeInput: (value: string) => void;
@@ -14,10 +12,8 @@ type AnagramStationPanelProps = {
 };
 
 export function AnagramStationPanel({
-  anagramScrambled,
   anagramAttemptsLeft,
   anagramInput,
-  anagramResult,
   isActionDisabled,
   isSubmittingAnagram,
   onChangeInput,
@@ -26,7 +22,7 @@ export function AnagramStationPanel({
   return (
     <View className="mt-3">
       <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-        Rozsypanka: <Text className="font-bold">{anagramScrambled || "—"}</Text> • Pozostało prób: {anagramAttemptsLeft}
+        Pozostało prób: {anagramAttemptsLeft}
       </Text>
       <View className="mt-2 flex-row gap-2">
         <TextInput
@@ -56,11 +52,6 @@ export function AnagramStationPanel({
           <Text className="text-xs font-semibold text-zinc-950">{isSubmittingAnagram ? "..." : "Sprawdź"}</Text>
         </Pressable>
       </View>
-      {anagramResult ? (
-        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-          {anagramResult}
-        </Text>
-      ) : null}
     </View>
   );
 }

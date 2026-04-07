@@ -1422,6 +1422,13 @@ export class MobileService {
     >();
     for (const log of logs) {
       if (
+        log.eventType === 'completed_tasks_reset' ||
+        log.eventType === 'realization_reset'
+      ) {
+        break;
+      }
+
+      if (
         !log.teamId ||
         (log.eventType !== 'task_failed' && log.eventType !== 'task_completed')
       ) {
@@ -2276,10 +2283,20 @@ export class MobileService {
     const logs = await this.prisma.eventLog.findMany({
       where: {
         realizationId: input.realizationId,
-        teamId: input.teamId,
-        eventType: {
-          in: ['task_failed', 'task_completed'],
-        },
+        OR: [
+          {
+            teamId: input.teamId,
+            eventType: {
+              in: ['task_failed', 'task_completed'],
+            },
+          },
+          {
+            teamId: null,
+            eventType: {
+              in: ['completed_tasks_reset', 'realization_reset'],
+            },
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -2291,6 +2308,13 @@ export class MobileService {
     const failed = new Set<string>();
     const decided = new Set<string>();
     for (const log of logs) {
+      if (
+        log.eventType === 'completed_tasks_reset' ||
+        log.eventType === 'realization_reset'
+      ) {
+        break;
+      }
+
       const stationId = this.parseStationIdFromEventPayload(log.payload);
       if (!stationId || decided.has(stationId)) {
         continue;

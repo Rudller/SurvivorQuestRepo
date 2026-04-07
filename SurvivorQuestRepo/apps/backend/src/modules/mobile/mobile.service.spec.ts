@@ -257,3 +257,77 @@ describe('MobileService join session', () => {
     expect(result.team.slotNumber).toBe(2);
   });
 });
+
+describe('MobileService failed task snapshots', () => {
+  function createService() {
+    const prisma = {
+      eventLog: {
+        findMany: jest.fn(),
+      },
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma };
+  }
+
+  it('ignores outcomes older than completed tasks reset', async () => {
+    const { service, prisma } = createService();
+    prisma.eventLog.findMany.mockResolvedValue([
+      {
+        eventType: 'task_failed',
+        payload: { stationId: 'station-after-reset' },
+      },
+      {
+        eventType: 'completed_tasks_reset',
+        payload: { resetCount: 3 },
+      },
+      {
+        eventType: 'task_failed',
+        payload: { stationId: 'station-before-reset' },
+      },
+    ]);
+
+    const failedStationIds = await (service as never).getFailedTaskStationIds({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+    });
+
+    expect([...failedStationIds]).toEqual(['station-after-reset']);
+    expect(prisma.eventLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          realizationId: 'realization-1',
+          OR: expect.arrayContaining([
+            expect.objectContaining({ teamId: 'team-1' }),
+            expect.objectContaining({ teamId: null }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('clears failed outcomes after realization reset', async () => {
+    const { service, prisma } = createService();
+    prisma.eventLog.findMany.mockResolvedValue([
+      {
+        eventType: 'realization_reset',
+        payload: { resetAt: new Date().toISOString() },
+      },
+      {
+        eventType: 'task_failed',
+        payload: { stationId: 'station-before-reset' },
+      },
+    ]);
+
+    const failedStationIds = await (service as never).getFailedTaskStationIds({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+    });
+
+    expect([...failedStationIds]).toEqual([]);
+  });
+});

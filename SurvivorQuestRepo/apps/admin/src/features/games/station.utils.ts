@@ -33,7 +33,7 @@ const CAESAR_CIPHER_DEFAULT_STATION_DESCRIPTION =
 const REBUS_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest odgadnąć hasło na podstawie rebusu. Przeanalizuj symbole, litery i podpowiedzi, a następnie wpisz poprawne rozwiązanie.";
 const BOGGLE_DEFAULT_STATION_DESCRIPTION =
-  "Twoim zadaniem jest ułożyć poprawne słowo na podstawie liter widocznych na planszy Boggle. Wpisz właściwe hasło, aby zaliczyć stanowisko.";
+  "Twoim zadaniem jest odnaleźć jedno docelowe słowo na planszy Boggle 3x3. Słowo musi dać się przejść po sąsiadujących polach (również po skosie), bez użycia tego samego pola dwa razy.";
 const MEMORY_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest odnaleźć i dopasować wszystkie pary kart. Zapamiętuj odkryte symbole i łącz je poprawnie.";
 const SIMON_DEFAULT_STATION_DESCRIPTION =
@@ -282,8 +282,9 @@ export function getQuizLikeStationCopy(stationType: StationType) {
       return {
         sectionTitle: "Hasło Boggle",
         questionLabel: "Hasło / zadanie (Boggle)",
-        questionPlaceholder: "Wpisz litery planszy lub hasło do odgadnięcia",
-        answersHint: "Boggle używa wyłącznie hasła jako rozwiązania.",
+        questionPlaceholder: "Wpisz docelowe słowo Boggle (3-8 znaków)",
+        answersHint:
+          "Boggle używa jednego hasła (3-8 znaków). W mobilce gracz układa je na planszy 3x3 po sąsiadujących polach (także po skosie), bez powtórnego użycia pola.",
         validationMessage: "Boggle wymaga hasła/zadania.",
       };
     case "mini-sudoku":

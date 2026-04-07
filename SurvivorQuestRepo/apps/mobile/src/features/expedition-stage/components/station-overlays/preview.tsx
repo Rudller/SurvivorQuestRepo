@@ -76,6 +76,9 @@ function isQuizStationType(stationType: StationTestType) {
   );
 }
 
+const WORDLE_REVEAL_CELL_DELAY_MS = 340;
+const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
+
 
 export function StationPreviewOverlay({
   station: stationProp,
@@ -92,6 +95,8 @@ export function StationPreviewOverlay({
   const [wordleInput, setWordleInput] = useState("");
   const [wordleAttempts, setWordleAttempts] = useState<WordleAttempt[]>([]);
   const [wordleResult, setWordleResult] = useState<string | null>(null);
+  const [wordleRevealedCellCounts, setWordleRevealedCellCounts] = useState<number[]>([]);
+  const [isWordleRevealAnimating, setIsWordleRevealAnimating] = useState(false);
   const [hangmanInput, setHangmanInput] = useState("");
   const [hangmanGuessedLetters, setHangmanGuessedLetters] = useState<string[]>([]);
   const [hangmanMisses, setHangmanMisses] = useState<string[]>([]);
@@ -117,6 +122,7 @@ export function StationPreviewOverlay({
   const [rebusAttempts, setRebusAttempts] = useState(0);
   const [rebusResult, setRebusResult] = useState<string | null>(null);
   const [boggleInput, setBoggleInput] = useState("");
+  const [boggleSelectedCellPath, setBoggleSelectedCellPath] = useState<number[]>([]);
   const [boggleAttempts, setBoggleAttempts] = useState(0);
   const [boggleResult, setBoggleResult] = useState<string | null>(null);
   const [miniSudokuValues, setMiniSudokuValues] = useState<string[]>(["", "", "", ""]);
@@ -149,6 +155,7 @@ export function StationPreviewOverlay({
   const [isSubmittingCode, setIsSubmittingCode] = useState(false);
   const [isCodeInputInvalid, setIsCodeInputInvalid] = useState(false);
   const [isCodeInputSuccess, setIsCodeInputSuccess] = useState(false);
+  const [wordleKeyboardContainerWidth, setWordleKeyboardContainerWidth] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [displayedStation, setDisplayedStation] = useState<StationTestViewModel | null>(stationProp);
   const [isOverlayMounted, setIsOverlayMounted] = useState(Boolean(stationProp));
@@ -163,6 +170,7 @@ export function StationPreviewOverlay({
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const memoryHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const simonHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wordleRevealTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const timeoutPopupShownRef = useRef(false);
   const quizOptions = useMemo(
     () =>
@@ -173,6 +181,47 @@ export function StationPreviewOverlay({
         "Rozdzielam zespół i tracę kontakt.",
       ],
     [displayedStation?.quizAnswers],
+  );
+  const clearWordleRevealTimeouts = useCallback(() => {
+    wordleRevealTimeoutsRef.current.forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
+    wordleRevealTimeoutsRef.current = [];
+  }, []);
+  const runWordleRevealSequence = useCallback(
+    (attemptIndex: number, revealLength: number) =>
+      new Promise<void>((resolve) => {
+        if (revealLength <= 0) {
+          setIsWordleRevealAnimating(false);
+          resolve();
+          return;
+        }
+
+        clearWordleRevealTimeouts();
+        setIsWordleRevealAnimating(true);
+        for (let columnIndex = 0; columnIndex < revealLength; columnIndex += 1) {
+          const timeoutId = setTimeout(() => {
+            setWordleRevealedCellCounts((current) => {
+              const next = [...current];
+              if (next.length <= attemptIndex) {
+                next.length = attemptIndex + 1;
+              }
+              const alreadyRevealed = next[attemptIndex] ?? 0;
+              next[attemptIndex] = Math.max(alreadyRevealed, columnIndex + 1);
+              return next;
+            });
+          }, columnIndex * WORDLE_REVEAL_CELL_DELAY_MS);
+          wordleRevealTimeoutsRef.current.push(timeoutId);
+        }
+
+        const finalizeTimeoutId = setTimeout(() => {
+          setIsWordleRevealAnimating(false);
+          clearWordleRevealTimeouts();
+          resolve();
+        }, revealLength * WORDLE_REVEAL_CELL_DELAY_MS + WORDLE_REVEAL_FINISH_BUFFER_MS);
+        wordleRevealTimeoutsRef.current.push(finalizeTimeoutId);
+      }),
+    [clearWordleRevealTimeouts],
   );
   const unloadAudioSound = useCallback(async () => {
     const activePlayer = audioPlayerRef.current;
@@ -303,6 +352,8 @@ export function StationPreviewOverlay({
     setWordleInput("");
     setWordleAttempts([]);
     setWordleResult(null);
+    setWordleRevealedCellCounts([]);
+    setIsWordleRevealAnimating(false);
     setHangmanInput("");
     setHangmanGuessedLetters([]);
     setHangmanMisses([]);
@@ -328,6 +379,7 @@ export function StationPreviewOverlay({
     setRebusAttempts(0);
     setRebusResult(null);
     setBoggleInput("");
+    setBoggleSelectedCellPath([]);
     setBoggleAttempts(0);
     setBoggleResult(null);
     setMiniSudokuValues(["", "", "", ""]);
@@ -381,8 +433,9 @@ export function StationPreviewOverlay({
       clearTimeout(simonHintTimeoutRef.current);
       simonHintTimeoutRef.current = null;
     }
+    clearWordleRevealTimeouts();
     timeoutPopupShownRef.current = false;
-  }, [codeInputShakeAnimation, displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
+  }, [clearWordleRevealTimeouts, codeInputShakeAnimation, displayedStation?.stationId, quizFeedbackAnimation, timerPulseAnimation]);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -474,9 +527,10 @@ export function StationPreviewOverlay({
         clearTimeout(simonHintTimeoutRef.current);
         simonHintTimeoutRef.current = null;
       }
+      clearWordleRevealTimeouts();
       void unloadAudioSound();
     };
-  }, [unloadAudioSound]);
+  }, [clearWordleRevealTimeouts, unloadAudioSound]);
 
   useEffect(() => {
     if (
@@ -722,6 +776,36 @@ export function StationPreviewOverlay({
     remainingTimeSeconds,
   ]);
 
+  const wordleSecretForInputReset =
+    displayedStation?.stationType === "wordle" ? resolvePuzzleSecret(displayedStation, "wordle") : "";
+  const wordleLengthForInputReset = Array.from(wordleSecretForInputReset).length;
+  const wordleDisplayLengthForTracking = Math.max(1, wordleLengthForInputReset || 5);
+  const normalizedWordleInputForReset = normalizeWordleSecret(wordleInput).slice(0, wordleLengthForInputReset || 32);
+  useEffect(() => {
+    if (wordleResult !== null) {
+      setWordleResult(null);
+    }
+    if (quizSubmitError !== null) {
+      setQuizSubmitError(null);
+    }
+  }, [normalizedWordleInputForReset]);
+  useEffect(() => {
+    if (!wordleAttempts.length) {
+      if (wordleRevealedCellCounts.length > 0) {
+        setWordleRevealedCellCounts([]);
+      }
+      return;
+    }
+
+    setWordleRevealedCellCounts((current) => {
+      const next = current.slice(0, wordleAttempts.length);
+      while (next.length < wordleAttempts.length) {
+        next.push(wordleDisplayLengthForTracking);
+      }
+      return next;
+    });
+  }, [wordleAttempts.length, wordleDisplayLengthForTracking, wordleRevealedCellCounts.length]);
+
   if (!isOverlayMounted || !displayedStation) {
     return null;
   }
@@ -760,6 +844,9 @@ export function StationPreviewOverlay({
     if (isWordleStation) {
       return Math.max(230, Math.round(viewportHeight * 0.4));
     }
+    if (isAnagramStation) {
+      return Math.max(210, Math.round(viewportHeight * 0.34));
+    }
     return Math.max(190, Math.round(viewportHeight * 0.33));
   })();
   const hasTimerStarted = Boolean(station.startedAt);
@@ -768,11 +855,11 @@ export function StationPreviewOverlay({
   const wordleLength = Array.from(wordleSecret).length;
   const wordleDisplayLength = Math.max(1, wordleLength || 5);
   const normalizedWordleInput = normalizeWordleSecret(wordleInput).slice(0, wordleLength || 32);
-  const wordleInputCharacters = useMemo(() => Array.from(normalizedWordleInput), [normalizedWordleInput]);
+  const wordleInputCharacters = Array.from(normalizedWordleInput);
   const normalizedWordleAttemptsCount = wordleAttempts.length;
   const wordleSolved = wordleAttempts.some((attempt) => attempt.evaluation.every((cell) => cell === "correct"));
   const wordleAttemptsLeft = Math.max(0, WORDLE_MAX_ATTEMPTS - normalizedWordleAttemptsCount);
-  const wordleKeyStateByLetter = useMemo(() => {
+  const wordleKeyStateByLetter = (() => {
     const statePriority: Record<WordleCellState, number> = {
       absent: 1,
       present: 2,
@@ -780,9 +867,19 @@ export function StationPreviewOverlay({
     };
     const map = new Map<string, WordleCellState>();
 
-    wordleAttempts.forEach((attempt) => {
+    wordleAttempts.forEach((attempt, attemptIndex) => {
+      const revealedCellCount = Math.max(
+        0,
+        Math.min(
+          wordleDisplayLength,
+          wordleRevealedCellCounts[attemptIndex] ?? wordleDisplayLength,
+        ),
+      );
       const guessCharacters = Array.from(attempt.guess);
       attempt.evaluation.forEach((state, index) => {
+        if (index >= revealedCellCount) {
+          return;
+        }
         const letter = (guessCharacters[index] ?? "").toUpperCase();
         if (!letter) {
           return;
@@ -795,14 +892,13 @@ export function StationPreviewOverlay({
     });
 
     return map;
-  }, [wordleAttempts]);
-  const [wordleKeyboardContainerWidth, setWordleKeyboardContainerWidth] = useState(0);
+  })();
   const wordleKeyboardKeyGap = 2;
-  const wordleKeyboardKeyWidth = useMemo(() => {
+  const wordleKeyboardKeyWidth = (() => {
     const availableWidth =
       wordleKeyboardContainerWidth > 0 ? wordleKeyboardContainerWidth : Math.max(260, viewportWidth - 72);
     return Math.max(24, Math.floor((availableWidth - 9 * wordleKeyboardKeyGap) / 10));
-  }, [viewportWidth, wordleKeyboardContainerWidth, wordleKeyboardKeyGap]);
+  })();
   const wordleBoardCellSize = wordleKeyboardKeyWidth;
   const guessedHangmanSet = new Set(hangmanGuessedLetters);
   const hangmanSecret = isHangmanStation ? resolvePuzzleSecret(station, "hangman") : "";
@@ -831,7 +927,21 @@ export function StationPreviewOverlay({
   const mastermindSolved = mastermindAttempts.some((attempt) => attempt.exact === mastermindSecret.length);
   const mastermindAttemptsLeft = Math.max(0, MASTERMIND_MAX_ATTEMPTS - mastermindAttempts.length);
   const anagramTarget = isAnagramStation ? normalizePuzzleWord(puzzleSourceAnswer || station.name) : "";
-  const anagramScrambled = isAnagramStation ? scrambleWord(anagramTarget || "SURVIVOR", station.stationId) : "";
+  const anagramHintSource = isAnagramStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "") : "";
+  const anagramSourceWords = isAnagramStation
+    ? anagramHintSource
+        .split(" ")
+        .map((part) => normalizeWordleSecret(part))
+        .filter((part) => part.length > 0)
+    : [];
+  const anagramHintWordLengths = anagramSourceWords.map((part) => Array.from(part).length);
+  const anagramHintWordCount = anagramHintWordLengths.length > 0 ? anagramHintWordLengths.length : anagramTarget.length > 0 ? 1 : 0;
+  const anagramHintLettersLayout =
+    anagramHintWordLengths.length > 0 ? anagramHintWordLengths.join("+") : `${Array.from(anagramTarget).length}`;
+  const anagramScrambledWords =
+    anagramSourceWords.length > 0
+      ? anagramSourceWords.map((word, index) => scrambleWord(word, `${station.stationId}-anagram-word-${index}`))
+      : [scrambleWord(anagramTarget || "SURVIVOR", `${station.stationId}-anagram-word-0`)];
   const normalizedAnagramInput = normalizePuzzleWord(anagramInput);
   const anagramAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - anagramAttempts);
   const caesarDecoded = isCaesarStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "SURVIVOR QUEST") : "";
@@ -849,6 +959,8 @@ export function StationPreviewOverlay({
   const rebusAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - rebusAttempts);
   const boggleTargetWord = isBoggleStation ? resolveBoggleTarget(station) : "";
   const boggleBoardLetters = isBoggleStation ? resolveBoggleBoard(station, boggleTargetWord || "TEAM") : [];
+  const boggleMaxInputLength = Math.max(3, Array.from(boggleTargetWord || "TEAM").length);
+  const boggleBoardSide = Math.sqrt(boggleBoardLetters.length);
   const normalizedBoggleInput = normalizePuzzleWord(boggleInput);
   const boggleAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - boggleAttempts);
   const miniSudokuPuzzle = isMiniSudokuStation ? resolveMiniSudokuPuzzle(station) : null;
@@ -901,6 +1013,7 @@ export function StationPreviewOverlay({
     station.status === "done" ||
     station.status === "failed" ||
     isSubmittingWordleGuess ||
+    isWordleRevealAnimating ||
     (hasTimedLimit && !hasTimerStarted) ||
     isTimeExpired ||
     wordleAttemptsLeft <= 0 ||
@@ -1012,6 +1125,7 @@ export function StationPreviewOverlay({
       station.status === "done" ||
       station.status === "failed" ||
       isSubmittingWordleGuess ||
+      isWordleRevealAnimating ||
       (hasTimedLimit && !hasTimerStarted) ||
       isTimeExpired
     ) {
@@ -1026,8 +1140,17 @@ export function StationPreviewOverlay({
     const evaluation = buildWordleEvaluation(normalizedWordleInput, wordleSecret);
     const nextAttempts = [...wordleAttempts, { guess: normalizedWordleInput, evaluation }];
     setWordleAttempts(nextAttempts);
+    setWordleRevealedCellCounts((current) => {
+      const next = current.slice(0, nextAttempts.length);
+      while (next.length < nextAttempts.length - 1) {
+        next.push(wordleDisplayLength);
+      }
+      next[nextAttempts.length - 1] = 0;
+      return next;
+    });
     setWordleInput("");
     setQuizSubmitError(null);
+    await runWordleRevealSequence(nextAttempts.length - 1, wordleLength);
 
     const solved = evaluation.every((item) => item === "correct");
     if (!solved) {
@@ -1078,14 +1201,6 @@ export function StationPreviewOverlay({
       },
     ]);
   };
-  useEffect(() => {
-    if (wordleResult !== null) {
-      setWordleResult(null);
-    }
-    if (quizSubmitError !== null) {
-      setQuizSubmitError(null);
-    }
-  }, [normalizedWordleInput]);
   const submitQuizAnswer = async (index: number) => {
     if (!isClassicQuizStation && !isAudioQuizStation) {
       return;
@@ -1332,7 +1447,7 @@ export function StationPreviewOverlay({
       const nextAttempts = anagramAttempts + 1;
       setAnagramAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setAnagramResult(`Brak prób. Poprawne słowo: ${anagramTarget}`);
+        setAnagramResult("Brak prób. Zadanie niezaliczone.");
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
         Alert.alert("Nie zaliczono", "Nie udało się rozwiązać anagramu.", [
           {
@@ -1670,6 +1785,10 @@ export function StationPreviewOverlay({
       setBoggleResult("Wpisz słowo (minimum 3 litery).");
       return;
     }
+    if (normalizedBoggleInput.length > boggleMaxInputLength) {
+      setBoggleResult(`Słowo może mieć maksymalnie ${boggleMaxInputLength} liter.`);
+      return;
+    }
 
     if (isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0) {
       return;
@@ -1727,6 +1846,62 @@ export function StationPreviewOverlay({
         onPress: onClose,
       },
     ]);
+  };
+  const selectBoggleBoardCell = (cellIndex: number) => {
+    if (!isBoggleStation || isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0) {
+      return;
+    }
+
+    const letter = boggleBoardLetters[cellIndex] ?? "";
+    if (!letter) {
+      return;
+    }
+
+    if (boggleSelectedCellPath.includes(cellIndex)) {
+      setBoggleResult("Nie można użyć tego samego pola dwa razy.");
+      return;
+    }
+
+    if (boggleSelectedCellPath.length >= boggleMaxInputLength) {
+      return;
+    }
+
+    if (boggleSelectedCellPath.length > 0 && Number.isInteger(boggleBoardSide)) {
+      const previousCell = boggleSelectedCellPath[boggleSelectedCellPath.length - 1] ?? 0;
+      const previousRow = Math.floor(previousCell / boggleBoardSide);
+      const previousCol = previousCell % boggleBoardSide;
+      const nextRow = Math.floor(cellIndex / boggleBoardSide);
+      const nextCol = cellIndex % boggleBoardSide;
+      if (Math.abs(previousRow - nextRow) > 1 || Math.abs(previousCol - nextCol) > 1) {
+        setBoggleResult("Wybieraj sąsiadujące pola (także po skosie).");
+        return;
+      }
+    }
+
+    setBoggleSelectedCellPath((current) => [...current, cellIndex]);
+    setBoggleInput((current) => `${current}${letter}`.slice(0, boggleMaxInputLength));
+    setBoggleResult(null);
+    setQuizSubmitError(null);
+  };
+  const backspaceBoggleInput = () => {
+    if (isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0) {
+      return;
+    }
+
+    setBoggleSelectedCellPath((current) => {
+      if (!current.length) {
+        return current;
+      }
+      return current.slice(0, -1);
+    });
+    setBoggleInput((current) => {
+      if (!current.length) {
+        return current;
+      }
+      return current.slice(0, -1);
+    });
+    setBoggleResult(null);
+    setQuizSubmitError(null);
   };
   const submitMiniSudoku = async () => {
     if (!isMiniSudokuStation || !miniSudokuPuzzle) {
@@ -1937,11 +2112,43 @@ export function StationPreviewOverlay({
                 {isWordleStation ? (
                   <WordleMediaBoard
                     stationId={station.stationId}
-                    attemptsCount={normalizedWordleAttemptsCount}
                     displayLength={wordleDisplayLength}
                     attempts={wordleAttempts}
+                    revealedCellCounts={wordleRevealedCellCounts}
                     cellSize={wordleBoardCellSize}
                   />
+                ) : isAnagramStation ? (
+                  <View className="flex-1 items-center justify-center px-3">
+                    <View className="items-center justify-center" style={{ rowGap: 14 }}>
+                      {(anagramScrambledWords.length > 0 ? anagramScrambledWords : ["—"]).map((word, wordIndex) => (
+                        <View
+                          key={`${station.stationId}-anagram-top-word-${wordIndex}`}
+                          className="flex-row justify-center"
+                          style={{ columnGap: 10 }}
+                        >
+                          {Array.from(word).map((character, characterIndex) => (
+                            <View
+                              key={`${station.stationId}-anagram-top-${wordIndex}-${characterIndex}-${character}`}
+                              className="items-center justify-center rounded-lg border"
+                              style={{
+                                minWidth: 52,
+                                height: 52,
+                                borderColor: EXPEDITION_THEME.border,
+                                backgroundColor: EXPEDITION_THEME.panelStrong,
+                              }}
+                            >
+                              <Text className="text-xl font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                                {character}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                    <Text className="mt-3 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                      Wyrazy: {anagramHintWordCount} • Litery: {anagramHintLettersLayout}
+                    </Text>
+                  </View>
                 ) : shouldShowQuizFallbackGraphic ? (
                   <View className="flex-1 items-center justify-center">
                     {!quizIconLoadFailed ? (
@@ -1990,6 +2197,11 @@ export function StationPreviewOverlay({
                   {stationDescription}
                 </Text>
               ) : null}
+              {isAnagramStation ? (
+                <Text className="mt-2 text-xs leading-5" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  Rozsypanka jest wyświetlana wyraz po wyrazie, a każdy wyraz znajduje się w osobnym wierszu.
+                </Text>
+              ) : null}
 
               {isQuizStation ? (
                 <View
@@ -2036,10 +2248,10 @@ export function StationPreviewOverlay({
                       keyboardKeyGap={wordleKeyboardKeyGap}
                       keyStateByLetter={wordleKeyStateByLetter}
                       isInteractiveDisabled={isWordleInteractiveDisabled}
+                      isRevealing={isWordleRevealAnimating}
                       isSubmitting={isSubmittingWordleGuess}
-                      canSubmit={!isWordleInteractiveDisabled && normalizedWordleInput.length === (wordleLength || 0)}
+                      canSubmit={normalizedWordleInput.length === (wordleLength || 0)}
                       canBackspace={!isWordleInteractiveDisabled && normalizedWordleInput.length > 0}
-                      result={wordleResult}
                       onLayoutKeyboard={(nextWidth) => {
                         if (Math.abs(nextWidth - wordleKeyboardContainerWidth) > 1) {
                           setWordleKeyboardContainerWidth(nextWidth);
@@ -2130,10 +2342,8 @@ export function StationPreviewOverlay({
 
                   {isAnagramStation ? (
                     <AnagramStationPanel
-                      anagramScrambled={anagramScrambled}
                       anagramAttemptsLeft={anagramAttemptsLeft}
                       anagramInput={anagramInput}
-                      anagramResult={anagramResult}
                       isActionDisabled={isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0}
                       isSubmittingAnagram={isSubmittingAnagram}
                       onChangeInput={(value) => {
@@ -2221,15 +2431,20 @@ export function StationPreviewOverlay({
                       stationId={station.stationId}
                       boggleBoardLetters={boggleBoardLetters}
                       boggleAttemptsLeft={boggleAttemptsLeft}
+                      boggleMaxInputLength={boggleMaxInputLength}
                       boggleInput={boggleInput}
                       boggleResult={boggleResult}
+                      selectedCellPath={boggleSelectedCellPath}
                       isActionDisabled={isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0}
                       isSubmittingBoggle={isSubmittingBoggle}
                       onChangeInput={(value) => {
-                        setBoggleInput(value);
+                        setBoggleInput(normalizePuzzleWord(value).slice(0, boggleMaxInputLength));
+                        setBoggleSelectedCellPath([]);
                         setBoggleResult(null);
                         setQuizSubmitError(null);
                       }}
+                      onPressBoardCell={selectBoggleBoardCell}
+                      onBackspaceInput={backspaceBoggleInput}
                       onSubmit={() => {
                         void submitBoggle();
                       }}
