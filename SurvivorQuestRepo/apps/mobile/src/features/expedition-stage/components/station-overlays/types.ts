@@ -43,6 +43,8 @@ export type StationTestMenuOverlayProps = {
   onClose: () => void;
   onEnterStation: (stationId: string) => void;
   onOpenWelcomeScreen: () => void;
+  onPreviewSuccessPopup: () => void;
+  onPreviewFailedPopup: () => void;
 };
 
 export type StationPreviewOverlayProps = {
@@ -53,6 +55,12 @@ export type StationPreviewOverlayProps = {
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;
   onTimeExpired?: (stationId: string) => void;
+  debugOutcomePreview?: {
+    id: number;
+    variant: "success" | "failed";
+    message: string;
+  } | null;
+  onDebugOutcomePreviewConsumed?: () => void;
 };
 
 export type QuizPrestartOverlayProps = {

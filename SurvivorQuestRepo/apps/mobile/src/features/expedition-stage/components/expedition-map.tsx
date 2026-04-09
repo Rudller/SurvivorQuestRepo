@@ -5,6 +5,11 @@ import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
 
 const OSM_ATTRIBUTION_LABEL = "© OpenStreetMap contributors";
+const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const DEFAULT_MAP_WEBVIEW_BASE_URL = "https://survivorquest.app";
+const DEFAULT_MAP_WEBVIEW_USER_AGENT = "SurvivorQuestMobile/1.0";
 const DEFAULT_ZOOM = 14;
 const DEFAULT_EDGE_DISTANCE_METERS = 200;
 
@@ -25,7 +30,25 @@ type MapPayload = {
   focusCoordinate: MapCoordinate | null;
 };
 
-function buildLeafletHtml(initialPayloadJson: string) {
+function normalizeHttpUrl(rawValue: string | undefined) {
+  const value = rawValue?.trim();
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildLeafletHtml(initialPayloadJson: string, tileUrl: string, tileAttribution: string) {
   return `<!doctype html>
 <html lang="pl">
   <head>
@@ -49,6 +72,8 @@ function buildLeafletHtml(initialPayloadJson: string) {
     <script>
       (function () {
         const initialPayload = ${initialPayloadJson};
+        const tileUrl = ${JSON.stringify(tileUrl)};
+        const tileAttribution = ${JSON.stringify(tileAttribution)};
         let map = null;
         let stationLayer = null;
         let playerMarker = null;
@@ -102,8 +127,9 @@ function buildLeafletHtml(initialPayloadJson: string) {
           });
 
           stationLayer = L.layerGroup().addTo(map);
-          L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          L.tileLayer(tileUrl, {
             maxZoom: 19,
+            attribution: tileAttribution,
           }).addTo(map);
         }
 
@@ -241,6 +267,15 @@ export function ExpeditionMap({
   const webViewRef = useRef<WebView>(null);
   const initialCenterRef = useRef(centerCoordinate);
   const [isReady, setIsReady] = useState(false);
+  const mapTileUrl = process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim() || OSM_TILE_URL;
+  const mapTileAttribution =
+    process.env.EXPO_PUBLIC_MAP_TILE_ATTRIBUTION?.trim() || OSM_TILE_ATTRIBUTION;
+  const mapWebViewBaseUrl =
+    normalizeHttpUrl(process.env.EXPO_PUBLIC_MAP_WEBVIEW_BASE_URL) ||
+    DEFAULT_MAP_WEBVIEW_BASE_URL;
+  const mapWebViewUserAgent =
+    process.env.EXPO_PUBLIC_MAP_WEBVIEW_USER_AGENT?.trim() ||
+    DEFAULT_MAP_WEBVIEW_USER_AGENT;
 
   const payload = useMemo<MapPayload>(
     () => ({
@@ -263,8 +298,10 @@ export function ExpeditionMap({
           selectedStationId: null,
           focusCoordinate: null,
         } satisfies MapPayload),
+        mapTileUrl,
+        mapTileAttribution,
       ),
-    [],
+    [mapTileAttribution, mapTileUrl],
   );
 
   useEffect(() => {
@@ -311,11 +348,12 @@ export function ExpeditionMap({
     <View style={{ flex: 1 }}>
       <WebView
         ref={webViewRef}
-        source={{ html: initialHtml }}
+        source={{ html: initialHtml, baseUrl: mapWebViewBaseUrl }}
         onMessage={handleMessage}
         originWhitelist={["*"]}
         javaScriptEnabled
         domStorageEnabled
+        userAgent={mapWebViewUserAgent}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         style={{ flex: 1, backgroundColor: "transparent" }}

@@ -36,32 +36,50 @@ export function BoggleStationPanel({
   const selectedCellSet = new Set(selectedCellPath);
 
   return (
-    <View className="mt-3">
-      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+    <View className="h-full pt-1">
+      <Text className="text-center text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
         Ułóż słowo dotykając litery na planszy • Pozostało prób: {boggleAttemptsLeft}
       </Text>
-      <View className="mt-2 flex-row flex-wrap justify-between gap-y-1.5">
-        {boggleBoardLetters.map((letter, index) => (
-          <Pressable
-            key={`${stationId}-boggle-${index}`}
-            className="h-12 w-[31.5%] items-center justify-center rounded-lg border"
-            style={{
-              borderColor: selectedCellSet.has(index) ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-              backgroundColor: selectedCellSet.has(index) ? "rgba(245, 158, 11, 0.22)" : EXPEDITION_THEME.panelStrong,
-              opacity: isActionDisabled ? 0.55 : 1,
-            }}
-            disabled={isActionDisabled}
-            onPress={() => {
-              onPressBoardCell(index);
-            }}
-          >
-            <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {letter}
-            </Text>
-          </Pressable>
-        ))}
+      <View className="flex-1 items-center justify-center">
+        <View className="mt-2 w-[82%] flex-row flex-wrap justify-between gap-y-1.5">
+          {boggleBoardLetters.map((letter, index) => (
+            <Pressable
+              key={`${stationId}-boggle-${index}`}
+              className="relative h-24 w-[32%] rounded-xl border"
+              style={{
+                borderColor: selectedCellSet.has(index) ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                backgroundColor: selectedCellSet.has(index) ? "rgba(245, 158, 11, 0.22)" : EXPEDITION_THEME.panelStrong,
+                opacity: isActionDisabled ? 0.55 : 1,
+              }}
+              disabled={isActionDisabled}
+              onPress={() => {
+                onPressBoardCell(index);
+              }}
+            >
+              <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
+                <Text
+                  className="text-center font-extrabold"
+                  style={{
+                    color: EXPEDITION_THEME.textPrimary,
+                    fontSize: 26,
+                    lineHeight: 26,
+                    includeFontPadding: false,
+                    textAlignVertical: "center",
+                  }}
+                >
+                  {letter}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+        {boggleResult ? (
+          <Text className="mt-2 text-center text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+            {boggleResult}
+          </Text>
+        ) : null}
       </View>
-      <View className="mt-2 flex-row gap-2">
+      <View className="pb-1 pt-2 flex-row gap-2">
         <TextInput
           className="flex-1 rounded-xl border px-3 py-2 text-sm"
           style={{
@@ -103,11 +121,6 @@ export function BoggleStationPanel({
           <Text className="text-sm font-semibold text-zinc-950">{isSubmittingBoggle ? "..." : "Sprawdź"}</Text>
         </Pressable>
       </View>
-      {boggleResult ? (
-        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-          {boggleResult}
-        </Text>
-      ) : null}
     </View>
   );
 }

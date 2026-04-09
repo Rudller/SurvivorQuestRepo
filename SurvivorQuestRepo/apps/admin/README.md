@@ -46,6 +46,8 @@ If missing, frontend falls back to `http://localhost:3001` in development.
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+NEXT_PUBLIC_MAP_TILE_ATTRIBUTION=&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors
 ```
 
 When switching mode, restart the dev server.

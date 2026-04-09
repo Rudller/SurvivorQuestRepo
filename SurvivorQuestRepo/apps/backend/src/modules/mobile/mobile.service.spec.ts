@@ -331,3 +331,91 @@ describe('MobileService failed task snapshots', () => {
     expect([...failedStationIds]).toEqual([]);
   });
 });
+
+describe('MobileService current realization resolver', () => {
+  function createService() {
+    return new MobileService({} as never, {} as never, {} as never);
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('prefers in-progress realization over planned ones', () => {
+    const service = createService();
+    const now = new Date('2026-04-08T12:00:00.000Z').getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    const result = (service as never).resolveCurrentMobileRealization([
+      {
+        id: 'planned-1',
+        status: 'planned',
+        scheduledAt: '2026-04-08T13:00:00.000Z',
+      },
+      {
+        id: 'in-progress-1',
+        status: 'in-progress',
+        scheduledAt: '2026-04-07T10:00:00.000Z',
+      },
+      {
+        id: 'planned-2',
+        status: 'planned',
+        scheduledAt: '2026-04-08T14:00:00.000Z',
+      },
+    ]);
+
+    expect(result?.id).toBe('in-progress-1');
+  });
+
+  it('selects nearest upcoming planned realization when none is in progress', () => {
+    const service = createService();
+    const now = new Date('2026-04-08T12:00:00.000Z').getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    const result = (service as never).resolveCurrentMobileRealization([
+      {
+        id: 'planned-far-future',
+        status: 'planned',
+        scheduledAt: '2026-04-10T12:00:00.000Z',
+      },
+      {
+        id: 'planned-nearest-upcoming',
+        status: 'planned',
+        scheduledAt: '2026-04-08T13:00:00.000Z',
+      },
+      {
+        id: 'planned-past',
+        status: 'planned',
+        scheduledAt: '2026-04-08T08:00:00.000Z',
+      },
+    ]);
+
+    expect(result?.id).toBe('planned-nearest-upcoming');
+  });
+
+  it('selects latest past planned realization when all planned are in the past', () => {
+    const service = createService();
+    const now = new Date('2026-04-08T12:00:00.000Z').getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    const result = (service as never).resolveCurrentMobileRealization([
+      {
+        id: 'planned-old',
+        status: 'planned',
+        scheduledAt: '2026-04-06T08:00:00.000Z',
+      },
+      {
+        id: 'planned-most-recent-past',
+        status: 'planned',
+        scheduledAt: '2026-04-08T11:00:00.000Z',
+      },
+      {
+        id: 'planned-mid',
+        status: 'planned',
+        scheduledAt: '2026-04-07T09:00:00.000Z',
+      },
+    ]);
+
+    expect(result?.id).toBe('planned-most-recent-past');
+  });
+});

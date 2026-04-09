@@ -49,6 +49,8 @@ export function StationTestMenuOverlay({
   onClose,
   onEnterStation,
   onOpenWelcomeScreen,
+  onPreviewSuccessPopup,
+  onPreviewFailedPopup,
 }: StationTestMenuOverlayProps) {
   if (!visible) {
     return null;
@@ -89,6 +91,26 @@ export function StationTestMenuOverlay({
             Pokaż Welcome Screen
           </Text>
         </Pressable>
+        <View className="mt-2 flex-row gap-2">
+          <Pressable
+            className="flex-1 rounded-xl border px-3 py-2 active:opacity-90"
+            style={{ borderColor: "rgba(16, 185, 129, 0.45)", backgroundColor: "rgba(16, 185, 129, 0.16)" }}
+            onPress={onPreviewSuccessPopup}
+          >
+            <Text className="text-xs font-semibold text-center" style={{ color: "#6ee7b7" }}>
+              Pokaż popup zaliczone
+            </Text>
+          </Pressable>
+          <Pressable
+            className="flex-1 rounded-xl border px-3 py-2 active:opacity-90"
+            style={{ borderColor: "rgba(239, 68, 68, 0.45)", backgroundColor: "rgba(239, 68, 68, 0.16)" }}
+            onPress={onPreviewFailedPopup}
+          >
+            <Text className="text-xs font-semibold text-center" style={{ color: "#fca5a5" }}>
+              Pokaż popup niezaliczone
+            </Text>
+          </Pressable>
+        </View>
 
         <ScrollView className="mt-3" style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
           <View className="gap-2">

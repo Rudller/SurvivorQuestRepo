@@ -40,6 +40,12 @@ type TransientPopup = {
   message: string;
   tone: "error" | "success";
 };
+
+type DebugOutcomePreview = {
+  id: number;
+  variant: "success" | "failed";
+  message: string;
+};
 const POPUP_MIN_DURATION_MS = 6_500;
 const POPUP_MAX_DURATION_MS = 12_000;
 const POPUP_MS_PER_CHAR = 45;
@@ -320,6 +326,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
+  const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
@@ -877,6 +884,31 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     setIsStationTestMenuOpen(false);
   }
 
+  const handlePreviewOutcomePopup = useCallback(
+    (variant: "success" | "failed") => {
+      const previewStationId = stationTestEntries[0]?.stationId ?? null;
+      if (!previewStationId) {
+        setActionError("Brak stanowisk do podglądu popupu.");
+        return;
+      }
+
+      setPendingQuizStartStationId(null);
+      setPendingTimeStartStationId(null);
+      setSelectedStationId(previewStationId);
+      setActiveStationTestId(previewStationId);
+      setIsStationTestMenuOpen(false);
+      setDebugOutcomePreview({
+        id: Date.now(),
+        variant,
+        message:
+          variant === "success"
+            ? "Podgląd popupu zaliczonego zadania."
+            : "Podgląd popupu niezaliczonego zadania.",
+      });
+    },
+    [stationTestEntries],
+  );
+
   const handleStartStationTestTask = useCallback(
     async (stationId: string) => {
       setActionError(null);
@@ -1132,6 +1164,8 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         stations={stationTestEntries}
         onClose={() => setIsStationTestMenuOpen(false)}
         onEnterStation={handleEnterStationTest}
+        onPreviewSuccessPopup={() => handlePreviewOutcomePopup("success")}
+        onPreviewFailedPopup={() => handlePreviewOutcomePopup("failed")}
         onOpenWelcomeScreen={() => {
           setIsStationTestMenuOpen(false);
           setIsWelcomePreviewOpen(true);
@@ -1165,6 +1199,8 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
           });
         }}
         onTimeExpired={handleTimeStationExpired}
+        debugOutcomePreview={debugOutcomePreview}
+        onDebugOutcomePreviewConsumed={() => setDebugOutcomePreview(null)}
       />
 
       <QuizPrestartOverlay

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
+import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import type { OnboardingSession } from "../features/onboarding/model/types";
@@ -223,6 +224,38 @@ export function MobileApp() {
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
 
   useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    let isActive = true;
+    const applyImmersiveMode = async () => {
+      if (!isActive) {
+        return;
+      }
+
+      try {
+        await NavigationBar.setButtonStyleAsync("light");
+        await NavigationBar.setVisibilityAsync("hidden");
+      } catch {
+        // ignore - immersive mode is best effort on Android devices
+      }
+    };
+
+    void applyImmersiveMode();
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void applyImmersiveMode();
+      }
+    });
+
+    return () => {
+      isActive = false;
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     let isActive = true;
 
     const hydrateSession = async () => {
@@ -380,7 +413,7 @@ export function MobileApp() {
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
           </View>
-          <StatusBar style="light" />
+          <StatusBar style="light" hidden />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -407,7 +440,7 @@ export function MobileApp() {
               </View>
             </View>
           </View>
-          <StatusBar style="light" />
+          <StatusBar style="light" hidden />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -450,7 +483,7 @@ export function MobileApp() {
             }}
           />
         ) : null}
-        <StatusBar style="light" />
+        <StatusBar style="light" hidden />
       </SafeAreaView>
     </SafeAreaProvider>
   );

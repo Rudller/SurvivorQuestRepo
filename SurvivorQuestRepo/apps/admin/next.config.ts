@@ -5,6 +5,19 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "..", ".."),
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

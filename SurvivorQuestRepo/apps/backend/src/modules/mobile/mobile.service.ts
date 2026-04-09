@@ -1907,15 +1907,40 @@ export class MobileService {
     );
     if (inProgress) return inProgress;
 
-    const planned = realizations
-      .filter((item) => item.status === 'planned')
-      .sort(
-        (left, right) =>
-          new Date(left.scheduledAt).getTime() -
-          new Date(right.scheduledAt).getTime(),
-      );
+    const planned = realizations.filter((item) => item.status === 'planned');
 
     if (planned.length > 0) {
+      const now = Date.now();
+      let nearestUpcoming: T | null = null;
+      let nearestUpcomingTimestamp = Number.POSITIVE_INFINITY;
+      let latestPast: T | null = null;
+      let latestPastTimestamp = Number.NEGATIVE_INFINITY;
+
+      for (const item of planned) {
+        const timestamp = new Date(item.scheduledAt).getTime();
+        if (!Number.isFinite(timestamp)) {
+          continue;
+        }
+
+        if (timestamp >= now && timestamp < nearestUpcomingTimestamp) {
+          nearestUpcoming = item;
+          nearestUpcomingTimestamp = timestamp;
+        }
+
+        if (timestamp < now && timestamp > latestPastTimestamp) {
+          latestPast = item;
+          latestPastTimestamp = timestamp;
+        }
+      }
+
+      if (nearestUpcoming) {
+        return nearestUpcoming;
+      }
+
+      if (latestPast) {
+        return latestPast;
+      }
+
       return planned[0];
     }
 

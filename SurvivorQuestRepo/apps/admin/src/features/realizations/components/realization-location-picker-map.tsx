@@ -7,6 +7,12 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-lea
 const DEFAULT_CENTER: [number, number] = [52.2297, 21.0122];
 const DEFAULT_ZOOM = 6;
 const SELECTED_ZOOM = 14;
+const OSM_TILE_URL =
+  process.env.NEXT_PUBLIC_MAP_TILE_URL?.trim() ||
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_TILE_ATTRIBUTION =
+  process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION?.trim() ||
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const pinSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44" viewBox="0 0 30 44">
   <path fill="#f59e0b" stroke="#fbbf24" stroke-width="2" d="M15 2c-7 0-12 5.2-12 12 0 10.1 11.1 24.6 11.6 25.2.2.3.5.4.8.4s.6-.1.8-.4C16.9 38.6 28 24.1 28 14c0-6.8-5-12-13-12z"/>
@@ -73,8 +79,8 @@ export function RealizationLocationPickerMap({ latitude, longitude, recenterToke
       <MapClickHandler onPick={onPick} />
       <MapRecenterController latitude={latitude} longitude={longitude} recenterToken={recenterToken} />
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution={OSM_TILE_ATTRIBUTION}
+        url={OSM_TILE_URL}
       />
       {hasCoordinates && (
         <Marker

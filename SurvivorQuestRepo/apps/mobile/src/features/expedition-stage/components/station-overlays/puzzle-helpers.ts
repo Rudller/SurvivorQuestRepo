@@ -432,7 +432,7 @@ export function resolveMatchingPairs(
     );
 
   if (parsedPairs.length >= 2) {
-    return parsedPairs.slice(0, 3);
+    return parsedPairs;
   }
 
   return [

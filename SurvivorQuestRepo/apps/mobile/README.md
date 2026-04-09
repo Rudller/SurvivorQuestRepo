@@ -11,7 +11,10 @@ EXPO_PUBLIC_API_BASE_URL=http://YOUR_PC_LAN_IP:3001
 Example:
 
 ```
-EXPO_PUBLIC_API_BASE_URL=http://192.168.18.34:3001
+EXPO_PUBLIC_API_BASE_URL=http://192.168.18.2:3001
+EXPO_PUBLIC_MAP_WEBVIEW_BASE_URL=https://survivorquest.app
+EXPO_PUBLIC_MAP_WEBVIEW_USER_AGENT=SurvivorQuestMobile/1.0 (+https://survivorquest.app; contact: maps@survivorquest.app)
+EXPO_PUBLIC_MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
 ```
 
 ## 2) Start backend API

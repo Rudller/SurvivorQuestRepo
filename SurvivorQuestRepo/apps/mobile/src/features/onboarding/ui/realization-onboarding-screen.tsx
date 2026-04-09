@@ -134,7 +134,7 @@ type MobileSessionStateResponse = {
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
-const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.34:3001";
+const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.2:3001";
 const PRODUCTION_API_BASE_URL_CANDIDATES = [
   "https://survivorquest.pl/api",
   "https://www.survivorquest.pl/api",
@@ -1291,7 +1291,7 @@ export function RealizationOnboardingScreen({
   async function saveApiServerOverride() {
     const normalized = normalizeApiBaseUrl(apiBaseUrlDraft);
     if (!normalized) {
-      setApiConfigMessage("Podaj poprawny adres serwera, np. http://192.168.18.34:3001.");
+      setApiConfigMessage("Podaj poprawny adres serwera, np. http://192.168.18.2:3001.");
       return;
     }
 
@@ -1585,7 +1585,7 @@ export function RealizationOnboardingScreen({
                         setApiBaseUrlDraft(value);
                         setApiConfigMessage(null);
                       }}
-                      placeholder="http://192.168.18.34:3001"
+                      placeholder="http://192.168.18.2:3001"
                       placeholderTextColor={EXPEDITION_THEME.textSubtle}
                       autoCapitalize="none"
                       autoCorrect={false}

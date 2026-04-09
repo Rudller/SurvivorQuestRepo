@@ -194,17 +194,7 @@ function renderLogDescription(
   return null;
 }
 
-function toLocalDateKey(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+const AUTO_CURRENT_REALIZATION_VALUE = "__auto-current-realization__";
 
 export default function CurrentRealizationPage() {
   const router = useRouter();
@@ -230,7 +220,25 @@ export default function CurrentRealizationPage() {
   } = useGetRealizationsQuery(undefined, {
     skip: !meData,
     pollingInterval: 30_000,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   });
+  const realizationOptions = useMemo(
+    () =>
+      [...(realizations ?? [])].sort(
+        (left, right) =>
+          new Date(left.scheduledAt).getTime() -
+          new Date(right.scheduledAt).getTime(),
+      ),
+    [realizations],
+  );
+  const effectiveSelectedRealizationId =
+    selectedRealizationId !== "current" &&
+    realizationOptions.some(
+      (realization) => realization.id === selectedRealizationId,
+    )
+      ? selectedRealizationId
+      : "current";
 
   const {
     data: overview,
@@ -239,24 +247,20 @@ export default function CurrentRealizationPage() {
     error: overviewError,
     refetch,
   } = useGetCurrentRealizationOverviewQuery(
-    selectedRealizationId === "current" ? undefined : { realizationId: selectedRealizationId },
+    effectiveSelectedRealizationId === "current"
+      ? undefined
+      : { realizationId: effectiveSelectedRealizationId },
     {
-    skip: !meData,
-    pollingInterval: 10_000,
+      skip: !meData,
+      pollingInterval: 10_000,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
     },
   );
   const selectedRealizationArg =
-    selectedRealizationId === "current" ? undefined : { realizationId: selectedRealizationId };
-  const overviewDayKey = overview ? toLocalDateKey(overview.realization.scheduledAt) : "";
-  const sameDayRealizations = useMemo(() => {
-    if (!realizations || !overviewDayKey) {
-      return [];
-    }
-
-    return realizations
-      .filter((realization) => toLocalDateKey(realization.scheduledAt) === overviewDayKey)
-      .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime());
-  }, [realizations, overviewDayKey]);
+    effectiveSelectedRealizationId === "current"
+      ? undefined
+      : { realizationId: effectiveSelectedRealizationId };
 
   const topTeams = useMemo(
     () => [...(overview?.teams ?? [])].sort((left, right) => right.points - left.points),
@@ -288,21 +292,6 @@ export default function CurrentRealizationPage() {
       router.replace("/login");
     }
   }, [isMeError, meError, router]);
-
-  useEffect(() => {
-    if (selectedRealizationId === "current") {
-      return;
-    }
-
-    if (sameDayRealizations.length === 0) {
-      setSelectedRealizationId("current");
-      return;
-    }
-
-    if (!sameDayRealizations.some((realization) => realization.id === selectedRealizationId)) {
-      setSelectedRealizationId("current");
-    }
-  }, [sameDayRealizations, selectedRealizationId]);
 
   if (isMeLoading) {
     return <main className="p-8">Sprawdzanie sesji...</main>;
@@ -343,28 +332,36 @@ export default function CurrentRealizationPage() {
                 Status realizacji: {overview.realization.status}
               </p>
             )}
-            {overview && sameDayRealizations.length > 1 ? (
+            {overview && realizationOptions.length > 0 ? (
               <div className="mt-3 max-w-96 space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-zinc-500">
-                  Wybór realizacji z tego dnia
+                  Wybór realizacji
                 </label>
                 <select
-                  value={selectedRealizationId === "current" ? overview.realization.id : selectedRealizationId}
+                  value={
+                    effectiveSelectedRealizationId === "current"
+                      ? AUTO_CURRENT_REALIZATION_VALUE
+                      : effectiveSelectedRealizationId
+                  }
                   onChange={(event) => {
                     setIsActionsMenuOpen(false);
                     setIsQrPanelOpen(false);
-                    setSelectedRealizationId(event.target.value);
+                    setSelectedRealizationId(
+                      event.target.value === AUTO_CURRENT_REALIZATION_VALUE
+                        ? "current"
+                        : event.target.value,
+                    );
                   }}
                   disabled={isOverviewLoading || isRealizationsLoading}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-60"
                 >
-                  {sameDayRealizations.map((realization) => (
+                  <option value={AUTO_CURRENT_REALIZATION_VALUE}>
+                    Aktualna (auto)
+                  </option>
+                  {realizationOptions.map((realization) => (
                     <option key={realization.id} value={realization.id}>
                       {realization.companyName} •{" "}
-                      {new Date(realization.scheduledAt).toLocaleTimeString("pl-PL", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
+                      {new Date(realization.scheduledAt).toLocaleString("pl-PL")}{" "}
                       • {realization.status}
                     </option>
                   ))}
