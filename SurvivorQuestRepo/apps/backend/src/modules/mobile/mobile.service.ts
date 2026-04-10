@@ -62,6 +62,11 @@ const LOCATION_MAX_SPEED_MPS = 120;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
 
+type MobileSessionEndReason =
+  | 'time-expired'
+  | 'all-tasks-completed'
+  | 'realization-finished';
+
 @Injectable()
 export class MobileService {
   constructor(
@@ -311,6 +316,12 @@ export class MobileService {
       realization.scheduledAt,
       realization.durationMinutes,
     );
+    const sessionEndState = await this.resolveSessionEndState({
+      realization,
+      teamId: team.id,
+      normalizedRealizationStatus,
+    });
+    const leaderboard = await this.buildRealizationLeaderboard(realization.id);
 
     if (normalizedRealizationStatus === 'planned') {
       await this.emitTeamReadyForStartIfNeeded({
@@ -374,6 +385,8 @@ export class MobileService {
       },
       customizationOccupancy,
       tasks,
+      endState: sessionEndState,
+      leaderboard,
       meta: {
         sessionExpiresAt: assignment.expiresAt.toISOString(),
         eventLogCount,
@@ -828,6 +841,10 @@ export class MobileService {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
 
     if (!input.stationId?.trim()) {
       throw new BadRequestException('Invalid payload');
@@ -918,6 +935,10 @@ export class MobileService {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
 
     if (!input.stationId?.trim()) {
       throw new BadRequestException('Invalid payload');
@@ -1076,6 +1097,10 @@ export class MobileService {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
 
     if (!input.stationId?.trim()) {
       throw new BadRequestException('Invalid payload');
@@ -1241,6 +1266,10 @@ export class MobileService {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
     const normalizedToken = input.token?.trim();
     if (!normalizedToken) {
       throw new BadRequestException('Invalid payload');
@@ -2149,6 +2178,193 @@ export class MobileService {
 
     const ratio = Math.max(0, 1 - elapsedSeconds / safeLimit);
     return Math.max(0, Math.round(safeBasePoints * ratio));
+  }
+
+  private async assertGameplayAllowed(input: {
+    realization: {
+      id: string;
+      status: RealizationStatus;
+      scheduledAt: string;
+      durationMinutes: number;
+      stationIds: string[];
+      updatedAt: string;
+    };
+    teamId: string;
+  }) {
+    const endState = await this.resolveSessionEndState({
+      realization: input.realization,
+      teamId: input.teamId,
+    });
+
+    if (!endState.isEnded) {
+      return;
+    }
+
+    if (endState.reason === 'time-expired') {
+      throw new ConflictException('Realization time is over');
+    }
+
+    if (endState.reason === 'all-tasks-completed') {
+      throw new ConflictException('All tasks are already completed for this team');
+    }
+
+    throw new ConflictException('Realization has been finished');
+  }
+
+  private async resolveSessionEndState(input: {
+    realization: {
+      id: string;
+      status: RealizationStatus;
+      scheduledAt: string;
+      durationMinutes: number;
+      stationIds: string[];
+      updatedAt: string;
+    };
+    teamId: string;
+    normalizedRealizationStatus?: RealizationStatus;
+  }) {
+    const normalizedRealizationStatus =
+      input.normalizedRealizationStatus ||
+      this.normalizeStatus(
+        input.realization.status,
+        input.realization.scheduledAt,
+        input.realization.durationMinutes,
+      );
+
+    if (normalizedRealizationStatus === 'done') {
+      return {
+        isEnded: true,
+        reason: 'realization-finished' as MobileSessionEndReason,
+        endedAt: input.realization.updatedAt,
+      };
+    }
+
+    const deadlineAt = this.resolveRealizationDeadlineAtIso(
+      input.realization.scheduledAt,
+      input.realization.durationMinutes,
+    );
+    if (deadlineAt && new Date(deadlineAt).getTime() <= Date.now()) {
+      return {
+        isEnded: true,
+        reason: 'time-expired' as MobileSessionEndReason,
+        endedAt: deadlineAt,
+      };
+    }
+
+    const stationIds = input.realization.stationIds;
+    if (stationIds.length > 0) {
+      const [doneTasksCount, latestDoneTask] = await Promise.all([
+        this.prisma.teamTaskProgress.count({
+          where: {
+            realizationId: input.realization.id,
+            teamId: input.teamId,
+            stationId: { in: stationIds },
+            status: TaskStatus.DONE,
+          },
+        }),
+        this.prisma.teamTaskProgress.findFirst({
+          where: {
+            realizationId: input.realization.id,
+            teamId: input.teamId,
+            stationId: { in: stationIds },
+            status: TaskStatus.DONE,
+          },
+          orderBy: { finishedAt: 'desc' },
+          select: { finishedAt: true },
+        }),
+      ]);
+
+      if (doneTasksCount >= stationIds.length) {
+        return {
+          isEnded: true,
+          reason: 'all-tasks-completed' as MobileSessionEndReason,
+          endedAt: latestDoneTask?.finishedAt?.toISOString() || new Date().toISOString(),
+        };
+      }
+    }
+
+    return {
+      isEnded: false,
+      reason: null,
+      endedAt: null,
+    } as const;
+  }
+
+  private resolveRealizationDeadlineAtIso(
+    scheduledAt: string,
+    durationMinutes: number,
+  ) {
+    const scheduledAtMs = new Date(scheduledAt).getTime();
+    if (!Number.isFinite(scheduledAtMs)) {
+      return null;
+    }
+
+    const safeDurationMinutes = Math.max(1, Math.round(durationMinutes));
+    const deadlineMs = scheduledAtMs + safeDurationMinutes * MINUTES_TO_MS;
+    return new Date(deadlineMs).toISOString();
+  }
+
+  private async buildRealizationLeaderboard(realizationId: string) {
+    const [teams, assignments] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { realizationId },
+        orderBy: [{ points: 'desc' }, { slotNumber: 'asc' }],
+        select: {
+          id: true,
+          slotNumber: true,
+          name: true,
+          color: true,
+          badgeKey: true,
+          badgeImageUrl: true,
+          points: true,
+          taskDone: true,
+          taskTotal: true,
+          status: true,
+        },
+      }),
+      this.prisma.teamAssignment.findMany({
+        where: { realizationId },
+        select: { teamId: true },
+      }),
+    ]);
+
+    const assignedTeamIds = new Set(assignments.map((item) => item.teamId));
+    const participatingTeams = teams.filter((team) => {
+      const hasName = Boolean(team.name?.trim());
+      const hasProgress = team.taskDone > 0 || team.points > 0;
+      const hasDeviceAssignment = assignedTeamIds.has(team.id);
+      const hasRuntimeStatus = team.status !== TeamStatus.UNASSIGNED;
+      return hasName || hasProgress || hasDeviceAssignment || hasRuntimeStatus;
+    });
+
+    return {
+      updatedAt: new Date().toISOString(),
+      entries: participatingTeams.map((team, index) => {
+        const progressDone = Math.max(0, team.taskDone);
+        const progressTotal = Math.max(progressDone, team.taskTotal);
+        const progressPercent =
+          progressTotal > 0
+            ? Math.max(
+                0,
+                Math.min(100, Math.round((progressDone / progressTotal) * 100)),
+              )
+            : 0;
+
+        return {
+          position: index + 1,
+          teamId: team.id,
+          slotNumber: team.slotNumber,
+          name: team.name?.trim() || `Drużyna ${team.slotNumber}`,
+          color: normalizeTeamColor(team.color),
+          badgeKey: normalizeTeamBadgeKey(team.badgeKey),
+          badgeImageUrl: team.badgeImageUrl || null,
+          points: team.points,
+          progressDone,
+          progressTotal,
+          progressPercent,
+        };
+      }),
+    };
   }
 
   private async getCustomizationOccupancyByRealization(realizationId: string) {

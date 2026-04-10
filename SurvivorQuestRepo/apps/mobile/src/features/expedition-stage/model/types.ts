@@ -14,6 +14,25 @@ export type PlayerLocation = MapCoordinate & {
   at: string;
 };
 
+export type ExpeditionSessionEndReason =
+  | "time-expired"
+  | "all-tasks-completed"
+  | "realization-finished";
+
+export type ExpeditionLeaderboardEntry = {
+  position: number;
+  teamId: string;
+  slotNumber: number;
+  name: string;
+  color: string | null;
+  badgeKey: string | null;
+  badgeImageUrl: string | null;
+  points: number;
+  progressDone: number;
+  progressTotal: number;
+  progressPercent: number;
+};
+
 export type ExpeditionSessionState = {
   realization: {
     id: string;
@@ -45,6 +64,15 @@ export type ExpeditionSessionState = {
     lastLocation: PlayerLocation | null;
   };
   tasks: ExpeditionTask[];
+  endState: {
+    isEnded: boolean;
+    reason: ExpeditionSessionEndReason | null;
+    endedAt: string | null;
+  };
+  leaderboard: {
+    updatedAt: string;
+    entries: ExpeditionLeaderboardEntry[];
+  };
   meta: {
     sessionExpiresAt: string;
     eventLogCount: number;
@@ -184,6 +212,15 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       startedAt: null,
       finishedAt: null,
     })),
+    endState: {
+      isEnded: false,
+      reason: null,
+      endedAt: null,
+    },
+    leaderboard: {
+      updatedAt: new Date().toISOString(),
+      entries: [],
+    },
     meta: {
       sessionExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
       eventLogCount: 0,

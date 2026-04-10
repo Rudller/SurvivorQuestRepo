@@ -49,6 +49,7 @@ export function StationTestMenuOverlay({
   onClose,
   onEnterStation,
   onOpenWelcomeScreen,
+  onOpenFinishScreen,
   onPreviewSuccessPopup,
   onPreviewFailedPopup,
 }: StationTestMenuOverlayProps) {
@@ -89,6 +90,15 @@ export function StationTestMenuOverlay({
         >
           <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
             Pokaż Welcome Screen
+          </Text>
+        </Pressable>
+        <Pressable
+          className="mt-2 rounded-xl border px-3 py-2 active:opacity-90"
+          style={{ borderColor: "rgba(56, 189, 248, 0.45)", backgroundColor: "rgba(8, 47, 73, 0.35)" }}
+          onPress={onOpenFinishScreen}
+        >
+          <Text className="text-xs font-semibold text-center" style={{ color: "#7dd3fc" }}>
+            Pokaż ekran końcowy
           </Text>
         </Pressable>
         <View className="mt-2 flex-row gap-2">

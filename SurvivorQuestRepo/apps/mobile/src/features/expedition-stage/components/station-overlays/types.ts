@@ -1,4 +1,4 @@
-import type { ExpeditionTaskStatus } from "../../model/types";
+import type { ExpeditionLeaderboardEntry, ExpeditionSessionEndReason, ExpeditionTaskStatus } from "../../model/types";
 
 export type StationTestType =
   | "quiz"
@@ -43,6 +43,7 @@ export type StationTestMenuOverlayProps = {
   onClose: () => void;
   onEnterStation: (stationId: string) => void;
   onOpenWelcomeScreen: () => void;
+  onOpenFinishScreen: () => void;
   onPreviewSuccessPopup: () => void;
   onPreviewFailedPopup: () => void;
 };
@@ -75,6 +76,16 @@ export type QuizPrestartOverlayProps = {
 export type WelcomePreviewOverlayProps = {
   visible: boolean;
   introText?: string;
+  onClose: () => void;
+};
+
+export type RealizationFinishOverlayProps = {
+  visible: boolean;
+  reason: ExpeditionSessionEndReason | "manual-preview" | null;
+  endedAt: string | null;
+  leaderboardEntries: ExpeditionLeaderboardEntry[];
+  currentTeamId: string;
+  canClose: boolean;
   onClose: () => void;
 };
 

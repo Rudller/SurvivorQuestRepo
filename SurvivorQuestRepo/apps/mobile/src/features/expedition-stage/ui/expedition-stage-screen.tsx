@@ -11,6 +11,7 @@ import { ExpeditionMap } from "../components/expedition-map";
 import { QrScannerOverlay } from "../components/qr-scanner-overlay";
 import {
   QuizPrestartOverlay,
+  RealizationFinishOverlay,
   StationPreviewOverlay,
   StationTestMenuOverlay,
   WelcomePreviewOverlay,
@@ -269,6 +270,16 @@ function formatTimeLimitLabel(timeLimitSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function resolveRealizationDeadlineIso(scheduledAt: string, durationMinutes: number) {
+  const scheduledAtMs = new Date(scheduledAt).getTime();
+  if (!Number.isFinite(scheduledAtMs)) {
+    return null;
+  }
+
+  const safeDurationMinutes = Math.max(1, Math.round(durationMinutes) || 1);
+  return new Date(scheduledAtMs + safeDurationMinutes * 60_000).toISOString();
+}
+
 function isInvalidCompletionCodeError(value: string | null) {
   const normalized = value?.trim().toLowerCase() ?? "";
   if (!normalized) {
@@ -320,6 +331,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   const [isQrResolving, setIsQrResolving] = useState(false);
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [isWelcomePreviewOpen, setIsWelcomePreviewOpen] = useState(false);
+  const [isFinishPreviewOpen, setIsFinishPreviewOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
   const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
   const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
@@ -554,6 +566,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     showTransientPopup(actionMessage, "success");
   }, [actionMessage, showTransientPopup]);
 
+
   const mappableStationIds = useMemo(
     () => stationIds.filter((stationId) => Boolean(realStationCoordinates[stationId])),
     [realStationCoordinates, stationIds],
@@ -781,8 +794,37 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
     sessionState.realization.scheduledAt,
     sessionState.realization.durationMinutes,
   );
+  const localDeadlineAt = useMemo(
+    () => resolveRealizationDeadlineIso(sessionState.realization.scheduledAt, sessionState.realization.durationMinutes),
+    [sessionState.realization.durationMinutes, sessionState.realization.scheduledAt],
+  );
+  const hasAllTasksResolved = taskTotal > 0 && completedTasks >= taskTotal;
+  const localEndReason =
+    countdown.isCompleted
+      ? ("time-expired" as const)
+      : hasAllTasksResolved
+        ? ("all-tasks-completed" as const)
+        : null;
+  const isSessionEnded = sessionState.endState.isEnded || Boolean(localEndReason);
+  const sessionEndReason = sessionState.endState.reason ?? localEndReason;
+  const sessionEndedAt =
+    sessionState.endState.endedAt ??
+    (localEndReason === "time-expired" ? localDeadlineAt : null);
+
+  useEffect(() => {
+    if (!isSessionEnded) {
+      return;
+    }
+
+    setIsFinishPreviewOpen(false);
+  }, [isSessionEnded]);
 
   async function handleOpenQrScanner() {
+    if (isSessionEnded) {
+      setActionError("Realizacja została zakończona. Skanowanie QR jest zablokowane.");
+      return;
+    }
+
     setActionError(null);
     setActionMessage(null);
     setIsScannerOpening(true);
@@ -808,6 +850,11 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
 
   const handleQrDetected = useCallback(
     async (rawValue: string) => {
+      if (isSessionEnded) {
+        setActionError("Realizacja została zakończona. Dalsze zadania są zablokowane.");
+        return;
+      }
+
       if (isQrResolving) {
         return;
       }
@@ -852,7 +899,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         setIsQrResolving(false);
       }
     },
-    [isQrResolving, resolveStationQrToken],
+    [isQrResolving, isSessionEnded, resolveStationQrToken],
   );
 
   function handleSelectStationFromMap(stationId: string) {
@@ -860,6 +907,12 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   }
 
   function handleEnterStationTest(stationId: string) {
+    if (isSessionEnded) {
+      setActionError("Realizacja została zakończona. Nie można otwierać stanowisk.");
+      setIsStationTestMenuOpen(false);
+      return;
+    }
+
     const selectedStation = stationTestEntries.find((item) => item.stationId === stationId) ?? null;
     if (stationIds.includes(stationId)) {
       setSelectedStationId(stationId);
@@ -911,6 +964,10 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
 
   const handleStartStationTestTask = useCallback(
     async (stationId: string) => {
+      if (isSessionEnded) {
+        return "Realizacja została zakończona. Nie można uruchamiać nowych zadań.";
+      }
+
       setActionError(null);
       setActionMessage(null);
       const startedAtIso = new Date().toISOString();
@@ -938,7 +995,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
       setActionMessage("Licznik zadania uruchomiony.");
       return null;
     },
-    [startStationTask],
+    [isSessionEnded, startStationTask],
   );
 
   const handleCompleteStationTestTask = useCallback(
@@ -1136,6 +1193,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
             progressLabel={`${completedTasks}/${taskTotal}`}
             onOpenQrScanner={() => void handleOpenQrScanner()}
             isScannerOpening={isScannerOpening}
+            isInteractionDisabled={isSessionEnded}
           />
         </View>
       </View>
@@ -1164,6 +1222,10 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         stations={stationTestEntries}
         onClose={() => setIsStationTestMenuOpen(false)}
         onEnterStation={handleEnterStationTest}
+        onOpenFinishScreen={() => {
+          setIsStationTestMenuOpen(false);
+          setIsFinishPreviewOpen(true);
+        }}
         onPreviewSuccessPopup={() => handlePreviewOutcomePopup("success")}
         onPreviewFailedPopup={() => handlePreviewOutcomePopup("failed")}
         onOpenWelcomeScreen={() => {
@@ -1176,6 +1238,16 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         visible={isWelcomePreviewOpen}
         introText={sessionState.realization.introText ?? session.realization?.introText}
         onClose={() => setIsWelcomePreviewOpen(false)}
+      />
+
+      <RealizationFinishOverlay
+        visible={isSessionEnded || isFinishPreviewOpen}
+        reason={isSessionEnded ? sessionEndReason : "manual-preview"}
+        endedAt={isSessionEnded ? sessionEndedAt : null}
+        leaderboardEntries={sessionState.leaderboard.entries}
+        currentTeamId={sessionState.team.id}
+        canClose={!isSessionEnded && isFinishPreviewOpen}
+        onClose={() => setIsFinishPreviewOpen(false)}
       />
 
       <StationPreviewOverlay

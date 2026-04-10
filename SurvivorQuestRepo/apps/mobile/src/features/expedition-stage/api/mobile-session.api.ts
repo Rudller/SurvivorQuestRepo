@@ -57,6 +57,14 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
   return "quiz";
 }
 
+function normalizeEndReason(value: unknown): ExpeditionSessionState["endState"]["reason"] {
+  if (value === "time-expired" || value === "all-tasks-completed" || value === "realization-finished") {
+    return value;
+  }
+
+  return null;
+}
+
 function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["quiz"] | undefined {
   if (!value) {
     return undefined;
@@ -115,6 +123,8 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
   const scenario = asRecord(realization.scenario);
   const team = asRecord(source.team);
   const meta = asRecord(source.meta);
+  const endState = asRecord(source.endState ?? source.end_state ?? meta.endState ?? meta.end_state);
+  const leaderboard = asRecord(source.leaderboard ?? meta.leaderboard);
   const stationIdsFromPayload = [
     ...asArray(realization.stationIds ?? realization.station_ids),
     ...asArray(scenario.stationIds ?? scenario.station_ids),
@@ -263,6 +273,55 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       lastLocation: normalizePlayerLocation(team.lastLocation ?? team.last_location),
     },
     tasks: mergedTasks,
+    endState: {
+      isEnded: asBoolean(endState.isEnded ?? endState.is_ended, false),
+      reason: normalizeEndReason(endState.reason),
+      endedAt: (() => {
+        const value = asString(endState.endedAt ?? endState.ended_at).trim();
+        return value.length > 0 ? value : null;
+      })(),
+    },
+    leaderboard: {
+      updatedAt: asString(leaderboard.updatedAt ?? leaderboard.updated_at, new Date().toISOString()),
+      entries: asArray(leaderboard.entries).map((entry, index) => {
+        const parsed = asRecord(entry);
+        const position = Math.max(1, Math.round(asNumber(parsed.position, index + 1)));
+        const slotNumber = Math.max(1, Math.round(asNumber(parsed.slotNumber ?? parsed.slot_number, 1)));
+        const teamId = asString(parsed.teamId ?? parsed.team_id, `team-slot-${slotNumber}`).trim();
+        const teamName = asString(parsed.name, `Drużyna ${slotNumber}`).trim();
+
+        return {
+          position,
+          teamId: teamId || `team-slot-${slotNumber}`,
+          slotNumber,
+          name: teamName || `Drużyna ${slotNumber}`,
+          color: (() => {
+            const value = asString(parsed.color).trim();
+            return value.length > 0 ? value : null;
+          })(),
+          badgeKey: (() => {
+            const value = asString(parsed.badgeKey ?? parsed.badge_key).trim();
+            return value.length > 0 ? value : null;
+          })(),
+          badgeImageUrl: (() => {
+            const value = asString(parsed.badgeImageUrl ?? parsed.badge_image_url).trim();
+            return value.length > 0 ? value : null;
+          })(),
+          points: Math.max(0, Math.round(asNumber(parsed.points, 0))),
+          progressDone: Math.max(0, Math.round(asNumber(parsed.progressDone ?? parsed.progress_done, 0))),
+          progressTotal: Math.max(
+            0,
+            Math.round(
+              asNumber(
+                parsed.progressTotal ?? parsed.progress_total,
+                asNumber(parsed.progressDone ?? parsed.progress_done, 0),
+              ),
+            ),
+          ),
+          progressPercent: Math.max(0, Math.min(100, Math.round(asNumber(parsed.progressPercent ?? parsed.progress_percent, 0)))),
+        };
+      }),
+    },
     meta: {
       sessionExpiresAt: asString(meta.sessionExpiresAt ?? meta.session_expires_at, ""),
       eventLogCount: Math.max(0, Math.round(asNumber(meta.eventLogCount ?? meta.event_log_count, 0))),

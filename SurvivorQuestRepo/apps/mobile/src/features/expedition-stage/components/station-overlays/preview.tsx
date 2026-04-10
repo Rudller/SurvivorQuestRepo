@@ -87,9 +87,10 @@ function normalizeCarouselIndex(index: number, length: number) {
 
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
+const TIMEOUT_POPUP_AUTO_CLOSE_SECONDS = 10;
 
 type QuizOutcomePopup = {
-  variant: "success" | "failed";
+  variant: "success" | "failed" | "timeout";
   message: string;
 };
 
@@ -177,6 +178,7 @@ export function StationPreviewOverlay({
   const [displayedStation, setDisplayedStation] = useState<StationTestViewModel | null>(stationProp);
   const [isOverlayMounted, setIsOverlayMounted] = useState(Boolean(stationProp));
   const [quizOutcomePopup, setQuizOutcomePopup] = useState<QuizOutcomePopup | null>(null);
+  const [timeoutPopupSecondsLeft, setTimeoutPopupSecondsLeft] = useState<number | null>(null);
   const overlaySlideAnimation = useRef(new Animated.Value(stationProp ? 1 : 0)).current;
   const quizFeedbackAnimation = useRef(new Animated.Value(0)).current;
   const timerPulseAnimation = useRef(new Animated.Value(0)).current;
@@ -191,6 +193,7 @@ export function StationPreviewOverlay({
   const memoryHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const simonHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wordleRevealTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const timeoutPopupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutPopupShownRef = useRef(false);
   const quizOutcomeActionRef = useRef<(() => void) | null>(null);
   const quizOptions = useMemo(
@@ -244,23 +247,34 @@ export function StationPreviewOverlay({
       }),
     [clearWordleRevealTimeouts],
   );
+  const clearTimeoutPopupCountdown = useCallback(() => {
+    if (timeoutPopupIntervalRef.current) {
+      clearInterval(timeoutPopupIntervalRef.current);
+      timeoutPopupIntervalRef.current = null;
+    }
+    setTimeoutPopupSecondsLeft(null);
+  }, []);
   const showQuizOutcomePopup = useCallback(
     (variant: QuizOutcomePopup["variant"], message: string, onDismiss?: () => void) => {
       Keyboard.dismiss();
+      if (variant !== "timeout") {
+        clearTimeoutPopupCountdown();
+      }
       quizOutcomeActionRef.current = onDismiss ?? onClose;
       setQuizOutcomePopup({
         variant,
         message,
       });
     },
-    [onClose],
+    [clearTimeoutPopupCountdown, onClose],
   );
   const closeQuizOutcomePopup = useCallback(() => {
     const onDismiss = quizOutcomeActionRef.current;
     quizOutcomeActionRef.current = null;
+    clearTimeoutPopupCountdown();
     setQuizOutcomePopup(null);
     onDismiss?.();
-  }, []);
+  }, [clearTimeoutPopupCountdown]);
   const unloadAudioSound = useCallback(async () => {
     const activePlayer = audioPlayerRef.current;
     audioPlayerRef.current = null;
@@ -451,6 +465,7 @@ export function StationPreviewOverlay({
     setIsSubmittingCode(false);
     setIsCodeInputInvalid(false);
     setIsCodeInputSuccess(false);
+    clearTimeoutPopupCountdown();
     setQuizOutcomePopup(null);
     setNowMs(Date.now());
     quizFeedbackAnimation.setValue(0);
@@ -478,7 +493,15 @@ export function StationPreviewOverlay({
     clearWordleRevealTimeouts();
     timeoutPopupShownRef.current = false;
     quizOutcomeActionRef.current = null;
-  }, [clearWordleRevealTimeouts, codeInputShakeAnimation, displayedStation?.stationId, matchingCheckPulseAnimation, quizFeedbackAnimation, timerPulseAnimation]);
+  }, [
+    clearTimeoutPopupCountdown,
+    clearWordleRevealTimeouts,
+    codeInputShakeAnimation,
+    displayedStation?.stationId,
+    matchingCheckPulseAnimation,
+    quizFeedbackAnimation,
+    timerPulseAnimation,
+  ]);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -548,6 +571,40 @@ export function StationPreviewOverlay({
   ]);
 
   useEffect(() => {
+    if (quizOutcomePopup?.variant !== "timeout") {
+      clearTimeoutPopupCountdown();
+      return;
+    }
+
+    if (timeoutPopupIntervalRef.current) {
+      clearInterval(timeoutPopupIntervalRef.current);
+    }
+    setTimeoutPopupSecondsLeft(TIMEOUT_POPUP_AUTO_CLOSE_SECONDS);
+    timeoutPopupIntervalRef.current = setInterval(() => {
+      setTimeoutPopupSecondsLeft((current) => {
+        if (current === null) {
+          return null;
+        }
+        return Math.max(0, current - 1);
+      });
+    }, 1000);
+
+    return () => {
+      if (timeoutPopupIntervalRef.current) {
+        clearInterval(timeoutPopupIntervalRef.current);
+        timeoutPopupIntervalRef.current = null;
+      }
+    };
+  }, [clearTimeoutPopupCountdown, quizOutcomePopup?.variant]);
+
+  useEffect(() => {
+    if (quizOutcomePopup?.variant !== "timeout" || timeoutPopupSecondsLeft !== 0) {
+      return;
+    }
+    closeQuizOutcomePopup();
+  }, [closeQuizOutcomePopup, quizOutcomePopup?.variant, timeoutPopupSecondsLeft]);
+
+  useEffect(() => {
     if (!displayedStation || displayedStation.stationType !== "simon") {
       if (simonHintTimeoutRef.current) {
         clearTimeout(simonHintTimeoutRef.current);
@@ -585,10 +642,11 @@ export function StationPreviewOverlay({
         simonHintTimeoutRef.current = null;
       }
       clearWordleRevealTimeouts();
+      clearTimeoutPopupCountdown();
       void unloadAudioSound();
       quizOutcomeActionRef.current = null;
     };
-  }, [clearWordleRevealTimeouts, unloadAudioSound]);
+  }, [clearTimeoutPopupCountdown, clearWordleRevealTimeouts, unloadAudioSound]);
 
   useEffect(() => {
     if (
@@ -714,7 +772,7 @@ export function StationPreviewOverlay({
 
     const isQuizAnswerPending =
       (displayedStation.stationType === "quiz" || displayedStation.stationType === "audio-quiz") &&
-      (selectedQuizOption !== null || isSubmittingQuizAnswer);
+      isSubmittingQuizAnswer;
     const isWordlePending = displayedStation.stationType === "wordle" && isSubmittingWordleGuess;
     const isHangmanPending = displayedStation.stationType === "hangman" && isSubmittingHangmanGuess;
     const isMastermindPending = displayedStation.stationType === "mastermind" && isSubmittingMastermindGuess;
@@ -769,13 +827,8 @@ export function StationPreviewOverlay({
                           ? "Czas na mini Sudoku minął. Zadanie nie zostało zaliczone."
                           : displayedStation.stationType === "matching"
                             ? "Czas na łączenie par minął. Zadanie nie zostało zaliczone."
-          : "Czas na quiz minął. Zadanie nie zostało zaliczone.";
-    Alert.alert("Czas minął", timeoutMessage, [
-      {
-        text: "Wróć do mapy",
-        onPress: onClose,
-      },
-    ]);
+                            : "Czas na quiz minął. Zadanie nie zostało zaliczone.";
+    showQuizOutcomePopup("timeout", timeoutMessage);
   }, [
     displayedStation,
     isSubmittingAnagram,
@@ -790,10 +843,9 @@ export function StationPreviewOverlay({
     isSubmittingRebus,
     isSubmittingSimon,
     isSubmittingWordleGuess,
-    onClose,
     onQuizFailed,
     remainingTimeSeconds,
-    selectedQuizOption,
+    showQuizOutcomePopup,
   ]);
 
   useEffect(() => {
@@ -820,18 +872,16 @@ export function StationPreviewOverlay({
 
     timeoutPopupShownRef.current = true;
     onTimeExpired?.(displayedStation.stationId);
-    Alert.alert("Czas minął", "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.", [
-      {
-        text: "Wróć do mapy",
-        onPress: onClose,
-      },
-    ]);
+    showQuizOutcomePopup(
+      "timeout",
+      "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.",
+    );
   }, [
     displayedStation,
     isSubmittingCode,
-    onClose,
     onTimeExpired,
     remainingTimeSeconds,
+    showQuizOutcomePopup,
   ]);
 
   const wordleSecretForInputReset =
@@ -2056,11 +2106,22 @@ export function StationPreviewOverlay({
       },
     ],
   } as const;
-  const quizOutcomeTitle = quizOutcomePopup?.variant === "success" ? "Zaliczono" : "Nie zaliczono";
+  const isTimeoutOutcomePopup = quizOutcomePopup?.variant === "timeout";
+  const quizOutcomeTitle = (() => {
+    if (quizOutcomePopup?.variant === "success") {
+      return "Zaliczono";
+    }
+    if (isTimeoutOutcomePopup) {
+      return "Czas minął";
+    }
+    return "Nie zaliczono";
+  })();
   const quizOutcomeAccent =
     quizOutcomePopup?.variant === "success"
       ? { border: "rgba(16, 185, 129, 0.55)", bg: "rgba(16, 185, 129, 0.18)", text: "#6ee7b7", icon: "✓" }
-      : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
+      : isTimeoutOutcomePopup
+        ? { border: "rgba(245, 158, 11, 0.55)", bg: "rgba(245, 158, 11, 0.16)", text: "#fcd34d", icon: "⏳" }
+        : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
   const stationMediaRendererByType: Partial<Record<StationTestType, () => ReactNode>> = {
     wordle: () => (
       <WordleMediaBoard
@@ -2621,12 +2682,25 @@ export function StationPreviewOverlay({
           style={{ zIndex: 80, backgroundColor: "rgba(15, 25, 20, 0.6)" }}
         >
           <View
-            className="w-full max-w-md rounded-3xl border px-6 py-6"
+            className="relative w-full max-w-md rounded-3xl border px-6 py-6"
             style={{
               borderColor: quizOutcomeAccent.border,
               backgroundColor: EXPEDITION_THEME.panel,
             }}
           >
+            {isTimeoutOutcomePopup && timeoutPopupSecondsLeft !== null ? (
+              <View
+                className="absolute right-4 top-4 rounded-lg border px-2 py-1"
+                style={{
+                  borderColor: "rgba(245, 158, 11, 0.45)",
+                  backgroundColor: "rgba(245, 158, 11, 0.16)",
+                }}
+              >
+                <Text className="text-xs font-bold" style={{ color: "#fcd34d" }}>
+                  {`${timeoutPopupSecondsLeft}s`}
+                </Text>
+              </View>
+            ) : null}
             <View
               className="mb-4 w-full items-center justify-center rounded-2xl border py-4"
               style={{
@@ -2646,11 +2720,18 @@ export function StationPreviewOverlay({
             </Text>
             <Pressable
               className="mt-6 h-12 w-full items-center justify-center rounded-xl px-4 py-3 active:opacity-90"
-              style={{ backgroundColor: quizOutcomePopup.variant === "success" ? "#059669" : "#dc2626" }}
+              style={{
+                backgroundColor:
+                  quizOutcomePopup.variant === "success"
+                    ? "#059669"
+                    : isTimeoutOutcomePopup
+                      ? "#b45309"
+                      : "#dc2626",
+              }}
               onPress={closeQuizOutcomePopup}
             >
               <Text className="text-base font-semibold" style={{ color: "#f8fafc" }}>
-                Wróć do mapy
+                {isTimeoutOutcomePopup ? "Wróć do mapy teraz" : "Wróć do mapy"}
               </Text>
             </Pressable>
           </View>
