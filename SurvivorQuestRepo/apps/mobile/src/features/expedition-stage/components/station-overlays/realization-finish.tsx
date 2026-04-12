@@ -88,9 +88,15 @@ type TeamBannerCardProps = {
   entry: ExpeditionLeaderboardEntry;
   isCurrentTeam: boolean;
   compact?: boolean;
+  showMedal?: boolean;
 };
 
-function TeamBannerCard({ entry, isCurrentTeam, compact = false }: TeamBannerCardProps) {
+function TeamBannerCard({
+  entry,
+  isCurrentTeam,
+  compact = false,
+  showMedal = true,
+}: TeamBannerCardProps) {
   const palette = resolveTeamBannerPalette(entry);
   const badgeLabel = entry.badgeKey?.trim() || "🏁";
   const medal = resolvePositionMedal(entry.position);
@@ -126,7 +132,7 @@ function TeamBannerCard({ entry, isCurrentTeam, compact = false }: TeamBannerCar
 
         <View className="flex-1">
           <View className="flex-row items-center gap-1">
-            <Text className={compact ? "text-sm" : "text-base"}>{medal}</Text>
+            {showMedal ? <Text className={compact ? "text-sm" : "text-base"}>{medal}</Text> : null}
             <Text className={compact ? "text-[13px] font-extrabold" : "text-[15px] font-extrabold"} style={{ color: palette.textColor }} numberOfLines={1}>
               {entry.name}
             </Text>
@@ -230,6 +236,7 @@ export function RealizationFinishOverlay({
   endedAt,
   leaderboardEntries,
   currentTeamId,
+  showLeaderboard,
   canClose,
   onClose,
 }: RealizationFinishOverlayProps) {
@@ -255,10 +262,10 @@ export function RealizationFinishOverlay({
   const currentTeamEntry = sortedEntries.find((entry) => entry.teamId === currentTeamId) ?? null;
 
   useEffect(() => {
-    if (!visible) {
+    if (!visible || !showLeaderboard) {
       setIsFullLeaderboardVisible(false);
     }
-  }, [visible]);
+  }, [showLeaderboard, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -298,20 +305,22 @@ export function RealizationFinishOverlay({
           padding: isTablet ? 28 : 18,
         }}
       >
-        <Pressable
-          className="absolute right-4 top-4 rounded-lg border px-3 py-1.5 active:opacity-90"
-          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(31, 51, 42, 0.82)" }}
-          onPress={() => setIsFullLeaderboardVisible(true)}
-        >
-          <Text
-            className={isTablet ? "text-xs font-semibold uppercase tracking-wide" : "text-[11px] font-semibold uppercase tracking-wide"}
-            style={{ color: EXPEDITION_THEME.textPrimary }}
+        {showLeaderboard ? (
+          <Pressable
+            className="absolute right-4 top-4 rounded-lg border px-3 py-1.5 active:opacity-90"
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(31, 51, 42, 0.82)" }}
+            onPress={() => setIsFullLeaderboardVisible(true)}
           >
-            Pełna tabela
-          </Text>
-        </Pressable>
+            <Text
+              className={isTablet ? "text-xs font-semibold uppercase tracking-wide" : "text-[11px] font-semibold uppercase tracking-wide"}
+              style={{ color: EXPEDITION_THEME.textPrimary }}
+            >
+              Pełna tabela
+            </Text>
+          </Pressable>
+        ) : null}
 
-        <View className="flex-row items-center gap-2 pr-36">
+        <View className={`flex-row items-center gap-2 ${showLeaderboard ? "pr-36" : ""}`}>
           <Text className={isTablet ? "text-2xl" : "text-xl"}>🏆</Text>
           <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
             Koniec realizacji
@@ -330,24 +339,28 @@ export function RealizationFinishOverlay({
           </Text>
         ) : null}
 
-        <View className="mt-4">
-          <Text className={isTablet ? "text-base font-semibold" : "text-sm font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-            Top 3 drużyny
-          </Text>
-          <View className="mt-2 gap-2">
-            {podiumEntries.map((entry, index) => (
-              <TeamRankRow
-                key={`podium-${index + 1}-${entry?.teamId ?? "empty"}`}
-                position={index + 1}
-                entry={entry}
-                isCurrentTeam={Boolean(entry && entry.teamId === currentTeamId)}
-                compact={!isTablet}
-              />
-            ))}
+        {showLeaderboard ? (
+          <View className="mt-4">
+            <Text className={isTablet ? "text-base font-semibold" : "text-sm font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
+              Top 3 drużyny
+            </Text>
+            <View className="mt-2 gap-2">
+              {podiumEntries.map((entry, index) => (
+                <TeamRankRow
+                  key={`podium-${index + 1}-${entry?.teamId ?? "empty"}`}
+                  position={index + 1}
+                  entry={entry}
+                  isCurrentTeam={Boolean(entry && entry.teamId === currentTeamId)}
+                  compact={!isTablet}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
-        <View className="mt-4 h-px" style={{ backgroundColor: EXPEDITION_THEME.border, opacity: 0.7 }} />
+        {showLeaderboard ? (
+          <View className="mt-4 h-px" style={{ backgroundColor: EXPEDITION_THEME.border, opacity: 0.7 }} />
+        ) : null}
 
         <View className="mt-4">
           <Text className="text-xs uppercase tracking-widest" style={{ color: "#6ee7b7" }}>
@@ -355,16 +368,25 @@ export function RealizationFinishOverlay({
           </Text>
           {currentTeamEntry ? (
             <View className="mt-2">
-              <TeamRankRow
-                position={currentTeamEntry.position}
-                entry={currentTeamEntry}
-                isCurrentTeam
-                compact={!isTablet}
-              />
+              {showLeaderboard ? (
+                <TeamRankRow
+                  position={currentTeamEntry.position}
+                  entry={currentTeamEntry}
+                  isCurrentTeam
+                  compact={!isTablet}
+                />
+              ) : (
+                <TeamBannerCard
+                  entry={currentTeamEntry}
+                  isCurrentTeam
+                  compact={!isTablet}
+                  showMedal={false}
+                />
+              )}
             </View>
           ) : (
             <Text className={isTablet ? "mt-2 text-sm" : "mt-2 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
-              Wasza drużyna nie jest jeszcze widoczna w rankingu.
+              Dane Waszej drużyny nie są jeszcze dostępne.
             </Text>
           )}
         </View>
@@ -391,7 +413,7 @@ export function RealizationFinishOverlay({
         ) : null}
       </Animated.View>
 
-      {isFullLeaderboardVisible ? (
+      {showLeaderboard && isFullLeaderboardVisible ? (
         <View
           className="absolute inset-0 items-center justify-center px-4"
           style={{ backgroundColor: "rgba(4, 10, 8, 0.82)" }}

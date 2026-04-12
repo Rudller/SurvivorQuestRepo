@@ -64,17 +64,25 @@ export function useExpeditionSession(session: OnboardingSession) {
         session.apiBaseUrl?.trim() || "",
         session.sessionToken?.trim() || "",
         session.realization?.id || session.realizationId || "",
+        session.selectedLanguage ?? session.realization?.selectedLanguage ?? session.realization?.language ?? "",
         String(session.team.slotNumber ?? ""),
       ].join("|"),
     [
       session.apiBaseUrl,
       session.realization?.id,
+      session.realization?.language,
+      session.realization?.selectedLanguage,
       session.realizationId,
+      session.selectedLanguage,
       session.sessionToken,
       session.team.slotNumber,
     ],
   );
   const stableSession = useMemo(() => session, [sessionIdentityKey]);
+  const selectedLanguage =
+    stableSession.selectedLanguage ??
+    stableSession.realization?.selectedLanguage ??
+    stableSession.realization?.language;
   const offlineMode = useMemo(() => isOfflineSession(stableSession), [stableSession]);
   const [sessionState, setSessionState] = useState<ExpeditionSessionState>(() => buildInitialSessionState(session));
   const [isLoading, setIsLoading] = useState(!offlineMode);
@@ -111,7 +119,11 @@ export function useExpeditionSession(session: OnboardingSession) {
     setIsRefreshing(true);
 
     try {
-      const nextState = await fetchMobileSessionState(apiBaseUrl, session.sessionToken);
+      const nextState = await fetchMobileSessionState(
+        apiBaseUrl,
+        session.sessionToken,
+        selectedLanguage,
+      );
       setSessionState(nextState);
       setErrorMessage(null);
       setIsSessionInvalid(false);
@@ -129,7 +141,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [offlineMode, session.apiBaseUrl, session.sessionToken]);
+  }, [offlineMode, selectedLanguage, session.apiBaseUrl, session.sessionToken]);
 
   useEffect(() => {
     if (offlineMode) {
@@ -548,6 +560,7 @@ export function useExpeditionSession(session: OnboardingSession) {
         const response = await postMobileResolveStationQr(apiBaseUrl, {
           sessionToken: session.sessionToken,
           token: normalizedToken,
+          selectedLanguage,
         });
         await refreshSessionState();
         return response;
@@ -555,7 +568,13 @@ export function useExpeditionSession(session: OnboardingSession) {
         return getApiErrorMessage(error, "Nie udało się zweryfikować kodu QR.");
       }
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+    [
+      offlineMode,
+      refreshSessionState,
+      selectedLanguage,
+      session.apiBaseUrl,
+      session.sessionToken,
+    ],
   );
 
   return {

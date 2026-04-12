@@ -16,7 +16,15 @@ import {
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
-import type { OnboardingSession, Screen, TeamColor } from "../model/types";
+import {
+  getRealizationLanguageLabel,
+  isRealizationLanguage,
+  type OnboardingSession,
+  type RealizationLanguage,
+  type RealizationLanguageOption,
+  type Screen,
+  type TeamColor,
+} from "../model/types";
 import { TeamCustomizationStep } from "./team-customization-step";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
@@ -26,6 +34,10 @@ type ApiServerPreset = "local" | "production" | "custom";
 type MobileBootstrapRealization = {
   id: string;
   companyName: string;
+  language?: RealizationLanguage;
+  customLanguage?: string;
+  selectedLanguage?: RealizationLanguage;
+  availableLanguages?: RealizationLanguageOption[];
   introText?: string;
   gameRules?: string;
   status: "planned" | "in-progress" | "done";
@@ -33,6 +45,7 @@ type MobileBootstrapRealization = {
   durationMinutes: number;
   joinCode: string;
   locationRequired: boolean;
+  showLeaderboard?: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -227,6 +240,73 @@ function normalizeRealizationStatus(value: unknown): "planned" | "in-progress" |
   }
 
   return "planned";
+}
+
+function normalizeLanguageOption(
+  value: unknown,
+  customLanguage?: string,
+): RealizationLanguageOption | null {
+  const source = typeof value === "string" ? { value } : (value as Record<string, unknown> | null);
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const languageValue =
+    typeof source.value === "string" && isRealizationLanguage(source.value.toLowerCase())
+      ? (source.value.toLowerCase() as RealizationLanguage)
+      : typeof source.language === "string" && isRealizationLanguage(source.language.toLowerCase())
+        ? (source.language.toLowerCase() as RealizationLanguage)
+        : null;
+
+  if (!languageValue) {
+    return null;
+  }
+
+  const label =
+    typeof source.label === "string" && source.label.trim().length > 0
+      ? source.label.trim()
+      : languageValue === "other"
+        ? customLanguage?.trim() || getRealizationLanguageLabel(languageValue)
+        : getRealizationLanguageLabel(languageValue);
+
+  return {
+    value: languageValue,
+    label,
+  };
+}
+
+function normalizeLanguageOptions(
+  options: unknown,
+  fallbackLanguage?: RealizationLanguage,
+  customLanguage?: string,
+) {
+  const parsed = Array.isArray(options)
+    ? options
+        .map((item) => normalizeLanguageOption(item, customLanguage))
+        .filter((item): item is RealizationLanguageOption => Boolean(item))
+    : [];
+  const deduplicated = parsed.filter(
+    (item, index, list) =>
+      list.findIndex((candidate) => candidate.value === item.value) === index,
+  );
+
+  if (deduplicated.length > 0) {
+    return deduplicated;
+  }
+
+  if (!fallbackLanguage) {
+    return [] as RealizationLanguageOption[];
+  }
+
+  return [
+    {
+      value: fallbackLanguage,
+      label:
+        fallbackLanguage === "other"
+          ? customLanguage?.trim() || getRealizationLanguageLabel(fallbackLanguage)
+          : getRealizationLanguageLabel(fallbackLanguage),
+    },
+  ] satisfies RealizationLanguageOption[];
 }
 
 function resolveBannerTextColor(hexColor: string) {
@@ -534,6 +614,7 @@ export function RealizationOnboardingScreen({
     const candidates = resolveApiBaseUrlCandidates();
     return candidates.length > 0 ? candidates[0] : null;
   });
+  const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
 
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("Drużyna");
@@ -569,6 +650,29 @@ export function RealizationOnboardingScreen({
           ? "#71717a"
           : EXPEDITION_THEME.danger;
 
+  const activeLanguageOptions = useMemo(
+    () => activeRealization?.availableLanguages ?? [],
+    [activeRealization?.availableLanguages],
+  );
+
+  const selectedLanguageLabel =
+    activeLanguageOptions.find((option) => option.value === selectedLanguage)?.label ??
+    (selectedLanguage === "other"
+      ? activeRealization?.customLanguage?.trim() || getRealizationLanguageLabel(selectedLanguage)
+      : getRealizationLanguageLabel(selectedLanguage));
+
+  const buildSessionStatePath = useCallback(
+    (token: string) => {
+      const encodedToken = encodeURIComponent(token);
+      const languageSuffix =
+        selectedLanguage && isRealizationLanguage(selectedLanguage)
+          ? `&selectedLanguage=${encodeURIComponent(selectedLanguage)}`
+          : "";
+      return `/api/mobile/session/state?sessionToken=${encodedToken}${languageSuffix}`;
+    },
+    [selectedLanguage],
+  );
+
   const refreshCustomizationState = useCallback(async () => {
     if (!apiBaseUrl || !sessionToken) {
       return;
@@ -576,7 +680,7 @@ export function RealizationOnboardingScreen({
 
     const state = await requestMobileApi<MobileSessionStateResponse>(
       apiBaseUrl,
-      `/api/mobile/session/state?sessionToken=${encodeURIComponent(sessionToken)}`,
+      buildSessionStatePath(sessionToken),
     );
 
     setCustomizationOccupancy(
@@ -595,7 +699,7 @@ export function RealizationOnboardingScreen({
         setTeamIcon(state.team.badgeKey);
       }
     }
-  }, [apiBaseUrl, selectedTeam, sessionToken]);
+  }, [apiBaseUrl, buildSessionStatePath, selectedTeam, sessionToken]);
 
   useEffect(() => {
     let isActive = true;
@@ -785,16 +889,26 @@ export function RealizationOnboardingScreen({
   function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
     const normalizedStatus = normalizeRealizationStatus(activeRealization?.status);
     const awaitingAdminStart = normalizedStatus === "planned" && Boolean(apiBaseUrl);
+    const effectiveSelectedLanguage =
+      selectedLanguage ??
+      activeRealization?.selectedLanguage ??
+      activeRealization?.language ??
+      "polish";
 
     onComplete?.({
       realizationId: activeRealization?.id ?? null,
       realizationCode,
       sessionToken: nextSessionToken,
       apiBaseUrl,
+      selectedLanguage: effectiveSelectedLanguage,
       realization: activeRealization
         ? {
             id: activeRealization.id,
             companyName: activeRealization.companyName,
+            language: activeRealization.language,
+            customLanguage: activeRealization.customLanguage?.trim() || undefined,
+            selectedLanguage: effectiveSelectedLanguage,
+            availableLanguages: activeRealization.availableLanguages ?? [],
             status: normalizedStatus,
             scheduledAt: activeRealization.scheduledAt,
             durationMinutes: normalizeDurationMinutes(activeRealization.durationMinutes),
@@ -802,6 +916,7 @@ export function RealizationOnboardingScreen({
             teamCount: activeRealization.teamCount,
             stationIds: activeRealization.stationIds,
             locationRequired: activeRealization.locationRequired,
+            showLeaderboard: activeRealization.showLeaderboard !== false,
             introText: activeRealization.introText?.trim() || undefined,
             gameRules: activeRealization.gameRules?.trim() || undefined,
           }
@@ -896,6 +1011,7 @@ export function RealizationOnboardingScreen({
     setSetupMessage(null);
     setSaveMessage(null);
     setActiveRealization(null);
+    setSelectedLanguage("polish");
     setApiBaseUrl(null);
     setSessionToken(null);
     setSelectedTeam(null);
@@ -957,16 +1073,41 @@ export function RealizationOnboardingScreen({
         throw new Error("Nie znaleziono realizacji dla podanego kodu.");
       }
 
+      const normalizedLanguage =
+        typeof realization.language === "string" && isRealizationLanguage(realization.language.toLowerCase())
+          ? (realization.language.toLowerCase() as RealizationLanguage)
+          : undefined;
+      const normalizedCustomLanguage = realization.customLanguage?.trim() || undefined;
+      const normalizedAvailableLanguages = normalizeLanguageOptions(
+        realization.availableLanguages,
+        normalizedLanguage,
+        normalizedCustomLanguage,
+      );
+      const normalizedSelectedLanguage =
+        (typeof realization.selectedLanguage === "string" &&
+        isRealizationLanguage(realization.selectedLanguage.toLowerCase())
+          ? (realization.selectedLanguage.toLowerCase() as RealizationLanguage)
+          : undefined) ??
+        normalizedLanguage ??
+        normalizedAvailableLanguages[0]?.value ??
+        "polish";
+
       const normalizedRealization = {
         ...realization,
+        language: normalizedLanguage,
+        customLanguage: normalizedCustomLanguage,
+        selectedLanguage: normalizedSelectedLanguage,
+        availableLanguages: normalizedAvailableLanguages,
         status: normalizeRealizationStatus(realization.status),
         introText: realization.introText?.trim() || undefined,
         gameRules: realization.gameRules?.trim() || undefined,
         durationMinutes: normalizeDurationMinutes(realization.durationMinutes),
+        showLeaderboard: realization.showLeaderboard !== false,
       };
 
       setApiBaseUrl(resolvedBaseUrl);
       setActiveRealization(normalizedRealization);
+      setSelectedLanguage(normalizedRealization.selectedLanguage);
       setSessionToken(join.sessionToken);
       setSelectedTeam(join.team.slotNumber);
       setTeamName(join.team.name?.trim() || `Drużyna ${join.team.slotNumber}`);
@@ -1771,6 +1912,43 @@ export function RealizationOnboardingScreen({
                   </>
                 )}
               </View>
+
+              {activeLanguageOptions.length > 0 && (
+                <View
+                  className="mt-3 rounded-2xl border px-4 py-4"
+                  style={{
+                    borderColor: EXPEDITION_THEME.border,
+                    backgroundColor: EXPEDITION_THEME.panelMuted,
+                  }}
+                >
+                  <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                    Język treści gry
+                  </Text>
+                  <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+                    Wybrany: {selectedLanguageLabel}
+                  </Text>
+                  <View className="mt-2 flex-row flex-wrap gap-2">
+                    {activeLanguageOptions.map((option) => {
+                      const isActive = option.value === selectedLanguage;
+                      return (
+                        <Pressable
+                          key={`language-${option.value}`}
+                          className="rounded-xl border px-3 py-2 active:opacity-90"
+                          style={{
+                            borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                            backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
+                          }}
+                          onPress={() => setSelectedLanguage(option.value)}
+                        >
+                          <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               <Pressable
                 className="mt-3 rounded-2xl border px-3 py-3 active:opacity-90"

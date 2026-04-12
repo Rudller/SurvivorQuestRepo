@@ -25,7 +25,7 @@ import {
   RealizationService,
   type RealizationStatus,
 } from '../realization/realization.service';
-import { StationService } from '../station/station.service';
+import { StationService, type StationEntity } from '../station/station.service';
 import {
   buildDeterministicStationQrNonce,
   buildStationQrEntryUrl,
@@ -38,6 +38,10 @@ import {
   resolveStationQrTtlSeconds,
   toStationQrRejectedMessage,
 } from './domain/mobile-station.helpers';
+import {
+  resolveLocalizedStationPresentation,
+  resolveRealizationLanguageContext,
+} from './domain/mobile-language.helpers';
 import {
   parseIsoOrNow,
   parseOptionalNumberInRange,
@@ -82,25 +86,37 @@ export class MobileService {
       serverTime: new Date().toISOString(),
       teamColors: TEAM_COLORS,
       badgeKeys: BADGE_KEYS,
-      realizations: realizations.map((realization) => ({
-        id: realization.id,
-        companyName: realization.companyName,
-        introText: realization.introText,
-        gameRules: realization.gameRules,
-        status: this.normalizeStatus(
-          realization.status,
-          realization.scheduledAt,
-          realization.durationMinutes,
-        ),
-        scheduledAt: realization.scheduledAt,
-        durationMinutes: realization.durationMinutes,
-        joinCode: realization.joinCode,
-        locationRequired: realization.locationRequired,
-        teamCount: realization.teamCount,
-        stationIds: realization.stationIds,
-        createdAt: realization.createdAt,
-        updatedAt: realization.updatedAt,
-      })),
+      realizations: realizations.map((realization) => {
+        const languageContext = resolveRealizationLanguageContext({
+          language: realization.language,
+          customLanguage: realization.customLanguage,
+        });
+
+        return {
+          id: realization.id,
+          companyName: realization.companyName,
+          language: languageContext.baseLanguage,
+          customLanguage: languageContext.customLanguage,
+          selectedLanguage: languageContext.selectedLanguage,
+          availableLanguages: languageContext.availableLanguageOptions,
+          introText: realization.introText,
+          gameRules: realization.gameRules,
+          status: this.normalizeStatus(
+            realization.status,
+            realization.scheduledAt,
+            realization.durationMinutes,
+          ),
+          scheduledAt: realization.scheduledAt,
+          durationMinutes: realization.durationMinutes,
+          joinCode: realization.joinCode,
+          locationRequired: realization.locationRequired,
+          showLeaderboard: realization.showLeaderboard,
+          teamCount: realization.teamCount,
+          stationIds: realization.stationIds,
+          createdAt: realization.createdAt,
+          updatedAt: realization.updatedAt,
+        };
+      }),
     };
   }
 
@@ -275,9 +291,14 @@ export class MobileService {
     };
   }
 
-  async getMobileSessionState(sessionToken: string) {
+  async getMobileSessionState(sessionToken: string, selectedLanguage?: string) {
     const { assignment, team, realization } =
       await this.requireSession(sessionToken);
+    const languageContext = resolveRealizationLanguageContext({
+      language: realization.language,
+      customLanguage: realization.customLanguage,
+      selectedLanguage,
+    });
     const taskProgress = await this.prisma.teamTaskProgress.findMany({
       where: {
         realizationId: realization.id,
@@ -346,33 +367,19 @@ export class MobileService {
         teamCount: realization.teamCount,
         peopleCount: realization.peopleCount,
         positionsCount: realization.positionsCount,
+        language: languageContext.baseLanguage,
+        customLanguage: languageContext.customLanguage,
+        selectedLanguage: languageContext.selectedLanguage,
+        availableLanguages: languageContext.availableLanguageOptions,
         instructors: realization.instructors,
         status: normalizedRealizationStatus,
         locationRequired: realization.locationRequired,
+        showLeaderboard: realization.showLeaderboard,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
-        stations: realization.scenarioStations.map((station) => ({
-          id: station.id,
-          name: station.name,
-          type: station.type,
-          description: station.description,
-          imageUrl: station.imageUrl,
-          points: station.points,
-          timeLimitSeconds: station.timeLimitSeconds,
-          completionCodeInputMode: resolveCompletionCodeInputMode(
-            station.completionCode,
-          ),
-          quiz:
-            station.quiz && Array.isArray(station.quiz.answers)
-              ? {
-                  question: station.quiz.question,
-                  answers: station.quiz.answers,
-                  correctAnswerIndex: station.quiz.correctAnswerIndex,
-                }
-              : undefined,
-          latitude: station.latitude,
-          longitude: station.longitude,
-        })),
+        stations: realization.scenarioStations.map((station) =>
+          this.toMobileStationPayload(station, languageContext),
+        ),
       },
       team: {
         id: team.id,
@@ -1262,10 +1269,19 @@ export class MobileService {
     };
   }
 
-  async resolveMobileStationQr(input: { sessionToken: string; token: string }) {
+  async resolveMobileStationQr(input: {
+    sessionToken: string;
+    token: string;
+    selectedLanguage?: string;
+  }) {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
     );
+    const languageContext = resolveRealizationLanguageContext({
+      language: realization.language,
+      customLanguage: realization.customLanguage,
+      selectedLanguage: input.selectedLanguage,
+    });
     await this.assertGameplayAllowed({
       realization,
       teamId: team.id,
@@ -1373,28 +1389,7 @@ export class MobileService {
 
     return {
       realizationId: realization.id,
-      station: {
-        id: station.id,
-        name: station.name,
-        type: station.type,
-        description: station.description,
-        imageUrl: station.imageUrl,
-        points: station.points,
-        timeLimitSeconds: station.timeLimitSeconds,
-        completionCodeInputMode: resolveCompletionCodeInputMode(
-          station.completionCode,
-        ),
-        quiz:
-          station.quiz && Array.isArray(station.quiz.answers)
-            ? {
-                question: station.quiz.question,
-                answers: station.quiz.answers,
-                correctAnswerIndex: station.quiz.correctAnswerIndex,
-              }
-            : undefined,
-        latitude: station.latitude,
-        longitude: station.longitude,
-      },
+      station: this.toMobileStationPayload(station, languageContext),
       task: {
         stationId: station.id,
         status:
@@ -1548,6 +1543,7 @@ export class MobileService {
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
+        showLeaderboard: realization.showLeaderboard,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
         stationIds: realization.stationIds,
@@ -1901,6 +1897,7 @@ export class MobileService {
       select: {
         id: true,
         locationRequired: true,
+        showLeaderboard: true,
       },
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
@@ -1918,8 +1915,11 @@ export class MobileService {
       ),
       scheduledAt: item.scheduledAt,
       durationMinutes: item.durationMinutes,
+      language: item.language,
+      customLanguage: item.customLanguage,
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
+      showLeaderboard: rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
       joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
@@ -2082,6 +2082,39 @@ export class MobileService {
       assignment,
       team: assignment.team,
       realization,
+    };
+  }
+
+  private toMobileStationPayload(
+    station: StationEntity,
+    languageContext: ReturnType<typeof resolveRealizationLanguageContext>,
+  ) {
+    const localized = resolveLocalizedStationPresentation(
+      station,
+      languageContext,
+    );
+
+    return {
+      id: station.id,
+      name: localized.name,
+      type: station.type,
+      description: localized.description,
+      imageUrl: station.imageUrl,
+      points: station.points,
+      timeLimitSeconds: station.timeLimitSeconds,
+      completionCodeInputMode: resolveCompletionCodeInputMode(
+        station.completionCode,
+      ),
+      quiz:
+        localized.quiz && Array.isArray(localized.quiz.answers)
+          ? {
+              question: localized.quiz.question,
+              answers: localized.quiz.answers,
+              correctAnswerIndex: localized.quiz.correctAnswerIndex,
+            }
+          : undefined,
+      latitude: station.latitude,
+      longitude: station.longitude,
     };
   }
 

@@ -79,6 +79,7 @@ type StartTaskPayload = {
 type ResolveStationQrPayload = {
   sessionToken?: string;
   token?: string;
+  selectedLanguage?: string;
 };
 
 @Controller(['mobile', 'api/mobile'])
@@ -101,8 +102,14 @@ export class MobileController {
   }
 
   @Get('session/state')
-  async getMobileSessionState(@Query('sessionToken') sessionToken?: string) {
-    return this.mobileService.getMobileSessionState(sessionToken || '');
+  async getMobileSessionState(
+    @Query('sessionToken') sessionToken?: string,
+    @Query('selectedLanguage') selectedLanguage?: string,
+  ) {
+    return this.mobileService.getMobileSessionState(
+      sessionToken || '',
+      selectedLanguage,
+    );
   }
 
   @Post('team/claim')
@@ -192,6 +199,7 @@ export class MobileController {
     return this.mobileService.resolveMobileStationQr({
       sessionToken: payload.sessionToken || '',
       token: payload.token || '',
+      selectedLanguage: payload.selectedLanguage,
     });
   }
 

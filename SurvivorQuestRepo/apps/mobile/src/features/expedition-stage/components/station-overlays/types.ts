@@ -85,6 +85,7 @@ export type RealizationFinishOverlayProps = {
   endedAt: string | null;
   leaderboardEntries: ExpeditionLeaderboardEntry[];
   currentTeamId: string;
+  showLeaderboard: boolean;
   canClose: boolean;
   onClose: () => void;
 };

@@ -83,6 +83,7 @@ type RealizationDto = {
   positionsCount: number;
   durationMinutes?: number;
   locationRequired?: boolean;
+  showLeaderboard?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -110,6 +111,7 @@ type CreateRealizationPayload = {
   peopleCount: number;
   positionsCount: number;
   durationMinutes: number;
+  showLeaderboard: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -137,6 +139,7 @@ type UpdateRealizationPayload = {
   peopleCount: number;
   positionsCount: number;
   durationMinutes: number;
+  showLeaderboard: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -267,6 +270,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
         ? Math.round(dto.durationMinutes)
         : 120,
     locationRequired: typeof dto.locationRequired === "boolean" ? dto.locationRequired : false,
+    showLeaderboard: typeof dto.showLeaderboard === "boolean" ? dto.showLeaderboard : true,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,

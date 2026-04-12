@@ -5,6 +5,12 @@ import type {
   ExpeditionTaskStatus,
   PlayerLocation,
 } from "../model/types";
+import {
+  getRealizationLanguageLabel,
+  isRealizationLanguage,
+  type RealizationLanguage,
+  type RealizationLanguageOption,
+} from "../../onboarding/model/types";
 
 type UnknownRecord = Record<string, unknown>;
 type MobileApiError = { message?: string };
@@ -65,6 +71,54 @@ function normalizeEndReason(value: unknown): ExpeditionSessionState["endState"][
   return null;
 }
 
+function normalizeRealizationLanguage(value: unknown): RealizationLanguage | undefined {
+  const normalized = asString(value).trim().toLowerCase();
+  return isRealizationLanguage(normalized) ? normalized : undefined;
+}
+
+function normalizeRealizationLanguageOptions(
+  value: unknown,
+  fallbackLanguage?: RealizationLanguage,
+  customLanguage?: string,
+) {
+  const parsed = asArray(value)
+    .map((item) => {
+      const source = asRecord(item);
+      const language = normalizeRealizationLanguage(source.value ?? source.language ?? item);
+      if (!language) {
+        return null;
+      }
+
+      const label = asString(source.label).trim();
+      return {
+        value: language,
+        label:
+          language === "other"
+            ? label || customLanguage?.trim() || getRealizationLanguageLabel(language)
+            : label || getRealizationLanguageLabel(language),
+      } satisfies RealizationLanguageOption;
+    })
+    .filter((item): item is RealizationLanguageOption => Boolean(item));
+
+  if (parsed.length > 0) {
+    return parsed;
+  }
+
+  if (!fallbackLanguage) {
+    return [] as RealizationLanguageOption[];
+  }
+
+  return [
+    {
+      value: fallbackLanguage,
+      label:
+        fallbackLanguage === "other"
+          ? customLanguage?.trim() || getRealizationLanguageLabel(fallbackLanguage)
+          : getRealizationLanguageLabel(fallbackLanguage),
+    },
+  ] satisfies RealizationLanguageOption[];
+}
+
 function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["quiz"] | undefined {
   if (!value) {
     return undefined;
@@ -120,6 +174,28 @@ function normalizePlayerLocation(value: unknown): PlayerLocation | null {
 function normalizeSessionState(raw: unknown): ExpeditionSessionState {
   const source = asRecord(raw);
   const realization = asRecord(source.realization);
+  const realizationLanguage = normalizeRealizationLanguage(
+    realization.language,
+  );
+  const realizationCustomLanguage =
+    asString(realization.customLanguage ?? realization.custom_language).trim() ||
+    undefined;
+  const availableLanguages = normalizeRealizationLanguageOptions(
+    realization.availableLanguages ?? realization.available_languages,
+    realizationLanguage,
+    realizationCustomLanguage,
+  );
+  const selectedLanguageFromApi = normalizeRealizationLanguage(
+    realization.selectedLanguage ?? realization.selected_language,
+  );
+  const selectedLanguage =
+    (selectedLanguageFromApi &&
+      availableLanguages.some((option) => option.value === selectedLanguageFromApi) &&
+      selectedLanguageFromApi) ||
+    (realizationLanguage &&
+      availableLanguages.some((option) => option.value === realizationLanguage) &&
+      realizationLanguage) ||
+    availableLanguages[0]?.value;
   const scenario = asRecord(realization.scenario);
   const team = asRecord(source.team);
   const meta = asRecord(source.meta);
@@ -249,6 +325,10 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       contactEmail: asString(realization.contactEmail ?? realization.contact_email) || undefined,
       logoUrl: asString(realization.logoUrl ?? realization.logo_url) || undefined,
       type: asString(realization.type) || undefined,
+      language: realizationLanguage,
+      customLanguage: realizationCustomLanguage,
+      selectedLanguage,
+      availableLanguages,
       teamCount: Math.max(0, Math.round(asNumber(realization.teamCount ?? realization.team_count, 0))) || undefined,
       peopleCount: Math.max(0, Math.round(asNumber(realization.peopleCount ?? realization.people_count, 0))) || undefined,
       positionsCount:
@@ -258,6 +338,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         .filter((value) => value.trim().length > 0),
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
+      showLeaderboard: asBoolean(realization.showLeaderboard ?? realization.show_leaderboard, true),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
        durationMinutes:
          Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,
@@ -369,7 +450,11 @@ export function isSessionTokenInvalidError(error: unknown) {
   );
 }
 
-export async function fetchMobileSessionState(apiBaseUrl: string, sessionToken: string) {
+export async function fetchMobileSessionState(
+  apiBaseUrl: string,
+  sessionToken: string,
+  selectedLanguage?: RealizationLanguage,
+) {
   const trimmedToken = sessionToken.trim();
 
   if (!trimmedToken) {
@@ -377,7 +462,14 @@ export async function fetchMobileSessionState(apiBaseUrl: string, sessionToken: 
   }
 
   const encodedToken = encodeURIComponent(trimmedToken);
-  const result = await requestMobileApi<unknown>(apiBaseUrl, `/api/mobile/session/state?sessionToken=${encodedToken}`);
+  const languageSuffix =
+    selectedLanguage && isRealizationLanguage(selectedLanguage)
+      ? `&selectedLanguage=${encodeURIComponent(selectedLanguage)}`
+      : "";
+  const result = await requestMobileApi<unknown>(
+    apiBaseUrl,
+    `/api/mobile/session/state?sessionToken=${encodedToken}${languageSuffix}`,
+  );
   return normalizeSessionState(result);
 }
 
@@ -496,6 +588,7 @@ export async function postMobileResolveStationQr(
   payload: {
     sessionToken: string;
     token: string;
+    selectedLanguage?: RealizationLanguage;
   },
 ) {
   return requestMobileApi<{
@@ -549,6 +642,7 @@ export async function postMobileResolveStationQr(
     body: JSON.stringify({
       sessionToken: payload.sessionToken,
       token: payload.token,
+      selectedLanguage: payload.selectedLanguage,
     }),
   });
 }

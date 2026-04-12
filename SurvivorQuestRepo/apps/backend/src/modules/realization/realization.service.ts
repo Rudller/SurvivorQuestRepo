@@ -126,6 +126,7 @@ export class RealizationService {
         ),
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
+        showLeaderboard: validated.showLeaderboard,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -233,6 +234,7 @@ export class RealizationService {
         peopleCount: validated.peopleCount,
         positionsCount: finalStations.length,
         durationMinutes: validated.durationMinutes,
+        showLeaderboard: validated.showLeaderboard,
         status: toPrismaRealizationStatus(
           resolveRealizationStatus(
             validated.status,

@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
-import type { OnboardingSession } from "../../onboarding/model/types";
+import {
+  getRealizationLanguageLabel,
+  type OnboardingSession,
+  type RealizationLanguage,
+  type RealizationLanguageOption,
+} from "../../onboarding/model/types";
 import {
   getApiErrorMessage,
 } from "../api/mobile-session.api";
@@ -32,6 +37,7 @@ import {
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
   onSessionInvalid?: (reason?: string) => void;
+  onSelectedLanguageChange?: (language: RealizationLanguage) => void;
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
@@ -307,7 +313,11 @@ function extractStationQrToken(rawValue: string) {
   return normalized;
 }
 
-export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionStageScreenProps) {
+export function ExpeditionStageScreen({
+  session,
+  onSessionInvalid,
+  onSelectedLanguageChange,
+}: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const {
     sessionState,
@@ -790,6 +800,44 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
   const teamName = sessionState.team.name?.trim() || session.team.name || "Drużyna";
   const teamIcon = session.team.icon.trim().length > 0 ? session.team.icon : "🏁";
+  const selectedLanguage =
+    session.selectedLanguage ??
+    sessionState.realization.selectedLanguage ??
+    session.realization?.selectedLanguage ??
+    sessionState.realization.language ??
+    session.realization?.language ??
+    "polish";
+  const availableLanguageOptions = useMemo<RealizationLanguageOption[]>(() => {
+    if (
+      sessionState.realization.availableLanguages &&
+      sessionState.realization.availableLanguages.length > 0
+    ) {
+      return sessionState.realization.availableLanguages;
+    }
+
+    if (
+      session.realization?.availableLanguages &&
+      session.realization.availableLanguages.length > 0
+    ) {
+      return session.realization.availableLanguages;
+    }
+
+    return [
+      {
+        value: selectedLanguage,
+        label:
+          selectedLanguage === "other"
+            ? session.realization?.customLanguage?.trim() ||
+              getRealizationLanguageLabel(selectedLanguage)
+            : getRealizationLanguageLabel(selectedLanguage),
+      },
+    ];
+  }, [
+    selectedLanguage,
+    session.realization?.availableLanguages,
+    session.realization?.customLanguage,
+    sessionState.realization.availableLanguages,
+  ]);
   const countdown = useRealizationCountdown(
     sessionState.realization.scheduledAt,
     sessionState.realization.durationMinutes,
@@ -1112,6 +1160,44 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         />
 
         <View className="mt-2 items-end">
+          {availableLanguageOptions.length > 0 ? (
+            <View
+              className="mb-2 w-56 rounded-2xl border px-3 py-2"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
+            >
+              <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                Język treści
+              </Text>
+              <View className="mt-2 flex-row flex-wrap gap-1.5">
+                {availableLanguageOptions.map((option) => {
+                  const isActive = option.value === selectedLanguage;
+                  return (
+                    <Pressable
+                      key={`expedition-language-${option.value}`}
+                      className="rounded-lg border px-2 py-1 active:opacity-90"
+                      style={{
+                        borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                        backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                      }}
+                      onPress={() => {
+                        if (option.value === selectedLanguage) {
+                          return;
+                        }
+                        onSelectedLanguageChange?.(option.value);
+                        setActionError(null);
+                        setActionMessage(`Język treści: ${option.label}`);
+                      }}
+                    >
+                      <Text className="text-[10px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
           <View
             className="w-56 rounded-2xl border px-3 py-2"
             style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
@@ -1246,6 +1332,7 @@ export function ExpeditionStageScreen({ session, onSessionInvalid }: ExpeditionS
         endedAt={isSessionEnded ? sessionEndedAt : null}
         leaderboardEntries={sessionState.leaderboard.entries}
         currentTeamId={sessionState.team.id}
+        showLeaderboard={sessionState.realization.showLeaderboard}
         canClose={!isSessionEnded && isFinishPreviewOpen}
         onClose={() => setIsFinishPreviewOpen(false)}
       />

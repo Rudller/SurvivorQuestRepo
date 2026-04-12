@@ -5,7 +5,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ActivityIndicator, Alert, AppState, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
-import type { OnboardingSession } from "../features/onboarding/model/types";
+import type {
+  OnboardingSession,
+  RealizationLanguage,
+} from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
 import { EXPEDITION_THEME } from "../features/onboarding/model/constants";
 import {
@@ -290,6 +293,31 @@ export function MobileApp() {
     await AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
   }
 
+  async function handleSelectedLanguageChange(nextLanguage: RealizationLanguage) {
+    setOnboardingSession((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextSession: OnboardingSession = {
+        ...current,
+        selectedLanguage: nextLanguage,
+        realization: current.realization
+          ? {
+              ...current.realization,
+              selectedLanguage: nextLanguage,
+            }
+          : null,
+      };
+
+      void AsyncStorage.setItem(
+        ONBOARDING_SESSION_STORAGE_KEY,
+        JSON.stringify(nextSession),
+      );
+      return nextSession;
+    });
+  }
+
   function resolveSessionInvalidReason(error: unknown) {
     if (error instanceof Error && error.message.trim().length > 0) {
       return error.message.trim();
@@ -346,6 +374,7 @@ export function MobileApp() {
         const nextState = await fetchMobileSessionState(
           onboardingSession.apiBaseUrl as string,
           onboardingSession.sessionToken,
+          onboardingSession.selectedLanguage,
         );
         if (cancelled) {
           return;
@@ -354,13 +383,33 @@ export function MobileApp() {
         if (nextState.realization.status === "in-progress") {
           const nextGameRules =
             nextState.realization.gameRules ?? onboardingSession.realization?.gameRules;
+          const nextSelectedLanguage =
+            nextState.realization.selectedLanguage ??
+            onboardingSession.selectedLanguage ??
+            onboardingSession.realization?.selectedLanguage ??
+            onboardingSession.realization?.language;
           const nextSession: OnboardingSession = {
             ...onboardingSession,
+            selectedLanguage: nextSelectedLanguage,
             awaitingAdminStart: false,
             showGameRulesAfterStart: Boolean(nextGameRules?.trim()),
             realization: onboardingSession.realization
               ? {
                   ...onboardingSession.realization,
+                  language:
+                    nextState.realization.language ??
+                    onboardingSession.realization.language,
+                  customLanguage:
+                    nextState.realization.customLanguage ??
+                    onboardingSession.realization.customLanguage,
+                  selectedLanguage:
+                    nextState.realization.selectedLanguage ??
+                    onboardingSession.realization.selectedLanguage,
+                  availableLanguages:
+                    nextState.realization.availableLanguages &&
+                    nextState.realization.availableLanguages.length > 0
+                      ? nextState.realization.availableLanguages
+                      : onboardingSession.realization.availableLanguages,
                   status: "in-progress",
                   introText: nextState.realization.introText ?? onboardingSession.realization.introText,
                   gameRules: nextGameRules,
@@ -461,6 +510,9 @@ export function MobileApp() {
             session={onboardingSession}
             onSessionInvalid={(reason) => {
               void resetToOnboardingWithMessage(reason);
+            }}
+            onSelectedLanguageChange={(language) => {
+              void handleSelectedLanguageChange(language);
             }}
           />
         ) : (

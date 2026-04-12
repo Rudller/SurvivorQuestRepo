@@ -1,4 +1,9 @@
-import type { OnboardingSession } from "../../onboarding/model/types";
+import type {
+  OnboardingSession,
+  RealizationLanguage,
+  RealizationLanguageOption,
+} from "../../onboarding/model/types";
+import { getRealizationLanguageLabel } from "../../onboarding/model/types";
 
 export type ExpeditionTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
@@ -44,12 +49,17 @@ export type ExpeditionSessionState = {
     contactEmail?: string;
     logoUrl?: string;
     type?: string;
+    language?: RealizationLanguage;
+    customLanguage?: string;
+    selectedLanguage?: RealizationLanguage;
+    availableLanguages: RealizationLanguageOption[];
     teamCount?: number;
     peopleCount?: number;
     positionsCount?: number;
     instructors: string[];
     status: "planned" | "in-progress" | "done";
     locationRequired: boolean;
+    showLeaderboard: boolean;
     scheduledAt: string;
     durationMinutes: number;
     stations: ExpeditionRealizationStation[];
@@ -159,6 +169,22 @@ export function resolveDefaultStationPoints(stationId: string) {
 
 export function buildInitialSessionState(session: OnboardingSession): ExpeditionSessionState {
   const stationIds = session.realization?.stationIds?.length ? session.realization.stationIds : ["g-1", "g-2", "g-3"];
+  const fallbackLanguage = session.selectedLanguage ?? session.realization?.selectedLanguage ?? session.realization?.language;
+  const fallbackLanguageOptions =
+    session.realization?.availableLanguages && session.realization.availableLanguages.length > 0
+      ? session.realization.availableLanguages
+      : fallbackLanguage
+        ? [
+            {
+              value: fallbackLanguage,
+              label:
+                fallbackLanguage === "other"
+                  ? session.realization?.customLanguage?.trim() ||
+                    getRealizationLanguageLabel(fallbackLanguage)
+                  : getRealizationLanguageLabel(fallbackLanguage),
+            },
+          ]
+        : [];
 
   return {
     realization: {
@@ -171,12 +197,17 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       contactEmail: undefined,
       logoUrl: undefined,
       type: undefined,
+      language: session.realization?.language,
+      customLanguage: session.realization?.customLanguage,
+      selectedLanguage: fallbackLanguage,
+      availableLanguages: fallbackLanguageOptions,
       teamCount: session.realization?.teamCount,
       peopleCount: undefined,
       positionsCount: undefined,
       instructors: [],
       status: session.realization?.status ?? "in-progress",
       locationRequired: session.realization?.locationRequired ?? false,
+      showLeaderboard: session.realization?.showLeaderboard ?? true,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:
         typeof session.realization?.durationMinutes === "number" &&

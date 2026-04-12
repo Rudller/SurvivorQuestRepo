@@ -210,6 +210,7 @@ export type Realization = {
   positionsCount: number;
   durationMinutes: number;
   locationRequired: boolean;
+  showLeaderboard: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;

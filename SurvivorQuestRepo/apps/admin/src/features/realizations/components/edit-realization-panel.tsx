@@ -109,6 +109,7 @@ export function EditRealizationPanel({
     teamCount: realization.teamCount,
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
+    showLeaderboard: realization.showLeaderboard,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
@@ -416,6 +417,7 @@ export function EditRealizationPanel({
                   peopleCount: normalizedPeopleCount,
                   positionsCount: positionsCountForSubmit,
                   durationMinutes: normalizedDurationMinutes,
+                  showLeaderboard: editValues.showLeaderboard,
                   status: editValues.status,
                   scheduledAt: normalizedScheduledAt,
                   scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -721,6 +723,21 @@ export function EditRealizationPanel({
                     </select>
                   </label>
 
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.showLeaderboard}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          showLeaderboard: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż leaderboard na ekranie końcowym (mobile)
+                  </label>
+
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
                     <input
@@ -914,6 +931,10 @@ export function EditRealizationPanel({
               </p>
               <p>
                 <span className="text-zinc-500">Zasady gry:</span> {editValues.gameRules.trim() ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span>{" "}
+                {editValues.showLeaderboard ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

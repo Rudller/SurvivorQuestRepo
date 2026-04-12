@@ -53,6 +53,7 @@ export type CreateRealizationDto = {
   durationMinutes?: number;
   status?: RealizationStatus;
   scheduledAt?: string;
+  showLeaderboard?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
 };
@@ -118,6 +119,7 @@ export function validateRealizationPayload(
   const positionsCount = Math.round(Number(payload.positionsCount));
   const durationMinutes = Math.round(Number(payload.durationMinutes));
   const scenarioId = payload.scenarioId?.trim() || '';
+  const showLeaderboard = payload.showLeaderboard;
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
     : null;
@@ -144,6 +146,10 @@ export function validateRealizationPayload(
     durationMinutes < 1 ||
     !scheduledAt
   ) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  if (typeof showLeaderboard !== 'undefined' && typeof showLeaderboard !== 'boolean') {
     throw new BadRequestException('Invalid payload');
   }
 
@@ -182,6 +188,7 @@ export function validateRealizationPayload(
     peopleCount,
     positionsCount,
     durationMinutes,
+    showLeaderboard: payload.showLeaderboard ?? true,
     status: payload.status,
     scheduledAt,
     changedBy: payload.changedBy?.trim() || 'admin@local',

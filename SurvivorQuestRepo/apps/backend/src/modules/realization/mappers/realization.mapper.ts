@@ -144,6 +144,7 @@ export function buildRealizationEntity(input: {
     positionsCount: number;
     durationMinutes: number;
     locationRequired: boolean;
+    showLeaderboard: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     createdAt: Date;
@@ -187,6 +188,7 @@ export function buildRealizationEntity(input: {
     positionsCount: realization.positionsCount,
     durationMinutes: realization.durationMinutes,
     locationRequired: realization.locationRequired,
+    showLeaderboard: realization.showLeaderboard,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),
