@@ -4,7 +4,8 @@
 
 ```bash
 # Monorepo (from root SurvivorQuestRepo/)
-pnpm dev:admin          # Start admin dashboard (Next.js on :3000)
+pnpm dev:web            # Start public frontend (Next.js on :3000)
+pnpm dev:admin          # Start admin dashboard (Next.js on :3100, route base /admin)
 pnpm dev:mobile         # Start mobile app (Expo)
 
 # Admin (from apps/admin/)
@@ -20,13 +21,14 @@ pnpm ios                # iOS simulator
 
 ## Architecture
 
-Monorepo (pnpm workspaces + Turbo) with three apps:
+Monorepo (pnpm workspaces + Turbo) with four apps:
 
 | App | Stack | Status |
 |---|---|---|
-| `apps/admin` | Next.js 16 (App Router, React 19) | Active — mock API mode |
+| `apps/web` | Next.js 16 (App Router, React 19) | Active — public website |
+| `apps/admin` | Next.js 16 (App Router, React 19) | Active — panel under `/admin` |
 | `apps/mobile` | Expo 54 + React Native 0.81 | Active |
-| `apps/backend` | NestJS, Prisma, PostgreSQL, JWT | Planned |
+| `apps/backend` | NestJS, Prisma, PostgreSQL, JWT | Active |
 
 ### Backend Tech Stack (apps/backend)
 
@@ -67,15 +69,12 @@ All UI rendering and form logic live in `features/<feature>/components/` (e.g., 
 │  Mobile  │──────▶│          apps/backend             │◀──────│    Admin     │
 │  (Expo)  │  REST │  NestJS + Prisma + PostgreSQL     │  REST │  (Next.js)  │
 └─────────┘       └──────────────────────────────────┘       └─────────────┘
-                              ▲ target
-                              │
-          Currently: admin uses built-in mock API
-          (Next.js route handlers at /api/*)
+                                                             ▲
+                                                             │
+                                                    Public frontend (`apps/web`)
 ```
 
-**Current state:** Admin's `/api/*` route handlers serve as a **temporary mock backend**. They simulate REST responses so the frontend can be developed independently. These mocks are **not** the real backend — they will be replaced.
-
-**Target state:** All clients (admin + mobile) will call `apps/backend` (NestJS). The switch is controlled by `NEXT_PUBLIC_USE_MOCK_API` env var and `buildApiPath()` helper in `shared/api/api-path.ts`. When backend is ready, set `NEXT_PUBLIC_USE_MOCK_API=false` and `NEXT_PUBLIC_API_URL` to the backend URL.
+**Current state:** Admin and mobile call `apps/backend` (NestJS) directly over REST. Public website (`apps/web`) is informational and does not own admin APIs.
 
 ### API Layer (RTK Query)
 

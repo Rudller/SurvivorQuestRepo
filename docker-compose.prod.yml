@@ -84,12 +84,29 @@ services:
       - backend
     labels:
       - traefik.enable=true
-      - traefik.http.routers.admin.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      - traefik.http.routers.admin.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/admin`)
       - traefik.http.routers.admin.entrypoints=websecure
       - traefik.http.routers.admin.tls=true
       - traefik.http.routers.admin.tls.certresolver=letsencrypt
-      - traefik.http.routers.admin.priority=10
+      - traefik.http.routers.admin.priority=90
       - traefik.http.services.admin.loadbalancer.server.port=3100
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./SurvivorQuestRepo
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls=true
+      - traefik.http.routers.web.tls.certresolver=letsencrypt
+      - traefik.http.routers.web.priority=10
+      - traefik.http.services.web.loadbalancer.server.port=3000
     restart: unless-stopped
 
   pgadmin:

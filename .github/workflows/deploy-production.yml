@@ -107,14 +107,16 @@ jobs:
             docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build --remove-orphans
             docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend pnpm prisma migrate deploy
 
-            check_mobile_bootstrap() {
+            check_route() {
+              url="$1"
+
               if command -v curl >/dev/null 2>&1; then
-                curl --fail --silent --show-error "https://${DOMAIN}/api/mobile/bootstrap" >/dev/null
+                curl --fail --silent --show-error "${url}" >/dev/null
                 return $?
               fi
 
               if command -v wget >/dev/null 2>&1; then
-                wget --server-response --spider "https://${DOMAIN}/api/mobile/bootstrap" >/dev/null 2>&1
+                wget --server-response --spider "${url}" >/dev/null 2>&1
                 return $?
               fi
 
@@ -122,11 +124,17 @@ jobs:
               return 1
             }
 
+            check_http_surface() {
+              check_route "https://${DOMAIN}/" &&
+                check_route "https://${DOMAIN}/admin/login" &&
+                check_route "https://${DOMAIN}/api/mobile/bootstrap"
+            }
+
             attempt=1
             max_attempts=10
-            until check_mobile_bootstrap; do
+            until check_http_surface; do
               if [ "${attempt}" -ge "${max_attempts}" ]; then
-                echo "Smoke test failed: GET /api/mobile/bootstrap did not return success." >&2
+                echo "Smoke test failed: expected /, /admin/login and /api/mobile/bootstrap to return success." >&2
                 exit 1
               fi
 

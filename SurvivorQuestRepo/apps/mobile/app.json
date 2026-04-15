@@ -4,7 +4,7 @@
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/survivor_icon_1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -20,8 +20,9 @@
       }
     },
     "android": {
+      "icon": "./assets/survivor_icon_512.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/survivor_icon_512.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -33,7 +34,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/survivor_icon_192.png"
     },
     "plugins": [
       "expo-audio"

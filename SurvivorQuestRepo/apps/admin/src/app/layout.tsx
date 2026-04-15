@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Survivor Quest Admin Panel",
   description: "Panel administratora SurvivorQuest",
+  icons: {
+    icon: [{ url: "/admin/admin_icon_sq.png", type: "image/png" }],
+    shortcut: [{ url: "/admin/admin_icon_sq.png", type: "image/png" }],
+    apple: [{ url: "/admin/apple-touch-icon.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

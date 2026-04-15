@@ -23,8 +23,25 @@ const navItems = [
   { href: "/chat", label: "Czat" },
 ];
 
+function normalizeAdminPath(pathname: string | null) {
+  if (!pathname) {
+    return "/";
+  }
+
+  if (pathname === "/admin") {
+    return "/";
+  }
+
+  if (pathname.startsWith("/admin/")) {
+    return pathname.slice("/admin".length);
+  }
+
+  return pathname;
+}
+
 export function AdminSidebar({ userEmail, isLoggingOut, onLogout, onNavigate }: AdminSidebarProps) {
   const pathname = usePathname();
+  const normalizedPathname = normalizeAdminPath(pathname);
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -33,7 +50,7 @@ export function AdminSidebar({ userEmail, isLoggingOut, onLogout, onNavigate }: 
 
       <nav className="mt-6 space-y-0.5 border-l border-zinc-800/80">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = normalizedPathname === item.href;
 
           return (
             <Link

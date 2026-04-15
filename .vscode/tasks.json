@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev:web",
+      "type": "shell",
+      "command": "pnpm --dir .\\SurvivorQuestRepo --filter web dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "shared",
+        "group": "survivorquest-dev",
+        "reveal": "always",
+        "focus": false
+      }
+    },
+    {
+      "label": "dev:admin",
+      "type": "shell",
+      "command": "pnpm --dir .\\SurvivorQuestRepo --filter admin dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "shared",
+        "group": "survivorquest-dev",
+        "reveal": "always",
+        "focus": false
+      }
+    },
+    {
+      "label": "dev:backend",
+      "type": "shell",
+      "command": "pnpm --dir .\\SurvivorQuestRepo --filter backend start:dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "shared",
+        "group": "survivorquest-dev",
+        "reveal": "always",
+        "focus": false
+      }
+    },
+    {
+      "label": "dev:mobile",
+      "type": "shell",
+      "command": "pnpm --dir .\\SurvivorQuestRepo --filter mobile start",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "shared",
+        "group": "survivorquest-dev",
+        "reveal": "always",
+        "focus": false
+      }
+    },
+    {
+      "label": "dev:all (split terminals)",
+      "dependsOn": [
+        "dev:web",
+        "dev:admin",
+        "dev:backend",
+        "dev:mobile"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
