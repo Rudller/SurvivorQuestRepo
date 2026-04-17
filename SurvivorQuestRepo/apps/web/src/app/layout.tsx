@@ -8,8 +8,24 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SurvivorQuest",
-  description: "SurvivorQuest - gry terenowe i realizacje eventowe",
+  title: "SurvivorQuest | Gry terenowe i realizacje eventowe",
+  description:
+    "SurvivorQuest to nowoczesna platforma event-tech do organizacji gier terenowych, realizacji zespołowych i angażujących wydarzeń firmowych.",
+  keywords: [
+    "gry terenowe",
+    "eventy firmowe",
+    "integracja zespołu",
+    "event tech",
+    "SurvivorQuest",
+    "organizacja wydarzeń",
+  ],
+  openGraph: {
+    title: "SurvivorQuest | Eventy, które angażują od pierwszej minuty",
+    description:
+      "Poznaj SurvivorQuest: scenariusze eventowe, realizacje terenowe i nowoczesne narzędzia operacyjne dla organizatorów.",
+    locale: "pl_PL",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

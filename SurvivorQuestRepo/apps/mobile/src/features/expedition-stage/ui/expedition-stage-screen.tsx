@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import {
+  getRealizationLanguageFlag,
   getRealizationLanguageLabel,
   type OnboardingSession,
   type RealizationLanguage,
@@ -347,6 +348,7 @@ export function ExpeditionStageScreen({
   const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
+  const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
@@ -838,6 +840,12 @@ export function ExpeditionStageScreen({
     session.realization?.customLanguage,
     sessionState.realization.availableLanguages,
   ]);
+  const hasMultipleLanguageOptions = availableLanguageOptions.length > 1;
+  const currentLanguageOption =
+    availableLanguageOptions.find((option) => option.value === selectedLanguage) ??
+    availableLanguageOptions[0] ??
+    null;
+  const currentLanguageFlag = getRealizationLanguageFlag(currentLanguageOption?.value ?? "polish");
   const countdown = useRealizationCountdown(
     sessionState.realization.scheduledAt,
     sessionState.realization.durationMinutes,
@@ -866,6 +874,12 @@ export function ExpeditionStageScreen({
 
     setIsFinishPreviewOpen(false);
   }, [isSessionEnded]);
+
+  useEffect(() => {
+    if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
+      setIsLanguagePickerOpen(false);
+    }
+  }, [hasMultipleLanguageOptions, isLanguagePickerOpen]);
 
   async function handleOpenQrScanner() {
     if (isSessionEnded) {
@@ -1160,42 +1174,14 @@ export function ExpeditionStageScreen({
         />
 
         <View className="mt-2 items-end">
-          {availableLanguageOptions.length > 0 ? (
-            <View
-              className="mb-2 w-56 rounded-2xl border px-3 py-2"
+          {hasMultipleLanguageOptions ? (
+            <Pressable
+              className="mb-2 h-11 w-11 items-center justify-center rounded-full border active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
+              onPress={() => setIsLanguagePickerOpen(true)}
             >
-              <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                Język treści
-              </Text>
-              <View className="mt-2 flex-row flex-wrap gap-1.5">
-                {availableLanguageOptions.map((option) => {
-                  const isActive = option.value === selectedLanguage;
-                  return (
-                    <Pressable
-                      key={`expedition-language-${option.value}`}
-                      className="rounded-lg border px-2 py-1 active:opacity-90"
-                      style={{
-                        borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
-                        backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                      }}
-                      onPress={() => {
-                        if (option.value === selectedLanguage) {
-                          return;
-                        }
-                        onSelectedLanguageChange?.(option.value);
-                        setActionError(null);
-                        setActionMessage(`Język treści: ${option.label}`);
-                      }}
-                    >
-                      <Text className="text-[10px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+              <Text className="text-xl">{currentLanguageFlag}</Text>
+            </Pressable>
           ) : null}
 
           <View
@@ -1433,6 +1419,77 @@ export function ExpeditionStageScreen({
           setActionMessage((current) => current || "Skanowanie QR anulowane.");
         }}
       />
+
+      <Modal
+        visible={isLanguagePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsLanguagePickerOpen(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center px-6"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.55)" }}
+          onPress={() => setIsLanguagePickerOpen(false)}
+        >
+          <Pressable
+            className="w-full self-center rounded-2xl border px-4 py-4"
+            style={{
+              maxWidth: 360,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              Wybierz język treści
+            </Text>
+            <View className="mt-3 gap-2">
+              {availableLanguageOptions.map((option) => {
+                const isActive = option.value === selectedLanguage;
+                return (
+                  <Pressable
+                    key={`expedition-language-popup-${option.value}`}
+                    className="flex-row items-center justify-between rounded-xl border px-3 py-2 active:opacity-90"
+                    style={{
+                      borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                      backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                    }}
+                    onPress={() => {
+                      if (option.value !== selectedLanguage) {
+                        onSelectedLanguageChange?.(option.value);
+                        setActionError(null);
+                        setActionMessage(`Język treści: ${option.label}`);
+                      }
+                      setIsLanguagePickerOpen(false);
+                    }}
+                  >
+                    <View className="flex-row items-center gap-2">
+                      <Text className="text-lg">{getRealizationLanguageFlag(option.value)}</Text>
+                      <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                        {option.label}
+                      </Text>
+                    </View>
+                    {isActive ? (
+                      <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                        ✓
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              className="mt-3 rounded-xl border px-3 py-2 active:opacity-90"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              onPress={() => setIsLanguagePickerOpen(false)}
+            >
+              <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                Zamknij
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
     </View>
   );

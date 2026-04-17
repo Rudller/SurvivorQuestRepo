@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
+import { useGetStationsQuery } from "@/features/games/api/station.api";
+import { useGetScenariosQuery } from "@/features/scenario/api/scenario.api";
+import type { Realization } from "@/features/realizations/types/realization";
 import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
+import { EditRealizationPanel } from "@/features/realizations/components/edit-realization-panel";
 import {
   useGetCurrentRealizationOverviewQuery,
   useFinishCurrentRealizationMutation,
@@ -200,6 +204,7 @@ export default function CurrentRealizationPage() {
   const router = useRouter();
   const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
   const [selectedRealizationId, setSelectedRealizationId] = useState<"current" | string>("current");
 
   const {
@@ -223,6 +228,14 @@ export default function CurrentRealizationPage() {
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
+  const {
+    data: scenarios,
+    isLoading: isScenariosLoading,
+  } = useGetScenariosQuery(undefined, { skip: !meData });
+  const {
+    data: stations,
+    isLoading: isStationsLoading,
+  } = useGetStationsQuery(undefined, { skip: !meData });
   const realizationOptions = useMemo(
     () =>
       [...(realizations ?? [])].sort(
@@ -286,6 +299,18 @@ export default function CurrentRealizationPage() {
     () => new Map((overview?.realization.stations ?? []).map((station) => [station.stationId, station.stationName])),
     [overview?.realization.stations],
   );
+  const selectedOverviewRealization = useMemo(
+    () =>
+      overview
+        ? realizationOptions.find((realization) => realization.id === overview.realization.id) ?? null
+        : null,
+    [overview, realizationOptions],
+  );
+  const isEditActionDisabled =
+    !selectedOverviewRealization ||
+    isRealizationsLoading ||
+    isScenariosLoading ||
+    isStationsLoading;
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -346,6 +371,7 @@ export default function CurrentRealizationPage() {
                   onChange={(event) => {
                     setIsActionsMenuOpen(false);
                     setIsQrPanelOpen(false);
+                    setEditingRealization(null);
                     setSelectedRealizationId(
                       event.target.value === AUTO_CURRENT_REALIZATION_VALUE
                         ? "current"
@@ -407,6 +433,20 @@ export default function CurrentRealizationPage() {
                   className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                 >
                   Kody QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedOverviewRealization) {
+                      return;
+                    }
+                    setIsActionsMenuOpen(false);
+                    setEditingRealization(selectedOverviewRealization);
+                  }}
+                  disabled={isEditActionDisabled}
+                  className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isScenariosLoading || isStationsLoading ? "Ładowanie edytora..." : "Edytuj realizację"}
                 </button>
                 <button
                   type="button"
@@ -649,6 +689,16 @@ export default function CurrentRealizationPage() {
           realization={overview.realization}
           selectedRealizationId={selectedRealizationId === "current" ? undefined : selectedRealizationId}
           onClose={() => setIsQrPanelOpen(false)}
+        />
+      ) : null}
+      {editingRealization ? (
+        <EditRealizationPanel
+          realization={editingRealization}
+          scenarios={scenarios ?? []}
+          stations={stations ?? []}
+          userEmail={meData?.user.email}
+          onSaved={setEditingRealization}
+          onClose={() => setEditingRealization(null)}
         />
       ) : null}
     </AdminShell>

@@ -74,6 +74,14 @@ export function getRealizationLanguageLabel(value: RealizationLanguage) {
   return "Inne";
 }
 
+export function getRealizationLanguageFlag(value: RealizationLanguage) {
+  if (value === "polish") return "🇵🇱";
+  if (value === "english") return "🇬🇧";
+  if (value === "ukrainian") return "🇺🇦";
+  if (value === "russian") return "🇷🇺";
+  return "🌐";
+}
+
 export type OnboardingRealizationSummary = {
   id: string;
   companyName: string;

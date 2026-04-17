@@ -17,6 +17,7 @@ import {
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
 import {
+  getRealizationLanguageFlag,
   getRealizationLanguageLabel,
   isRealizationLanguage,
   type OnboardingSession,
@@ -593,6 +594,7 @@ export function RealizationOnboardingScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [isSwitchingTeam, setIsSwitchingTeam] = useState(false);
   const [isTeamPickerOpen, setIsTeamPickerOpen] = useState(false);
+  const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [teamPickerError, setTeamPickerError] = useState<string | null>(null);
 
   const [realizationCode, setRealizationCode] = useState("");
@@ -654,12 +656,22 @@ export function RealizationOnboardingScreen({
     () => activeRealization?.availableLanguages ?? [],
     [activeRealization?.availableLanguages],
   );
+  const hasMultipleLanguageOptions = activeLanguageOptions.length > 1;
+  const currentLanguageFlag = getRealizationLanguageFlag(
+    activeLanguageOptions.find((option) => option.value === selectedLanguage)?.value ?? selectedLanguage,
+  );
 
   const selectedLanguageLabel =
     activeLanguageOptions.find((option) => option.value === selectedLanguage)?.label ??
     (selectedLanguage === "other"
       ? activeRealization?.customLanguage?.trim() || getRealizationLanguageLabel(selectedLanguage)
       : getRealizationLanguageLabel(selectedLanguage));
+
+  useEffect(() => {
+    if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
+      setIsLanguagePickerOpen(false);
+    }
+  }, [hasMultipleLanguageOptions, isLanguagePickerOpen]);
 
   const buildSessionStatePath = useCallback(
     (token: string) => {
@@ -1913,40 +1925,18 @@ export function RealizationOnboardingScreen({
                 )}
               </View>
 
-              {activeLanguageOptions.length > 0 && (
-                <View
-                  className="mt-3 rounded-2xl border px-4 py-4"
-                  style={{
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelMuted,
-                  }}
-                >
-                  <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                    Język treści gry
-                  </Text>
-                  <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                    Wybrany: {selectedLanguageLabel}
-                  </Text>
-                  <View className="mt-2 flex-row flex-wrap gap-2">
-                    {activeLanguageOptions.map((option) => {
-                      const isActive = option.value === selectedLanguage;
-                      return (
-                        <Pressable
-                          key={`language-${option.value}`}
-                          className="rounded-xl border px-3 py-2 active:opacity-90"
-                          style={{
-                            borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
-                            backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
-                          }}
-                          onPress={() => setSelectedLanguage(option.value)}
-                        >
-                          <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                            {option.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+              {hasMultipleLanguageOptions && (
+                <View className="mt-3 items-end">
+                  <Pressable
+                    className="h-11 w-11 items-center justify-center rounded-full border active:opacity-90"
+                    style={{
+                      borderColor: EXPEDITION_THEME.border,
+                      backgroundColor: EXPEDITION_THEME.panelMuted,
+                    }}
+                    onPress={() => setIsLanguagePickerOpen(true)}
+                  >
+                    <Text className="text-xl">{currentLanguageFlag}</Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -2020,6 +2010,81 @@ export function RealizationOnboardingScreen({
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={isLanguagePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsLanguagePickerOpen(false)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(12, 18, 15, 0.72)" }}
+          onPress={() => setIsLanguagePickerOpen(false)}
+        >
+          <Pressable
+            className={`w-full rounded-3xl border ${isTabletLayout ? "p-6" : "p-4"}`}
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+              maxWidth: isTabletLayout ? 760 : 640,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              Wybierz język treści gry
+            </Text>
+            <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+              Wybrany: {selectedLanguageLabel}
+            </Text>
+
+            <View className="mt-3 gap-2">
+              {activeLanguageOptions.map((option) => {
+                const isActive = option.value === selectedLanguage;
+
+                return (
+                  <Pressable
+                    key={`language-option-${option.value}`}
+                    className="rounded-2xl border px-3 py-3 active:opacity-90"
+                    style={{
+                      borderColor: isActive ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                      backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                    }}
+                    onPress={() => {
+                      setSelectedLanguage(option.value);
+                      setIsLanguagePickerOpen(false);
+                    }}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-lg">{getRealizationLanguageFlag(option.value)}</Text>
+                        <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                          {option.label}
+                        </Text>
+                      </View>
+                      {isActive ? (
+                        <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                          ✓
+                        </Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-90"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              onPress={() => setIsLanguagePickerOpen(false)}
+            >
+              <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                Zamknij
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={isTeamPickerOpen && Platform.OS !== "ios" && Platform.OS !== "web"}
