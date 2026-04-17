@@ -2,9 +2,10 @@
   "name": "survivorquest-launcher",
   "private": true,
   "scripts": {
-    "start": "pnpm --dir \"SurvivorQuestRepo\" start",
-    "start:dev": "pnpm --dir \"SurvivorQuestRepo\" start:dev",
-    "dev": "pnpm --dir \"SurvivorQuestRepo\" dev:all",
+    "start": "node start.cjs",
+    "start:dev": "node start.cjs dev",
+    "start:dev:wt": "node start.cjs dev-panes",
+    "dev": "node start.cjs",
     "docker:prod:build": "docker compose --env-file .env.production -f docker-compose.prod.yml build",
     "docker:prod:up": "docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build",
     "docker:prod:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down",

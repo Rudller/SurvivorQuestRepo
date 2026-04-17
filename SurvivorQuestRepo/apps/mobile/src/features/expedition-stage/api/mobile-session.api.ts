@@ -461,14 +461,20 @@ export async function fetchMobileSessionState(
     throw new Error("Brakuje tokenu sesji.");
   }
 
-  const encodedToken = encodeURIComponent(trimmedToken);
-  const languageSuffix =
+  const safeLanguage =
     selectedLanguage && isRealizationLanguage(selectedLanguage)
-      ? `&selectedLanguage=${encodeURIComponent(selectedLanguage)}`
-      : "";
+      ? selectedLanguage
+      : undefined;
   const result = await requestMobileApi<unknown>(
     apiBaseUrl,
-    `/api/mobile/session/state?sessionToken=${encodedToken}${languageSuffix}`,
+    "/api/mobile/session/state",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        sessionToken: trimmedToken,
+        selectedLanguage: safeLanguage,
+      }),
+    },
   );
   return normalizeSessionState(result);
 }

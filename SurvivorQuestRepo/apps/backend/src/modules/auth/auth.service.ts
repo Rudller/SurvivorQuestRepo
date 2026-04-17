@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   getOpaqueTokenCandidates,
@@ -33,6 +33,7 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: {
         email,
+        status: UserStatus.ACTIVE,
       },
     });
 

@@ -73,7 +73,7 @@ To wystarcza do lokalnego developmentu i stagingu, ale przed produkcja nadal war
 - mobilne endpointy:
   - `GET /mobile/bootstrap`
   - `POST /mobile/session/join`
-  - `GET /mobile/session/state`
+  - `POST /mobile/session/state`
   - `POST /mobile/team/claim|select|randomize|location`
   - `POST /mobile/station/resolve-qr`
   - `POST /mobile/task/complete`
@@ -93,6 +93,7 @@ To wystarcza do lokalnego developmentu i stagingu, ale przed produkcja nadal war
   - `/realizations`
   - `/chat/messages`
   - `/mobile/admin/*`
+- Mutujace endpointy administracyjne (`POST/PUT/PATCH/DELETE`) wymagaja poprawnego `Origin` lub `Referer` zgodnego z CORS allowlista.
 
 ## 4. Wymagania
 

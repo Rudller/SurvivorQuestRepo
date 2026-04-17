@@ -82,6 +82,11 @@ type ResolveStationQrPayload = {
   selectedLanguage?: string;
 };
 
+type SessionStatePayload = {
+  sessionToken?: string;
+  selectedLanguage?: string;
+};
+
 @Controller(['mobile', 'api/mobile'])
 export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
@@ -101,14 +106,11 @@ export class MobileController {
     });
   }
 
-  @Get('session/state')
-  async getMobileSessionState(
-    @Query('sessionToken') sessionToken?: string,
-    @Query('selectedLanguage') selectedLanguage?: string,
-  ) {
+  @Post('session/state')
+  async getMobileSessionState(@Body() payload: SessionStatePayload) {
     return this.mobileService.getMobileSessionState(
-      sessionToken || '',
-      selectedLanguage,
+      payload.sessionToken || '',
+      payload.selectedLanguage,
     );
   }
 

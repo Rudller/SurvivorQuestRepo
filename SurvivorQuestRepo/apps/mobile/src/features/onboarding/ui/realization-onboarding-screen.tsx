@@ -673,26 +673,25 @@ export function RealizationOnboardingScreen({
     }
   }, [hasMultipleLanguageOptions, isLanguagePickerOpen]);
 
-  const buildSessionStatePath = useCallback(
-    (token: string) => {
-      const encodedToken = encodeURIComponent(token);
-      const languageSuffix =
-        selectedLanguage && isRealizationLanguage(selectedLanguage)
-          ? `&selectedLanguage=${encodeURIComponent(selectedLanguage)}`
-          : "";
-      return `/api/mobile/session/state?sessionToken=${encodedToken}${languageSuffix}`;
-    },
-    [selectedLanguage],
-  );
-
   const refreshCustomizationState = useCallback(async () => {
     if (!apiBaseUrl || !sessionToken) {
       return;
     }
 
+    const safeLanguage =
+      selectedLanguage && isRealizationLanguage(selectedLanguage)
+        ? selectedLanguage
+        : undefined;
     const state = await requestMobileApi<MobileSessionStateResponse>(
       apiBaseUrl,
-      buildSessionStatePath(sessionToken),
+      "/api/mobile/session/state",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          sessionToken,
+          selectedLanguage: safeLanguage,
+        }),
+      },
     );
 
     setCustomizationOccupancy(
@@ -711,7 +710,7 @@ export function RealizationOnboardingScreen({
         setTeamIcon(state.team.badgeKey);
       }
     }
-  }, [apiBaseUrl, buildSessionStatePath, selectedTeam, sessionToken]);
+  }, [apiBaseUrl, selectedLanguage, selectedTeam, sessionToken]);
 
   useEffect(() => {
     let isActive = true;

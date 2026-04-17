@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import { AuthController } from '../src/modules/auth/auth.controller';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -14,6 +14,7 @@ type StoredUser = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  status: UserStatus;
 };
 
 type StoredSession = {
@@ -41,15 +42,28 @@ describe('AuthController (e2e)', () => {
         email: 'admin@test.pl',
         passwordHash: await hashPassword('sekret123'),
         role: UserRole.ADMIN,
+        status: UserStatus.ACTIVE,
       },
     ];
     sessions = [];
 
     const prismaMock = {
       user: {
-        findFirst: jest.fn(({ where }: { where: { email: string } }) => {
-          return users.find((user) => user.email === where.email) ?? null;
-        }),
+        findFirst: jest.fn(
+          ({
+            where,
+          }: {
+            where: { email: string; status?: UserStatus };
+          }) => {
+            return (
+              users.find(
+                (user) =>
+                  user.email === where.email &&
+                  (!where.status || user.status === where.status),
+              ) ?? null
+            );
+          },
+        ),
         update: jest.fn(
           ({
             where,
@@ -252,5 +266,16 @@ describe('AuthController (e2e)', () => {
 
     expect(sessions[0].refreshTokenHash).not.toBe('sq_legacy_token');
     expect(sessions[0].refreshTokenHash).toHaveLength(64);
+  });
+
+  it('rejects blocked accounts even with a valid password', async () => {
+    users[0].status = UserStatus.BLOCKED;
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'admin@test.pl', password: 'sekret123' })
+      .expect(401);
+
+    expect(sessions).toHaveLength(0);
   });
 });
