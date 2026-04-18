@@ -7,7 +7,8 @@
     "start": "cross-env EXPO_NO_DOCTOR=1 expo start",
     "android": "cross-env EXPO_NO_DOCTOR=1 expo start --android",
     "ios": "cross-env EXPO_NO_DOCTOR=1 expo start --ios",
-    "web": "cross-env EXPO_NO_DOCTOR=1 expo start --web"
+    "web": "cross-env EXPO_NO_DOCTOR=1 expo start --web",
+    "build:apk": "npx eas-cli build --platform android --profile beta --wait"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.0.1",

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "SurvivorQuest",
+    "slug": "survivorquest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/survivor_icon_1024.png",
@@ -14,12 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.survivorquest.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Aplikacja potrzebuje lokalizacji, aby pokazać pozycję drużyny na mapie realizacji.",
         "NSCameraUsageDescription": "Aplikacja potrzebuje kamery, aby skanować QR i wykonywać zdjęcia podczas realizacji."
       }
     },
     "android": {
+      "package": "com.survivorquest.app",
       "icon": "./assets/survivor_icon_512.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/survivor_icon_512.png",
@@ -30,7 +32,9 @@
       "permissions": [
         "CAMERA",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -38,6 +42,11 @@
     },
     "plugins": [
       "expo-audio"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b645b543-8bdc-44ed-b0e4-35978516f56a"
+      }
+    }
   }
 }
