@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Location from "expo-location";
 import type { MapCoordinate, PlayerLocation } from "../model/types";
 
 export type LocationPermissionState = "pending" | "granted" | "denied" | "error";
 
 const INITIAL_FIX_ACCURACY = Location.Accuracy.Low;
-const LIVE_TRACKING_ACCURACY = Location.Accuracy.Balanced;
-const LIVE_TRACKING_TIME_INTERVAL_MS = 4_000;
-const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 3;
+const LIVE_TRACKING_ACCURACY = Location.Accuracy.Highest;
+const LIVE_TRACKING_TIME_INTERVAL_MS = 1_500;
+const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 1;
+const LIVE_TRACKING_POLL_INTERVAL_MS = 7_000;
 const ONE_SHOT_FIX_TIMEOUT_MS = 6_500;
 const LOCATION_UNAVAILABLE_FALLBACK_MESSAGE =
   "Nie udało się pobrać bieżącej lokalizacji. Sprawdź, czy lokalizacja jest włączona, i spróbuj ponownie.";
@@ -21,18 +22,27 @@ function toPlayerLocation(
     heading?: number | null;
   },
   timestamp: number,
+  fallbackHeading?: number | null,
 ) {
+  const resolvedHeading =
+    typeof coords.heading === "number" && Number.isFinite(coords.heading) && coords.heading >= 0
+      ? coords.heading
+      : typeof fallbackHeading === "number" && Number.isFinite(fallbackHeading) && fallbackHeading >= 0
+        ? fallbackHeading
+        : undefined;
+
   return {
     latitude: coords.latitude,
     longitude: coords.longitude,
     accuracy: typeof coords.accuracy === "number" ? coords.accuracy : undefined,
     speed: typeof coords.speed === "number" ? coords.speed : undefined,
-    heading: typeof coords.heading === "number" ? coords.heading : undefined,
+    heading: resolvedHeading,
     at: new Date(timestamp).toISOString(),
   } satisfies PlayerLocation;
 }
 
 export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
+  const latestHeadingRef = useRef<number | null>(null);
   const [permissionState, setPermissionState] = useState<LocationPermissionState>("pending");
   const [locationError, setLocationError] = useState<string | null>(null);
   const [playerLocation, setPlayerLocation] = useState<PlayerLocation | null>(
@@ -79,7 +89,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
             settled = true;
             clearTimeout(timeout);
             subscription?.remove();
-            resolve(toPlayerLocation(update.coords, update.timestamp));
+            resolve(toPlayerLocation(update.coords, update.timestamp, latestHeadingRef.current));
           },
         )
           .then((nextSubscription) => {
@@ -100,7 +110,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
       const current = await Location.getCurrentPositionAsync({
         accuracy: INITIAL_FIX_ACCURACY,
       });
-      const normalized = toPlayerLocation(current.coords, current.timestamp);
+      const normalized = toPlayerLocation(current.coords, current.timestamp, latestHeadingRef.current);
       setPlayerLocation(normalized);
       return normalized;
     } catch (error) {
@@ -114,7 +124,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
       const lastKnown = await Location.getLastKnownPositionAsync();
       if (lastKnown) {
-        const normalized = toPlayerLocation(lastKnown.coords, lastKnown.timestamp);
+        const normalized = toPlayerLocation(lastKnown.coords, lastKnown.timestamp, latestHeadingRef.current);
         setPlayerLocation(normalized);
         return normalized;
       }
@@ -129,7 +139,9 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
   useEffect(() => {
     let isMounted = true;
-    let subscription: Location.LocationSubscription | null = null;
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let headingSubscription: Location.LocationSubscription | null = null;
+    let pollingTimer: ReturnType<typeof setInterval> | null = null;
 
     async function startTracking() {
       try {
@@ -150,7 +162,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
         const lastKnown = await Location.getLastKnownPositionAsync();
         if (isMounted && lastKnown) {
-          setPlayerLocation(toPlayerLocation(lastKnown.coords, lastKnown.timestamp));
+          setPlayerLocation(toPlayerLocation(lastKnown.coords, lastKnown.timestamp, latestHeadingRef.current));
         }
 
         void requestCurrentLocation().catch((error: unknown) => {
@@ -161,7 +173,37 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
           setLocationError(error instanceof Error ? error.message : "Nie udało się odświeżyć bieżącej lokalizacji.");
         });
 
-        subscription = await Location.watchPositionAsync(
+        headingSubscription = await Location.watchHeadingAsync((headingUpdate) => {
+          if (!isMounted) {
+            return;
+          }
+
+          const candidateHeading =
+            Number.isFinite(headingUpdate.trueHeading) && headingUpdate.trueHeading >= 0
+            ? headingUpdate.trueHeading
+            : Number.isFinite(headingUpdate.magHeading) && headingUpdate.magHeading >= 0
+              ? headingUpdate.magHeading
+              : null;
+
+          latestHeadingRef.current = candidateHeading;
+
+          if (!Number.isFinite(candidateHeading)) {
+            return;
+          }
+
+          setPlayerLocation((current) => {
+            if (!current) {
+              return current;
+            }
+
+            return {
+              ...current,
+              heading: candidateHeading ?? undefined,
+            };
+          });
+        });
+
+        locationSubscription = await Location.watchPositionAsync(
           {
             accuracy: LIVE_TRACKING_ACCURACY,
             timeInterval: LIVE_TRACKING_TIME_INTERVAL_MS,
@@ -172,9 +214,25 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
               return;
             }
 
-            setPlayerLocation(toPlayerLocation(update.coords, update.timestamp));
+            setLocationError(null);
+            setPlayerLocation(toPlayerLocation(update.coords, update.timestamp, latestHeadingRef.current));
           },
         );
+
+        pollingTimer = setInterval(() => {
+          Location.getCurrentPositionAsync({
+            accuracy: LIVE_TRACKING_ACCURACY,
+          })
+            .then((current) => {
+              if (!isMounted) {
+                return;
+              }
+
+              setLocationError(null);
+              setPlayerLocation(toPlayerLocation(current.coords, current.timestamp, latestHeadingRef.current));
+            })
+            .catch(() => undefined);
+        }, LIVE_TRACKING_POLL_INTERVAL_MS);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -189,7 +247,11 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
     return () => {
       isMounted = false;
-      subscription?.remove();
+      locationSubscription?.remove();
+      headingSubscription?.remove();
+      if (pollingTimer) {
+        clearInterval(pollingTimer);
+      }
     };
   }, [requestCurrentLocation]);
 

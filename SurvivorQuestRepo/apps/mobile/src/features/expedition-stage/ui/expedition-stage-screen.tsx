@@ -395,22 +395,15 @@ export function ExpeditionStageScreen({
       return syncedLocation;
     }
 
-    if (!syncedLocation) {
-      return localLocation;
-    }
-
-    const localAt = new Date(localLocation.at).getTime();
-    const syncedAt = new Date(syncedLocation.at).getTime();
-
-    if (!Number.isFinite(localAt)) {
-      return syncedLocation;
-    }
-    if (!Number.isFinite(syncedAt)) {
-      return localLocation;
-    }
-
-    return localAt >= syncedAt ? localLocation : syncedLocation;
+    return localLocation;
   }, [playerLocation, sessionState.team.lastLocation]);
+  const mapCenterCoordinate = useMemo(() => {
+    if (mapPlayerLocation) {
+      return toCoordinate(mapPlayerLocation.latitude, mapPlayerLocation.longitude);
+    }
+
+    return mapAnchor ?? DEFAULT_MAP_ANCHOR;
+  }, [mapAnchor, mapPlayerLocation]);
 
   const stationMetadataMap = useMemo(
     () =>
@@ -1151,7 +1144,7 @@ export function ExpeditionStageScreen({
           </View>
         ) : (
           <ExpeditionMap
-            centerCoordinate={mapAnchor ?? DEFAULT_MAP_ANCHOR}
+            centerCoordinate={mapCenterCoordinate}
             playerLocation={mapPlayerLocation}
             pins={stationPins}
             selectedStationId={selectedStationId}
