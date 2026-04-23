@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
 
@@ -16,6 +17,21 @@ type ExpeditionMapProps = {
   selectedStationId: string | null;
   focusCoordinate: MapCoordinate | null;
   onSelectStation: (stationId: string) => void;
+};
+
+const EXPEDITION_MAP_TEXT: Record<UiLanguage, { webNotice: string }> = {
+  polish: {
+    webNotice: "Widok mapy geograficznej jest dostępny na urządzeniach mobilnych (iOS/Android).",
+  },
+  english: {
+    webNotice: "The geographic map view is available on mobile devices (iOS/Android).",
+  },
+  ukrainian: {
+    webNotice: "Географічна карта доступна на мобільних пристроях (iOS/Android).",
+  },
+  russian: {
+    webNotice: "Географический вид карты доступен на мобильных устройствах (iOS/Android).",
+  },
 };
 
 function isFiniteCoordinate(value: { latitude: number; longitude: number } | null | undefined) {
@@ -141,6 +157,35 @@ function buildOsmWebViewHtml(payload: unknown) {
       }).setView([payload.center.latitude, payload.center.longitude], 16);
       const stationLayer = L.layerGroup().addTo(map);
       let playerMarker = null;
+      const PLAYER_MOVING_SPEED_THRESHOLD_MPS = 0.9;
+      const PLAYER_MOVEMENT_STEP_THRESHOLD_METERS = 3;
+      const PLAYER_AUTO_FOCUS_MOVING_DISTANCE_METERS = 6;
+      const PLAYER_AUTO_FOCUS_STATIONARY_DISTANCE_METERS = 18;
+      const MAX_EFFECTIVE_ACCURACY_METERS = 30;
+      const MANUAL_PAN_STATIONARY_LOCK_MS = 12000;
+      const SMOOTH_PAN_DISTANCE_MAX_METERS = 250;
+      const SMOOTH_PAN_FAST_DISTANCE_METERS = 80;
+      let lastPayloadCenter = null;
+      let lastAutoFocusedPlayer = null;
+      let lastPlayerSample = null;
+      let userPanLockedUntil = 0;
+
+      function toLatLngIfFinite(value) {
+        if (!value || !Number.isFinite(value.latitude) || !Number.isFinite(value.longitude)) {
+          return null;
+        }
+        return L.latLng(value.latitude, value.longitude);
+      }
+
+      lastPayloadCenter = toLatLngIfFinite(payload.center);
+      lastAutoFocusedPlayer = toLatLngIfFinite(payload.player);
+      lastPlayerSample = toLatLngIfFinite(payload.player);
+
+      map.on("movestart", (event) => {
+        if (event && event.originalEvent) {
+          userPanLockedUntil = Date.now() + MANUAL_PAN_STATIONARY_LOCK_MS;
+        }
+      });
 
       L.tileLayer(payload.tileUrl, {
         maxZoom: 20,
@@ -206,6 +251,87 @@ function buildOsmWebViewHtml(payload: unknown) {
         playerMarker = L.marker([player.latitude, player.longitude], { icon }).addTo(map);
       }
 
+      function smoothMoveTo(target) {
+        const distanceFromCurrentCenter = map.getCenter().distanceTo(target);
+        if (!Number.isFinite(distanceFromCurrentCenter) || distanceFromCurrentCenter <= 0.8) {
+          return;
+        }
+
+        if (distanceFromCurrentCenter > SMOOTH_PAN_DISTANCE_MAX_METERS) {
+          map.setView(target, map.getZoom(), { animate: false });
+          return;
+        }
+
+        const panDurationSeconds =
+          distanceFromCurrentCenter > SMOOTH_PAN_FAST_DISTANCE_METERS ? 0.95 : 0.55;
+        map.panTo(target, {
+          animate: true,
+          duration: panDurationSeconds,
+          easeLinearity: 0.25,
+          noMoveStart: true,
+        });
+      }
+
+      function maybeAutoFocusOnPlayer(player) {
+        const nextPlayer = toLatLngIfFinite(player);
+        if (!nextPlayer) {
+          return false;
+        }
+
+        const previousPlayerSample = lastPlayerSample;
+        lastPlayerSample = nextPlayer;
+
+        if (!lastAutoFocusedPlayer) {
+          smoothMoveTo(nextPlayer);
+          lastAutoFocusedPlayer = nextPlayer;
+          lastPayloadCenter = nextPlayer;
+          return true;
+        }
+
+        const movedSinceLastSampleMeters = previousPlayerSample
+          ? previousPlayerSample.distanceTo(nextPlayer)
+          : 0;
+        const movedSinceAutoFocusMeters = lastAutoFocusedPlayer.distanceTo(nextPlayer);
+        const rawAccuracyMeters =
+          Number.isFinite(player && player.accuracy) && player.accuracy > 0 ? player.accuracy : 0;
+        const effectiveAccuracyMeters = Math.min(rawAccuracyMeters, MAX_EFFECTIVE_ACCURACY_METERS);
+        const speedMetersPerSecond =
+          Number.isFinite(player && player.speed) && player.speed > 0 ? player.speed : 0;
+        const movementNoiseFloorMeters = Math.max(
+          PLAYER_MOVEMENT_STEP_THRESHOLD_METERS,
+          effectiveAccuracyMeters * 0.35,
+        );
+        const isMoving =
+          speedMetersPerSecond >= PLAYER_MOVING_SPEED_THRESHOLD_MPS ||
+          movedSinceLastSampleMeters >= movementNoiseFloorMeters;
+
+        if (!isMoving) {
+          return false;
+        }
+
+        const isManualPanLockActive = Date.now() < userPanLockedUntil;
+        if (
+          isManualPanLockActive &&
+          speedMetersPerSecond < PLAYER_MOVING_SPEED_THRESHOLD_MPS &&
+          movedSinceAutoFocusMeters < PLAYER_AUTO_FOCUS_STATIONARY_DISTANCE_METERS
+        ) {
+          return false;
+        }
+
+        const requiredMovementMeters = isMoving
+          ? Math.max(PLAYER_AUTO_FOCUS_MOVING_DISTANCE_METERS, effectiveAccuracyMeters * 0.6)
+          : Math.max(PLAYER_AUTO_FOCUS_STATIONARY_DISTANCE_METERS, effectiveAccuracyMeters * 1.5);
+
+        if (movedSinceAutoFocusMeters < requiredMovementMeters) {
+          return false;
+        }
+
+        smoothMoveTo(nextPlayer);
+        lastAutoFocusedPlayer = nextPlayer;
+        lastPayloadCenter = nextPlayer;
+        return true;
+      }
+
       function applyPayload(nextPayload) {
         if (!nextPayload || typeof nextPayload !== "object") {
           return;
@@ -215,12 +341,27 @@ function buildOsmWebViewHtml(payload: unknown) {
         renderPlayer(nextPayload.player ?? null);
 
         if (nextPayload.focus && Number.isFinite(nextPayload.focus.latitude) && Number.isFinite(nextPayload.focus.longitude)) {
-          map.setView([nextPayload.focus.latitude, nextPayload.focus.longitude], 17, { animate: false });
+          map.setView([nextPayload.focus.latitude, nextPayload.focus.longitude], 17, {
+            animate: true,
+            duration: 0.45,
+          });
           return;
         }
 
-        if (nextPayload.center && Number.isFinite(nextPayload.center.latitude) && Number.isFinite(nextPayload.center.longitude)) {
-          map.setView([nextPayload.center.latitude, nextPayload.center.longitude], map.getZoom(), { animate: false });
+        if (toLatLngIfFinite(nextPayload.player)) {
+          void maybeAutoFocusOnPlayer(nextPayload.player);
+          return;
+        }
+
+        const nextCenter = toLatLngIfFinite(nextPayload.center);
+        if (!nextCenter) {
+          return;
+        }
+
+        const payloadCenterChanged = !lastPayloadCenter || lastPayloadCenter.distanceTo(nextCenter) > 4;
+        if (payloadCenterChanged) {
+          smoothMoveTo(nextCenter);
+          lastPayloadCenter = nextCenter;
         }
       }
 
@@ -239,6 +380,8 @@ export function ExpeditionMap({
   focusCoordinate,
   onSelectStation,
 }: ExpeditionMapProps) {
+  const uiLanguage = useUiLanguage();
+  const text = EXPEDITION_MAP_TEXT[uiLanguage];
   const renderablePins = useMemo(
     () =>
       pins.filter((pin) =>
@@ -254,7 +397,7 @@ export function ExpeditionMap({
     return (
       <View className="h-full items-center justify-center px-6" style={{ backgroundColor: "rgba(0, 0, 0, 0.25)" }}>
         <Text className="text-center text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
-          Widok mapy geograficznej jest dostępny na urządzeniach mobilnych (iOS/Android).
+          {text.webNotice}
         </Text>
       </View>
     );
@@ -270,6 +413,14 @@ export function ExpeditionMap({
               latitude: playerLocation.latitude,
               longitude: playerLocation.longitude,
               heading: normalizeHeading(playerLocation.heading),
+              accuracy:
+                typeof playerLocation.accuracy === "number" && Number.isFinite(playerLocation.accuracy)
+                  ? playerLocation.accuracy
+                  : null,
+              speed:
+                typeof playerLocation.speed === "number" && Number.isFinite(playerLocation.speed)
+                  ? playerLocation.speed
+                  : null,
             }
           : null,
       tileUrl: DEFAULT_MAP_TILE_URL,

@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Animated, Easing, PanResponder, Text, View } from "react-native";
 
+import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { MEMORY_MAX_MISTAKES } from "../puzzle-helpers";
+import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
 
 type MatchingStationPanelProps = {
   matchingAttemptsLeft: number;
@@ -47,6 +50,32 @@ const SIDE_BOTTOM_CARD_TRANSFORM = [
   { translateY: MATCHING_SIDE_CARD_OFFSET_Y },
 ] as const;
 
+type MatchingStationText = {
+  instruction: string;
+  attemptsLeft: string;
+};
+
+const MATCHING_STATION_TEXT_ENGLISH: MatchingStationText = {
+  instruction: "Swipe the column up/down and align a pair on the center line.",
+  attemptsLeft: "Attempts left",
+};
+
+const MATCHING_STATION_TEXT: Record<UiLanguage, MatchingStationText> = {
+  polish: {
+    instruction: "Przesuń palcem kolumnę w górę/dół i ustaw parę w linii środka.",
+    attemptsLeft: "Pozostało prób",
+  },
+  english: MATCHING_STATION_TEXT_ENGLISH,
+  ukrainian: {
+    instruction: "Проведіть стовпець вгору/вниз і вирівняйте пару на центральній лінії.",
+    attemptsLeft: "Залишилось спроб",
+  },
+  russian: {
+    instruction: "Проведите столбец вверх/вниз и выровняйте пару по центральной линии.",
+    attemptsLeft: "Осталось попыток",
+  },
+};
+
 function normalizeCarouselIndex(index: number, length: number) {
   if (length <= 0) {
     return 0;
@@ -77,6 +106,9 @@ export function MatchingStationPanel({
   onShiftLeft,
   onShiftRight,
 }: MatchingStationPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = MATCHING_STATION_TEXT[uiLanguage];
+  const layout = useStationPanelLayout();
   const canInteract = !isInteractiveLocked && matchingAttemptsLeft > 0;
   const leftTranslateY = useRef(new Animated.Value(0)).current;
   const rightTranslateY = useRef(new Animated.Value(0)).current;
@@ -267,9 +299,17 @@ export function MatchingStationPanel({
 
   return (
     <View className="h-full w-full justify-center">
-      <Text className="text-center text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-        Przesuń palcem kolumnę w górę/dół i ustaw parę w linii środka.
+      <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.isTablet ? 16 : 14 }}>
+        {text.instruction}
       </Text>
+      <View className="mt-1">
+        <AttemptsIndicator
+          label={text.attemptsLeft}
+          attemptsLeft={matchingAttemptsLeft}
+          maxAttempts={MEMORY_MAX_MISTAKES}
+          align="center"
+        />
+      </View>
 
       <View className="mt-6 relative">
         <View
@@ -306,8 +346,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-xl font-semibold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-semibold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 24 : 20 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {leftPrev}
@@ -324,8 +367,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-3xl font-extrabold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-extrabold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 38 : 30 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {leftCurrent}
@@ -347,8 +393,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-xl font-semibold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-semibold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 24 : 20 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {leftNext}
@@ -393,8 +442,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-xl font-semibold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-semibold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 24 : 20 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {rightPrev}
@@ -411,8 +463,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-3xl font-extrabold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-extrabold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 38 : 30 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {rightCurrent}
@@ -434,8 +489,11 @@ export function MatchingStationPanel({
                 }}
               >
                 <Text
-                  className="text-center text-xl font-semibold"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="text-center font-semibold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 24 : 20 }}
+                  maxFontSizeMultiplier={1.2}
+                  minimumFontScale={0.9}
+                  adjustsFontSizeToFit
                   numberOfLines={4}
                 >
                   {rightNext}
@@ -447,7 +505,7 @@ export function MatchingStationPanel({
       </View>
 
       {matchingResult ? (
-        <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
           {matchingResult}
         </Text>
       ) : null}

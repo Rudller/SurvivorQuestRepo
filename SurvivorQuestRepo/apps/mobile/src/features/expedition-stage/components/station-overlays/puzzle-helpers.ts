@@ -1,3 +1,5 @@
+import type { UiLanguage } from "../../../i18n";
+
 export type IntroBlock = {
   kind: "paragraph" | "unordered" | "ordered";
   text: string;
@@ -67,10 +69,15 @@ export const QUIZ_BRAIN_ICON_URI =
   "https://cdn-icons-png.flaticon.com/512/5677/5677920.png";
 
 const BOGGLE_BOARD_SIZE = 9;
-export const CAESAR_SHIFT = 3;
 export const MASTERMIND_SYMBOLS = ["A", "B", "C", "D", "E", "F"] as const;
 const BOGGLE_FILLER_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MEMORY_SYMBOL_POOL = ["🍀", "🔥", "💧", "🌙", "⭐", "⚡", "🎯", "🧭"];
+const CAESAR_SECRET_FALLBACKS = [
+  "SURVIVOR QUEST",
+  "TEAM SPIRIT",
+  "FIELD MISSION",
+  "TRAIL CHALLENGE",
+] as const;
 export const SIMON_BUTTONS = [
   { id: "1", label: "1", color: "#ef4444" },
   { id: "2", label: "2", color: "#f97316" },
@@ -135,6 +142,35 @@ const INVALID_COMPLETION_CODE_MARKERS = [
   "invalid completion code",
   "http 400",
 ];
+
+const MATCHING_FALLBACK_PAIRS_ENGLISH: MatchingPair[] = [
+  { left: "Compass", right: "Navigation" },
+  { left: "Flashlight", right: "Light" },
+  { left: "Map", right: "Orientation" },
+];
+
+const MATCHING_FALLBACK_PAIRS_UKRAINIAN: MatchingPair[] = [
+  { left: "Компас", right: "Навігація" },
+  { left: "Ліхтарик", right: "Світло" },
+  { left: "Мапа", right: "Орієнтування" },
+];
+
+const MATCHING_FALLBACK_PAIRS_RUSSIAN: MatchingPair[] = [
+  { left: "Компас", right: "Навигация" },
+  { left: "Фонарик", right: "Свет" },
+  { left: "Карта", right: "Ориентирование" },
+];
+
+const MATCHING_FALLBACK_PAIRS: Record<UiLanguage, MatchingPair[]> = {
+  polish: [
+    { left: "Kompas", right: "Nawigacja" },
+    { left: "Latarka", right: "Światło" },
+    { left: "Mapa", right: "Orientacja" },
+  ],
+  english: MATCHING_FALLBACK_PAIRS_ENGLISH,
+  ukrainian: MATCHING_FALLBACK_PAIRS_UKRAINIAN,
+  russian: MATCHING_FALLBACK_PAIRS_RUSSIAN,
+};
 
 export function normalizeWordleSecret(value: string) {
   return value.toUpperCase().replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "");
@@ -258,6 +294,21 @@ export function caesarShift(value: string, shift: number) {
       return String.fromCharCode(shifted);
     })
     .join("");
+}
+
+export function resolveCaesarShift(station: StationPuzzleViewModel) {
+  // Deterministic random shift per station so the challenge is reproducible within a session.
+  return (resolveSeed(`${station.stationId}-caesar-shift`) % 25) + 1;
+}
+
+export function resolveCaesarSecret(station: StationPuzzleViewModel) {
+  const directAnswer = normalizePuzzleText(resolveCorrectAnswerText(station));
+  if (directAnswer.length > 0) {
+    return directAnswer;
+  }
+
+  const fallbackIndex = resolveSeed(`${station.stationId}-caesar-secret`) % CAESAR_SECRET_FALLBACKS.length;
+  return CAESAR_SECRET_FALLBACKS[fallbackIndex];
 }
 
 export function resolveMemoryDeck(station: StationPuzzleViewModel): MemoryCard[] {
@@ -415,6 +466,7 @@ export function resolveMiniSudokuPuzzle(station: StationPuzzleViewModel) {
 
 export function resolveMatchingPairs(
   station: StationPuzzleViewModel,
+  uiLanguage: UiLanguage = "polish",
 ): MatchingPair[] {
   const parsedPairs = (station.quizAnswers ?? [])
     .map((entry) => entry.trim())
@@ -435,11 +487,7 @@ export function resolveMatchingPairs(
     return parsedPairs;
   }
 
-  return [
-    { left: "Kompas", right: "Nawigacja" },
-    { left: "Latarka", right: "Światło" },
-    { left: "Mapa", right: "Orientacja" },
-  ];
+  return MATCHING_FALLBACK_PAIRS[uiLanguage];
 }
 
 export function resolvePuzzleSecret(

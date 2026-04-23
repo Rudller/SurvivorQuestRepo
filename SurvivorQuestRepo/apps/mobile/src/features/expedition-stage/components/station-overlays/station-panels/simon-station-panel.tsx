@@ -1,7 +1,9 @@
 import { Pressable, Text, View } from "react-native";
 
+import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { SIMON_BUTTONS } from "../puzzle-helpers";
+import { useStationPanelLayout } from "./shared-ui";
 
 type SimonStationPanelProps = {
   stationId: string;
@@ -15,6 +17,32 @@ type SimonStationPanelProps = {
   onPressButton: (buttonId: string) => void;
 };
 
+type SimonStationText = {
+  rememberSequence: string;
+  progress: string;
+};
+
+const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
+  rememberSequence: "Remember sequence",
+  progress: "Progress",
+};
+
+const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
+  polish: {
+    rememberSequence: "Zapamiętaj sekwencję",
+    progress: "Postęp",
+  },
+  english: SIMON_STATION_TEXT_ENGLISH,
+  ukrainian: {
+    rememberSequence: "Запам'ятайте послідовність",
+    progress: "Прогрес",
+  },
+  russian: {
+    rememberSequence: "Запомните последовательность",
+    progress: "Прогресс",
+  },
+};
+
 export function SimonStationPanel({
   stationId,
   simonSequence,
@@ -26,10 +54,14 @@ export function SimonStationPanel({
   isSubmittingSimon,
   onPressButton,
 }: SimonStationPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = SIMON_STATION_TEXT[uiLanguage];
+  const layout = useStationPanelLayout();
+
   return (
     <View className="mt-3">
-      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-        Zapamiętaj sekwencję:{" "}
+      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+        {text.rememberSequence}:{" "}
         <Text className="font-bold">
           {simonHintVisible
             ? simonSequence
@@ -38,15 +70,16 @@ export function SimonStationPanel({
             : simonHiddenHint}
         </Text>
       </Text>
-      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        Postęp: {simonProgress}/{simonSequence.length}
+      <Text className="mt-1" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
+        {text.progress}: {simonProgress}/{simonSequence.length}
       </Text>
       <View className="mt-2 flex-row flex-wrap justify-between gap-y-2">
         {SIMON_BUTTONS.map((button) => (
           <Pressable
             key={`${stationId}-simon-${button.id}`}
-            className="h-16 w-[31.5%] items-center justify-center rounded-xl border active:opacity-90"
+            className="w-[31.5%] items-center justify-center rounded-xl border active:opacity-90"
             style={{
+              height: layout.isTablet ? 84 : 64,
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: button.color,
               opacity: isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length ? 0.55 : 1,
@@ -55,13 +88,14 @@ export function SimonStationPanel({
               onPressButton(button.id);
             }}
             disabled={isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length}
+            hitSlop={4}
           >
-            <Text className="text-2xl">{button.label}</Text>
+            <Text style={{ fontSize: layout.isTablet ? 34 : 24 }}>{button.label}</Text>
           </Pressable>
         ))}
       </View>
       {simonResult ? (
-        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
           {simonResult}
         </Text>
       ) : null}

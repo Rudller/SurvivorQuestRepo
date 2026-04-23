@@ -1,7 +1,22 @@
 import { memo, useMemo } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
+import { EXPEDITION_THEME, TEAM_ICONS } from "../model/constants";
 import type { TeamColor, TeamColorOption } from "../model/types";
+
+export type TeamCustomizationStepText = {
+  editorTitle: string;
+  editorHint: string;
+  bannerPreviewLabel: string;
+  teamFallbackName: string;
+  teamLabel: string;
+  pointsLabel: string;
+  customizationLabel: string;
+  teamNamePlaceholder: string;
+  teamColorLabel: string;
+  teamIconLabel: string;
+  startAction: string;
+  startingAction: string;
+};
 
 type TeamCustomizationStepProps = {
   isTabletLayout: boolean;
@@ -9,16 +24,19 @@ type TeamCustomizationStepProps = {
   teamName: string;
   teamColor: TeamColor;
   teamIcon: string;
+  teamColors: TeamColorOption[];
   selectedColor: TeamColorOption;
   bannerTextColor: string;
   bannerMutedTextColor: string;
   bannerIconBackground: string;
   saveMessage: string | null;
+  saveMessageTone: "success" | "error" | null;
   blockMessage: string | null;
   isSaving: boolean;
   canSave: boolean;
   occupiedColors: Record<string, number>;
   occupiedIcons: Record<string, number>;
+  text: TeamCustomizationStepText;
   onTeamNameChange: (value: string) => void;
   onTeamColorChange: (value: TeamColor) => void;
   onTeamIconChange: (value: string) => void;
@@ -139,16 +157,19 @@ export function TeamCustomizationStep({
   teamName,
   teamColor,
   teamIcon,
+  teamColors,
   selectedColor,
   bannerTextColor,
   bannerMutedTextColor,
   bannerIconBackground,
   saveMessage,
+  saveMessageTone,
   blockMessage,
   isSaving,
   canSave,
   occupiedColors,
   occupiedIcons,
+  text,
   onTeamNameChange,
   onTeamColorChange,
   onTeamIconChange,
@@ -164,10 +185,10 @@ export function TeamCustomizationStep({
     >
       <View className="px-1">
         <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-          Edytor baneru drużyny
+          {text.editorTitle}
         </Text>
         <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-          Dopracuj wygląd baneru drużyny. Ten baner będzie widoczny w górnym panelu podczas gry.
+          {text.editorHint}
         </Text>
       </View>
 
@@ -177,10 +198,10 @@ export function TeamCustomizationStep({
           borderColor: EXPEDITION_THEME.border,
           backgroundColor: EXPEDITION_THEME.panelStrong,
         }}
-      >
-        <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          Podgląd baneru
-        </Text>
+        >
+          <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+            {text.bannerPreviewLabel}
+          </Text>
         <View
           className="mt-2 rounded-xl border px-2 py-1"
           style={{
@@ -199,15 +220,15 @@ export function TeamCustomizationStep({
                 style={{ color: bannerTextColor }}
                 numberOfLines={1}
               >
-                {teamName.trim() || "Nazwa drużyny"}
+                {teamName.trim() || text.teamFallbackName}
               </Text>
               <Text className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: bannerMutedTextColor }}>
-                Drużyna {selectedTeam ?? "-"} • {selectedColor.label}
+                {text.teamLabel} {selectedTeam ?? "-"} • {selectedColor.label}
               </Text>
             </View>
             <View>
               <Text className="text-[9px] uppercase tracking-widest" style={{ color: bannerMutedTextColor }}>
-                Punkty
+                {text.pointsLabel}
               </Text>
               <Text
                 className={isTabletLayout ? "text-2xl font-extrabold text-right" : "text-xl font-extrabold text-right"}
@@ -228,7 +249,7 @@ export function TeamCustomizationStep({
         }}
       >
         <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          Customizacja drużyny
+          {text.customizationLabel}
         </Text>
 
         <TextInput
@@ -240,16 +261,16 @@ export function TeamCustomizationStep({
           }}
           value={teamName}
           onChangeText={onTeamNameChange}
-          placeholder="Nazwa drużyny"
+          placeholder={text.teamNamePlaceholder}
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
           maxLength={40}
         />
 
         <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          Kolor drużyny
+          {text.teamColorLabel}
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-3">
-          {TEAM_COLORS.map((colorOption) => (
+          {teamColors.map((colorOption) => (
             <ColorOptionButton
               key={colorOption.key}
               colorOption={colorOption}
@@ -262,7 +283,7 @@ export function TeamCustomizationStep({
         </View>
 
         <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          Ikona drużyny
+          {text.teamIconLabel}
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-3">
           {TEAM_ICONS.map((iconOption) => (
@@ -285,7 +306,9 @@ export function TeamCustomizationStep({
           onPress={() => void onSave()}
           disabled={!canSave}
         >
-          <Text className="text-center font-semibold text-zinc-950">{isSaving ? "Uruchamianie..." : "Start!"}</Text>
+          <Text className="text-center font-semibold text-zinc-950">
+            {isSaving ? text.startingAction : text.startAction}
+          </Text>
         </Pressable>
       </View>
 
@@ -297,7 +320,10 @@ export function TeamCustomizationStep({
             backgroundColor: EXPEDITION_THEME.panelStrong,
           }}
         >
-          <Text className="text-sm" style={{ color: saveMessage.startsWith("Nie") ? EXPEDITION_THEME.danger : EXPEDITION_THEME.accentStrong }}>
+          <Text
+            className="text-sm"
+            style={{ color: saveMessageTone === "error" ? EXPEDITION_THEME.danger : EXPEDITION_THEME.accentStrong }}
+          >
             {saveMessage}
           </Text>
         </View>

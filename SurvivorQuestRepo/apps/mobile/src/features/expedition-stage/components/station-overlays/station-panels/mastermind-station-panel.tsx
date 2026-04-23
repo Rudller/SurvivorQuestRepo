@@ -1,7 +1,9 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { MASTERMIND_MAX_ATTEMPTS, MASTERMIND_SYMBOLS } from "../puzzle-helpers";
+import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
 
 export type MastermindAttempt = {
   guess: string;
@@ -24,6 +26,57 @@ type MastermindStationPanelProps = {
   onAddSymbol: (symbol: string) => void;
 };
 
+type MastermindStationText = {
+  codeInfo: string;
+  attempts: string;
+  remaining: string;
+  exact: string;
+  misplaced: string;
+  placeholder: string;
+  check: string;
+};
+
+const MASTERMIND_STATION_TEXT_ENGLISH: MastermindStationText = {
+  codeInfo: "Code consists of 4 symbols (A-F).",
+  attempts: "Attempts",
+  remaining: "Remaining",
+  exact: "exact",
+  misplaced: "misplaced",
+  placeholder: "e.g. ABCD",
+  check: "Check",
+};
+
+const MASTERMIND_STATION_TEXT: Record<UiLanguage, MastermindStationText> = {
+  polish: {
+    codeInfo: "Kod składa się z 4 znaków (A-F).",
+    attempts: "Próby",
+    remaining: "Pozostało",
+    exact: "trafione",
+    misplaced: "miejsce",
+    placeholder: "np. ABCD",
+    check: "Sprawdź",
+  },
+  english: MASTERMIND_STATION_TEXT_ENGLISH,
+  ukrainian: {
+    codeInfo: "Код складається з 4 символів (A-F).",
+    attempts: "Спроби",
+    remaining: "Залишилось",
+    exact: "точно",
+    misplaced: "не на місці",
+    placeholder: "напр. ABCD",
+    check: "Перевірити",
+  },
+  russian: {
+    codeInfo: "Код состоит из 4 символов (A-F).",
+    attempts: "Попытки",
+    remaining: "Осталось",
+    exact: "точно",
+    misplaced: "не на месте",
+    placeholder: "напр. ABCD",
+    check: "Проверить",
+  },
+};
+
 export function MastermindStationPanel({
   stationId,
   mastermindAttempts,
@@ -38,14 +91,22 @@ export function MastermindStationPanel({
   onSubmitGuess,
   onAddSymbol,
 }: MastermindStationPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = MASTERMIND_STATION_TEXT[uiLanguage];
+  const layout = useStationPanelLayout();
+
   return (
     <View className="mt-3">
-      <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-        Kod składa się z 4 znaków (A-F). Próby: {mastermindAttempts.length}/{MASTERMIND_MAX_ATTEMPTS}
+      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+        {text.codeInfo} {text.attempts}: {mastermindAttempts.length}/{MASTERMIND_MAX_ATTEMPTS}
       </Text>
-      <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        Pozostało: {mastermindAttemptsLeft}
-      </Text>
+      <View className="mt-1">
+        <AttemptsIndicator
+          label={text.remaining}
+          attemptsLeft={mastermindAttemptsLeft}
+          maxAttempts={MASTERMIND_MAX_ATTEMPTS}
+        />
+      </View>
       <View className="mt-2 gap-1.5">
         {mastermindAttempts.map((attempt, index) => (
           <View
@@ -56,21 +117,23 @@ export function MastermindStationPanel({
             <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
               {attempt.guess}
             </Text>
-            <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-              ● trafione: {attempt.exact} • ◐ miejsce: {attempt.misplaced}
+            <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+              ● {text.exact}: {attempt.exact} • ◐ {text.misplaced}: {attempt.misplaced}
             </Text>
           </View>
         ))}
       </View>
       <View className="mt-2 flex-row gap-2">
         <TextInput
-          className="flex-1 rounded-xl border px-3 py-2 text-sm"
+          className="flex-1 rounded-xl border px-4"
           style={{
             borderColor: EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panelStrong,
             color: EXPEDITION_THEME.textPrimary,
+            fontSize: layout.inputFontSize,
+            paddingVertical: layout.isTablet ? 12 : 8,
           }}
-          placeholder="np. ABCD"
+          placeholder={text.placeholder}
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
           autoCapitalize="characters"
           autoCorrect={false}
@@ -80,35 +143,53 @@ export function MastermindStationPanel({
           onSubmitEditing={onSubmitGuess}
         />
         <Pressable
-          className="items-center justify-center rounded-xl px-4 active:opacity-90"
+          className="items-center justify-center rounded-xl px-5 active:opacity-90"
           style={{
             backgroundColor: isActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
+            minHeight: layout.actionMinHeight,
           }}
           onPress={onSubmitGuess}
           disabled={isActionDisabled}
         >
-          <Text className="text-xs font-semibold text-zinc-950">{isSubmittingMastermindGuess ? "..." : "Sprawdź"}</Text>
+          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+            {isSubmittingMastermindGuess ? "..." : text.check}
+          </Text>
         </Pressable>
       </View>
       <View className="mt-2 flex-row flex-wrap gap-1.5">
         {MASTERMIND_SYMBOLS.map((symbol) => (
           <Pressable
             key={`${stationId}-mastermind-symbol-${symbol}`}
-            className="h-8 w-8 items-center justify-center rounded-md border active:opacity-90"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+            className="items-center justify-center rounded-md border active:opacity-90"
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panelStrong,
+              width: layout.isTablet ? 38 : 32,
+              height: layout.isTablet ? 38 : 32,
+            }}
             onPress={() => {
               onAddSymbol(symbol);
             }}
             disabled={isSymbolDisabled}
+            hitSlop={4}
           >
-            <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            <Text
+              className="font-semibold"
+              style={{
+                color: EXPEDITION_THEME.textPrimary,
+                fontSize: layout.isTablet ? 16 : 12,
+                textAlign: "center",
+                textAlignVertical: "center",
+                includeFontPadding: false,
+              }}
+            >
               {symbol}
             </Text>
           </Pressable>
         ))}
       </View>
       {mastermindResult ? (
-        <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
           {mastermindResult}
         </Text>
       ) : null}

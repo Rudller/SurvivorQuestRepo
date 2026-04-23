@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 
 type BottomCountdownPanelProps = {
@@ -9,6 +10,46 @@ type BottomCountdownPanelProps = {
   onOpenQrScanner: () => void;
   isScannerOpening?: boolean;
   isInteractionDisabled?: boolean;
+};
+
+const BOTTOM_COUNTDOWN_PANEL_TEXT: Record<
+  UiLanguage,
+  {
+    time: string;
+    progress: string;
+    realizationFinished: string;
+    openingScanner: string;
+    qrScanner: string;
+  }
+> = {
+  polish: {
+    time: "Czas",
+    progress: "Postęp",
+    realizationFinished: "Realizacja zakończona",
+    openingScanner: "Otwieranie skanera...",
+    qrScanner: "Skaner QR",
+  },
+  english: {
+    time: "Time",
+    progress: "Progress",
+    realizationFinished: "Realization finished",
+    openingScanner: "Opening scanner...",
+    qrScanner: "QR scanner",
+  },
+  ukrainian: {
+    time: "Час",
+    progress: "Прогрес",
+    realizationFinished: "Реалізацію завершено",
+    openingScanner: "Відкриваємо сканер...",
+    qrScanner: "QR-сканер",
+  },
+  russian: {
+    time: "Время",
+    progress: "Прогресс",
+    realizationFinished: "Реализация завершена",
+    openingScanner: "Открываем сканер...",
+    qrScanner: "QR-сканер",
+  },
 };
 
 function QrScannerIcon() {
@@ -31,6 +72,9 @@ export function BottomCountdownPanel({
   isScannerOpening = false,
   isInteractionDisabled = false,
 }: BottomCountdownPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = BOTTOM_COUNTDOWN_PANEL_TEXT[uiLanguage];
+
   return (
     <View
       className="rounded-[30px] border px-4 py-3"
@@ -42,7 +86,7 @@ export function BottomCountdownPanel({
       <View className="flex-row items-center justify-between">
         <View className="flex-1 items-center">
           <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-            Czas
+            {text.time}
           </Text>
           <Text className="mt-1 text-lg font-extrabold" style={{ color: isCompleted ? EXPEDITION_THEME.danger : EXPEDITION_THEME.accentStrong }}>
             {remainingLabel}
@@ -63,7 +107,7 @@ export function BottomCountdownPanel({
 
         <View className="flex-1 items-center">
           <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-            Postęp
+            {text.progress}
           </Text>
           <Text className="mt-1 text-lg font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
             {progressLabel}
@@ -71,7 +115,7 @@ export function BottomCountdownPanel({
         </View>
       </View>
       <Text className="mt-2 text-center text-[11px]" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        {isInteractionDisabled ? "Realizacja zakończona" : isScannerOpening ? "Otwieranie skanera..." : "Skaner QR"}
+        {isInteractionDisabled ? text.realizationFinished : isScannerOpening ? text.openingScanner : text.qrScanner}
       </Text>
     </View>
   );

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import {
   getRealizationLanguageFlag,
@@ -54,9 +55,219 @@ type DebugOutcomePreview = {
   variant: "success" | "failed";
   message: string;
 };
+
+const EXPEDITION_STAGE_TEXT: Record<
+  UiLanguage,
+  {
+    stationLabelPrefix: string;
+    stationTypeTimed: string;
+    stationTypePoints: string;
+    stationTypeAudioQuiz: string;
+    stationTypeHangman: string;
+    stationTypeCaesar: string;
+    stationTypeMatching: string;
+    stationTypeQuiz: string;
+    realizationEndedScannerBlocked: string;
+    qrScannerReady: string;
+    openScannerFailed: string;
+    realizationEndedTasksBlocked: string;
+    qrTokenReadFailed: string;
+    processQrFailed: string;
+    scannedStation: string;
+    realizationEndedCannotOpenStations: string;
+    noStationsForPopupPreview: string;
+    successPopupPreview: string;
+    failedPopupPreview: string;
+    realizationEndedCannotStartTasks: string;
+    taskTimerStarted: string;
+    taskAlreadyFailedAfterClose: string;
+    taskCompleted: string;
+    timedTaskAlertTitle: string;
+    timedTaskAlertBody: string;
+    timedTaskAlertBack: string;
+    timedTaskAlertCloseAndFail: string;
+    taskMarkedFailed: string;
+    taskTimeExpired: string;
+    loadingMap: string;
+    realizationPrefix: string;
+    tasks: string;
+    testMenu: string;
+    teamDefaultName: string;
+    qrScanCanceled: string;
+    chooseContentLanguage: string;
+    contentLanguageSet: string;
+    close: string;
+  }
+> = {
+  polish: {
+    stationLabelPrefix: "Stanowisko",
+    stationTypeTimed: "Na czas",
+    stationTypePoints: "Na punkty",
+    stationTypeAudioQuiz: "Quiz audio",
+    stationTypeHangman: "Wisielec",
+    stationTypeCaesar: "Szyfr Cezara",
+    stationTypeMatching: "Łączenie par",
+    stationTypeQuiz: "Quiz",
+    realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
+    qrScannerReady: "Skaner QR gotowy.",
+    openScannerFailed: "Nie udało się otworzyć skanera.",
+    realizationEndedTasksBlocked: "Realizacja została zakończona. Dalsze zadania są zablokowane.",
+    qrTokenReadFailed: "Nie udało się odczytać tokenu z kodu QR.",
+    processQrFailed: "Nie udało się przetworzyć kodu QR.",
+    scannedStation: "Zeskanowano stanowisko: {name}",
+    realizationEndedCannotOpenStations: "Realizacja została zakończona. Nie można otwierać stanowisk.",
+    noStationsForPopupPreview: "Brak stanowisk do podglądu popupu.",
+    successPopupPreview: "Podgląd popupu zaliczonego zadania.",
+    failedPopupPreview: "Podgląd popupu niezaliczonego zadania.",
+    realizationEndedCannotStartTasks: "Realizacja została zakończona. Nie można uruchamiać nowych zadań.",
+    taskTimerStarted: "Licznik zadania uruchomiony.",
+    taskAlreadyFailedAfterClose: "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.",
+    taskCompleted: "Zadanie zaliczone.",
+    timedTaskAlertTitle: "Uwaga: opuszczenie stanowiska",
+    timedTaskAlertBody: "Jeśli zamkniesz stanowisko bez ukończenia, zadanie zostanie oznaczone jako niezaliczone.",
+    timedTaskAlertBack: "Wróć",
+    timedTaskAlertCloseAndFail: "Zamknij i nie zaliczaj",
+    taskMarkedFailed: "Zadanie zostało oznaczone jako niezaliczone.",
+    taskTimeExpired: "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.",
+    loadingMap: "Ładowanie mapy...",
+    realizationPrefix: "Realizacja",
+    tasks: "Zadania",
+    testMenu: "Menu testowe",
+    teamDefaultName: "Drużyna",
+    qrScanCanceled: "Skanowanie QR anulowane.",
+    chooseContentLanguage: "Wybierz język treści",
+    contentLanguageSet: "Język treści: {label}",
+    close: "Zamknij",
+  },
+  english: {
+    stationLabelPrefix: "Station",
+    stationTypeTimed: "Timed",
+    stationTypePoints: "Points",
+    stationTypeAudioQuiz: "Audio quiz",
+    stationTypeHangman: "Hangman",
+    stationTypeCaesar: "Caesar cipher",
+    stationTypeMatching: "Matching pairs",
+    stationTypeQuiz: "Quiz",
+    realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
+    qrScannerReady: "QR scanner is ready.",
+    openScannerFailed: "Failed to open scanner.",
+    realizationEndedTasksBlocked: "The realization has ended. Further tasks are blocked.",
+    qrTokenReadFailed: "Could not read a token from the QR code.",
+    processQrFailed: "Could not process the QR code.",
+    scannedStation: "Scanned station: {name}",
+    realizationEndedCannotOpenStations: "The realization has ended. Stations cannot be opened.",
+    noStationsForPopupPreview: "No stations available for popup preview.",
+    successPopupPreview: "Preview of passed task popup.",
+    failedPopupPreview: "Preview of failed task popup.",
+    realizationEndedCannotStartTasks: "The realization has ended. New tasks cannot be started.",
+    taskTimerStarted: "Task timer started.",
+    taskAlreadyFailedAfterClose: "This task was marked as failed after closing the station.",
+    taskCompleted: "Task completed.",
+    timedTaskAlertTitle: "Warning: leaving station",
+    timedTaskAlertBody: "If you close the station before completion, the task will be marked as failed.",
+    timedTaskAlertBack: "Back",
+    timedTaskAlertCloseAndFail: "Close and fail",
+    taskMarkedFailed: "The task was marked as failed.",
+    taskTimeExpired: "Time to complete the task has expired. The task was not completed.",
+    loadingMap: "Loading map...",
+    realizationPrefix: "Realization",
+    tasks: "Tasks",
+    testMenu: "Test menu",
+    teamDefaultName: "Team",
+    qrScanCanceled: "QR scanning canceled.",
+    chooseContentLanguage: "Choose content language",
+    contentLanguageSet: "Content language: {label}",
+    close: "Close",
+  },
+  ukrainian: {
+    stationLabelPrefix: "Станція",
+    stationTypeTimed: "На час",
+    stationTypePoints: "На бали",
+    stationTypeAudioQuiz: "Аудіо-вікторина",
+    stationTypeHangman: "Шибениця",
+    stationTypeCaesar: "Шифр Цезаря",
+    stationTypeMatching: "Поєднання пар",
+    stationTypeQuiz: "Вікторина",
+    realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
+    qrScannerReady: "QR-сканер готовий.",
+    openScannerFailed: "Не вдалося відкрити сканер.",
+    realizationEndedTasksBlocked: "Реалізацію завершено. Подальші завдання заблоковано.",
+    qrTokenReadFailed: "Не вдалося зчитати токен із QR-коду.",
+    processQrFailed: "Не вдалося обробити QR-код.",
+    scannedStation: "Скановано станцію: {name}",
+    realizationEndedCannotOpenStations: "Реалізацію завершено. Не можна відкривати станції.",
+    noStationsForPopupPreview: "Немає станцій для попереднього перегляду popup.",
+    successPopupPreview: "Попередній перегляд popup зарахованого завдання.",
+    failedPopupPreview: "Попередній перегляд popup незарахованого завдання.",
+    realizationEndedCannotStartTasks: "Реалізацію завершено. Не можна запускати нові завдання.",
+    taskTimerStarted: "Таймер завдання запущено.",
+    taskAlreadyFailedAfterClose: "Це завдання позначено як незараховане після закриття станції.",
+    taskCompleted: "Завдання зараховано.",
+    timedTaskAlertTitle: "Увага: вихід зі станції",
+    timedTaskAlertBody: "Якщо закрити станцію без завершення, завдання буде позначено як незараховане.",
+    timedTaskAlertBack: "Назад",
+    timedTaskAlertCloseAndFail: "Закрити й не зараховувати",
+    taskMarkedFailed: "Завдання позначено як незараховане.",
+    taskTimeExpired: "Час на виконання завдання вичерпано. Завдання не зараховано.",
+    loadingMap: "Завантаження мапи...",
+    realizationPrefix: "Реалізація",
+    tasks: "Завдання",
+    testMenu: "Тестове меню",
+    teamDefaultName: "Команда",
+    qrScanCanceled: "Сканування QR скасовано.",
+    chooseContentLanguage: "Оберіть мову вмісту",
+    contentLanguageSet: "Мова вмісту: {label}",
+    close: "Закрити",
+  },
+  russian: {
+    stationLabelPrefix: "Станция",
+    stationTypeTimed: "На время",
+    stationTypePoints: "На очки",
+    stationTypeAudioQuiz: "Аудиовикторина",
+    stationTypeHangman: "Виселица",
+    stationTypeCaesar: "Шифр Цезаря",
+    stationTypeMatching: "Сопоставление пар",
+    stationTypeQuiz: "Викторина",
+    realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
+    qrScannerReady: "QR-сканер готов.",
+    openScannerFailed: "Не удалось открыть сканер.",
+    realizationEndedTasksBlocked: "Реализация завершена. Дальнейшие задания заблокированы.",
+    qrTokenReadFailed: "Не удалось считать токен из QR-кода.",
+    processQrFailed: "Не удалось обработать QR-код.",
+    scannedStation: "Сканирована станция: {name}",
+    realizationEndedCannotOpenStations: "Реализация завершена. Нельзя открывать станции.",
+    noStationsForPopupPreview: "Нет станций для предпросмотра popup.",
+    successPopupPreview: "Предпросмотр popup зачтённого задания.",
+    failedPopupPreview: "Предпросмотр popup незачтённого задания.",
+    realizationEndedCannotStartTasks: "Реализация завершена. Нельзя запускать новые задания.",
+    taskTimerStarted: "Таймер задания запущен.",
+    taskAlreadyFailedAfterClose: "Это задание было отмечено как незачтённое после закрытия станции.",
+    taskCompleted: "Задание зачтено.",
+    timedTaskAlertTitle: "Внимание: выход со станции",
+    timedTaskAlertBody: "Если закрыть станцию без выполнения, задание будет отмечено как незачтённое.",
+    timedTaskAlertBack: "Назад",
+    timedTaskAlertCloseAndFail: "Закрыть и не засчитывать",
+    taskMarkedFailed: "Задание отмечено как незачтённое.",
+    taskTimeExpired: "Время на выполнение задания истекло. Задание не зачтено.",
+    loadingMap: "Загрузка карты...",
+    realizationPrefix: "Реализация",
+    tasks: "Задания",
+    testMenu: "Тестовое меню",
+    teamDefaultName: "Команда",
+    qrScanCanceled: "Сканирование QR отменено.",
+    chooseContentLanguage: "Выберите язык контента",
+    contentLanguageSet: "Язык контента: {label}",
+    close: "Закрыть",
+  },
+};
+
 const POPUP_MIN_DURATION_MS = 6_500;
 const POPUP_MAX_DURATION_MS = 12_000;
 const POPUP_MS_PER_CHAR = 45;
+
+function interpolate(template: string, values: Record<string, string>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
+}
 
 function toCoordinate(latitude: number, longitude: number): MapCoordinate {
   return { latitude, longitude };
@@ -177,17 +388,33 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
   return DEFAULT_STATION_PIN_CUSTOMIZATION;
 }
 
-function resolveStationLabel(stationId: string, stationName?: string) {
-  return stationName?.trim() ? stationName : `Stanowisko ${stationId}`;
+function resolveStationLabel(
+  stationId: string,
+  stationName: string | undefined,
+  text: Pick<(typeof EXPEDITION_STAGE_TEXT)["polish"], "stationLabelPrefix">,
+) {
+  return stationName?.trim() ? stationName : `${text.stationLabelPrefix} ${stationId}`;
 }
 
-function resolveStationTypeLabel(stationType?: ExpeditionStationType) {
+function resolveStationTypeLabel(
+  stationType: ExpeditionStationType | undefined,
+  text: Pick<
+    (typeof EXPEDITION_STAGE_TEXT)["polish"],
+    | "stationTypeTimed"
+    | "stationTypePoints"
+    | "stationTypeAudioQuiz"
+    | "stationTypeHangman"
+    | "stationTypeCaesar"
+    | "stationTypeMatching"
+    | "stationTypeQuiz"
+  >,
+) {
   if (stationType === "time") {
-    return "Na czas";
+    return text.stationTypeTimed;
   }
 
   if (stationType === "points") {
-    return "Na punkty";
+    return text.stationTypePoints;
   }
 
   if (stationType === "wordle") {
@@ -195,11 +422,11 @@ function resolveStationTypeLabel(stationType?: ExpeditionStationType) {
   }
 
   if (stationType === "hangman") {
-    return "Wisielec";
+    return text.stationTypeHangman;
   }
 
   if (stationType === "audio-quiz") {
-    return "Quiz audio";
+    return text.stationTypeAudioQuiz;
   }
 
   if (stationType === "mastermind") {
@@ -211,7 +438,7 @@ function resolveStationTypeLabel(stationType?: ExpeditionStationType) {
   }
 
   if (stationType === "caesar-cipher") {
-    return "Szyfr Cezara";
+    return text.stationTypeCaesar;
   }
 
   if (stationType === "memory") {
@@ -235,10 +462,10 @@ function resolveStationTypeLabel(stationType?: ExpeditionStationType) {
   }
 
   if (stationType === "matching") {
-    return "Łączenie par";
+    return text.stationTypeMatching;
   }
 
-  return "Quiz";
+  return text.stationTypeQuiz;
 }
 
 function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
@@ -320,6 +547,11 @@ export function ExpeditionStageScreen({
   onSelectedLanguageChange,
 }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
+  const uiLanguage = useUiLanguage();
+  const text = EXPEDITION_STAGE_TEXT[uiLanguage];
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const shortestEdge = Math.min(viewportWidth, viewportHeight);
+  const isTabletLayout = viewportWidth >= 900 || shortestEdge >= 700;
   const {
     sessionState,
     isLoading,
@@ -349,6 +581,10 @@ export function ExpeditionStageScreen({
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
+  const [timedCloseConfirmStation, setTimedCloseConfirmStation] = useState<{
+    stationId: string;
+    startedAt: string | null;
+  } | null>(null);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
@@ -384,19 +620,10 @@ export function ExpeditionStageScreen({
     }, popupDurationMs);
   }, []);
 
-  const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation(
-    sessionState.team.lastLocation ? toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude) : null,
-  );
+  const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation();
   const mapPlayerLocation = useMemo(() => {
-    const localLocation = playerLocation ?? null;
-    const syncedLocation = sessionState.team.lastLocation ?? null;
-
-    if (!localLocation) {
-      return syncedLocation;
-    }
-
-    return localLocation;
-  }, [playerLocation, sessionState.team.lastLocation]);
+    return playerLocation ?? null;
+  }, [playerLocation]);
   const mapCenterCoordinate = useMemo(() => {
     if (mapPlayerLocation) {
       return toCoordinate(mapPlayerLocation.latitude, mapPlayerLocation.longitude);
@@ -451,11 +678,6 @@ export function ExpeditionStageScreen({
       return;
     }
 
-    if (sessionState.team.lastLocation) {
-      setMapAnchor(toCoordinate(sessionState.team.lastLocation.latitude, sessionState.team.lastLocation.longitude));
-      return;
-    }
-
     if (stationCoordinateAnchor) {
       setMapAnchor(stationCoordinateAnchor);
       return;
@@ -464,7 +686,7 @@ export function ExpeditionStageScreen({
     if (!isLoading) {
       setMapAnchor(DEFAULT_MAP_ANCHOR);
     }
-  }, [isLoading, mapAnchor, playerLocation, sessionState.team.lastLocation, stationCoordinateAnchor]);
+  }, [isLoading, mapAnchor, playerLocation, stationCoordinateAnchor]);
 
   const stationIds = useMemo(
     () => sessionState.tasks.map((task) => task.stationId).filter((stationId) => stationId.trim().length > 0),
@@ -596,7 +818,7 @@ export function ExpeditionStageScreen({
 
         return {
           stationId,
-          label: resolveStationLabel(stationId, metadata?.name),
+          label: resolveStationLabel(stationId, metadata?.name, text),
           coordinate: realStationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
           status: task?.status ?? "todo",
           failed: isFailed,
@@ -611,11 +833,12 @@ export function ExpeditionStageScreen({
       realStationCoordinates,
       sessionState.tasks,
       stationMetadataMap,
+      text,
     ],
   );
 
   const selectedStationLabel = selectedStationId
-    ? resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name)
+    ? resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name, text)
     : null;
   const completedTasks = sessionState.tasks.filter(
     (task) => task.status === "done" || failedTaskIds.has(task.stationId),
@@ -633,11 +856,11 @@ export function ExpeditionStageScreen({
     () =>
       sessionState.tasks.map((task) => ({
         stationId: task.stationId,
-        label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name),
+        label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name, text),
         done: task.status === "done",
         failed: task.status !== "done" && failedTaskIds.has(task.stationId),
       })),
-    [failedTaskIds, sessionState.tasks, stationMetadataMap],
+    [failedTaskIds, sessionState.tasks, stationMetadataMap, text],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
@@ -646,14 +869,14 @@ export function ExpeditionStageScreen({
         catalogStations.length > 0
           ? catalogStations.map((stationCatalog) => {
               const task = taskByStationId[stationCatalog.id];
-              const stationName = resolveStationLabel(stationCatalog.id, stationCatalog.name);
+              const stationName = resolveStationLabel(stationCatalog.id, stationCatalog.name, text);
               const stationType = stationCatalog.type || "quiz";
 
               return {
                 stationId: stationCatalog.id,
                 stationType: normalizeStationType(stationType),
                 name: stationName,
-                typeLabel: resolveStationTypeLabel(stationType),
+                typeLabel: resolveStationTypeLabel(stationType, text),
                 description: stationCatalog.description?.trim() || "",
                 imageUrl:
                   stationCatalog.imageUrl?.trim() ||
@@ -674,14 +897,14 @@ export function ExpeditionStageScreen({
           : sessionState.tasks.map((task) => {
               const stationId = task.stationId;
               const metadata = stationMetadataMap[stationId];
-              const stationName = resolveStationLabel(stationId, metadata?.name);
+              const stationName = resolveStationLabel(stationId, metadata?.name, text);
               const stationType = metadata?.type || "quiz";
 
               return {
                 stationId,
                 stationType: normalizeStationType(stationType),
                 name: stationName,
-                typeLabel: resolveStationTypeLabel(stationType),
+                typeLabel: resolveStationTypeLabel(stationType, text),
                 description: "",
                 imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationName)}`,
                 points: resolveDefaultStationPoints(stationId),
@@ -705,6 +928,7 @@ export function ExpeditionStageScreen({
       sessionState.tasks,
       stationMetadataMap,
       taskByStationId,
+      text,
     ],
   );
 
@@ -793,7 +1017,7 @@ export function ExpeditionStageScreen({
   const teamColor = TEAM_COLORS.find((color) => color.key === sessionState.team.color) ?? null;
   const teamColorHex = teamColor?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
-  const teamName = sessionState.team.name?.trim() || session.team.name || "Drużyna";
+  const teamName = sessionState.team.name?.trim() || session.team.name || text.teamDefaultName;
   const teamIcon = session.team.icon.trim().length > 0 ? session.team.icon : "🏁";
   const selectedLanguage =
     session.selectedLanguage ??
@@ -802,6 +1026,25 @@ export function ExpeditionStageScreen({
     sessionState.realization.language ??
     session.realization?.language ??
     "polish";
+
+  useEffect(() => {
+    if (!onSelectedLanguageChange || session.selectedLanguage) {
+      return;
+    }
+
+    const runtimeLanguage = sessionState.realization.selectedLanguage ?? sessionState.realization.language;
+    if (!runtimeLanguage) {
+      return;
+    }
+
+    onSelectedLanguageChange(runtimeLanguage);
+  }, [
+    onSelectedLanguageChange,
+    session.selectedLanguage,
+    sessionState.realization.language,
+    sessionState.realization.selectedLanguage,
+  ]);
+
   const availableLanguageOptions = useMemo<RealizationLanguageOption[]>(() => {
     if (
       sessionState.realization.availableLanguages &&
@@ -874,9 +1117,19 @@ export function ExpeditionStageScreen({
     }
   }, [hasMultipleLanguageOptions, isLanguagePickerOpen]);
 
+  useEffect(() => {
+    if (!timedCloseConfirmStation) {
+      return;
+    }
+
+    if (!activeStationTestId || activeStationTestId !== timedCloseConfirmStation.stationId) {
+      setTimedCloseConfirmStation(null);
+    }
+  }, [activeStationTestId, timedCloseConfirmStation]);
+
   async function handleOpenQrScanner() {
     if (isSessionEnded) {
-      setActionError("Realizacja została zakończona. Skanowanie QR jest zablokowane.");
+      setActionError(text.realizationEndedScannerBlocked);
       return;
     }
 
@@ -895,9 +1148,9 @@ export function ExpeditionStageScreen({
         }
       }
       setIsQrScannerOpen(true);
-      setActionMessage("Skaner QR gotowy.");
+      setActionMessage(text.qrScannerReady);
     } catch (error) {
-      setActionError(getApiErrorMessage(error, "Nie udało się otworzyć skanera."));
+      setActionError(getApiErrorMessage(error, text.openScannerFailed));
     } finally {
       setIsScannerOpening(false);
     }
@@ -906,7 +1159,7 @@ export function ExpeditionStageScreen({
   const handleQrDetected = useCallback(
     async (rawValue: string) => {
       if (isSessionEnded) {
-        setActionError("Realizacja została zakończona. Dalsze zadania są zablokowane.");
+        setActionError(text.realizationEndedTasksBlocked);
         return;
       }
 
@@ -921,7 +1174,7 @@ export function ExpeditionStageScreen({
       try {
         const token = extractStationQrToken(rawValue);
         if (!token) {
-          setActionError("Nie udało się odczytać tokenu z kodu QR.");
+          setActionError(text.qrTokenReadFailed);
           return;
         }
 
@@ -947,14 +1200,14 @@ export function ExpeditionStageScreen({
           setActiveStationTestId(scannedStationId);
         }
         setIsQrScannerOpen(false);
-        setActionMessage(`Zeskanowano stanowisko: ${result.station.name}`);
+        setActionMessage(interpolate(text.scannedStation, { name: result.station.name }));
       } catch (error) {
-        setActionError(getApiErrorMessage(error, "Nie udało się przetworzyć kodu QR."));
+        setActionError(getApiErrorMessage(error, text.processQrFailed));
       } finally {
         setIsQrResolving(false);
       }
     },
-    [isQrResolving, isSessionEnded, resolveStationQrToken],
+    [isQrResolving, isSessionEnded, resolveStationQrToken, text],
   );
 
   function handleSelectStationFromMap(stationId: string) {
@@ -963,7 +1216,7 @@ export function ExpeditionStageScreen({
 
   function handleEnterStationTest(stationId: string) {
     if (isSessionEnded) {
-      setActionError("Realizacja została zakończona. Nie można otwierać stanowisk.");
+      setActionError(text.realizationEndedCannotOpenStations);
       setIsStationTestMenuOpen(false);
       return;
     }
@@ -996,7 +1249,7 @@ export function ExpeditionStageScreen({
     (variant: "success" | "failed") => {
       const previewStationId = stationTestEntries[0]?.stationId ?? null;
       if (!previewStationId) {
-        setActionError("Brak stanowisk do podglądu popupu.");
+        setActionError(text.noStationsForPopupPreview);
         return;
       }
 
@@ -1010,17 +1263,17 @@ export function ExpeditionStageScreen({
         variant,
         message:
           variant === "success"
-            ? "Podgląd popupu zaliczonego zadania."
-            : "Podgląd popupu niezaliczonego zadania.",
+            ? text.successPopupPreview
+            : text.failedPopupPreview,
       });
     },
-    [stationTestEntries],
+    [stationTestEntries, text.failedPopupPreview, text.noStationsForPopupPreview, text.successPopupPreview],
   );
 
   const handleStartStationTestTask = useCallback(
     async (stationId: string) => {
       if (isSessionEnded) {
-        return "Realizacja została zakończona. Nie można uruchamiać nowych zadań.";
+        return text.realizationEndedCannotStartTasks;
       }
 
       setActionError(null);
@@ -1047,10 +1300,10 @@ export function ExpeditionStageScreen({
         return result;
       }
 
-      setActionMessage("Licznik zadania uruchomiony.");
+      setActionMessage(text.taskTimerStarted);
       return null;
     },
-    [isSessionEnded, startStationTask],
+    [isSessionEnded, startStationTask, text.realizationEndedCannotStartTasks, text.taskTimerStarted],
   );
 
   const handleCompleteStationTestTask = useCallback(
@@ -1059,7 +1312,7 @@ export function ExpeditionStageScreen({
       setActionMessage(null);
 
       if (taskByStationId[stationId]?.status === "failed") {
-        return "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.";
+        return text.taskAlreadyFailedAfterClose;
       }
 
       const result = await completeStationTask(stationId, completionCode, startedAt);
@@ -1070,10 +1323,10 @@ export function ExpeditionStageScreen({
         return result;
       }
 
-      setActionMessage("Zadanie zaliczone.");
+      setActionMessage(text.taskCompleted);
       return null;
     },
-    [completeStationTask, taskByStationId],
+    [completeStationTask, taskByStationId, text.taskAlreadyFailedAfterClose, text.taskCompleted],
   );
 
   const handleRequestCloseActiveStation = useCallback(() => {
@@ -1084,39 +1337,17 @@ export function ExpeditionStageScreen({
 
     const isAlreadyDone = activeStationTest.status === "done" || activeStationTest.status === "failed";
     const hasTimeLimit = activeStationTest.timeLimitSeconds > 0;
-    if (isAlreadyDone || !hasTimeLimit) {
+    const isInteractiveQuiz = isInteractiveQuizStationType(activeStationTest.stationType);
+    const shouldRequireFailConfirmation = hasTimeLimit || isInteractiveQuiz;
+    if (isAlreadyDone || !shouldRequireFailConfirmation) {
       setActiveStationTestId(null);
       return;
     }
 
-    Alert.alert(
-      "Uwaga: zadanie na czas",
-      "Jeśli zamkniesz stanowisko bez ukończenia, zadanie zostanie automatycznie oznaczone jako niezaliczone.",
-      [
-        { text: "Wróć", style: "cancel" },
-        {
-          text: "Zamknij i nie zaliczaj",
-          style: "destructive",
-          onPress: () => {
-            const stationId = activeStationTest.stationId;
-            const startedAt = activeStationTest.startedAt ?? localStartedAtByStationId[stationId];
-            void failStationTask(
-              stationId,
-              "task_closed_before_completion",
-              startedAt,
-            ).then((error) => {
-              if (error) {
-                setActionError(error);
-              } else {
-                setActionMessage("Zadanie zostało oznaczone jako niezaliczone.");
-              }
-              setActiveStationTestId(null);
-            });
-          },
-        },
-      ],
-    );
-  }, [activeStationTest, failStationTask, localStartedAtByStationId]);
+    const stationId = activeStationTest.stationId;
+    const startedAt = activeStationTest.startedAt ?? localStartedAtByStationId[stationId] ?? null;
+    setTimedCloseConfirmStation({ stationId, startedAt });
+  }, [activeStationTest, localStartedAtByStationId]);
 
   const handleTimeStationExpired = useCallback(
     (stationId: string) => {
@@ -1126,10 +1357,10 @@ export function ExpeditionStageScreen({
           setActionError(error);
           return;
         }
-        setActionError("Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.");
+        setActionError(text.taskTimeExpired);
       });
     },
-    [failStationTask, localStartedAtByStationId, taskByStationId],
+    [failStationTask, localStartedAtByStationId, taskByStationId, text.taskTimeExpired],
   );
 
   return (
@@ -1139,7 +1370,7 @@ export function ExpeditionStageScreen({
           <View className="flex-1 items-center justify-center gap-3" style={{ backgroundColor: EXPEDITION_THEME.panelMuted }}>
             <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
             <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Ładowanie mapy...
+              {text.loadingMap}
             </Text>
           </View>
         ) : (
@@ -1156,7 +1387,11 @@ export function ExpeditionStageScreen({
 
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <TopRealizationPanel
-          companyName={sessionState.realization.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`}
+          companyName={
+            sessionState.realization.companyName ||
+            session.realization?.companyName ||
+            `${text.realizationPrefix} ${session.realizationCode}`
+          }
           logoUrl={sessionState.realization.logoUrl}
           teamName={teamName}
           teamSlot={sessionState.team.slotNumber ?? session.team.slotNumber}
@@ -1182,7 +1417,7 @@ export function ExpeditionStageScreen({
             style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
           >
             <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-              Zadania
+              {text.tasks}
             </Text>
             <View className="mt-2 gap-1.5">
               {checklistItems.map((item) => (
@@ -1232,7 +1467,7 @@ export function ExpeditionStageScreen({
             onPress={() => setIsStationTestMenuOpen(true)}
           >
             <Text className="text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Menu testowe
+              {text.testMenu}
             </Text>
           </Pressable>
 
@@ -1409,9 +1644,95 @@ export function ExpeditionStageScreen({
         onDetected={(value) => void handleQrDetected(value)}
         onClose={() => {
           setIsQrScannerOpen(false);
-          setActionMessage((current) => current || "Skanowanie QR anulowane.");
+          setActionMessage((current) => current || text.qrScanCanceled);
         }}
       />
+
+      <Modal
+        visible={Boolean(timedCloseConfirmStation)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTimedCloseConfirmStation(null)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", paddingHorizontal: isTabletLayout ? 36 : 24 }}
+          onPress={() => setTimedCloseConfirmStation(null)}
+        >
+          <Pressable
+            className="w-full border"
+            style={{
+              maxWidth: isTabletLayout ? 760 : 460,
+              borderRadius: isTabletLayout ? 28 : 18,
+              paddingHorizontal: isTabletLayout ? 28 : 20,
+              paddingVertical: isTabletLayout ? 26 : 20,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: isTabletLayout ? 28 : 18 }}>
+              {text.timedTaskAlertTitle}
+            </Text>
+            <Text
+              className="mt-2"
+              style={{ color: EXPEDITION_THEME.textMuted, fontSize: isTabletLayout ? 19 : 14, lineHeight: isTabletLayout ? 30 : 24 }}
+            >
+              {text.timedTaskAlertBody}
+            </Text>
+
+            <View className="mt-5 flex-row" style={{ columnGap: isTabletLayout ? 14 : 8 }}>
+              <Pressable
+                className="flex-1 items-center justify-center border active:opacity-90"
+                style={{
+                  borderRadius: isTabletLayout ? 16 : 12,
+                  minHeight: isTabletLayout ? 62 : 48,
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                }}
+                onPress={() => setTimedCloseConfirmStation(null)}
+              >
+                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: isTabletLayout ? 19 : 14 }}>
+                  {text.timedTaskAlertBack}
+                </Text>
+              </Pressable>
+              <Pressable
+                className="flex-1 items-center justify-center border active:opacity-90"
+                style={{
+                  borderRadius: isTabletLayout ? 16 : 12,
+                  minHeight: isTabletLayout ? 62 : 48,
+                  borderColor: "rgba(239, 68, 68, 0.7)",
+                  backgroundColor: "rgba(239, 68, 68, 0.2)",
+                }}
+                onPress={() => {
+                  const station = timedCloseConfirmStation;
+                  if (!station) {
+                    return;
+                  }
+
+                  setTimedCloseConfirmStation(null);
+                  void failStationTask(
+                    station.stationId,
+                    "task_closed_before_completion",
+                    station.startedAt ?? undefined,
+                  ).then((error) => {
+                    if (error) {
+                      setActionError(error);
+                    } else {
+                      setActionMessage(text.taskMarkedFailed);
+                    }
+                    setActiveStationTestId(null);
+                  });
+                }}
+              >
+                <Text className="font-semibold" style={{ color: "#fecaca", fontSize: isTabletLayout ? 19 : 14 }}>
+                  {text.timedTaskAlertCloseAndFail}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={isLanguagePickerOpen}
@@ -1434,7 +1755,7 @@ export function ExpeditionStageScreen({
             onPress={(event) => event.stopPropagation()}
           >
             <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Wybierz język treści
+              {text.chooseContentLanguage}
             </Text>
             <View className="mt-3 gap-2">
               {availableLanguageOptions.map((option) => {
@@ -1451,7 +1772,7 @@ export function ExpeditionStageScreen({
                       if (option.value !== selectedLanguage) {
                         onSelectedLanguageChange?.(option.value);
                         setActionError(null);
-                        setActionMessage(`Język treści: ${option.label}`);
+                        setActionMessage(interpolate(text.contentLanguageSet, { label: option.label }));
                       }
                       setIsLanguagePickerOpen(false);
                     }}
@@ -1477,7 +1798,7 @@ export function ExpeditionStageScreen({
               onPress={() => setIsLanguagePickerOpen(false)}
             >
               <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                Zamknij
+                {text.close}
               </Text>
             </Pressable>
           </Pressable>

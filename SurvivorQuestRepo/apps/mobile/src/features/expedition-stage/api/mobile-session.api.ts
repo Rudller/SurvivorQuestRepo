@@ -11,9 +11,59 @@ import {
   type RealizationLanguage,
   type RealizationLanguageOption,
 } from "../../onboarding/model/types";
+import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
 
 type UnknownRecord = Record<string, unknown>;
 type MobileApiError = { message?: string };
+
+const MOBILE_SESSION_API_TEXT: Record<
+  UiLanguage,
+  {
+    stationLabel: string;
+    stationDescriptionFallback: string;
+    companyNameFallback: string;
+    teamLabel: string;
+    apiCommunicationError: string;
+    missingSessionToken: string;
+  }
+> = {
+  polish: {
+    stationLabel: "Stanowisko",
+    stationDescriptionFallback: "Opis stanowiska jest dostępny po skanie QR.",
+    companyNameFallback: "Realizacja terenowa",
+    teamLabel: "Drużyna",
+    apiCommunicationError: "Wystąpił błąd komunikacji z API.",
+    missingSessionToken: "Brakuje tokenu sesji.",
+  },
+  english: {
+    stationLabel: "Station",
+    stationDescriptionFallback: "Station description is available after scanning the QR code.",
+    companyNameFallback: "Outdoor realization",
+    teamLabel: "Team",
+    apiCommunicationError: "API communication error occurred.",
+    missingSessionToken: "Missing session token.",
+  },
+  ukrainian: {
+    stationLabel: "Станція",
+    stationDescriptionFallback: "Опис станції буде доступний після сканування QR-коду.",
+    companyNameFallback: "Виїзна реалізація",
+    teamLabel: "Команда",
+    apiCommunicationError: "Сталася помилка зв'язку з API.",
+    missingSessionToken: "Відсутній токен сесії.",
+  },
+  russian: {
+    stationLabel: "Станция",
+    stationDescriptionFallback: "Описание станции будет доступно после сканирования QR-кода.",
+    companyNameFallback: "Выездная реализация",
+    teamLabel: "Команда",
+    apiCommunicationError: "Произошла ошибка связи с API.",
+    missingSessionToken: "Отсутствует токен сессии.",
+  },
+};
+
+function getMobileSessionApiText(language: RealizationLanguage | null | undefined) {
+  return MOBILE_SESSION_API_TEXT[resolveUiLanguage(language)];
+}
 
 function asRecord(value: unknown): UnknownRecord {
   return typeof value === "object" && value !== null ? (value as UnknownRecord) : {};
@@ -171,7 +221,7 @@ function normalizePlayerLocation(value: unknown): PlayerLocation | null {
   };
 }
 
-function normalizeSessionState(raw: unknown): ExpeditionSessionState {
+function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLanguage): ExpeditionSessionState {
   const source = asRecord(raw);
   const realization = asRecord(source.realization);
   const realizationLanguage = normalizeRealizationLanguage(
@@ -196,6 +246,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       availableLanguages.some((option) => option.value === realizationLanguage) &&
       realizationLanguage) ||
     availableLanguages[0]?.value;
+  const text = getMobileSessionApiText(preferredLanguage ?? selectedLanguageFromApi ?? realizationLanguage);
   const scenario = asRecord(realization.scenario);
   const team = asRecord(source.team);
   const meta = asRecord(source.meta);
@@ -217,13 +268,13 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
     .map((stationItem) => {
     const station = asRecord(stationItem);
     const id = asString(station.id ?? station.stationId ?? station.station_id).trim();
-    const name = asString(station.name, id || "Stanowisko");
+    const name = asString(station.name, id ? `${text.stationLabel} ${id}` : text.stationLabel);
 
     return {
       id,
       name,
       type: normalizeStationType(station.type),
-      description: asString(station.description, "Opis stanowiska jest dostępny po skanie QR."),
+      description: asString(station.description, text.stationDescriptionFallback),
       imageUrl:
         asString(station.imageUrl ?? station.image_url) ||
         `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(name)}`,
@@ -284,11 +335,11 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
       return existingStation;
     }
 
-      return {
-        id: stationId,
-        name: `Stanowisko ${stationId}`,
-        type: "quiz",
-      description: "Opis stanowiska jest dostępny po skanie QR.",
+    return {
+      id: stationId,
+      name: `${text.stationLabel} ${stationId}`,
+      type: "quiz",
+      description: text.stationDescriptionFallback,
       imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationId)}`,
       points: 100,
       timeLimitSeconds: 0,
@@ -317,7 +368,7 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
   return {
     realization: {
       id: asString(realization.id, "unknown-realization"),
-      companyName: asString(realization.companyName ?? realization.company_name, "Realizacja terenowa"),
+      companyName: asString(realization.companyName ?? realization.company_name, text.companyNameFallback),
       introText: asString(realization.introText ?? realization.intro_text) || undefined,
       gameRules: asString(realization.gameRules ?? realization.game_rules) || undefined,
       contactPerson: asString(realization.contactPerson ?? realization.contact_person),
@@ -369,13 +420,13 @@ function normalizeSessionState(raw: unknown): ExpeditionSessionState {
         const position = Math.max(1, Math.round(asNumber(parsed.position, index + 1)));
         const slotNumber = Math.max(1, Math.round(asNumber(parsed.slotNumber ?? parsed.slot_number, 1)));
         const teamId = asString(parsed.teamId ?? parsed.team_id, `team-slot-${slotNumber}`).trim();
-        const teamName = asString(parsed.name, `Drużyna ${slotNumber}`).trim();
+        const teamName = asString(parsed.name, `${text.teamLabel} ${slotNumber}`).trim();
 
         return {
           position,
           teamId: teamId || `team-slot-${slotNumber}`,
           slotNumber,
-          name: teamName || `Drużyna ${slotNumber}`,
+          name: teamName || `${text.teamLabel} ${slotNumber}`,
           color: (() => {
             const value = asString(parsed.color).trim();
             return value.length > 0 ? value : null;
@@ -428,12 +479,12 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   return data as T;
 }
 
-export function getApiErrorMessage(error: unknown, fallback = "Wystąpił błąd komunikacji z API.") {
+export function getApiErrorMessage(error: unknown, fallback?: string, language?: RealizationLanguage) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
 
-  return fallback;
+  return fallback ?? getMobileSessionApiText(language).apiCommunicationError;
 }
 
 export function isSessionTokenInvalidError(error: unknown) {
@@ -455,16 +506,16 @@ export async function fetchMobileSessionState(
   sessionToken: string,
   selectedLanguage?: RealizationLanguage,
 ) {
-  const trimmedToken = sessionToken.trim();
-
-  if (!trimmedToken) {
-    throw new Error("Brakuje tokenu sesji.");
-  }
-
   const safeLanguage =
     selectedLanguage && isRealizationLanguage(selectedLanguage)
       ? selectedLanguage
       : undefined;
+  const trimmedToken = sessionToken.trim();
+
+  if (!trimmedToken) {
+    throw new Error(getMobileSessionApiText(safeLanguage).missingSessionToken);
+  }
+
   const result = await requestMobileApi<unknown>(
     apiBaseUrl,
     "/api/mobile/session/state",
@@ -476,7 +527,7 @@ export async function fetchMobileSessionState(
       }),
     },
   );
-  return normalizeSessionState(result);
+  return normalizeSessionState(result, safeLanguage);
 }
 
 export async function postMobileTeamLocation(

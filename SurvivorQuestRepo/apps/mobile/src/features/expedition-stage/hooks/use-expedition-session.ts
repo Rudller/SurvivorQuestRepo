@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OnboardingSession } from "../../onboarding/model/types";
+import { useUiLanguage } from "../../i18n/ui-language-context";
 import {
   fetchMobileSessionState,
   getApiErrorMessage,
@@ -19,6 +20,69 @@ import {
 
 const SESSION_POLLING_INTERVAL_MS = 15_000;
 const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
+
+const EXPEDITION_SESSION_TEXT = {
+  polish: {
+    missingSessionStateApiConfig: "Brakuje konfiguracji API do pobrania stanu sesji.",
+    refreshSessionFailed: "Nie udało się odświeżyć stanu sesji.",
+    invalidStation: "Nieprawidłowe stanowisko.",
+    missingApiConfig: "Brakuje konfiguracji API.",
+    startTaskFailed: "Nie udało się uruchomić zadania.",
+    invalidTaskData: "Nieprawidłowe dane zadania.",
+    completeTaskFailed: "Nie udało się ukończyć zadania.",
+    noLocationServerResponse: "Brak odpowiedzi serwera dla lokalizacji.",
+    sendLocationFailed: "Nie udało się wysłać lokalizacji.",
+    failTaskFailed: "Nie udało się oznaczyć zadania jako niezaliczone.",
+    invalidQrCode: "Nieprawidłowy kod QR.",
+    qrRequiresBackend: "Skanowanie QR wymaga połączenia z backendem.",
+    verifyQrFailed: "Nie udało się zweryfikować kodu QR.",
+  },
+  english: {
+    missingSessionStateApiConfig: "Missing API configuration to fetch session state.",
+    refreshSessionFailed: "Failed to refresh session state.",
+    invalidStation: "Invalid station.",
+    missingApiConfig: "Missing API configuration.",
+    startTaskFailed: "Failed to start the task.",
+    invalidTaskData: "Invalid task data.",
+    completeTaskFailed: "Failed to complete the task.",
+    noLocationServerResponse: "No server response for location update.",
+    sendLocationFailed: "Failed to send location.",
+    failTaskFailed: "Failed to mark the task as failed.",
+    invalidQrCode: "Invalid QR code.",
+    qrRequiresBackend: "QR scanning requires a backend connection.",
+    verifyQrFailed: "Failed to verify the QR code.",
+  },
+  ukrainian: {
+    missingSessionStateApiConfig: "Відсутня конфігурація API для отримання стану сесії.",
+    refreshSessionFailed: "Не вдалося оновити стан сесії.",
+    invalidStation: "Некоректна станція.",
+    missingApiConfig: "Відсутня конфігурація API.",
+    startTaskFailed: "Не вдалося запустити завдання.",
+    invalidTaskData: "Некоректні дані завдання.",
+    completeTaskFailed: "Не вдалося завершити завдання.",
+    noLocationServerResponse: "Немає відповіді сервера для оновлення локації.",
+    sendLocationFailed: "Не вдалося надіслати локацію.",
+    failTaskFailed: "Не вдалося позначити завдання як незараховане.",
+    invalidQrCode: "Некоректний QR-код.",
+    qrRequiresBackend: "Сканування QR потребує з'єднання з бекендом.",
+    verifyQrFailed: "Не вдалося перевірити QR-код.",
+  },
+  russian: {
+    missingSessionStateApiConfig: "Отсутствует конфигурация API для получения состояния сессии.",
+    refreshSessionFailed: "Не удалось обновить состояние сессии.",
+    invalidStation: "Некорректная станция.",
+    missingApiConfig: "Отсутствует конфигурация API.",
+    startTaskFailed: "Не удалось запустить задание.",
+    invalidTaskData: "Некорректные данные задания.",
+    completeTaskFailed: "Не удалось завершить задание.",
+    noLocationServerResponse: "Нет ответа сервера для обновления локации.",
+    sendLocationFailed: "Не удалось отправить локацию.",
+    failTaskFailed: "Не удалось отметить задание как незачтенное.",
+    invalidQrCode: "Некорректный QR-код.",
+    qrRequiresBackend: "Сканирование QR требует подключения к бэкенду.",
+    verifyQrFailed: "Не удалось проверить QR-код.",
+  },
+} as const;
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
@@ -58,6 +122,8 @@ function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, s
 }
 
 export function useExpeditionSession(session: OnboardingSession) {
+  const uiLanguage = useUiLanguage();
+  const text = EXPEDITION_SESSION_TEXT[uiLanguage];
   const sessionIdentityKey = useMemo(
     () =>
       [
@@ -111,7 +177,7 @@ export function useExpeditionSession(session: OnboardingSession) {
     const apiBaseUrl = session.apiBaseUrl?.trim();
 
     if (!apiBaseUrl) {
-      const error = "Brakuje konfiguracji API do pobrania stanu sesji.";
+      const error = text.missingSessionStateApiConfig;
       setErrorMessage(error);
       return error;
     }
@@ -130,7 +196,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       setSessionInvalidReason(null);
       return null;
     } catch (error) {
-      const message = getApiErrorMessage(error, "Nie udało się odświeżyć stanu sesji.");
+      const message = getApiErrorMessage(error, text.refreshSessionFailed);
       setErrorMessage(message);
       if (isSessionTokenInvalidError(error)) {
         setIsSessionInvalid(true);
@@ -141,7 +207,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [offlineMode, selectedLanguage, session.apiBaseUrl, session.sessionToken]);
+  }, [offlineMode, selectedLanguage, session.apiBaseUrl, session.sessionToken, text]);
 
   useEffect(() => {
     if (offlineMode) {
@@ -165,7 +231,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const normalizedStationId = stationId.trim();
 
       if (!normalizedStationId) {
-        return "Nieprawidłowe stanowisko.";
+        return text.invalidStation;
       }
 
       const startedAtIso = startedAt?.trim() || new Date().toISOString();
@@ -195,7 +261,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const apiBaseUrl = session.apiBaseUrl?.trim();
 
       if (!apiBaseUrl) {
-        return "Brakuje konfiguracji API.";
+        return text.missingApiConfig;
       }
 
       try {
@@ -205,14 +271,14 @@ export function useExpeditionSession(session: OnboardingSession) {
           startedAt: startedAtIso,
         });
       } catch (error) {
-        return getApiErrorMessage(error, "Nie udało się uruchomić zadania.");
+        return getApiErrorMessage(error, text.startTaskFailed);
       }
 
       setSessionState((current) => {
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
-              return task;
-            }
+        const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+          if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
+            return task;
+          }
 
           return {
             ...task,
@@ -230,7 +296,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const completeStationTask = useCallback(
@@ -239,7 +305,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const normalizedCode = completionCode.trim().toUpperCase();
 
       if (!normalizedStationId || !normalizedCode) {
-        return "Nieprawidłowe dane zadania.";
+        return text.invalidTaskData;
       }
 
       if (offlineMode) {
@@ -292,7 +358,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const apiBaseUrl = session.apiBaseUrl?.trim();
 
       if (!apiBaseUrl) {
-        return "Brakuje konfiguracji API.";
+        return text.missingApiConfig;
       }
 
       try {
@@ -348,13 +414,13 @@ export function useExpeditionSession(session: OnboardingSession) {
           };
         });
       } catch (error) {
-        return getApiErrorMessage(error, "Nie udało się ukończyć zadania.");
+        return getApiErrorMessage(error, text.completeTaskFailed);
       }
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const syncTeamLocation = useCallback(
@@ -383,7 +449,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const apiBaseUrl = session.apiBaseUrl?.trim();
 
       if (!apiBaseUrl) {
-        return "Brakuje konfiguracji API.";
+        return text.missingApiConfig;
       }
 
       try {
@@ -419,7 +485,7 @@ export function useExpeditionSession(session: OnboardingSession) {
         }
 
         if (!result) {
-          throw lastError ?? new Error("Brak odpowiedzi serwera dla lokalizacji.");
+          throw lastError ?? new Error(text.noLocationServerResponse);
         }
 
         setSessionState((current) => ({
@@ -435,17 +501,17 @@ export function useExpeditionSession(session: OnboardingSession) {
         setLastLocationSyncAt(result.lastLocationAt);
         return null;
       } catch (error) {
-        return getApiErrorMessage(error, "Nie udało się wysłać lokalizacji.");
+        return getApiErrorMessage(error, text.sendLocationFailed);
       }
     },
-    [offlineMode, session.apiBaseUrl, session.sessionToken],
+    [offlineMode, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const failStationTask = useCallback(
     async (stationId: string, reason?: string, startedAt?: string) => {
       const normalizedStationId = stationId.trim();
       if (!normalizedStationId) {
-        return "Nieprawidłowe stanowisko.";
+        return text.invalidStation;
       }
 
       if (offlineMode) {
@@ -486,7 +552,7 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       const apiBaseUrl = session.apiBaseUrl?.trim();
       if (!apiBaseUrl) {
-        return "Brakuje konfiguracji API.";
+        return text.missingApiConfig;
       }
 
       try {
@@ -531,29 +597,29 @@ export function useExpeditionSession(session: OnboardingSession) {
           };
         });
       } catch (error) {
-        return getApiErrorMessage(error, "Nie udało się oznaczyć zadania jako niezaliczone.");
+        return getApiErrorMessage(error, text.failTaskFailed);
       }
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken],
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const resolveStationQrToken = useCallback(
     async (token: string) => {
       const normalizedToken = token.trim();
       if (!normalizedToken) {
-        return "Nieprawidłowy kod QR.";
+        return text.invalidQrCode;
       }
 
       if (offlineMode) {
-        return "Skanowanie QR wymaga połączenia z backendem.";
+        return text.qrRequiresBackend;
       }
 
       const apiBaseUrl = session.apiBaseUrl?.trim();
       if (!apiBaseUrl) {
-        return "Brakuje konfiguracji API.";
+        return text.missingApiConfig;
       }
 
       try {
@@ -565,7 +631,7 @@ export function useExpeditionSession(session: OnboardingSession) {
         await refreshSessionState();
         return response;
       } catch (error) {
-        return getApiErrorMessage(error, "Nie udało się zweryfikować kodu QR.");
+        return getApiErrorMessage(error, text.verifyQrFailed);
       }
     },
     [
@@ -574,6 +640,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       selectedLanguage,
       session.apiBaseUrl,
       session.sessionToken,
+      text,
     ],
   );
 

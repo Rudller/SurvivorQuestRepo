@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { useUiLanguage, type UiLanguage } from "../../i18n";
 
 type QrScannerOverlayProps = {
   visible: boolean;
@@ -9,7 +10,54 @@ type QrScannerOverlayProps = {
   onDetected: (rawValue: string) => void;
 };
 
+const QR_SCANNER_OVERLAY_TEXT: Record<
+  UiLanguage,
+  {
+    title: string;
+    subtitle: string;
+    cameraAccessTitle: string;
+    cameraAccessDescription: string;
+    enableCamera: string;
+    verifyingCode: string;
+  }
+> = {
+  polish: {
+    title: "Skaner QR",
+    subtitle: "Skieruj kod do ramki",
+    cameraAccessTitle: "Dostęp do kamery",
+    cameraAccessDescription: "Aby skanować kody QR stanowisk, włącz dostęp do kamery.",
+    enableCamera: "Włącz kamerę",
+    verifyingCode: "Weryfikuję kod...",
+  },
+  english: {
+    title: "QR scanner",
+    subtitle: "Point the code at the frame",
+    cameraAccessTitle: "Camera access",
+    cameraAccessDescription: "Enable camera access to scan station QR codes.",
+    enableCamera: "Enable camera",
+    verifyingCode: "Verifying code...",
+  },
+  ukrainian: {
+    title: "QR-сканер",
+    subtitle: "Наведіть код у рамку",
+    cameraAccessTitle: "Доступ до камери",
+    cameraAccessDescription: "Щоб сканувати QR-коди станцій, увімкніть доступ до камери.",
+    enableCamera: "Увімкнути камеру",
+    verifyingCode: "Перевіряю код...",
+  },
+  russian: {
+    title: "QR-сканер",
+    subtitle: "Наведите код в рамку",
+    cameraAccessTitle: "Доступ к камере",
+    cameraAccessDescription: "Чтобы сканировать QR-коды станций, включите доступ к камере.",
+    enableCamera: "Включить камеру",
+    verifyingCode: "Проверяю код...",
+  },
+};
+
 export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: QrScannerOverlayProps) {
+  const uiLanguage = useUiLanguage();
+  const text = QR_SCANNER_OVERLAY_TEXT[uiLanguage];
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
   const [isMounted, setIsMounted] = useState(visible);
@@ -92,8 +140,8 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
         <View className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4">
           <View className="flex-row items-start justify-between gap-3">
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-widest text-zinc-300">Skaner QR</Text>
-              <Text className="mt-1 text-sm text-zinc-100">Skieruj kod do ramki</Text>
+              <Text className="text-xs uppercase tracking-widest text-zinc-300">{text.title}</Text>
+              <Text className="mt-1 text-sm text-zinc-100">{text.subtitle}</Text>
             </View>
             <Pressable
               className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
@@ -106,15 +154,15 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
 
           {!permission?.granted ? (
             <View className="mt-4 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3">
-              <Text className="text-sm font-semibold text-zinc-100">Dostęp do kamery</Text>
+              <Text className="text-sm font-semibold text-zinc-100">{text.cameraAccessTitle}</Text>
               <Text className="mt-1 text-xs text-zinc-300">
-                Aby skanować kody QR stanowisk, włącz dostęp do kamery.
+                {text.cameraAccessDescription}
               </Text>
               <Pressable
                 className="mt-3 rounded-lg bg-amber-400 px-3 py-2 active:opacity-90"
                 onPress={() => void requestPermission()}
               >
-                <Text className="text-center text-sm font-semibold text-zinc-950">Włącz kamerę</Text>
+                <Text className="text-center text-sm font-semibold text-zinc-950">{text.enableCamera}</Text>
               </Pressable>
             </View>
           ) : (
@@ -204,7 +252,7 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
                 <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/55">
                   <View className="flex-row items-center gap-2 rounded-xl bg-black/70 px-3 py-2">
                     <ActivityIndicator color="#fbbf24" />
-                    <Text className="text-sm text-zinc-100">Weryfikuję kod...</Text>
+                    <Text className="text-sm text-zinc-100">{text.verifyingCode}</Text>
                   </View>
                 </View>
               ) : null}

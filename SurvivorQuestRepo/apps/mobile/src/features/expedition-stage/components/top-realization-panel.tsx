@@ -1,4 +1,5 @@
 import { Image, Text, View } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 
 type TopRealizationPanelProps = {
@@ -10,6 +11,36 @@ type TopRealizationPanelProps = {
   teamColorLabel: string;
   teamIcon: string;
   points: number;
+};
+
+const TOP_REALIZATION_PANEL_TEXT: Record<
+  UiLanguage,
+  {
+    logo: string;
+    team: string;
+    points: string;
+  }
+> = {
+  polish: {
+    logo: "Logo",
+    team: "Drużyna",
+    points: "Punkty",
+  },
+  english: {
+    logo: "Logo",
+    team: "Team",
+    points: "Points",
+  },
+  ukrainian: {
+    logo: "Логотип",
+    team: "Команда",
+    points: "Бали",
+  },
+  russian: {
+    logo: "Логотип",
+    team: "Команда",
+    points: "Очки",
+  },
 };
 
 function resolveCardTextColor(hexColor: string) {
@@ -38,6 +69,8 @@ export function TopRealizationPanel({
   teamIcon,
   points,
 }: TopRealizationPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = TOP_REALIZATION_PANEL_TEXT[uiLanguage];
   const cardTextColor = resolveCardTextColor(teamColorHex);
   const cardMutedTextColor = cardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
   const iconBackground = cardTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
@@ -56,10 +89,10 @@ export function TopRealizationPanel({
           style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
         >
           {logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+            <Image source={{ uri: logoUrl }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
           ) : (
             <Text className="text-[20px] font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle }}>
-              Logo
+              {text.logo}
             </Text>
           )}
         </View>
@@ -84,12 +117,12 @@ export function TopRealizationPanel({
                   {teamName}
                 </Text>
                 <Text className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: cardMutedTextColor }}>
-                  Drużyna {teamSlot ?? "-"} • {teamColorLabel}
+                  {text.team} {teamSlot ?? "-"} • {teamColorLabel}
                 </Text>
               </View>
               <View>
                 <Text className="text-[9px] uppercase tracking-widest" style={{ color: cardMutedTextColor }}>
-                  Punkty
+                  {text.points}
                 </Text>
                 <Text className="text-xl font-extrabold text-right" style={{ color: cardTextColor }}>
                   {points}

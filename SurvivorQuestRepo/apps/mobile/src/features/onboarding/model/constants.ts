@@ -1,4 +1,4 @@
-import type { TeamColorOption } from "./types";
+import type { TeamColor, TeamColorOption } from "./types";
 
 export const EXPEDITION_THEME = {
   background: "#0f1914",
@@ -16,35 +16,171 @@ export const EXPEDITION_THEME = {
   danger: "#ef6f6c",
 } as const;
 
-export const TEAM_COLORS: TeamColorOption[] = [
-  { key: "red", label: "Czerwony", hex: "#ef4444" },
-  { key: "rose", label: "Różany", hex: "#f43f5e" },
-  { key: "pink", label: "Jasnoróżowy", hex: "#ec4899" },
-  { key: "magenta", label: "Magenta", hex: "#d946ef" },
-  { key: "violet", label: "Fioletowy", hex: "#8b5cf6" },
-  { key: "purple", label: "Purpurowy", hex: "#7e22ce" },
-  { key: "indigo", label: "Indygo", hex: "#6366f1" },
-  { key: "navy", label: "Granatowy", hex: "#1e3a8a" },
-  { key: "blue", label: "Niebieski", hex: "#3b82f6" },
-  { key: "sky", label: "Błękitny", hex: "#0ea5e9" },
-  { key: "cyan", label: "Cyjan", hex: "#06b6d4" },
-  { key: "turquoise", label: "Turkusowy", hex: "#06b6b8" },
-  { key: "teal", label: "Morski", hex: "#14b8a6" },
-  { key: "mint", label: "Miętowy", hex: "#2dd4bf" },
-  { key: "aquamarine", label: "Akwamaryna", hex: "#34d399" },
-  { key: "emerald", label: "Szmaragdowy", hex: "#10b981" },
-  { key: "green", label: "Zielony", hex: "#22c55e" },
-  { key: "lime", label: "Limonkowy", hex: "#84cc16" },
-  { key: "orange", label: "Pomarańczowy", hex: "#f97316" },
-  { key: "amber", label: "Bursztynowy", hex: "#f59e0b" },
-  { key: "gold", label: "Złoty", hex: "#d4af37" },
-  { key: "yellow", label: "Żółty", hex: "#eab308" },
-  { key: "brown", label: "Brązowy", hex: "#92400e" },
-  { key: "gray", label: "Szary", hex: "#6b7280" },
-  { key: "slate", label: "Grafitowy", hex: "#64748b" },
-  { key: "black", label: "Czarny", hex: "#111827" },
-  { key: "white", label: "Biały", hex: "#f8fafc" },
+type TeamColorLabelLocale = "polish" | "english" | "ukrainian" | "russian";
+
+type TeamColorDefinition = {
+  key: TeamColor;
+  hex: string;
+  labels: Record<TeamColorLabelLocale, string>;
+};
+
+const TEAM_COLOR_DEFINITIONS: TeamColorDefinition[] = [
+  {
+    key: "red",
+    hex: "#ef4444",
+    labels: { polish: "Czerwony", english: "Red", ukrainian: "Червоний", russian: "Красный" },
+  },
+  {
+    key: "rose",
+    hex: "#f43f5e",
+    labels: { polish: "Różany", english: "Rose", ukrainian: "Трояндовий", russian: "Розовый" },
+  },
+  {
+    key: "pink",
+    hex: "#ec4899",
+    labels: {
+      polish: "Jasnoróżowy",
+      english: "Pink",
+      ukrainian: "Яскраво-рожевий",
+      russian: "Ярко-розовый",
+    },
+  },
+  {
+    key: "magenta",
+    hex: "#d946ef",
+    labels: { polish: "Magenta", english: "Magenta", ukrainian: "Маджента", russian: "Маджента" },
+  },
+  {
+    key: "violet",
+    hex: "#8b5cf6",
+    labels: { polish: "Fioletowy", english: "Violet", ukrainian: "Фіолетовий", russian: "Фиолетовый" },
+  },
+  {
+    key: "purple",
+    hex: "#7e22ce",
+    labels: { polish: "Purpurowy", english: "Purple", ukrainian: "Пурпуровий", russian: "Пурпурный" },
+  },
+  {
+    key: "indigo",
+    hex: "#6366f1",
+    labels: { polish: "Indygo", english: "Indigo", ukrainian: "Індиго", russian: "Индиго" },
+  },
+  {
+    key: "navy",
+    hex: "#1e3a8a",
+    labels: { polish: "Granatowy", english: "Navy", ukrainian: "Темно-синій", russian: "Тёмно-синий" },
+  },
+  {
+    key: "blue",
+    hex: "#3b82f6",
+    labels: { polish: "Niebieski", english: "Blue", ukrainian: "Синій", russian: "Синий" },
+  },
+  {
+    key: "sky",
+    hex: "#0ea5e9",
+    labels: { polish: "Błękitny", english: "Sky blue", ukrainian: "Блакитний", russian: "Голубой" },
+  },
+  {
+    key: "cyan",
+    hex: "#06b6d4",
+    labels: { polish: "Cyjan", english: "Cyan", ukrainian: "Ціан", russian: "Циан" },
+  },
+  {
+    key: "turquoise",
+    hex: "#06b6b8",
+    labels: { polish: "Turkusowy", english: "Turquoise", ukrainian: "Бірюзовий", russian: "Бирюзовый" },
+  },
+  {
+    key: "teal",
+    hex: "#14b8a6",
+    labels: {
+      polish: "Morski",
+      english: "Teal",
+      ukrainian: "Синьо-зелений",
+      russian: "Сине-зелёный",
+    },
+  },
+  {
+    key: "mint",
+    hex: "#2dd4bf",
+    labels: { polish: "Miętowy", english: "Mint", ukrainian: "М’ятний", russian: "Мятный" },
+  },
+  {
+    key: "aquamarine",
+    hex: "#34d399",
+    labels: { polish: "Akwamaryna", english: "Aquamarine", ukrainian: "Аквамарин", russian: "Аквамарин" },
+  },
+  {
+    key: "emerald",
+    hex: "#10b981",
+    labels: { polish: "Szmaragdowy", english: "Emerald", ukrainian: "Смарагдовий", russian: "Изумрудный" },
+  },
+  {
+    key: "green",
+    hex: "#22c55e",
+    labels: { polish: "Zielony", english: "Green", ukrainian: "Зелений", russian: "Зелёный" },
+  },
+  {
+    key: "lime",
+    hex: "#84cc16",
+    labels: { polish: "Limonkowy", english: "Lime", ukrainian: "Лаймовий", russian: "Лаймовый" },
+  },
+  {
+    key: "orange",
+    hex: "#f97316",
+    labels: { polish: "Pomarańczowy", english: "Orange", ukrainian: "Помаранчевий", russian: "Оранжевый" },
+  },
+  {
+    key: "amber",
+    hex: "#f59e0b",
+    labels: { polish: "Bursztynowy", english: "Amber", ukrainian: "Бурштиновий", russian: "Янтарный" },
+  },
+  {
+    key: "gold",
+    hex: "#d4af37",
+    labels: { polish: "Złoty", english: "Gold", ukrainian: "Золотий", russian: "Золотой" },
+  },
+  {
+    key: "yellow",
+    hex: "#eab308",
+    labels: { polish: "Żółty", english: "Yellow", ukrainian: "Жовтий", russian: "Жёлтый" },
+  },
+  {
+    key: "brown",
+    hex: "#92400e",
+    labels: { polish: "Brązowy", english: "Brown", ukrainian: "Коричневий", russian: "Коричневый" },
+  },
+  {
+    key: "gray",
+    hex: "#6b7280",
+    labels: { polish: "Szary", english: "Gray", ukrainian: "Сірий", russian: "Серый" },
+  },
+  {
+    key: "slate",
+    hex: "#64748b",
+    labels: { polish: "Grafitowy", english: "Slate", ukrainian: "Сланцевий", russian: "Сланцевый" },
+  },
+  {
+    key: "black",
+    hex: "#111827",
+    labels: { polish: "Czarny", english: "Black", ukrainian: "Чорний", russian: "Чёрный" },
+  },
+  {
+    key: "white",
+    hex: "#f8fafc",
+    labels: { polish: "Biały", english: "White", ukrainian: "Білий", russian: "Белый" },
+  },
 ];
+
+export function getTeamColors(locale: TeamColorLabelLocale = "polish"): TeamColorOption[] {
+  return TEAM_COLOR_DEFINITIONS.map((definition) => ({
+    key: definition.key,
+    label: definition.labels[locale],
+    hex: definition.hex,
+  }));
+}
+
+export const TEAM_COLORS: TeamColorOption[] = getTeamColors("polish");
 
 export const TEAM_ICONS = [
   "🦊",

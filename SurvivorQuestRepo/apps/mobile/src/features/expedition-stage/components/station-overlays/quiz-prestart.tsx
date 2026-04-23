@@ -1,7 +1,133 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
 import type { QuizPrestartOverlayProps } from "./types";
+
+const QUIZ_PRESTART_TEXT: Record<
+  UiLanguage,
+  {
+    badgeTimed: string;
+    badgeAudioQuiz: string;
+    badgeWordle: string;
+    badgeHangman: string;
+    badgeLogicChallenge: string;
+    badgeQuiz: string;
+    titleTimed: string;
+    titleAudioQuiz: string;
+    titleWordle: string;
+    titleHangman: string;
+    titleLogicChallenge: string;
+    titleQuiz: string;
+    descriptionTimed: string;
+    descriptionAudioQuiz: string;
+    descriptionWordle: string;
+    descriptionHangman: string;
+    descriptionLogicChallenge: string;
+    descriptionQuiz: string;
+    stationPrefix: string;
+    close: string;
+    start: string;
+    starting: string;
+  }
+> = {
+  polish: {
+    badgeTimed: "Na czas",
+    badgeAudioQuiz: "Quiz audio",
+    badgeWordle: "Wordle",
+    badgeHangman: "Wisielec",
+    badgeLogicChallenge: "Wyzwanie logiczne",
+    badgeQuiz: "Quiz",
+    titleTimed: "Za chwilę zostanie uruchomione zadanie czasowe",
+    titleAudioQuiz: "Za chwilę zostanie uruchomiony quiz audio",
+    titleWordle: "Za chwilę zostanie uruchomiony Wordle",
+    titleHangman: "Za chwilę zostanie uruchomiony Wisielec",
+    titleLogicChallenge: "Za chwilę zostanie uruchomione wyzwanie",
+    titleQuiz: "Za chwilę zostanie uruchomiony quiz",
+    descriptionTimed: "Przygotuj się. Po starcie od razu ruszy licznik czasu.",
+    descriptionAudioQuiz: "Przygotuj się na odsłuchanie nagrania i wybór poprawnej odpowiedzi.",
+    descriptionWordle: "Przygotuj się na odgadnięcie słowa.",
+    descriptionHangman: "Przygotuj się na odgadnięcie hasła.",
+    descriptionLogicChallenge: "Przygotuj się na krótkie zadanie interaktywne.",
+    descriptionQuiz: "Przygotuj się na odpowiedzenie na pytania.",
+    stationPrefix: "Stanowisko",
+    close: "Zamknij",
+    start: "Start",
+    starting: "Uruchamianie...",
+  },
+  english: {
+    badgeTimed: "Timed",
+    badgeAudioQuiz: "Audio quiz",
+    badgeWordle: "Wordle",
+    badgeHangman: "Hangman",
+    badgeLogicChallenge: "Logic challenge",
+    badgeQuiz: "Quiz",
+    titleTimed: "A timed task will start in a moment",
+    titleAudioQuiz: "An audio quiz will start in a moment",
+    titleWordle: "Wordle will start in a moment",
+    titleHangman: "Hangman will start in a moment",
+    titleLogicChallenge: "A challenge will start in a moment",
+    titleQuiz: "A quiz will start in a moment",
+    descriptionTimed: "Get ready. The timer starts immediately after launch.",
+    descriptionAudioQuiz: "Get ready to listen to a recording and choose the correct answer.",
+    descriptionWordle: "Get ready to guess the word.",
+    descriptionHangman: "Get ready to guess the phrase.",
+    descriptionLogicChallenge: "Get ready for a short interactive task.",
+    descriptionQuiz: "Get ready to answer the questions.",
+    stationPrefix: "Station",
+    close: "Close",
+    start: "Start",
+    starting: "Starting...",
+  },
+  ukrainian: {
+    badgeTimed: "На час",
+    badgeAudioQuiz: "Аудіо-вікторина",
+    badgeWordle: "Wordle",
+    badgeHangman: "Шибениця",
+    badgeLogicChallenge: "Логічний виклик",
+    badgeQuiz: "Вікторина",
+    titleTimed: "Незабаром запуститься завдання на час",
+    titleAudioQuiz: "Незабаром запуститься аудіо-вікторина",
+    titleWordle: "Незабаром запуститься Wordle",
+    titleHangman: "Незабаром запуститься Шибениця",
+    titleLogicChallenge: "Незабаром запуститься випробування",
+    titleQuiz: "Незабаром запуститься вікторина",
+    descriptionTimed: "Підготуйтеся. Після старту таймер запуститься одразу.",
+    descriptionAudioQuiz: "Підготуйтеся прослухати запис і вибрати правильну відповідь.",
+    descriptionWordle: "Підготуйтеся відгадати слово.",
+    descriptionHangman: "Підготуйтеся відгадати фразу.",
+    descriptionLogicChallenge: "Підготуйтеся до короткого інтерактивного завдання.",
+    descriptionQuiz: "Підготуйтеся відповісти на запитання.",
+    stationPrefix: "Станція",
+    close: "Закрити",
+    start: "Старт",
+    starting: "Запуск...",
+  },
+  russian: {
+    badgeTimed: "На время",
+    badgeAudioQuiz: "Аудиовикторина",
+    badgeWordle: "Wordle",
+    badgeHangman: "Виселица",
+    badgeLogicChallenge: "Логическое испытание",
+    badgeQuiz: "Викторина",
+    titleTimed: "Скоро запустится задание на время",
+    titleAudioQuiz: "Скоро запустится аудиовикторина",
+    titleWordle: "Скоро запустится Wordle",
+    titleHangman: "Скоро запустится Виселица",
+    titleLogicChallenge: "Скоро запустится испытание",
+    titleQuiz: "Скоро запустится викторина",
+    descriptionTimed: "Подготовьтесь. После старта таймер запустится сразу.",
+    descriptionAudioQuiz: "Подготовьтесь прослушать запись и выбрать правильный ответ.",
+    descriptionWordle: "Подготовьтесь отгадать слово.",
+    descriptionHangman: "Подготовьтесь отгадать фразу.",
+    descriptionLogicChallenge: "Подготовьтесь к короткому интерактивному заданию.",
+    descriptionQuiz: "Подготовьтесь ответить на вопросы.",
+    stationPrefix: "Станция",
+    close: "Закрыть",
+    start: "Старт",
+    starting: "Запуск...",
+  },
+};
 
 export function QuizPrestartOverlay({
   visible,
@@ -11,6 +137,8 @@ export function QuizPrestartOverlay({
   onStart,
   onClose,
 }: QuizPrestartOverlayProps) {
+  const uiLanguage = useUiLanguage();
+  const text = QUIZ_PRESTART_TEXT[uiLanguage];
   const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const [displayStationName, setDisplayStationName] = useState(stationName);
@@ -76,40 +204,40 @@ export function QuizPrestartOverlay({
     stationType === "matching";
   const prestartBadge =
     stationType === "time"
-      ? "Na czas"
+      ? text.badgeTimed
       : stationType === "audio-quiz"
-        ? "Quiz audio"
+        ? text.badgeAudioQuiz
       : stationType === "wordle"
-        ? "Wordle"
+        ? text.badgeWordle
       : stationType === "hangman"
-          ? "Wisielec"
+          ? text.badgeHangman
           : isLogicChallenge
-            ? "Wyzwanie logiczne"
-          : "Quiz";
+            ? text.badgeLogicChallenge
+          : text.badgeQuiz;
   const prestartTitle =
     stationType === "time"
-      ? "Za chwilę zostanie uruchomione zadanie czasowe"
+      ? text.titleTimed
       : stationType === "audio-quiz"
-        ? "Za chwilę zostanie uruchomiony quiz audio"
+        ? text.titleAudioQuiz
       : stationType === "wordle"
-        ? "Za chwilę zostanie uruchomiony Wordle"
+        ? text.titleWordle
       : stationType === "hangman"
-          ? "Za chwilę zostanie uruchomiony Wisielec"
+          ? text.titleHangman
           : isLogicChallenge
-            ? "Za chwilę zostanie uruchomione wyzwanie"
-          : "Za chwilę zostanie uruchomiony quiz";
+            ? text.titleLogicChallenge
+          : text.titleQuiz;
   const prestartDescription =
     stationType === "time"
-      ? "Przygotuj się. Po starcie od razu ruszy licznik czasu."
+      ? text.descriptionTimed
       : stationType === "audio-quiz"
-        ? "Przygotuj się na odsłuchanie nagrania i wybór poprawnej odpowiedzi."
+        ? text.descriptionAudioQuiz
       : stationType === "wordle"
-        ? "Przygotuj się na odgadnięcie słowa."
+        ? text.descriptionWordle
       : stationType === "hangman"
-          ? "Przygotuj się na odgadnięcie hasła."
+          ? text.descriptionHangman
           : isLogicChallenge
-            ? "Przygotuj się na krótkie zadanie interaktywne."
-          : "Przygotuj się na odpowiedzenie na pytania.";
+            ? text.descriptionLogicChallenge
+          : text.descriptionQuiz;
 
   return (
     <Animated.View className="absolute inset-0 z-50 items-center justify-center px-3" style={[{ backgroundColor: "rgba(15, 25, 20, 0.88)" }, backdropStyle]}>
@@ -125,7 +253,7 @@ export function QuizPrestartOverlay({
         </Text>
         <Text className="mt-2 text-center text-sm leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
           {prestartDescription}
-          {displayStationName ? ` Stanowisko: ${displayStationName}.` : ""}
+          {displayStationName ? ` ${text.stationPrefix}: ${displayStationName}.` : ""}
         </Text>
 
         <View className="mt-4 flex-row gap-2">
@@ -136,7 +264,7 @@ export function QuizPrestartOverlay({
             disabled={isStarting}
           >
             <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Zamknij
+              {text.close}
             </Text>
           </Pressable>
           <Pressable
@@ -145,7 +273,7 @@ export function QuizPrestartOverlay({
             onPress={onStart}
             disabled={isStarting}
           >
-            <Text className="text-sm font-semibold text-zinc-950">{isStarting ? "Uruchamianie..." : "Start"}</Text>
+            <Text className="text-sm font-semibold text-zinc-950">{isStarting ? text.starting : text.start}</Text>
           </Pressable>
         </View>
       </Animated.View>

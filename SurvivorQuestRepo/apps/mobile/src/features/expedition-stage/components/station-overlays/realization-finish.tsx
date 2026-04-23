@@ -1,47 +1,222 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../../onboarding/model/constants";
 import type { ExpeditionLeaderboardEntry } from "../../model/types";
 import type { RealizationFinishOverlayProps } from "./types";
 
-function resolveReasonLabel(reason: RealizationFinishOverlayProps["reason"]) {
+const REALIZATION_FINISH_TEXT: Record<
+  UiLanguage,
+  {
+    reasonAllTasksCompleted: string;
+    reasonTimeExpired: string;
+    reasonRealizationFinished: string;
+    reasonManualPreview: string;
+    reasonDefault: string;
+    subtitleAllTasksCompleted: string;
+    subtitleTimeExpired: string;
+    subtitleRealizationFinished: string;
+    subtitleManualPreview: string;
+    subtitleDefault: string;
+    team: string;
+    points: string;
+    progress: string;
+    emptyTeam: string;
+    emptyPodiumSlot: string;
+    fullTable: string;
+    realizationEnd: string;
+    endedAt: string;
+    topThreeTeams: string;
+    yourTeam: string;
+    yourTeamUnavailable: string;
+    finalInstruction: string;
+    finalInstructionBold: string;
+    finalInstructionSuffix: string;
+    closePreview: string;
+    matchSummary: string;
+    fullResultsTable: string;
+    close: string;
+    place: string;
+    noTableData: string;
+  }
+> = {
+  polish: {
+    reasonAllTasksCompleted: "Wszystkie zadania Waszej drużyny zostały ukończone.",
+    reasonTimeExpired: "Czas realizacji dobiegł końca.",
+    reasonRealizationFinished: "Realizacja została zakończona przez organizatora.",
+    reasonManualPreview: "Podgląd ekranu końcowego (tryb testowy).",
+    reasonDefault: "Realizacja została zakończona.",
+    subtitleAllTasksCompleted: "Świetna robota! Jesteście na mecie.",
+    subtitleTimeExpired: "To był intensywny etap. Sprawdźcie końcowe wyniki.",
+    subtitleRealizationFinished: "Dziękujemy za udział. Czas na podsumowanie.",
+    subtitleManualPreview: "Podgląd wizualny ekranu końcowego.",
+    subtitleDefault: "Dziękujemy za wspólną grę.",
+    team: "Drużyna",
+    points: "Punkty",
+    progress: "Progres",
+    emptyTeam: "Brak drużyny",
+    emptyPodiumSlot: "Wolne miejsce podium",
+    fullTable: "Pełna tabela",
+    realizationEnd: "Koniec realizacji",
+    endedAt: "Czas zakończenia",
+    topThreeTeams: "Top 3 drużyny",
+    yourTeam: "Wasza drużyna",
+    yourTeamUnavailable: "Dane Waszej drużyny nie są jeszcze dostępne.",
+    finalInstruction: "Świetna robota! Po zakończeniu realizacji prosimy całą drużynę o powrót na miejsce startu,",
+    finalInstructionBold: "oddanie tabletów organizatorowi",
+    finalInstructionSuffix: "oraz potwierdzenie zakończenia udziału. Dziękujemy za grę 💚",
+    closePreview: "Zamknij podgląd",
+    matchSummary: "Podsumowanie",
+    fullResultsTable: "📊 Pełna tabela wyników",
+    close: "Zamknij",
+    place: "Miejsce",
+    noTableData: "Brak danych do wyświetlenia tabeli wyników.",
+  },
+  english: {
+    reasonAllTasksCompleted: "All tasks for your team have been completed.",
+    reasonTimeExpired: "The realization time has ended.",
+    reasonRealizationFinished: "The realization was ended by the organizer.",
+    reasonManualPreview: "Final screen preview (test mode).",
+    reasonDefault: "The realization has ended.",
+    subtitleAllTasksCompleted: "Great job! You reached the finish.",
+    subtitleTimeExpired: "That was an intense stage. Check the final results.",
+    subtitleRealizationFinished: "Thank you for participating. Time for a summary.",
+    subtitleManualPreview: "Visual preview of the final screen.",
+    subtitleDefault: "Thank you for playing together.",
+    team: "Team",
+    points: "Points",
+    progress: "Progress",
+    emptyTeam: "No team",
+    emptyPodiumSlot: "Empty podium slot",
+    fullTable: "Full table",
+    realizationEnd: "Realization finished",
+    endedAt: "End time",
+    topThreeTeams: "Top 3 teams",
+    yourTeam: "Your team",
+    yourTeamUnavailable: "Your team data is not available yet.",
+    finalInstruction: "Great job! After the realization ends, please return to the start point,",
+    finalInstructionBold: "hand the tablets to the organizer",
+    finalInstructionSuffix: "and confirm the end of participation. Thank you for playing 💚",
+    closePreview: "Close preview",
+    matchSummary: "Match summary",
+    fullResultsTable: "📊 Full results table",
+    close: "Close",
+    place: "Place",
+    noTableData: "No data to display in the results table.",
+  },
+  ukrainian: {
+    reasonAllTasksCompleted: "Усі завдання вашої команди виконано.",
+    reasonTimeExpired: "Час реалізації завершився.",
+    reasonRealizationFinished: "Реалізацію завершено організатором.",
+    reasonManualPreview: "Попередній перегляд фінального екрана (тестовий режим).",
+    reasonDefault: "Реалізацію завершено.",
+    subtitleAllTasksCompleted: "Чудова робота! Ви на фініші.",
+    subtitleTimeExpired: "Це був насичений етап. Перегляньте фінальні результати.",
+    subtitleRealizationFinished: "Дякуємо за участь. Час підсумків.",
+    subtitleManualPreview: "Візуальний перегляд фінального екрана.",
+    subtitleDefault: "Дякуємо за спільну гру.",
+    team: "Команда",
+    points: "Бали",
+    progress: "Прогрес",
+    emptyTeam: "Немає команди",
+    emptyPodiumSlot: "Вільне місце на п'єдесталі",
+    fullTable: "Повна таблиця",
+    realizationEnd: "Кінець реалізації",
+    endedAt: "Час завершення",
+    topThreeTeams: "Топ 3 команди",
+    yourTeam: "Ваша команда",
+    yourTeamUnavailable: "Дані вашої команди ще недоступні.",
+    finalInstruction: "Чудова робота! Після завершення реалізації просимо всю команду повернутися до місця старту,",
+    finalInstructionBold: "передати планшети організатору",
+    finalInstructionSuffix: "та підтвердити завершення участі. Дякуємо за гру 💚",
+    closePreview: "Закрити перегляд",
+    matchSummary: "Підсумок",
+    fullResultsTable: "📊 Повна таблиця результатів",
+    close: "Закрити",
+    place: "Місце",
+    noTableData: "Немає даних для відображення таблиці результатів.",
+  },
+  russian: {
+    reasonAllTasksCompleted: "Все задания вашей команды выполнены.",
+    reasonTimeExpired: "Время реализации истекло.",
+    reasonRealizationFinished: "Реализация завершена организатором.",
+    reasonManualPreview: "Предпросмотр финального экрана (тестовый режим).",
+    reasonDefault: "Реализация завершена.",
+    subtitleAllTasksCompleted: "Отличная работа! Вы на финише.",
+    subtitleTimeExpired: "Это был интенсивный этап. Проверьте финальные результаты.",
+    subtitleRealizationFinished: "Спасибо за участие. Время подвести итоги.",
+    subtitleManualPreview: "Визуальный предпросмотр финального экрана.",
+    subtitleDefault: "Спасибо за игру.",
+    team: "Команда",
+    points: "Очки",
+    progress: "Прогресс",
+    emptyTeam: "Нет команды",
+    emptyPodiumSlot: "Свободное место на пьедестале",
+    fullTable: "Полная таблица",
+    realizationEnd: "Конец реализации",
+    endedAt: "Время завершения",
+    topThreeTeams: "Топ-3 команды",
+    yourTeam: "Ваша команда",
+    yourTeamUnavailable: "Данные вашей команды пока недоступны.",
+    finalInstruction: "Отличная работа! После завершения реализации просим всю команду вернуться на место старта,",
+    finalInstructionBold: "передать планшеты организатору",
+    finalInstructionSuffix: "и подтвердить завершение участия. Спасибо за игру 💚",
+    closePreview: "Закрыть просмотр",
+    matchSummary: "Сводка",
+    fullResultsTable: "📊 Полная таблица результатов",
+    close: "Закрыть",
+    place: "Место",
+    noTableData: "Нет данных для отображения таблицы результатов.",
+  },
+};
+
+const REALIZATION_FINISH_DATE_LOCALE: Record<UiLanguage, string> = {
+  polish: "pl-PL",
+  english: "en-US",
+  ukrainian: "uk-UA",
+  russian: "ru-RU",
+};
+
+type RealizationFinishText = (typeof REALIZATION_FINISH_TEXT)["polish"];
+
+function resolveReasonLabel(reason: RealizationFinishOverlayProps["reason"], text: RealizationFinishText) {
   if (reason === "all-tasks-completed") {
-    return "Wszystkie zadania Waszej drużyny zostały ukończone.";
+    return text.reasonAllTasksCompleted;
   }
 
   if (reason === "time-expired") {
-    return "Czas realizacji dobiegł końca.";
+    return text.reasonTimeExpired;
   }
 
   if (reason === "realization-finished") {
-    return "Realizacja została zakończona przez organizatora.";
+    return text.reasonRealizationFinished;
   }
 
   if (reason === "manual-preview") {
-    return "Podgląd ekranu końcowego (tryb testowy).";
+    return text.reasonManualPreview;
   }
 
-  return "Realizacja została zakończona.";
+  return text.reasonDefault;
 }
 
-function resolveReasonSubtitle(reason: RealizationFinishOverlayProps["reason"]) {
+function resolveReasonSubtitle(reason: RealizationFinishOverlayProps["reason"], text: RealizationFinishText) {
   if (reason === "all-tasks-completed") {
-    return "Świetna robota! Jesteście na mecie.";
+    return text.subtitleAllTasksCompleted;
   }
 
   if (reason === "time-expired") {
-    return "To był intensywny etap. Sprawdźcie końcowe wyniki.";
+    return text.subtitleTimeExpired;
   }
 
   if (reason === "realization-finished") {
-    return "Dziękujemy za udział. Czas na podsumowanie.";
+    return text.subtitleRealizationFinished;
   }
 
   if (reason === "manual-preview") {
-    return "Podgląd wizualny ekranu końcowego.";
+    return text.subtitleManualPreview;
   }
 
-  return "Dziękujemy za wspólną grę.";
+  return text.subtitleDefault;
 }
 
 function resolveCardTextColor(hexColor: string) {
@@ -89,6 +264,7 @@ type TeamBannerCardProps = {
   isCurrentTeam: boolean;
   compact?: boolean;
   showMedal?: boolean;
+  text: RealizationFinishText;
 };
 
 function TeamBannerCard({
@@ -96,6 +272,7 @@ function TeamBannerCard({
   isCurrentTeam,
   compact = false,
   showMedal = true,
+  text,
 }: TeamBannerCardProps) {
   const palette = resolveTeamBannerPalette(entry);
   const badgeLabel = entry.badgeKey?.trim() || "🏁";
@@ -138,13 +315,13 @@ function TeamBannerCard({
             </Text>
           </View>
           <Text className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedTextColor }}>
-            Drużyna {entry.slotNumber}
+            {text.team} {entry.slotNumber}
           </Text>
         </View>
 
         <View className="items-end">
           <Text className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedTextColor }}>
-            Punkty
+            {text.points}
           </Text>
           <Text className={compact ? "text-lg font-extrabold" : "text-xl font-extrabold"} style={{ color: palette.textColor }}>
             {entry.points}
@@ -155,7 +332,7 @@ function TeamBannerCard({
       <View className="mt-2">
         <View className="flex-row items-center justify-between">
           <Text className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedTextColor }}>
-            Progres
+            {text.progress}
           </Text>
           <Text className="text-[10px] font-semibold" style={{ color: palette.textColor }}>
             {safeProgressDone}/{safeProgressTotal} ({safeProgressPercent}%)
@@ -180,9 +357,18 @@ type TeamRankRowProps = {
   entry: ExpeditionLeaderboardEntry | null;
   isCurrentTeam: boolean;
   compact?: boolean;
+  text: RealizationFinishText;
 };
 
-function EmptyPodiumBanner({ position, compact = false }: { position: number; compact?: boolean }) {
+function EmptyPodiumBanner({
+  position,
+  compact = false,
+  text,
+}: {
+  position: number;
+  compact?: boolean;
+  text: RealizationFinishText;
+}) {
   return (
     <View
       className="rounded-2xl border px-3 py-2"
@@ -194,18 +380,18 @@ function EmptyPodiumBanner({ position, compact = false }: { position: number; co
       <View className="flex-row items-center gap-1">
         <Text className={compact ? "text-sm" : "text-base"}>{resolvePositionMedal(position)}</Text>
         <Text className={compact ? "text-[13px] font-semibold" : "text-[15px] font-semibold"} style={{ color: EXPEDITION_THEME.textMuted }}>
-          Brak drużyny
+          {text.emptyTeam}
         </Text>
       </View>
       <Text className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle }}>
-        Wolne miejsce podium
+        {text.emptyPodiumSlot}
       </Text>
       <View className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: "rgba(148, 163, 184, 0.2)" }} />
     </View>
   );
 }
 
-function TeamRankRow({ position, entry, isCurrentTeam, compact = false }: TeamRankRowProps) {
+function TeamRankRow({ position, entry, isCurrentTeam, compact = false, text }: TeamRankRowProps) {
   return (
     <View className="flex-row items-stretch gap-2">
       <Text
@@ -221,9 +407,9 @@ function TeamRankRow({ position, entry, isCurrentTeam, compact = false }: TeamRa
       </Text>
       <View style={{ flex: 1 }}>
         {entry ? (
-          <TeamBannerCard entry={entry} isCurrentTeam={isCurrentTeam} compact={compact} />
+          <TeamBannerCard entry={entry} isCurrentTeam={isCurrentTeam} compact={compact} text={text} />
         ) : (
-          <EmptyPodiumBanner position={position} compact={compact} />
+          <EmptyPodiumBanner position={position} compact={compact} text={text} />
         )}
       </View>
     </View>
@@ -240,6 +426,9 @@ export function RealizationFinishOverlay({
   canClose,
   onClose,
 }: RealizationFinishOverlayProps) {
+  const uiLanguage = useUiLanguage();
+  const text = REALIZATION_FINISH_TEXT[uiLanguage];
+  const dateLocale = REALIZATION_FINISH_DATE_LOCALE[uiLanguage];
   const { width } = useWindowDimensions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(14)).current;
@@ -315,7 +504,7 @@ export function RealizationFinishOverlay({
               className={isTablet ? "text-xs font-semibold uppercase tracking-wide" : "text-[11px] font-semibold uppercase tracking-wide"}
               style={{ color: EXPEDITION_THEME.textPrimary }}
             >
-              Pełna tabela
+              {text.fullTable}
             </Text>
           </Pressable>
         ) : null}
@@ -323,26 +512,26 @@ export function RealizationFinishOverlay({
         <View className={`flex-row items-center gap-2 ${showLeaderboard ? "pr-36" : ""}`}>
           <Text className={isTablet ? "text-2xl" : "text-xl"}>🏆</Text>
           <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-            Koniec realizacji
+            {text.realizationEnd}
           </Text>
         </View>
 
         <Text className={isTablet ? "mt-2 text-xl font-semibold" : "mt-2 text-base font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-          {resolveReasonLabel(reason)}
+          {resolveReasonLabel(reason, text)}
         </Text>
         <Text className={isTablet ? "mt-1 text-sm" : "mt-1 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
-          {resolveReasonSubtitle(reason)}
+          {resolveReasonSubtitle(reason, text)}
         </Text>
         {endedAt ? (
           <Text className={isTablet ? "mt-1 text-sm" : "mt-1 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
-            Czas zakończenia: {new Date(endedAt).toLocaleString("pl-PL")}
+            {text.endedAt}: {new Date(endedAt).toLocaleString(dateLocale)}
           </Text>
         ) : null}
 
         {showLeaderboard ? (
           <View className="mt-4">
             <Text className={isTablet ? "text-base font-semibold" : "text-sm font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Top 3 drużyny
+              {text.topThreeTeams}
             </Text>
             <View className="mt-2 gap-2">
               {podiumEntries.map((entry, index) => (
@@ -352,6 +541,7 @@ export function RealizationFinishOverlay({
                   entry={entry}
                   isCurrentTeam={Boolean(entry && entry.teamId === currentTeamId)}
                   compact={!isTablet}
+                  text={text}
                 />
               ))}
             </View>
@@ -364,7 +554,7 @@ export function RealizationFinishOverlay({
 
         <View className="mt-4">
           <Text className="text-xs uppercase tracking-widest" style={{ color: "#6ee7b7" }}>
-            Wasza drużyna
+            {text.yourTeam}
           </Text>
           {currentTeamEntry ? (
             <View className="mt-2">
@@ -374,6 +564,7 @@ export function RealizationFinishOverlay({
                   entry={currentTeamEntry}
                   isCurrentTeam
                   compact={!isTablet}
+                  text={text}
                 />
               ) : (
                 <TeamBannerCard
@@ -381,12 +572,13 @@ export function RealizationFinishOverlay({
                   isCurrentTeam
                   compact={!isTablet}
                   showMedal={false}
+                  text={text}
                 />
               )}
             </View>
           ) : (
             <Text className={isTablet ? "mt-2 text-sm" : "mt-2 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
-              Dane Waszej drużyny nie są jeszcze dostępne.
+              {text.yourTeamUnavailable}
             </Text>
           )}
         </View>
@@ -395,9 +587,8 @@ export function RealizationFinishOverlay({
           className={isTablet ? "mt-5 text-base font-semibold" : "mt-4 text-sm font-semibold"}
           style={{ color: "#fde68a", textAlign: "center", lineHeight: isTablet ? 24 : 20 }}
         >
-          Świetna robota! Po zakończeniu realizacji prosimy całą drużynę o powrót na miejsce startu,{" "}
-          <Text style={{ fontWeight: "900" }}>oddanie tabletów organizatorowi</Text> oraz potwierdzenie zakończenia
-          udziału. Dziękujemy za grę 💚
+          {text.finalInstruction}{" "}
+          <Text style={{ fontWeight: "900" }}>{text.finalInstructionBold}</Text> {text.finalInstructionSuffix}
         </Text>
 
         {canClose ? (
@@ -407,7 +598,7 @@ export function RealizationFinishOverlay({
             onPress={onClose}
           >
             <Text className={isTablet ? "text-center text-sm font-semibold" : "text-center text-xs font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Zamknij podgląd
+              {text.closePreview}
             </Text>
           </Pressable>
         ) : null}
@@ -431,10 +622,10 @@ export function RealizationFinishOverlay({
               <View className="flex-row items-center justify-between">
                 <View>
                   <Text className={isTablet ? "text-lg font-extrabold uppercase tracking-widest" : "text-base font-extrabold uppercase tracking-wider"} style={{ color: "#86efac" }}>
-                    Match Summary
+                    {text.matchSummary}
                   </Text>
                   <Text className={isTablet ? "mt-1 text-base font-bold" : "mt-1 text-sm font-bold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    📊 Pełna tabela wyników
+                    {text.fullResultsTable}
                   </Text>
                 </View>
                 <Pressable
@@ -443,7 +634,7 @@ export function RealizationFinishOverlay({
                   onPress={() => setIsFullLeaderboardVisible(false)}
                 >
                   <Text className={isTablet ? "text-xs font-semibold uppercase tracking-wide" : "text-[11px] font-semibold uppercase tracking-wide"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    Zamknij
+                    {text.close}
                   </Text>
                 </Pressable>
               </View>
@@ -454,16 +645,16 @@ export function RealizationFinishOverlay({
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(24, 45, 37, 0.94)" }}
             >
               <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ width: 74, color: "#9ca3af" }}>
-                Miejsce
+                {text.place}
               </Text>
               <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ flex: 1, color: "#9ca3af" }}>
-                Drużyna
+                {text.team}
               </Text>
               <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 96, color: "#9ca3af" }}>
-                Progres
+                {text.progress}
               </Text>
               <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 84, color: "#9ca3af" }}>
-                Punkty
+                {text.points}
               </Text>
             </View>
 
@@ -504,7 +695,7 @@ export function RealizationFinishOverlay({
                           {resolvePositionMedal(entry.position)} {entry.name}
                         </Text>
                         <Text className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          Drużyna {entry.slotNumber}
+                          {text.team} {entry.slotNumber}
                         </Text>
                       </View>
                       <View style={{ width: 96 }}>
@@ -524,7 +715,7 @@ export function RealizationFinishOverlay({
               </ScrollView>
             ) : (
               <Text className={isTablet ? "px-4 py-4 text-sm" : "px-4 py-3 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
-                Brak danych do wyświetlenia tabeli wyników.
+                {text.noTableData}
               </Text>
             )}
           </View>

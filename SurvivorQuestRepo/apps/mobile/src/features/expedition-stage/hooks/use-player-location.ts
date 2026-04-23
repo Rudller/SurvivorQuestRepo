@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Location from "expo-location";
+import { useUiLanguage } from "../../i18n/ui-language-context";
 import type { MapCoordinate, PlayerLocation } from "../model/types";
 
 export type LocationPermissionState = "pending" | "granted" | "denied" | "error";
@@ -10,8 +11,44 @@ const LIVE_TRACKING_TIME_INTERVAL_MS = 1_500;
 const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 1;
 const LIVE_TRACKING_POLL_INTERVAL_MS = 7_000;
 const ONE_SHOT_FIX_TIMEOUT_MS = 6_500;
-const LOCATION_UNAVAILABLE_FALLBACK_MESSAGE =
-  "Nie udało się pobrać bieżącej lokalizacji. Sprawdź, czy lokalizacja jest włączona, i spróbuj ponownie.";
+const PLAYER_LOCATION_TEXT = {
+  polish: {
+    locationUnavailableFallback:
+      "Nie udało się pobrać bieżącej lokalizacji. Sprawdź, czy lokalizacja jest włączona, i spróbuj ponownie.",
+    locationServicesDisabled: "Usługa lokalizacji jest wyłączona w urządzeniu/emulatorze.",
+    locationPermissionDenied: "Brak zgody na lokalizację. Marker gracza może być nieaktualny.",
+    refreshCurrentLocationFailed: "Nie udało się odświeżyć bieżącej lokalizacji.",
+    locationFetchFailed: "Nie udało się pobrać lokalizacji.",
+    locationTimeout: "Przekroczono czas oczekiwania na lokalizację.",
+  },
+  english: {
+    locationUnavailableFallback:
+      "Could not get the current location. Make sure location services are enabled and try again.",
+    locationServicesDisabled: "Location service is disabled on the device/emulator.",
+    locationPermissionDenied: "Location permission denied. The player marker may be outdated.",
+    refreshCurrentLocationFailed: "Failed to refresh the current location.",
+    locationFetchFailed: "Failed to get location.",
+    locationTimeout: "Location request timed out.",
+  },
+  ukrainian: {
+    locationUnavailableFallback:
+      "Не вдалося отримати поточну локацію. Перевірте, чи ввімкнено геолокацію, і спробуйте ще раз.",
+    locationServicesDisabled: "Службу геолокації вимкнено на пристрої/емуляторі.",
+    locationPermissionDenied: "Немає дозволу на геолокацію. Маркер гравця може бути неактуальним.",
+    refreshCurrentLocationFailed: "Не вдалося оновити поточну локацію.",
+    locationFetchFailed: "Не вдалося отримати локацію.",
+    locationTimeout: "Час очікування локації вичерпано.",
+  },
+  russian: {
+    locationUnavailableFallback:
+      "Не удалось получить текущую локацию. Проверьте, включена ли геолокация, и попробуйте снова.",
+    locationServicesDisabled: "Служба геолокации отключена на устройстве/эмуляторе.",
+    locationPermissionDenied: "Нет разрешения на геолокацию. Маркер игрока может быть неактуальным.",
+    refreshCurrentLocationFailed: "Не удалось обновить текущую локацию.",
+    locationFetchFailed: "Не удалось получить локацию.",
+    locationTimeout: "Превышено время ожидания локации.",
+  },
+} as const;
 
 function toPlayerLocation(
   coords: {
@@ -42,6 +79,8 @@ function toPlayerLocation(
 }
 
 export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
+  const uiLanguage = useUiLanguage();
+  const text = PLAYER_LOCATION_TEXT[uiLanguage];
   const latestHeadingRef = useRef<number | null>(null);
   const [permissionState, setPermissionState] = useState<LocationPermissionState>("pending");
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -58,7 +97,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
   const requestCurrentLocation = useCallback(async () => {
     const servicesEnabled = await Location.hasServicesEnabledAsync();
     if (!servicesEnabled) {
-      throw new Error("Usługa lokalizacji jest wyłączona w urządzeniu/emulatorze.");
+      throw new Error(text.locationServicesDisabled);
     }
 
     await Location.enableNetworkProviderAsync().catch(() => undefined);
@@ -73,7 +112,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
           }
           settled = true;
           subscription?.remove();
-          reject(new Error("Location timeout"));
+          reject(new Error(text.locationTimeout));
         }, ONE_SHOT_FIX_TIMEOUT_MS);
 
         Location.watchPositionAsync(
@@ -130,12 +169,12 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
       }
 
       if (error instanceof Error && error.message.toLowerCase().includes("current location")) {
-        throw new Error(LOCATION_UNAVAILABLE_FALLBACK_MESSAGE);
+        throw new Error(text.locationUnavailableFallback);
       }
 
       throw error;
     }
-  }, []);
+  }, [text]);
 
   useEffect(() => {
     let isMounted = true;
@@ -153,7 +192,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
         if (permission.status !== Location.PermissionStatus.GRANTED) {
           setPermissionState("denied");
-          setLocationError("Brak zgody na lokalizację. Marker gracza może być nieaktualny.");
+          setLocationError(text.locationPermissionDenied);
           return;
         }
 
@@ -170,7 +209,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
             return;
           }
 
-          setLocationError(error instanceof Error ? error.message : "Nie udało się odświeżyć bieżącej lokalizacji.");
+          setLocationError(error instanceof Error ? error.message : text.refreshCurrentLocationFailed);
         });
 
         headingSubscription = await Location.watchHeadingAsync((headingUpdate) => {
@@ -239,7 +278,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         }
 
         setPermissionState("error");
-        setLocationError(error instanceof Error ? error.message : "Nie udało się pobrać lokalizacji.");
+        setLocationError(error instanceof Error ? error.message : text.locationFetchFailed);
       }
     }
 
@@ -253,7 +292,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         clearInterval(pollingTimer);
       }
     };
-  }, [requestCurrentLocation]);
+  }, [requestCurrentLocation, text]);
 
   return {
     playerLocation,

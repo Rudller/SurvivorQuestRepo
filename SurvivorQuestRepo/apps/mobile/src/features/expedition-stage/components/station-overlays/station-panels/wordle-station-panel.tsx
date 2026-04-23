@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 
+import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { WORDLE_MAX_ATTEMPTS, type WordleCellState } from "../puzzle-helpers";
+import { useStationPanelLayout } from "./shared-ui";
 
 export type WordleAttempt = {
   guess: string;
@@ -23,6 +25,37 @@ const WORDLE_TILE_COLORS = {
 const WORDLE_FLIP_HALF_DURATION_MS = 120;
 const WORDLE_INPUT_POP_UP_DURATION_MS = 90;
 const WORDLE_INPUT_POP_DOWN_DURATION_MS = 70;
+
+type WordleStationText = {
+  checking: string;
+  revealing: string;
+  checkWord: string;
+};
+
+const WORDLE_STATION_TEXT_ENGLISH: WordleStationText = {
+  checking: "Checking...",
+  revealing: "Revealing...",
+  checkWord: "Check word",
+};
+
+const WORDLE_STATION_TEXT: Record<UiLanguage, WordleStationText> = {
+  polish: {
+    checking: "Sprawdzanie...",
+    revealing: "Odkrywanie...",
+    checkWord: "Sprawdź słowo",
+  },
+  english: WORDLE_STATION_TEXT_ENGLISH,
+  ukrainian: {
+    checking: "Перевірка...",
+    revealing: "Відкриття...",
+    checkWord: "Перевірити слово",
+  },
+  russian: {
+    checking: "Проверка...",
+    revealing: "Открытие...",
+    checkWord: "Проверить слово",
+  },
+};
 
 function resolveWordleColors(state?: WordleCellState) {
   return {
@@ -223,6 +256,9 @@ export function WordleInteractionPanel({
   onBackspace,
   onSubmit,
 }: WordleInteractionPanelProps) {
+  const uiLanguage = useUiLanguage();
+  const text = WORDLE_STATION_TEXT[uiLanguage];
+  const layout = useStationPanelLayout();
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
   const previousInputRef = useRef<string[]>(inputCharacters);
   const inputShakeAnimation = useRef(new Animated.Value(0)).current;
@@ -304,7 +340,10 @@ export function WordleInteractionPanel({
                     backgroundColor: EXPEDITION_THEME.panelStrong,
                   }}
                 >
-                  <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  <Text
+                    className="font-bold"
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 14 }}
+                  >
                     {letter || " "}
                   </Text>
                 </View>
@@ -324,8 +363,11 @@ export function WordleInteractionPanel({
             }}
             disabled={isInteractiveDisabled || !canBackspace}
             onPress={onBackspace}
+            hitSlop={4}
           >
-            <Text className="text-sm font-semibold text-zinc-950">⌫</Text>
+            <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.isTablet ? 18 : 14 }}>
+              ⌫
+            </Text>
           </Pressable>
         </View>
       </Animated.View>
@@ -359,8 +401,12 @@ export function WordleInteractionPanel({
                   onPress={() => {
                     onPressKey(key);
                   }}
+                  hitSlop={3}
                 >
-                  <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  <Text
+                    className="font-semibold"
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 16 }}
+                  >
                     {key}
                   </Text>
                 </Pressable>
@@ -372,17 +418,18 @@ export function WordleInteractionPanel({
 
       <View className="mt-4 items-center">
         <Pressable
-          className="items-center justify-center rounded-xl py-4 active:opacity-90"
+          className="items-center justify-center rounded-xl active:opacity-90"
           style={{
             width: "50%",
             backgroundColor: !isInteractiveDisabled && canSubmit ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
             opacity: isInteractiveDisabled ? 0.45 : 1,
+            minHeight: layout.actionMinHeight,
           }}
           onPress={handleSubmitPress}
           disabled={isInteractiveDisabled}
         >
-          <Text className="text-sm font-semibold text-zinc-950">
-            {isSubmitting ? "Sprawdzanie..." : isRevealing ? "Odkrywanie..." : "Sprawdź słowo"}
+          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+            {isSubmitting ? text.checking : isRevealing ? text.revealing : text.checkWord}
           </Text>
         </Pressable>
       </View>

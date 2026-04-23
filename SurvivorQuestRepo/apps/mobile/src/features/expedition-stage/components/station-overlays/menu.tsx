@@ -1,26 +1,111 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
 import type { ExpeditionTaskStatus } from "../../model/types";
 import type { StationTestMenuOverlayProps } from "./types";
 
-function getStatusLabel(status: ExpeditionTaskStatus, quizFailed = false) {
+const STATION_TEST_MENU_TEXT: Record<
+  UiLanguage,
+  {
+    title: string;
+    description: string;
+    openWelcome: string;
+    openFinish: string;
+    openPassedPopup: string;
+    openFailedPopup: string;
+    emptyStations: string;
+    enter: string;
+    status: string;
+    failed: string;
+    done: string;
+    inProgress: string;
+    todo: string;
+  }
+> = {
+  polish: {
+    title: "Menu testowe",
+    description: "Lista pobrana z panelu admina dla aktywnej realizacji.",
+    openWelcome: "Pokaż Welcome Screen",
+    openFinish: "Pokaż ekran końcowy",
+    openPassedPopup: "Pokaż popup zaliczone",
+    openFailedPopup: "Pokaż popup niezaliczone",
+    emptyStations: "Brak stanowisk. Dodaj je w panelu admina.",
+    enter: "Wejdź",
+    status: "Status",
+    failed: "Niezaliczone",
+    done: "Ukończone",
+    inProgress: "W trakcie",
+    todo: "Do zrobienia",
+  },
+  english: {
+    title: "Test menu",
+    description: "List fetched from the admin panel for the active realization.",
+    openWelcome: "Show welcome screen",
+    openFinish: "Show finish screen",
+    openPassedPopup: "Show passed popup",
+    openFailedPopup: "Show failed popup",
+    emptyStations: "No stations. Add them in the admin panel.",
+    enter: "Enter",
+    status: "Status",
+    failed: "Failed",
+    done: "Completed",
+    inProgress: "In progress",
+    todo: "To do",
+  },
+  ukrainian: {
+    title: "Тестове меню",
+    description: "Список отримано з адмін-панелі для активної реалізації.",
+    openWelcome: "Показати екран вітання",
+    openFinish: "Показати фінальний екран",
+    openPassedPopup: "Показати popup «зараховано»",
+    openFailedPopup: "Показати popup «не зараховано»",
+    emptyStations: "Немає станцій. Додайте їх в адмін-панелі.",
+    enter: "Увійти",
+    status: "Статус",
+    failed: "Не зараховано",
+    done: "Завершено",
+    inProgress: "У процесі",
+    todo: "До виконання",
+  },
+  russian: {
+    title: "Тестовое меню",
+    description: "Список получен из админ-панели для активной реализации.",
+    openWelcome: "Показать экран приветствия",
+    openFinish: "Показать финальный экран",
+    openPassedPopup: "Показать popup «зачтено»",
+    openFailedPopup: "Показать popup «не зачтено»",
+    emptyStations: "Нет станций. Добавьте их в админ-панели.",
+    enter: "Войти",
+    status: "Статус",
+    failed: "Не зачтено",
+    done: "Завершено",
+    inProgress: "В процессе",
+    todo: "К выполнению",
+  },
+};
+
+function getStatusLabel(
+  status: ExpeditionTaskStatus,
+  labels: Pick<(typeof STATION_TEST_MENU_TEXT)["polish"], "failed" | "done" | "inProgress" | "todo">,
+  quizFailed = false,
+) {
   if (status === "failed") {
-    return "Niezaliczone";
+    return labels.failed;
   }
 
   if (quizFailed && status !== "done") {
-    return "Niezaliczone";
+    return labels.failed;
   }
 
   if (status === "done") {
-    return "Ukończone";
+    return labels.done;
   }
 
   if (status === "in-progress") {
-    return "W trakcie";
+    return labels.inProgress;
   }
 
-  return "Do zrobienia";
+  return labels.todo;
 }
 
 function getStatusColor(status: ExpeditionTaskStatus, quizFailed = false) {
@@ -53,6 +138,9 @@ export function StationTestMenuOverlay({
   onPreviewSuccessPopup,
   onPreviewFailedPopup,
 }: StationTestMenuOverlayProps) {
+  const uiLanguage = useUiLanguage();
+  const text = STATION_TEST_MENU_TEXT[uiLanguage];
+
   if (!visible) {
     return null;
   }
@@ -66,10 +154,10 @@ export function StationTestMenuOverlay({
         <View className="flex-row items-start justify-between gap-3">
           <View className="flex-1">
             <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Menu testowe
+              {text.title}
             </Text>
             <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Lista pobrana z panelu admina dla aktywnej realizacji.
+              {text.description}
             </Text>
           </View>
           <Pressable
@@ -89,7 +177,7 @@ export function StationTestMenuOverlay({
           onPress={onOpenWelcomeScreen}
         >
           <Text className="text-xs font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
-            Pokaż Welcome Screen
+            {text.openWelcome}
           </Text>
         </Pressable>
         <Pressable
@@ -98,7 +186,7 @@ export function StationTestMenuOverlay({
           onPress={onOpenFinishScreen}
         >
           <Text className="text-xs font-semibold text-center" style={{ color: "#7dd3fc" }}>
-            Pokaż ekran końcowy
+            {text.openFinish}
           </Text>
         </Pressable>
         <View className="mt-2 flex-row gap-2">
@@ -108,7 +196,7 @@ export function StationTestMenuOverlay({
             onPress={onPreviewSuccessPopup}
           >
             <Text className="text-xs font-semibold text-center" style={{ color: "#6ee7b7" }}>
-              Pokaż popup zaliczone
+              {text.openPassedPopup}
             </Text>
           </Pressable>
           <Pressable
@@ -117,7 +205,7 @@ export function StationTestMenuOverlay({
             onPress={onPreviewFailedPopup}
           >
             <Text className="text-xs font-semibold text-center" style={{ color: "#fca5a5" }}>
-              Pokaż popup niezaliczone
+              {text.openFailedPopup}
             </Text>
           </Pressable>
         </View>
@@ -130,7 +218,7 @@ export function StationTestMenuOverlay({
                 style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               >
                 <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Brak stanowisk. Dodaj je w panelu admina.
+                  {text.emptyStations}
                 </Text>
               </View>
             ) : (
@@ -154,11 +242,21 @@ export function StationTestMenuOverlay({
                       style={{ backgroundColor: EXPEDITION_THEME.accent }}
                       onPress={() => onEnterStation(station.stationId)}
                     >
-                      <Text className="text-xs font-semibold text-zinc-950">Wejdź</Text>
+                      <Text className="text-xs font-semibold text-zinc-950">{text.enter}</Text>
                     </Pressable>
                   </View>
                   <Text className="mt-1 text-xs" style={{ color: getStatusColor(station.status, Boolean(station.quizFailed)) }}>
-                    Status: {getStatusLabel(station.status, Boolean(station.quizFailed))}
+                    {text.status}:{" "}
+                    {getStatusLabel(
+                      station.status,
+                      {
+                        failed: text.failed,
+                        done: text.done,
+                        inProgress: text.inProgress,
+                        todo: text.todo,
+                      },
+                      Boolean(station.quizFailed),
+                    )}
                   </Text>
                 </View>
                 ))

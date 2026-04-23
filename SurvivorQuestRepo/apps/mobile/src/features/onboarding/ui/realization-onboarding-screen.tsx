@@ -15,7 +15,8 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS } from "../model/constants";
+import { resolveUiLanguage, type UiLanguage } from "../../i18n";
+import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS, getTeamColors } from "../model/constants";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -26,7 +27,7 @@ import {
   type Screen,
   type TeamColor,
 } from "../model/types";
-import { TeamCustomizationStep } from "./team-customization-step";
+import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -148,27 +149,598 @@ type MobileSessionStateResponse = {
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
-const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.2:3001";
+const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.14:3001";
 const PRODUCTION_API_BASE_URL_CANDIDATES = [
   "https://survivorquest.pl/api",
   "https://www.survivorquest.pl/api",
 ] as const;
 const PRODUCTION_API_BASE_URL = PRODUCTION_API_BASE_URL_CANDIDATES[0];
+const REQUEST_TIMEOUT_ERROR_PREFIX = "__mobile_api_timeout__:";
 
 const TOP_PANEL_STEP_ORDER: Screen[] = ["api", "code", "team", "customization"];
-
-const STEP_LABEL: Record<Screen, string> = {
-  api: "Połączenie API",
-  code: "Kod realizacji",
-  team: "Przydzielenie drużyny",
-  customization: "Customizacja drużyny",
+const UI_DATE_LOCALE: Record<UiLanguage, string> = {
+  polish: "pl-PL",
+  english: "en-US",
+  ukrainian: "uk-UA",
+  russian: "ru-RU",
 };
 
-const STEP_HINT: Record<Screen, string> = {
-  api: "Etap 1 potwierdza połączenie z backendem i gotowość API.",
-  code: "Etap 2 wymaga wpisania kodu realizacji od administratora.",
-  team: "Etap 3 pokazuje przydział drużyny przed konfiguracją baneru.",
-  customization: "Skonfiguruj baner drużyny i przejdź do ekranu startu aplikacji.",
+type OnboardingUiText = {
+  expeditionMapLabel: string;
+  noApiConfiguration: string;
+  stepLabel: Record<Screen, string>;
+  stepHint: Record<Screen, string>;
+  stepCounter: (stepNumber: number) => string;
+  apiStepTitle: string;
+  apiStepDescription: string;
+  apiConnectionLabel: string;
+  closeAction: string;
+  changeAction: string;
+  serverLabel: string;
+  statusLabel: string;
+  apiStatusValue: Record<ApiConnectionStatus, string>;
+  quickSelectLabel: string;
+  localPresetLabel: string;
+  productionPresetLabel: string;
+  saveAction: string;
+  defaultAction: string;
+  recheckAction: string;
+  goToStepTwoAction: string;
+  codeStepTitle: string;
+  codeStepDescription: string;
+  activeApiLabel: string;
+  realizationCodePlaceholder: string;
+  activateRealizationAction: string;
+  backToStepOneAction: string;
+  loadingConfiguration: string;
+  setupLoadFailed: string;
+  teamStepTitle: string;
+  teamStepDescription: string;
+  assignmentResultLabel: string;
+  assignmentNotReady: string;
+  assignedTeamLabel: (slotNumber: number) => string;
+  noAssignedTeam: string;
+  availableTeamCountLabel: (teamCount: number | string) => string;
+  codeDateLabel: (code: string, date: string) => string;
+  changeTeamAction: string;
+  backAction: string;
+  goToBannerEditorAction: string;
+  onboardingHint: string;
+  languagePickerTitle: string;
+  selectedLanguageLabel: (label: string) => string;
+  teamPickerTitle: string;
+  teamPickerDescription: string;
+  teamLabel: (slotNumber: number) => string;
+  currentlyAssignedLabel: string;
+  tapToAssignLabel: string;
+  switchingTeamAssignment: string;
+  chooseTeamActionSheetTitle: string;
+  actionSheetCancel: string;
+  chooseTeamPrompt: (slots: string) => string;
+  teamPickerInvalidInput: string;
+  mobileMemberName: string;
+  requiredRealizationCode: string;
+  deviceInitializationInProgress: string;
+  missingApiConfigForStep: string;
+  backendConnectionFailed: string;
+  realizationNotFound: string;
+  autoAssignmentMessage: (slotNumber: number) => string;
+  missingSessionOrApiConfig: string;
+  reassignmentFallbackMessage: string;
+  manualAssignmentMessage: (slotNumber: number) => string;
+  saveRequiresSession: string;
+  saveRequiresTeamName: string;
+  saveRequiresApi: string;
+  saveSuccessMessage: (name: string) => string;
+  saveFailedMessage: (error: string) => string;
+  liveSaveFailedMessage: (error: string) => string;
+  colorTakenMessage: (slotNumber: number) => string;
+  iconTakenMessage: (slotNumber: number) => string;
+  invalidApiAddress: string;
+  apiAddressSaved: string;
+  apiAddressSaveSessionOnly: string;
+  productionPresetError: string;
+  productionPresetSaved: string;
+  productionPresetSessionOnly: string;
+  resetDefaultSaved: string;
+  resetDefaultSessionOnly: string;
+  timeoutError: (baseUrl: string) => string;
+  http401Error: (rawMessage: string) => string;
+  http403Error: (rawMessage: string) => string;
+  http404Error: (rawMessage: string) => string;
+  http409Error: (rawMessage: string) => string;
+  http429Error: (rawMessage: string) => string;
+  http5xxError: (statusCode: number, rawMessage: string) => string;
+  networkError: (rawMessage: string) => string;
+  unexpectedConnectionError: string;
+  teamCustomizationText: TeamCustomizationStepText;
+};
+
+const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
+  polish: {
+    expeditionMapLabel: "Expedition Map",
+    noApiConfiguration: "Brak konfiguracji",
+    stepLabel: {
+      api: "Połączenie API",
+      code: "Kod realizacji",
+      team: "Przydzielenie drużyny",
+      customization: "Customizacja drużyny",
+    },
+    stepHint: {
+      api: "Etap 1 potwierdza połączenie z backendem i gotowość API.",
+      code: "Etap 2 wymaga wpisania kodu realizacji od administratora.",
+      team: "Etap 3 pokazuje przydział drużyny przed konfiguracją baneru.",
+      customization: "Skonfiguruj baner drużyny i przejdź do ekranu startu aplikacji.",
+    },
+    stepCounter: (stepNumber) => `Etap ${stepNumber}`,
+    apiStepTitle: "Etap 1: potwierdzenie API",
+    apiStepDescription: "Upewnij się, że backend odpowiada, zanim przejdziesz do wpisywania kodu realizacji.",
+    apiConnectionLabel: "Połączenie API",
+    closeAction: "Zamknij",
+    changeAction: "Zmień",
+    serverLabel: "Serwer",
+    statusLabel: "Status",
+    apiStatusValue: {
+      checking: "sprawdzanie",
+      connected: "połączono",
+      disconnected: "brak połączenia",
+      "config-missing": "brak konfiguracji",
+    },
+    quickSelectLabel: "Szybki wybór",
+    localPresetLabel: "Lokalna baza testowa",
+    productionPresetLabel: "Produkcja",
+    saveAction: "Zapisz",
+    defaultAction: "Domyślny",
+    recheckAction: "Sprawdź ponownie",
+    goToStepTwoAction: "Przejdź do etapu 2",
+    codeStepTitle: "Etap 2: kod realizacji",
+    codeStepDescription: "Wpisz kod przekazany przez administratora, aby przejść do przydziału drużyny.",
+    activeApiLabel: "Aktywne API",
+    realizationCodePlaceholder: "Kod realizacji",
+    activateRealizationAction: "Aktywuj realizację",
+    backToStepOneAction: "Cofnij do etapu 1",
+    loadingConfiguration: "Pobieranie konfiguracji od administratora...",
+    setupLoadFailed: "Nie udało się pobrać konfiguracji.",
+    teamStepTitle: "Etap 3: przydzielenie drużyny",
+    teamStepDescription: "System przypisuje drużynę na podstawie realizacji. Możesz ją zmienić przed startem aplikacji.",
+    assignmentResultLabel: "Wynik przydziału",
+    assignmentNotReady: "Przydział drużyny nie został jeszcze wykonany.",
+    assignedTeamLabel: (slotNumber) => `Przydzielona drużyna: ${slotNumber}`,
+    noAssignedTeam: "Brak przydzielonej drużyny.",
+    availableTeamCountLabel: (teamCount) => `Liczba możliwych drużyn: ${teamCount}`,
+    codeDateLabel: (code, date) => `Kod: ${code} • Termin: ${date}`,
+    changeTeamAction: "Zmień drużynę",
+    backAction: "Wstecz",
+    goToBannerEditorAction: "Przejdź do edytora banera",
+    onboardingHint:
+      "Etap 1 sprawdza API, etap 2 aktywuje realizację kodem, etap 3 finalizuje przydział, a potem konfigurujesz baner drużyny.",
+    languagePickerTitle: "Wybierz język treści gry",
+    selectedLanguageLabel: (label) => `Wybrany: ${label}`,
+    teamPickerTitle: "Wybierz drużynę",
+    teamPickerDescription: "Lista możliwych drużyn pochodzi z limitu drużyn realizacji.",
+    teamLabel: (slotNumber) => `Drużyna ${slotNumber}`,
+    currentlyAssignedLabel: "Aktualnie przypisana",
+    tapToAssignLabel: "Dotknij, aby przypisać",
+    switchingTeamAssignment: "Zmieniam przydział drużyny...",
+    chooseTeamActionSheetTitle: "Wybierz drużynę",
+    actionSheetCancel: "Anuluj",
+    chooseTeamPrompt: (slots) => `Wybierz numer drużyny (${slots})`,
+    teamPickerInvalidInput: "Wpisz numer drużyny z listy.",
+    mobileMemberName: "Użytkownik mobilny",
+    requiredRealizationCode: "Wpisz kod realizacji.",
+    deviceInitializationInProgress: "Trwa inicjalizacja urządzenia. Spróbuj ponownie za chwilę.",
+    missingApiConfigForStep: "Brakuje konfiguracji API. Ustaw adres serwera w sekcji połączenia.",
+    backendConnectionFailed: "Nie udało się połączyć z backendem.",
+    realizationNotFound: "Nie znaleziono realizacji dla podanego kodu.",
+    autoAssignmentMessage: (slotNumber) => `Przydzielono automatycznie: Drużyna ${slotNumber}.`,
+    missingSessionOrApiConfig: "Brak aktywnej sesji lub konfiguracji API.",
+    reassignmentFallbackMessage:
+      "Drużyna była już zajęta na innym urządzeniu. Przypisanie zostało przełączone.",
+    manualAssignmentMessage: (slotNumber) => `Przydzielono ręcznie: Drużyna ${slotNumber}.`,
+    saveRequiresSession: "Brak aktywnej sesji. Najpierw aktywuj kod realizacji.",
+    saveRequiresTeamName: "Podaj nazwę drużyny przed zapisaniem.",
+    saveRequiresApi: "Brakuje konfiguracji API. Ustaw adres serwera.",
+    saveSuccessMessage: (name) => `Zapisano ustawienia: ${name}.`,
+    saveFailedMessage: (error) => `Nie udało się zapisać: ${error}`,
+    liveSaveFailedMessage: (error) => `Nie udało się zapisać zmian na żywo: ${error}`,
+    colorTakenMessage: (slotNumber) => `Ten kolor jest już wybrany przez Drużynę ${slotNumber}. Wybierz inny.`,
+    iconTakenMessage: (slotNumber) => `Ta emotikona jest już wybrana przez Drużynę ${slotNumber}. Wybierz inną.`,
+    invalidApiAddress: "Podaj poprawny adres serwera, np. http://192.168.18.2:3001.",
+    apiAddressSaved: "Zapisano adres serwera API.",
+    apiAddressSaveSessionOnly: "Adres ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
+    productionPresetError: "Nie udało się ustawić serwera produkcyjnego.",
+    productionPresetSaved: "Wybrano serwer produkcyjny API.",
+    productionPresetSessionOnly:
+      "Serwer produkcyjny ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
+    resetDefaultSaved: "Przywrócono domyślną konfigurację serwera.",
+    resetDefaultSessionOnly:
+      "Przywrócono domyślną konfigurację dla tej sesji, ale nie udało się zapisać jej na stałe.",
+    timeoutError: (baseUrl) => `Timeout przy połączeniu z API (${baseUrl}). Sprawdź adres i sieć.`,
+    http401Error: (rawMessage) => `HTTP 401: brak autoryzacji lub wygasła sesja. ${rawMessage}`,
+    http403Error: (rawMessage) => `HTTP 403: dostęp zabroniony. ${rawMessage}`,
+    http404Error: (rawMessage) =>
+      `HTTP 404: endpoint API nie istnieje (sprawdź bazowy URL i prefiks /api). ${rawMessage}`,
+    http409Error: (rawMessage) => `HTTP 409: konflikt danych po stronie serwera. ${rawMessage}`,
+    http429Error: (rawMessage) => `HTTP 429: limit zapytań został przekroczony. ${rawMessage}`,
+    http5xxError: (statusCode, rawMessage) => `HTTP ${statusCode}: błąd serwera backend. ${rawMessage}`,
+    networkError: (rawMessage) =>
+      `Brak połączenia z API (network failure). Sprawdź HTTPS/certyfikat, DNS i dostępność serwera. ${rawMessage}`,
+    unexpectedConnectionError: "Wystąpił nieoczekiwany błąd połączenia.",
+    teamCustomizationText: {
+      editorTitle: "Edytor baneru drużyny",
+      editorHint: "Dopracuj wygląd baneru drużyny. Ten baner będzie widoczny w górnym panelu podczas gry.",
+      bannerPreviewLabel: "Podgląd baneru",
+      teamFallbackName: "Nazwa drużyny",
+      teamLabel: "Drużyna",
+      pointsLabel: "Punkty",
+      customizationLabel: "Customizacja drużyny",
+      teamNamePlaceholder: "Nazwa drużyny",
+      teamColorLabel: "Kolor drużyny",
+      teamIconLabel: "Ikona drużyny",
+      startAction: "Start!",
+      startingAction: "Uruchamianie...",
+    },
+  },
+  english: {
+    expeditionMapLabel: "Expedition Map",
+    noApiConfiguration: "No configuration",
+    stepLabel: {
+      api: "API connection",
+      code: "Realization code",
+      team: "Team assignment",
+      customization: "Team customization",
+    },
+    stepHint: {
+      api: "Step 1 confirms backend connectivity and API readiness.",
+      code: "Step 2 requires entering the realization code from the administrator.",
+      team: "Step 3 shows the assigned team before banner configuration.",
+      customization: "Configure your team banner and continue to the app start screen.",
+    },
+    stepCounter: (stepNumber) => `Step ${stepNumber}`,
+    apiStepTitle: "Step 1: confirm API",
+    apiStepDescription: "Make sure the backend responds before entering the realization code.",
+    apiConnectionLabel: "API connection",
+    closeAction: "Close",
+    changeAction: "Change",
+    serverLabel: "Server",
+    statusLabel: "Status",
+    apiStatusValue: {
+      checking: "checking",
+      connected: "connected",
+      disconnected: "disconnected",
+      "config-missing": "missing config",
+    },
+    quickSelectLabel: "Quick select",
+    localPresetLabel: "Local test backend",
+    productionPresetLabel: "Production",
+    saveAction: "Save",
+    defaultAction: "Default",
+    recheckAction: "Check again",
+    goToStepTwoAction: "Go to step 2",
+    codeStepTitle: "Step 2: realization code",
+    codeStepDescription: "Enter the code provided by the administrator to proceed to team assignment.",
+    activeApiLabel: "Active API",
+    realizationCodePlaceholder: "Realization code",
+    activateRealizationAction: "Activate realization",
+    backToStepOneAction: "Back to step 1",
+    loadingConfiguration: "Loading configuration from administrator...",
+    setupLoadFailed: "Failed to load configuration.",
+    teamStepTitle: "Step 3: team assignment",
+    teamStepDescription: "The system assigns a team based on the realization. You can change it before starting.",
+    assignmentResultLabel: "Assignment result",
+    assignmentNotReady: "Team assignment has not been completed yet.",
+    assignedTeamLabel: (slotNumber) => `Assigned team: ${slotNumber}`,
+    noAssignedTeam: "No team assigned.",
+    availableTeamCountLabel: (teamCount) => `Available teams: ${teamCount}`,
+    codeDateLabel: (code, date) => `Code: ${code} • Date: ${date}`,
+    changeTeamAction: "Change team",
+    backAction: "Back",
+    goToBannerEditorAction: "Go to banner editor",
+    onboardingHint: "Step 1 checks API, step 2 activates realization code, step 3 finalizes assignment, then you configure the team banner.",
+    languagePickerTitle: "Choose game content language",
+    selectedLanguageLabel: (label) => `Selected: ${label}`,
+    teamPickerTitle: "Choose team",
+    teamPickerDescription: "The list of teams is based on the realization team limit.",
+    teamLabel: (slotNumber) => `Team ${slotNumber}`,
+    currentlyAssignedLabel: "Currently assigned",
+    tapToAssignLabel: "Tap to assign",
+    switchingTeamAssignment: "Switching team assignment...",
+    chooseTeamActionSheetTitle: "Choose team",
+    actionSheetCancel: "Cancel",
+    chooseTeamPrompt: (slots) => `Choose team number (${slots})`,
+    teamPickerInvalidInput: "Enter a team number from the list.",
+    mobileMemberName: "Mobile user",
+    requiredRealizationCode: "Enter realization code.",
+    deviceInitializationInProgress: "Device initialization in progress. Please try again in a moment.",
+    missingApiConfigForStep: "API configuration is missing. Set the server address in the connection section.",
+    backendConnectionFailed: "Failed to connect to backend.",
+    realizationNotFound: "No realization was found for the provided code.",
+    autoAssignmentMessage: (slotNumber) => `Automatically assigned: Team ${slotNumber}.`,
+    missingSessionOrApiConfig: "No active session or API configuration.",
+    reassignmentFallbackMessage: "This team was already taken on another device. Assignment has been switched.",
+    manualAssignmentMessage: (slotNumber) => `Manually assigned: Team ${slotNumber}.`,
+    saveRequiresSession: "No active session. Activate realization code first.",
+    saveRequiresTeamName: "Enter a team name before saving.",
+    saveRequiresApi: "API configuration is missing. Set a server address.",
+    saveSuccessMessage: (name) => `Settings saved: ${name}.`,
+    saveFailedMessage: (error) => `Could not save: ${error}`,
+    liveSaveFailedMessage: (error) => `Could not save live changes: ${error}`,
+    colorTakenMessage: (slotNumber) => `This color is already selected by Team ${slotNumber}. Pick another one.`,
+    iconTakenMessage: (slotNumber) => `This emoji is already selected by Team ${slotNumber}. Pick another one.`,
+    invalidApiAddress: "Provide a valid server address, e.g. http://192.168.18.2:3001.",
+    apiAddressSaved: "API server address saved.",
+    apiAddressSaveSessionOnly: "Address is set for this session, but could not be saved permanently.",
+    productionPresetError: "Could not set production server.",
+    productionPresetSaved: "Production API server selected.",
+    productionPresetSessionOnly: "Production server is set for this session, but could not be saved permanently.",
+    resetDefaultSaved: "Default server configuration restored.",
+    resetDefaultSessionOnly: "Default configuration restored for this session, but could not be saved permanently.",
+    timeoutError: (baseUrl) => `API request timed out (${baseUrl}). Check server address and network.`,
+    http401Error: (rawMessage) => `HTTP 401: unauthorized or session expired. ${rawMessage}`,
+    http403Error: (rawMessage) => `HTTP 403: access forbidden. ${rawMessage}`,
+    http404Error: (rawMessage) => `HTTP 404: API endpoint does not exist (check base URL and /api prefix). ${rawMessage}`,
+    http409Error: (rawMessage) => `HTTP 409: server data conflict. ${rawMessage}`,
+    http429Error: (rawMessage) => `HTTP 429: request limit exceeded. ${rawMessage}`,
+    http5xxError: (statusCode, rawMessage) => `HTTP ${statusCode}: backend server error. ${rawMessage}`,
+    networkError: (rawMessage) =>
+      `No API connection (network failure). Check HTTPS/certificate, DNS, and server availability. ${rawMessage}`,
+    unexpectedConnectionError: "Unexpected connection error occurred.",
+    teamCustomizationText: {
+      editorTitle: "Team banner editor",
+      editorHint: "Adjust your team banner appearance. This banner is visible in the top panel during the game.",
+      bannerPreviewLabel: "Banner preview",
+      teamFallbackName: "Team name",
+      teamLabel: "Team",
+      pointsLabel: "Points",
+      customizationLabel: "Team customization",
+      teamNamePlaceholder: "Team name",
+      teamColorLabel: "Team color",
+      teamIconLabel: "Team icon",
+      startAction: "Start!",
+      startingAction: "Starting...",
+    },
+  },
+  ukrainian: {
+    expeditionMapLabel: "Карта експедиції",
+    noApiConfiguration: "Немає конфігурації",
+    stepLabel: {
+      api: "Підключення API",
+      code: "Код реалізації",
+      team: "Призначення команди",
+      customization: "Налаштування команди",
+    },
+    stepHint: {
+      api: "Крок 1 підтверджує зʼєднання з бекендом і готовність API.",
+      code: "Крок 2 вимагає ввести код реалізації від адміністратора.",
+      team: "Крок 3 показує призначену команду перед налаштуванням банера.",
+      customization: "Налаштуйте банер команди й перейдіть до стартового екрана застосунку.",
+    },
+    stepCounter: (stepNumber) => `Крок ${stepNumber}`,
+    apiStepTitle: "Крок 1: підтвердження API",
+    apiStepDescription: "Переконайтеся, що бекенд відповідає, перш ніж вводити код реалізації.",
+    apiConnectionLabel: "Підключення API",
+    closeAction: "Закрити",
+    changeAction: "Змінити",
+    serverLabel: "Сервер",
+    statusLabel: "Статус",
+    apiStatusValue: {
+      checking: "перевірка",
+      connected: "підключено",
+      disconnected: "немає зʼєднання",
+      "config-missing": "немає конфігурації",
+    },
+    quickSelectLabel: "Швидкий вибір",
+    localPresetLabel: "Локовий тестовий сервер",
+    productionPresetLabel: "Продакшн",
+    saveAction: "Зберегти",
+    defaultAction: "За замовчуванням",
+    recheckAction: "Перевірити ще раз",
+    goToStepTwoAction: "Перейти до кроку 2",
+    codeStepTitle: "Крок 2: код реалізації",
+    codeStepDescription: "Введіть код від адміністратора, щоб перейти до призначення команди.",
+    activeApiLabel: "Активний API",
+    realizationCodePlaceholder: "Код реалізації",
+    activateRealizationAction: "Активувати реалізацію",
+    backToStepOneAction: "Повернутися до кроку 1",
+    loadingConfiguration: "Завантаження конфігурації від адміністратора...",
+    setupLoadFailed: "Не вдалося завантажити конфігурацію.",
+    teamStepTitle: "Крок 3: призначення команди",
+    teamStepDescription: "Система призначає команду на основі реалізації. Ви можете змінити її перед стартом.",
+    assignmentResultLabel: "Результат призначення",
+    assignmentNotReady: "Призначення команди ще не виконано.",
+    assignedTeamLabel: (slotNumber) => `Призначена команда: ${slotNumber}`,
+    noAssignedTeam: "Команду не призначено.",
+    availableTeamCountLabel: (teamCount) => `Доступна кількість команд: ${teamCount}`,
+    codeDateLabel: (code, date) => `Код: ${code} • Час: ${date}`,
+    changeTeamAction: "Змінити команду",
+    backAction: "Назад",
+    goToBannerEditorAction: "Перейти до редактора банера",
+    onboardingHint: "Крок 1 перевіряє API, крок 2 активує код реалізації, крок 3 завершує призначення, після чого ви налаштовуєте банер команди.",
+    languagePickerTitle: "Виберіть мову ігрового контенту",
+    selectedLanguageLabel: (label) => `Вибрано: ${label}`,
+    teamPickerTitle: "Виберіть команду",
+    teamPickerDescription: "Список команд формується за лімітом команд реалізації.",
+    teamLabel: (slotNumber) => `Команда ${slotNumber}`,
+    currentlyAssignedLabel: "Призначена зараз",
+    tapToAssignLabel: "Торкніться, щоб призначити",
+    switchingTeamAssignment: "Змінюю призначення команди...",
+    chooseTeamActionSheetTitle: "Виберіть команду",
+    actionSheetCancel: "Скасувати",
+    chooseTeamPrompt: (slots) => `Виберіть номер команди (${slots})`,
+    teamPickerInvalidInput: "Введіть номер команди зі списку.",
+    mobileMemberName: "Мобільний користувач",
+    requiredRealizationCode: "Введіть код реалізації.",
+    deviceInitializationInProgress: "Триває ініціалізація пристрою. Спробуйте ще раз за мить.",
+    missingApiConfigForStep: "Немає конфігурації API. Вкажіть адресу сервера в розділі підключення.",
+    backendConnectionFailed: "Не вдалося підключитися до бекенду.",
+    realizationNotFound: "Не знайдено реалізацію для вказаного коду.",
+    autoAssignmentMessage: (slotNumber) => `Призначено автоматично: Команда ${slotNumber}.`,
+    missingSessionOrApiConfig: "Немає активної сесії або конфігурації API.",
+    reassignmentFallbackMessage: "Ця команда вже була зайнята на іншому пристрої. Призначення перемкнено.",
+    manualAssignmentMessage: (slotNumber) => `Призначено вручну: Команда ${slotNumber}.`,
+    saveRequiresSession: "Немає активної сесії. Спочатку активуйте код реалізації.",
+    saveRequiresTeamName: "Вкажіть назву команди перед збереженням.",
+    saveRequiresApi: "Немає конфігурації API. Вкажіть адресу сервера.",
+    saveSuccessMessage: (name) => `Налаштування збережено: ${name}.`,
+    saveFailedMessage: (error) => `Не вдалося зберегти: ${error}`,
+    liveSaveFailedMessage: (error) => `Не вдалося зберегти зміни в реальному часі: ${error}`,
+    colorTakenMessage: (slotNumber) => `Цей колір уже вибрала Команда ${slotNumber}. Оберіть інший.`,
+    iconTakenMessage: (slotNumber) => `Цей емодзі вже вибрала Команда ${slotNumber}. Оберіть інший.`,
+    invalidApiAddress: "Вкажіть правильну адресу сервера, наприклад http://192.168.18.2:3001.",
+    apiAddressSaved: "Адресу API-сервера збережено.",
+    apiAddressSaveSessionOnly: "Адресу встановлено для цієї сесії, але не вдалося зберегти назавжди.",
+    productionPresetError: "Не вдалося встановити продакшн-сервер.",
+    productionPresetSaved: "Вибрано продакшн API-сервер.",
+    productionPresetSessionOnly:
+      "Продакшн-сервер встановлено для цієї сесії, але не вдалося зберегти назавжди.",
+    resetDefaultSaved: "Відновлено стандартну конфігурацію сервера.",
+    resetDefaultSessionOnly:
+      "Стандартну конфігурацію відновлено для цієї сесії, але не вдалося зберегти назавжди.",
+    timeoutError: (baseUrl) => `Тайм-аут запиту до API (${baseUrl}). Перевірте адресу та мережу.`,
+    http401Error: (rawMessage) => `HTTP 401: немає авторизації або сесія завершилась. ${rawMessage}`,
+    http403Error: (rawMessage) => `HTTP 403: доступ заборонено. ${rawMessage}`,
+    http404Error: (rawMessage) => `HTTP 404: API endpoint не існує (перевірте базову URL і префікс /api). ${rawMessage}`,
+    http409Error: (rawMessage) => `HTTP 409: конфлікт даних на сервері. ${rawMessage}`,
+    http429Error: (rawMessage) => `HTTP 429: перевищено ліміт запитів. ${rawMessage}`,
+    http5xxError: (statusCode, rawMessage) => `HTTP ${statusCode}: помилка сервера бекенду. ${rawMessage}`,
+    networkError: (rawMessage) =>
+      `Немає зʼєднання з API (network failure). Перевірте HTTPS/сертифікат, DNS і доступність сервера. ${rawMessage}`,
+    unexpectedConnectionError: "Сталася неочікувана помилка зʼєднання.",
+    teamCustomizationText: {
+      editorTitle: "Редактор банера команди",
+      editorHint: "Налаштуйте вигляд банера команди. Цей банер буде видно у верхній панелі під час гри.",
+      bannerPreviewLabel: "Попередній перегляд банера",
+      teamFallbackName: "Назва команди",
+      teamLabel: "Команда",
+      pointsLabel: "Бали",
+      customizationLabel: "Налаштування команди",
+      teamNamePlaceholder: "Назва команди",
+      teamColorLabel: "Колір команди",
+      teamIconLabel: "Іконка команди",
+      startAction: "Старт!",
+      startingAction: "Запуск...",
+    },
+  },
+  russian: {
+    expeditionMapLabel: "Карта экспедиции",
+    noApiConfiguration: "Нет конфигурации",
+    stepLabel: {
+      api: "Подключение API",
+      code: "Код реализации",
+      team: "Назначение команды",
+      customization: "Настройка команды",
+    },
+    stepHint: {
+      api: "Шаг 1 подтверждает подключение к бэкенду и готовность API.",
+      code: "Шаг 2 требует ввести код реализации от администратора.",
+      team: "Шаг 3 показывает назначенную команду перед настройкой баннера.",
+      customization: "Настройте баннер команды и перейдите к стартовому экрану приложения.",
+    },
+    stepCounter: (stepNumber) => `Шаг ${stepNumber}`,
+    apiStepTitle: "Шаг 1: подтверждение API",
+    apiStepDescription: "Убедитесь, что бэкенд отвечает, прежде чем вводить код реализации.",
+    apiConnectionLabel: "Подключение API",
+    closeAction: "Закрыть",
+    changeAction: "Изменить",
+    serverLabel: "Сервер",
+    statusLabel: "Статус",
+    apiStatusValue: {
+      checking: "проверка",
+      connected: "подключено",
+      disconnected: "нет соединения",
+      "config-missing": "нет конфигурации",
+    },
+    quickSelectLabel: "Быстрый выбор",
+    localPresetLabel: "Локовый тестовый сервер",
+    productionPresetLabel: "Продакшн",
+    saveAction: "Сохранить",
+    defaultAction: "По умолчанию",
+    recheckAction: "Проверить снова",
+    goToStepTwoAction: "Перейти к шагу 2",
+    codeStepTitle: "Шаг 2: код реализации",
+    codeStepDescription: "Введите код от администратора, чтобы перейти к назначению команды.",
+    activeApiLabel: "Активный API",
+    realizationCodePlaceholder: "Код реализации",
+    activateRealizationAction: "Активировать реализацию",
+    backToStepOneAction: "Назад к шагу 1",
+    loadingConfiguration: "Загрузка конфигурации от администратора...",
+    setupLoadFailed: "Не удалось загрузить конфигурацию.",
+    teamStepTitle: "Шаг 3: назначение команды",
+    teamStepDescription: "Система назначает команду по реализации. Вы можете изменить её перед запуском.",
+    assignmentResultLabel: "Результат назначения",
+    assignmentNotReady: "Назначение команды ещё не выполнено.",
+    assignedTeamLabel: (slotNumber) => `Назначенная команда: ${slotNumber}`,
+    noAssignedTeam: "Команда не назначена.",
+    availableTeamCountLabel: (teamCount) => `Доступное количество команд: ${teamCount}`,
+    codeDateLabel: (code, date) => `Код: ${code} • Время: ${date}`,
+    changeTeamAction: "Сменить команду",
+    backAction: "Назад",
+    goToBannerEditorAction: "Перейти в редактор баннера",
+    onboardingHint: "Шаг 1 проверяет API, шаг 2 активирует код реализации, шаг 3 завершает назначение, затем вы настраиваете баннер команды.",
+    languagePickerTitle: "Выберите язык игрового контента",
+    selectedLanguageLabel: (label) => `Выбрано: ${label}`,
+    teamPickerTitle: "Выберите команду",
+    teamPickerDescription: "Список команд формируется по лимиту команд реализации.",
+    teamLabel: (slotNumber) => `Команда ${slotNumber}`,
+    currentlyAssignedLabel: "Назначена сейчас",
+    tapToAssignLabel: "Нажмите, чтобы назначить",
+    switchingTeamAssignment: "Меняю назначение команды...",
+    chooseTeamActionSheetTitle: "Выберите команду",
+    actionSheetCancel: "Отмена",
+    chooseTeamPrompt: (slots) => `Выберите номер команды (${slots})`,
+    teamPickerInvalidInput: "Введите номер команды из списка.",
+    mobileMemberName: "Мобильный пользователь",
+    requiredRealizationCode: "Введите код реализации.",
+    deviceInitializationInProgress: "Идёт инициализация устройства. Повторите попытку через мгновение.",
+    missingApiConfigForStep: "Нет конфигурации API. Укажите адрес сервера в разделе подключения.",
+    backendConnectionFailed: "Не удалось подключиться к бэкенду.",
+    realizationNotFound: "Реализация для указанного кода не найдена.",
+    autoAssignmentMessage: (slotNumber) => `Назначено автоматически: Команда ${slotNumber}.`,
+    missingSessionOrApiConfig: "Нет активной сессии или конфигурации API.",
+    reassignmentFallbackMessage: "Эта команда уже занята на другом устройстве. Назначение было переключено.",
+    manualAssignmentMessage: (slotNumber) => `Назначено вручную: Команда ${slotNumber}.`,
+    saveRequiresSession: "Нет активной сессии. Сначала активируйте код реализации.",
+    saveRequiresTeamName: "Укажите название команды перед сохранением.",
+    saveRequiresApi: "Нет конфигурации API. Укажите адрес сервера.",
+    saveSuccessMessage: (name) => `Настройки сохранены: ${name}.`,
+    saveFailedMessage: (error) => `Не удалось сохранить: ${error}`,
+    liveSaveFailedMessage: (error) => `Не удалось сохранить изменения в реальном времени: ${error}`,
+    colorTakenMessage: (slotNumber) => `Этот цвет уже выбрала Команда ${slotNumber}. Выберите другой.`,
+    iconTakenMessage: (slotNumber) => `Этот эмодзи уже выбрала Команда ${slotNumber}. Выберите другой.`,
+    invalidApiAddress: "Укажите корректный адрес сервера, например http://192.168.18.2:3001.",
+    apiAddressSaved: "Адрес API-сервера сохранён.",
+    apiAddressSaveSessionOnly: "Адрес установлен для этой сессии, но сохранить его навсегда не удалось.",
+    productionPresetError: "Не удалось установить продакшн-сервер.",
+    productionPresetSaved: "Выбран продакшн API-сервер.",
+    productionPresetSessionOnly: "Продакшн-сервер установлен для этой сессии, но сохранить его навсегда не удалось.",
+    resetDefaultSaved: "Восстановлена конфигурация сервера по умолчанию.",
+    resetDefaultSessionOnly:
+      "Конфигурация по умолчанию восстановлена для этой сессии, но сохранить её навсегда не удалось.",
+    timeoutError: (baseUrl) => `Тайм-аут запроса к API (${baseUrl}). Проверьте адрес и сеть.`,
+    http401Error: (rawMessage) => `HTTP 401: нет авторизации или сессия истекла. ${rawMessage}`,
+    http403Error: (rawMessage) => `HTTP 403: доступ запрещён. ${rawMessage}`,
+    http404Error: (rawMessage) => `HTTP 404: API endpoint не существует (проверьте базовый URL и префикс /api). ${rawMessage}`,
+    http409Error: (rawMessage) => `HTTP 409: конфликт данных на сервере. ${rawMessage}`,
+    http429Error: (rawMessage) => `HTTP 429: превышен лимит запросов. ${rawMessage}`,
+    http5xxError: (statusCode, rawMessage) => `HTTP ${statusCode}: ошибка сервера бэкенда. ${rawMessage}`,
+    networkError: (rawMessage) =>
+      `Нет подключения к API (network failure). Проверьте HTTPS/сертификат, DNS и доступность сервера. ${rawMessage}`,
+    unexpectedConnectionError: "Произошла непредвиденная ошибка подключения.",
+    teamCustomizationText: {
+      editorTitle: "Редактор баннера команды",
+      editorHint: "Настройте внешний вид баннера команды. Этот баннер виден в верхней панели во время игры.",
+      bannerPreviewLabel: "Предпросмотр баннера",
+      teamFallbackName: "Название команды",
+      teamLabel: "Команда",
+      pointsLabel: "Очки",
+      customizationLabel: "Настройка команды",
+      teamNamePlaceholder: "Название команды",
+      teamColorLabel: "Цвет команды",
+      teamIconLabel: "Иконка команды",
+      startAction: "Старт!",
+      startingAction: "Запуск...",
+    },
+  },
 };
 
 type RealizationOnboardingScreenProps = {
@@ -181,49 +753,52 @@ type RealizationOnboardingScreenProps = {
   onRecoveryConsumed?: () => void;
 };
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, text: OnboardingUiText) {
   if (error instanceof Error && error.message.trim().length > 0) {
     const rawMessage = error.message.trim();
+    if (rawMessage.startsWith(REQUEST_TIMEOUT_ERROR_PREFIX)) {
+      return text.timeoutError(rawMessage.slice(REQUEST_TIMEOUT_ERROR_PREFIX.length));
+    }
     const statusMatch = rawMessage.match(/\bHTTP\s+(\d{3})\b/i);
     const statusCode = statusMatch ? Number(statusMatch[1]) : null;
 
     if (statusCode === 401) {
-      return `HTTP 401: brak autoryzacji lub wygasła sesja. ${rawMessage}`;
+      return text.http401Error(rawMessage);
     }
     if (statusCode === 403) {
-      return `HTTP 403: dostęp zabroniony. ${rawMessage}`;
+      return text.http403Error(rawMessage);
     }
     if (statusCode === 404) {
-      return `HTTP 404: endpoint API nie istnieje (sprawdź bazowy URL i prefiks /api). ${rawMessage}`;
+      return text.http404Error(rawMessage);
     }
     if (statusCode === 409) {
-      return `HTTP 409: konflikt danych po stronie serwera. ${rawMessage}`;
+      return text.http409Error(rawMessage);
     }
     if (statusCode === 429) {
-      return `HTTP 429: limit zapytań został przekroczony. ${rawMessage}`;
+      return text.http429Error(rawMessage);
     }
     if (statusCode !== null && statusCode >= 500) {
-      return `HTTP ${statusCode}: błąd serwera backend. ${rawMessage}`;
+      return text.http5xxError(statusCode, rawMessage);
     }
 
     if (rawMessage.includes("Network request failed") || rawMessage.includes("Failed to fetch")) {
-      return `Brak połączenia z API (network failure). Sprawdź HTTPS/certyfikat, DNS i dostępność serwera. ${rawMessage}`;
+      return text.networkError(rawMessage);
     }
 
     return rawMessage;
   }
 
-  return "Wystąpił nieoczekiwany błąd połączenia.";
+  return text.unexpectedConnectionError;
 }
 
-function formatScheduledAt(value: string) {
+function formatScheduledAt(value: string, uiLanguage: UiLanguage) {
   const date = new Date(value);
 
   if (!Number.isFinite(date.getTime())) {
     return value;
   }
 
-  return date.toLocaleString("pl-PL");
+  return date.toLocaleString(UI_DATE_LOCALE[uiLanguage]);
 }
 
 function normalizeDurationMinutes(value: unknown) {
@@ -511,9 +1086,7 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(
-        `Timeout przy połączeniu z API (${baseUrl}). Sprawdź adres i sieć.`,
-      );
+      throw new Error(`${REQUEST_TIMEOUT_ERROR_PREFIX}${baseUrl}`);
     }
 
     throw error;
@@ -591,6 +1164,7 @@ export function RealizationOnboardingScreen({
   const [setupState, setSetupState] = useState<SetupState>("idle");
   const [setupMessage, setSetupMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessageTone, setSaveMessageTone] = useState<"success" | "error" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSwitchingTeam, setIsSwitchingTeam] = useState(false);
   const [isTeamPickerOpen, setIsTeamPickerOpen] = useState(false);
@@ -602,6 +1176,7 @@ export function RealizationOnboardingScreen({
   const [apiServerPreset, setApiServerPreset] = useState<ApiServerPreset>("local");
   const [apiBaseUrlDraft, setApiBaseUrlDraft] = useState("");
   const [apiConfigMessage, setApiConfigMessage] = useState<string | null>(null);
+  const [apiConfigMessageTone, setApiConfigMessageTone] = useState<"info" | "error" | null>(null);
   const [isApiConfigOpen, setIsApiConfigOpen] = useState(false);
   const [isHydratingApiConfig, setIsHydratingApiConfig] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -617,9 +1192,11 @@ export function RealizationOnboardingScreen({
     return candidates.length > 0 ? candidates[0] : null;
   });
   const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
+  const uiLanguage = useMemo(() => resolveUiLanguage(selectedLanguage), [selectedLanguage]);
+  const text = ONBOARDING_UI_TEXT[uiLanguage];
 
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
-  const [teamName, setTeamName] = useState("Drużyna");
+  const [teamName, setTeamName] = useState("");
   const [teamColor, setTeamColor] = useState<TeamColor>("amber");
   const [teamIcon, setTeamIcon] = useState("🦊");
   const [customizationBlockMessage, setCustomizationBlockMessage] =
@@ -628,10 +1205,11 @@ export function RealizationOnboardingScreen({
     normalizeCustomizationOccupancy(null),
   );
   const liveCustomizationRequestRef = useRef(0);
+  const teamColors = useMemo(() => getTeamColors(uiLanguage), [uiLanguage]);
 
   const selectedColor = useMemo(
-    () => TEAM_COLORS.find((color) => color.key === teamColor) ?? TEAM_COLORS[0],
-    [teamColor],
+    () => teamColors.find((color) => color.key === teamColor) ?? teamColors[0],
+    [teamColor, teamColors],
   );
   const bannerTextColor = resolveBannerTextColor(selectedColor.hex);
   const bannerMutedTextColor =
@@ -664,8 +1242,18 @@ export function RealizationOnboardingScreen({
   const selectedLanguageLabel =
     activeLanguageOptions.find((option) => option.value === selectedLanguage)?.label ??
     (selectedLanguage === "other"
-      ? activeRealization?.customLanguage?.trim() || getRealizationLanguageLabel(selectedLanguage)
-      : getRealizationLanguageLabel(selectedLanguage));
+      ? activeRealization?.customLanguage?.trim() || getRealizationLanguageLabel(selectedLanguage, uiLanguage)
+      : getRealizationLanguageLabel(selectedLanguage, uiLanguage));
+
+  const setSaveFeedback = useCallback((message: string | null, tone: "success" | "error" | null) => {
+    setSaveMessage(message);
+    setSaveMessageTone(tone);
+  }, []);
+
+  const setApiConfigFeedback = useCallback((message: string | null, tone: "info" | "error" | null) => {
+    setApiConfigMessage(message);
+    setApiConfigMessageTone(tone);
+  }, []);
 
   useEffect(() => {
     if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
@@ -840,7 +1428,7 @@ export function RealizationOnboardingScreen({
 
           if (!isCancelled) {
             setApiConnectionStatus("connected");
-            setApiConfigMessage(null);
+            setApiConfigFeedback(null, null);
           }
           return;
         } catch (error) {
@@ -852,7 +1440,7 @@ export function RealizationOnboardingScreen({
       if (!isCancelled) {
         setApiConnectionStatus("disconnected");
         if (lastProbeError) {
-          setApiConfigMessage(getErrorMessage(lastProbeError));
+          setApiConfigFeedback(getErrorMessage(lastProbeError, text), "error");
         }
       }
     };
@@ -862,7 +1450,7 @@ export function RealizationOnboardingScreen({
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig]);
+  }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig, setApiConfigFeedback, text]);
 
   useEffect(() => {
     if (screen !== "customization" || !apiBaseUrl || !sessionToken) {
@@ -1007,20 +1595,20 @@ export function RealizationOnboardingScreen({
 
     if (!normalizedCode) {
       setSetupState("error");
-      setSetupMessage("Wpisz kod realizacji.");
+      setSetupMessage(text.requiredRealizationCode);
       return;
     }
 
     if (!deviceId) {
       setSetupState("error");
-      setSetupMessage("Trwa inicjalizacja urządzenia. Spróbuj ponownie za chwilę.");
+      setSetupMessage(text.deviceInitializationInProgress);
       return;
     }
 
     setRealizationCode(normalizedCode);
     setSetupState("loading");
     setSetupMessage(null);
-    setSaveMessage(null);
+    setSaveFeedback(null, null);
     setActiveRealization(null);
     setSelectedLanguage("polish");
     setApiBaseUrl(null);
@@ -1039,7 +1627,7 @@ export function RealizationOnboardingScreen({
       setApiConnectionStatus("config-missing");
       setApiConnectionTarget(null);
       setSetupState("error");
-      setSetupMessage("Brakuje konfiguracji API. Ustaw adres serwera w sekcji połączenia.");
+      setSetupMessage(text.missingApiConfigForStep);
       return;
     }
 
@@ -1063,7 +1651,7 @@ export function RealizationOnboardingScreen({
 
       if (!resolvedBaseUrl || !bootstrap) {
         setApiConnectionStatus("disconnected");
-        throw bootstrapError ?? new Error("Nie udało się połączyć z backendem.");
+        throw bootstrapError ?? new Error(text.backendConnectionFailed);
       }
       setApiConnectionStatus("connected");
 
@@ -1072,7 +1660,7 @@ export function RealizationOnboardingScreen({
         body: JSON.stringify({
           joinCode: normalizedCode,
           deviceId,
-          memberName: "Użytkownik mobilny",
+          memberName: text.mobileMemberName,
         }),
       });
 
@@ -1081,7 +1669,7 @@ export function RealizationOnboardingScreen({
         bootstrap.realizations.find((item) => item.joinCode.trim().toUpperCase() === normalizedCode);
 
       if (!realization) {
-        throw new Error("Nie znaleziono realizacji dla podanego kodu.");
+        throw new Error(text.realizationNotFound);
       }
 
       const normalizedLanguage =
@@ -1121,7 +1709,7 @@ export function RealizationOnboardingScreen({
       setSelectedLanguage(normalizedRealization.selectedLanguage);
       setSessionToken(join.sessionToken);
       setSelectedTeam(join.team.slotNumber);
-      setTeamName(join.team.name?.trim() || `Drużyna ${join.team.slotNumber}`);
+      setTeamName(join.team.name?.trim() || text.teamLabel(join.team.slotNumber));
       setCustomizationBlockMessage(null);
       setCustomizationOccupancy(
         normalizeCustomizationOccupancy(join.customizationOccupancy),
@@ -1140,11 +1728,11 @@ export function RealizationOnboardingScreen({
       }
 
       setSetupState("ready");
-      setSetupMessage(`Przydzielono automatycznie: Drużyna ${join.team.slotNumber}.`);
+      setSetupMessage(text.autoAssignmentMessage(join.team.slotNumber));
       setScreen("team");
     } catch (error) {
       setSetupState("error");
-      setSetupMessage(getErrorMessage(error));
+      setSetupMessage(getErrorMessage(error, text));
     }
   }
 
@@ -1159,7 +1747,7 @@ export function RealizationOnboardingScreen({
     }
 
     if (!sessionToken || !apiBaseUrl) {
-      setTeamPickerError("Brak aktywnej sesji lub konfiguracji API.");
+      setTeamPickerError(text.missingSessionOrApiConfig);
       return;
     }
 
@@ -1176,7 +1764,7 @@ export function RealizationOnboardingScreen({
       });
 
       setSelectedTeam(result.team.slotNumber);
-      setTeamName(result.team.name?.trim() || `Drużyna ${result.team.slotNumber}`);
+      setTeamName(result.team.name?.trim() || text.teamLabel(result.team.slotNumber));
       setCustomizationBlockMessage(null);
       setCustomizationOccupancy(
         normalizeCustomizationOccupancy(result.customizationOccupancy),
@@ -1196,15 +1784,15 @@ export function RealizationOnboardingScreen({
 
       const reassignmentMessage =
         result.reassignment?.replacedExistingAssignment === true
-          ? result.reassignment.message ?? "Drużyna była już zajęta na innym urządzeniu. Przypisanie zostało przełączone."
+          ? result.reassignment.message ?? text.reassignmentFallbackMessage
           : null;
       setSetupMessage(
         reassignmentMessage ??
-          `Przydzielono ręcznie: Drużyna ${result.team.slotNumber}.`,
+          text.manualAssignmentMessage(result.team.slotNumber),
       );
       setIsTeamPickerOpen(false);
     } catch (error) {
-      setTeamPickerError(getErrorMessage(error));
+      setTeamPickerError(getErrorMessage(error, text));
     } finally {
       setIsSwitchingTeam(false);
     }
@@ -1214,22 +1802,22 @@ export function RealizationOnboardingScreen({
     const trimmedName = teamName.trim();
 
     if (!sessionToken) {
-      setSaveMessage("Brak aktywnej sesji. Najpierw aktywuj kod realizacji.");
+      setSaveFeedback(text.saveRequiresSession, "error");
       return;
     }
 
     if (!trimmedName) {
-      setSaveMessage("Podaj nazwę drużyny przed zapisaniem.");
+      setSaveFeedback(text.saveRequiresTeamName, "error");
       return;
     }
 
     if (!apiBaseUrl) {
-      setSaveMessage("Brakuje konfiguracji API. Ustaw adres serwera.");
+      setSaveFeedback(text.saveRequiresApi, "error");
       return;
     }
 
     setIsSaving(true);
-    setSaveMessage(null);
+    setSaveFeedback(null, null);
     let completionTeamName: string | null = null;
 
     try {
@@ -1249,10 +1837,10 @@ export function RealizationOnboardingScreen({
       setCustomizationOccupancy(
         normalizeCustomizationOccupancy(result.customizationOccupancy),
       );
-      setSaveMessage(`Zapisano ustawienia: ${normalizedResultName}.`);
+      setSaveFeedback(text.saveSuccessMessage(normalizedResultName), "success");
       completionTeamName = normalizedResultName;
     } catch (error) {
-      setSaveMessage(`Nie udało się zapisać: ${getErrorMessage(error)}`);
+      setSaveFeedback(text.saveFailedMessage(getErrorMessage(error, text)), "error");
     } finally {
       setIsSaving(false);
     }
@@ -1265,8 +1853,8 @@ export function RealizationOnboardingScreen({
   const handleTeamNameChange = useCallback((value: string) => {
     setTeamName(value);
     setCustomizationBlockMessage(null);
-    setSaveMessage(null);
-  }, []);
+    setSaveFeedback(null, null);
+  }, [setSaveFeedback]);
 
   const persistLiveCustomization = useCallback(
     async (input: {
@@ -1315,11 +1903,11 @@ export function RealizationOnboardingScreen({
 
         setTeamColor(input.previousColor);
         setTeamIcon(input.previousIcon);
-        setSaveMessage(`Nie udało się zapisać zmian na żywo: ${getErrorMessage(error)}`);
+        setSaveFeedback(text.liveSaveFailedMessage(getErrorMessage(error, text)), "error");
         await refreshCustomizationState().catch(() => undefined);
       }
     },
-    [apiBaseUrl, refreshCustomizationState, sessionToken],
+    [apiBaseUrl, refreshCustomizationState, sessionToken, setSaveFeedback, text],
   );
 
   const handleTeamColorChange = useCallback((value: TeamColor) => {
@@ -1331,14 +1919,14 @@ export function RealizationOnboardingScreen({
       (!selectedTeam || occupiedBy !== selectedTeam)
     ) {
       setCustomizationBlockMessage(
-        `Ten kolor jest już wybrany przez Drużynę ${occupiedBy}. Wybierz inny.`,
+        text.colorTakenMessage(occupiedBy),
       );
       return;
     }
 
     setTeamColor(value);
     setCustomizationBlockMessage(null);
-    setSaveMessage(null);
+    setSaveFeedback(null, null);
     void persistLiveCustomization({
       nextColor: value,
       previousColor,
@@ -1348,8 +1936,10 @@ export function RealizationOnboardingScreen({
     customizationOccupancy.colors,
     persistLiveCustomization,
     selectedTeam,
+    setSaveFeedback,
     teamColor,
     teamIcon,
+    text,
   ]);
 
   const handleTeamIconChange = useCallback((value: string) => {
@@ -1361,14 +1951,14 @@ export function RealizationOnboardingScreen({
       (!selectedTeam || occupiedBy !== selectedTeam)
     ) {
       setCustomizationBlockMessage(
-        `Ta emotikona jest już wybrana przez Drużynę ${occupiedBy}. Wybierz inną.`,
+        text.iconTakenMessage(occupiedBy),
       );
       return;
     }
 
     setTeamIcon(value);
     setCustomizationBlockMessage(null);
-    setSaveMessage(null);
+    setSaveFeedback(null, null);
     void persistLiveCustomization({
       nextIcon: value,
       previousColor,
@@ -1378,8 +1968,10 @@ export function RealizationOnboardingScreen({
     customizationOccupancy.icons,
     persistLiveCustomization,
     selectedTeam,
+    setSaveFeedback,
     teamColor,
     teamIcon,
+    text,
   ]);
 
   const canSaveCustomization = Boolean(selectedTeam) && !isSaving;
@@ -1392,14 +1984,14 @@ export function RealizationOnboardingScreen({
     }
 
     if (Platform.OS === "ios") {
-      const options = [...availableTeamSlots.map((slot) => `Drużyna ${slot}`), "Anuluj"];
+      const options = [...availableTeamSlots.map((slot) => text.teamLabel(slot)), text.actionSheetCancel];
       const cancelButtonIndex = options.length - 1;
 
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
           cancelButtonIndex,
-          title: "Wybierz drużynę",
+          title: text.chooseTeamActionSheetTitle,
         },
         (selectedIndex) => {
           if (typeof selectedIndex !== "number" || selectedIndex === cancelButtonIndex) {
@@ -1418,7 +2010,7 @@ export function RealizationOnboardingScreen({
 
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const selected = window.prompt(
-        `Wybierz numer drużyny (${availableTeamSlots.join(", ")})`,
+        text.chooseTeamPrompt(availableTeamSlots.join(", ")),
         String(selectedTeam ?? availableTeamSlots[0]),
       );
 
@@ -1429,7 +2021,7 @@ export function RealizationOnboardingScreen({
       const parsed = Number(selected.trim());
 
       if (!Number.isInteger(parsed) || !availableTeamSlots.includes(parsed)) {
-        setTeamPickerError("Wpisz numer drużyny z listy.");
+        setTeamPickerError(text.teamPickerInvalidInput);
         return;
       }
 
@@ -1443,7 +2035,7 @@ export function RealizationOnboardingScreen({
   async function saveApiServerOverride() {
     const normalized = normalizeApiBaseUrl(apiBaseUrlDraft);
     if (!normalized) {
-      setApiConfigMessage("Podaj poprawny adres serwera, np. http://192.168.18.2:3001.");
+      setApiConfigFeedback(text.invalidApiAddress, "error");
       return;
     }
 
@@ -1457,11 +2049,9 @@ export function RealizationOnboardingScreen({
 
     try {
       await AsyncStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, normalized);
-      setApiConfigMessage("Zapisano adres serwera API.");
+      setApiConfigFeedback(text.apiAddressSaved, "info");
     } catch {
-      setApiConfigMessage(
-        "Adres ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
-      );
+      setApiConfigFeedback(text.apiAddressSaveSessionOnly, "error");
     }
   }
 
@@ -1469,7 +2059,7 @@ export function RealizationOnboardingScreen({
     if (preset === "production") {
       const normalizedProductionBaseUrl = normalizeApiBaseUrl(PRODUCTION_API_BASE_URL);
       if (!normalizedProductionBaseUrl) {
-        setApiConfigMessage("Nie udało się ustawić serwera produkcyjnego.");
+        setApiConfigFeedback(text.productionPresetError, "error");
         return;
       }
 
@@ -1483,11 +2073,9 @@ export function RealizationOnboardingScreen({
 
       try {
         await AsyncStorage.setItem(API_BASE_URL_OVERRIDE_STORAGE_KEY, normalizedProductionBaseUrl);
-        setApiConfigMessage("Wybrano serwer produkcyjny API.");
+        setApiConfigFeedback(text.productionPresetSaved, "info");
       } catch {
-        setApiConfigMessage(
-          "Serwer produkcyjny ustawiony dla bieżącej sesji, ale nie udało się zapisać go na stałe.",
-        );
+        setApiConfigFeedback(text.productionPresetSessionOnly, "error");
       }
       return;
     }
@@ -1507,11 +2095,9 @@ export function RealizationOnboardingScreen({
 
     try {
       await AsyncStorage.removeItem(API_BASE_URL_OVERRIDE_STORAGE_KEY);
-      setApiConfigMessage("Przywrócono domyślną konfigurację serwera.");
+      setApiConfigFeedback(text.resetDefaultSaved, "info");
     } catch {
-      setApiConfigMessage(
-        "Przywrócono domyślną konfigurację dla tej sesji, ale nie udało się zapisać jej na stałe.",
-      );
+      setApiConfigFeedback(text.resetDefaultSessionOnly, "error");
     }
   }
 
@@ -1576,7 +2162,7 @@ export function RealizationOnboardingScreen({
               }}
             >
               <Text className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-                Expedition Map
+                {text.expeditionMapLabel}
               </Text>
               <Text
                 className={`mt-1 font-semibold tracking-tight ${isTabletLayout ? "text-5xl" : "text-3xl"}`}
@@ -1585,7 +2171,7 @@ export function RealizationOnboardingScreen({
                 SurvivorQuest
               </Text>
               <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                {STEP_HINT[screen]}
+                {text.stepHint[screen]}
               </Text>
 
               <View className="mt-4 flex-row gap-2">
@@ -1606,10 +2192,10 @@ export function RealizationOnboardingScreen({
                         className="text-[10px] uppercase tracking-widest"
                         style={{ color: isActive || isCompleted ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textSubtle }}
                       >
-                        Etap {index + 1}
+                        {text.stepCounter(index + 1)}
                       </Text>
                       <Text className="mt-0.5 text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                        {STEP_LABEL[step]}
+                        {text.stepLabel[step]}
                       </Text>
                     </View>
                   );
@@ -1628,10 +2214,10 @@ export function RealizationOnboardingScreen({
             >
               <View className="gap-1.5">
                 <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Etap 1: potwierdzenie API
+                  {text.apiStepTitle}
                 </Text>
                 <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Upewnij się, że backend odpowiada, zanim przejdziesz do wpisywania kodu realizacji.
+                  {text.apiStepDescription}
                 </Text>
               </View>
 
@@ -1644,7 +2230,7 @@ export function RealizationOnboardingScreen({
               >
                 <View className="flex-row items-center justify-between gap-3">
                   <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                    Połączenie API
+                    {text.apiConnectionLabel}
                   </Text>
                   <Pressable
                     className={`border active:opacity-80 ${isTabletLayout ? "rounded-2xl px-4 py-2" : "rounded-xl px-2.5 py-1"}`}
@@ -1659,21 +2245,21 @@ export function RealizationOnboardingScreen({
 
                         return next;
                       });
-                      setApiConfigMessage(null);
+                      setApiConfigFeedback(null, null);
                     }}
                   >
                     <Text className={`${isTabletLayout ? "text-sm" : "text-xs"} font-semibold`} style={{ color: EXPEDITION_THEME.textPrimary }}>
-                      {isApiConfigOpen ? "Zamknij" : "Zmień"}
+                      {isApiConfigOpen ? text.closeAction : text.changeAction}
                     </Text>
                   </Pressable>
                 </View>
                 <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Serwer: {apiConnectionTarget ?? "Brak konfiguracji"}
+                  {text.serverLabel}: {apiConnectionTarget ?? text.noApiConfiguration}
                 </Text>
                 <View className="mt-1.5 flex-row items-center gap-2">
                   <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: apiStatusIndicatorColor }} />
                   <Text className="text-sm font-medium" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    Status: {apiConnectionStatus}
+                    {text.statusLabel}: {text.apiStatusValue[apiConnectionStatus]}
                   </Text>
                 </View>
                 {apiConfigMessage ? (
@@ -1681,10 +2267,9 @@ export function RealizationOnboardingScreen({
                     className="mt-2 text-xs"
                     style={{
                       color:
+                        apiConfigMessageTone === "error" ||
                         apiConnectionStatus === "disconnected" ||
-                        /^HTTP\s+\d{3}/i.test(apiConfigMessage) ||
-                        apiConfigMessage.startsWith("Nie") ||
-                        apiConfigMessage.startsWith("Brak połączenia")
+                        /^HTTP\s+\d{3}/i.test(apiConfigMessage)
                           ? EXPEDITION_THEME.danger
                           : EXPEDITION_THEME.textMuted,
                     }}
@@ -1696,7 +2281,7 @@ export function RealizationOnboardingScreen({
                 {isApiConfigOpen && (
                   <View className="mt-3 gap-2">
                     <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                      Szybki wybór
+                      {text.quickSelectLabel}
                     </Text>
                     <View className="flex-row gap-2">
                       <Pressable
@@ -1708,7 +2293,7 @@ export function RealizationOnboardingScreen({
                         onPress={() => void applyApiServerPreset("local")}
                       >
                         <Text className="text-center text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                          Lokalna baza testowa
+                          {text.localPresetLabel}
                         </Text>
                       </Pressable>
                       <Pressable
@@ -1720,7 +2305,7 @@ export function RealizationOnboardingScreen({
                         onPress={() => void applyApiServerPreset("production")}
                       >
                         <Text className="text-center text-xs font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                          Produkcja
+                          {text.productionPresetLabel}
                         </Text>
                       </Pressable>
                     </View>
@@ -1735,7 +2320,7 @@ export function RealizationOnboardingScreen({
                       value={apiBaseUrlDraft}
                       onChangeText={(value) => {
                         setApiBaseUrlDraft(value);
-                        setApiConfigMessage(null);
+                        setApiConfigFeedback(null, null);
                       }}
                       placeholder="http://192.168.18.2:3001"
                       placeholderTextColor={EXPEDITION_THEME.textSubtle}
@@ -1749,7 +2334,9 @@ export function RealizationOnboardingScreen({
                         style={{ backgroundColor: EXPEDITION_THEME.accent }}
                         onPress={() => void saveApiServerOverride()}
                       >
-                        <Text className={`text-center ${isTabletLayout ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>Zapisz</Text>
+                        <Text className={`text-center ${isTabletLayout ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>
+                          {text.saveAction}
+                        </Text>
                       </Pressable>
                       <Pressable
                         className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-4 py-3" : "rounded-xl px-3 py-2"}`}
@@ -1757,7 +2344,7 @@ export function RealizationOnboardingScreen({
                         onPress={() => void resetApiServerOverride()}
                       >
                         <Text className={`text-center ${isTabletLayout ? "text-base" : "text-sm"} font-semibold`} style={{ color: EXPEDITION_THEME.textPrimary }}>
-                          Domyślny
+                          {text.defaultAction}
                         </Text>
                       </Pressable>
                     </View>
@@ -1773,7 +2360,7 @@ export function RealizationOnboardingScreen({
                   onPress={triggerApiProbe}
                 >
                   <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    Sprawdź ponownie
+                    {text.recheckAction}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1785,7 +2372,7 @@ export function RealizationOnboardingScreen({
                   onPress={() => setScreen("code")}
                   disabled={apiConnectionStatus !== "connected"}
                 >
-                  <Text className="text-center font-semibold text-zinc-950">Przejdź do etapu 2</Text>
+                  <Text className="text-center font-semibold text-zinc-950">{text.goToStepTwoAction}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1801,15 +2388,15 @@ export function RealizationOnboardingScreen({
             >
               <View className="gap-1.5">
                 <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Etap 2: kod realizacji
+                  {text.codeStepTitle}
                 </Text>
                 <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Wpisz kod przekazany przez administratora, aby przejść do przydziału drużyny.
+                  {text.codeStepDescription}
                 </Text>
               </View>
 
               <Text className="mt-3 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                Aktywne API: {apiConnectionTarget ?? "Brak konfiguracji"}
+                {text.activeApiLabel}: {apiConnectionTarget ?? text.noApiConfiguration}
               </Text>
 
               <TextInput
@@ -1821,7 +2408,7 @@ export function RealizationOnboardingScreen({
                 }}
                 value={realizationCode}
                 onChangeText={(value) => setRealizationCode(value.toUpperCase())}
-                placeholder="Kod realizacji"
+                placeholder={text.realizationCodePlaceholder}
                 placeholderTextColor={EXPEDITION_THEME.textSubtle}
                 autoCapitalize="characters"
                 maxLength={12}
@@ -1832,7 +2419,7 @@ export function RealizationOnboardingScreen({
                 style={{ backgroundColor: EXPEDITION_THEME.accent }}
                 onPress={() => void onSubmitCode()}
               >
-                <Text className="text-center text-base font-semibold text-zinc-950">Aktywuj realizację</Text>
+                <Text className="text-center text-base font-semibold text-zinc-950">{text.activateRealizationAction}</Text>
               </Pressable>
 
               <Pressable
@@ -1844,7 +2431,7 @@ export function RealizationOnboardingScreen({
                 onPress={() => setScreen("api")}
               >
                 <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Cofnij do etapu 1
+                  {text.backToStepOneAction}
                 </Text>
               </Pressable>
 
@@ -1858,7 +2445,7 @@ export function RealizationOnboardingScreen({
                 >
                   <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
                   <Text className="mt-3 text-center text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                    Pobieranie konfiguracji od administratora...
+                    {text.loadingConfiguration}
                   </Text>
                 </View>
               )}
@@ -1869,7 +2456,7 @@ export function RealizationOnboardingScreen({
                   style={{ borderColor: EXPEDITION_THEME.danger, backgroundColor: "rgba(239, 111, 108, 0.12)" }}
                 >
                   <Text className="text-sm" style={{ color: EXPEDITION_THEME.danger }}>
-                    {setupMessage ?? "Nie udało się pobrać konfiguracji."}
+                    {setupMessage ?? text.setupLoadFailed}
                   </Text>
                 </View>
               )}
@@ -1886,10 +2473,10 @@ export function RealizationOnboardingScreen({
             >
               <View className="gap-1">
                 <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  Etap 3: przydzielenie drużyny
+                  {text.teamStepTitle}
                 </Text>
                 <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  System przypisuje drużynę na podstawie realizacji. Możesz ją zmienić przed startem aplikacji.
+                  {text.teamStepDescription}
                 </Text>
               </View>
 
@@ -1901,16 +2488,16 @@ export function RealizationOnboardingScreen({
                 }}
               >
                 <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Wynik przydziału
+                  {text.assignmentResultLabel}
                 </Text>
                 <Text className="mt-1 text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                  {setupMessage ?? "Przydział drużyny nie został jeszcze wykonany."}
+                  {setupMessage ?? text.assignmentNotReady}
                 </Text>
                 <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  {selectedTeam ? `Przydzielona drużyna: ${selectedTeam}` : "Brak przydzielonej drużyny."}
+                  {selectedTeam ? text.assignedTeamLabel(selectedTeam) : text.noAssignedTeam}
                 </Text>
                 <Text className="mt-0.5 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Liczba możliwych drużyn: {activeRealization?.teamCount ?? "-"}
+                  {text.availableTeamCountLabel(activeRealization?.teamCount ?? "-")}
                 </Text>
                 {activeRealization && (
                   <>
@@ -1918,7 +2505,7 @@ export function RealizationOnboardingScreen({
                       {activeRealization.companyName}
                     </Text>
                     <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                      Kod: {realizationCode} • Termin: {formatScheduledAt(activeRealization.scheduledAt)}
+                      {text.codeDateLabel(realizationCode, formatScheduledAt(activeRealization.scheduledAt, uiLanguage))}
                     </Text>
                   </>
                 )}
@@ -1950,7 +2537,7 @@ export function RealizationOnboardingScreen({
                 disabled={availableTeamSlots.length === 0}
                 >
                   <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    Zmień drużynę
+                    {text.changeTeamAction}
                   </Text>
                 </Pressable>
 
@@ -1961,7 +2548,7 @@ export function RealizationOnboardingScreen({
                   onPress={() => setScreen("code")}
                 >
                   <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    Wstecz
+                    {text.backAction}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1971,7 +2558,7 @@ export function RealizationOnboardingScreen({
                   disabled={!selectedTeam}
                 >
                   <Text className="text-center font-semibold text-zinc-950">
-                    Przejdź do edytora banera
+                    {text.goToBannerEditorAction}
                   </Text>
                 </Pressable>
               </View>
@@ -1985,16 +2572,19 @@ export function RealizationOnboardingScreen({
               teamName={teamName}
               teamColor={teamColor}
               teamIcon={teamIcon}
+              teamColors={teamColors}
               selectedColor={selectedColor}
               bannerTextColor={bannerTextColor}
               bannerMutedTextColor={bannerMutedTextColor}
               bannerIconBackground={bannerIconBackground}
               saveMessage={saveMessage}
+              saveMessageTone={saveMessageTone}
               isSaving={isSaving}
               canSave={canSaveCustomization}
               occupiedColors={customizationOccupancy.colors}
               occupiedIcons={customizationOccupancy.icons}
               blockMessage={customizationBlockMessage}
+              text={text.teamCustomizationText}
               onTeamNameChange={handleTeamNameChange}
               onTeamColorChange={handleTeamColorChange}
               onTeamIconChange={handleTeamIconChange}
@@ -2004,7 +2594,7 @@ export function RealizationOnboardingScreen({
 
           {screen !== "customization" && (
             <Text className="px-2 text-center text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
-              Etap 1 sprawdza API, etap 2 aktywuje realizację kodem, etap 3 finalizuje przydział, a potem konfigurujesz baner drużyny.
+              {text.onboardingHint}
             </Text>
           )}
         </View>
@@ -2031,10 +2621,10 @@ export function RealizationOnboardingScreen({
             onPress={(event) => event.stopPropagation()}
           >
             <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Wybierz język treści gry
+              {text.languagePickerTitle}
             </Text>
             <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Wybrany: {selectedLanguageLabel}
+              {text.selectedLanguageLabel(selectedLanguageLabel)}
             </Text>
 
             <View className="mt-3 gap-2">
@@ -2078,7 +2668,7 @@ export function RealizationOnboardingScreen({
               onPress={() => setIsLanguagePickerOpen(false)}
             >
               <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                Zamknij
+                {text.closeAction}
               </Text>
             </Pressable>
           </Pressable>
@@ -2101,10 +2691,10 @@ export function RealizationOnboardingScreen({
             }}
           >
             <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Wybierz drużynę
+              {text.teamPickerTitle}
             </Text>
             <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Lista możliwych drużyn pochodzi z limitu drużyn realizacji.
+              {text.teamPickerDescription}
             </Text>
 
             <View className="mt-3 rounded-2xl border p-2" style={{ borderColor: EXPEDITION_THEME.border }}>
@@ -2128,10 +2718,10 @@ export function RealizationOnboardingScreen({
                         disabled={isSwitchingTeam}
                       >
                         <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                          Drużyna {slotNumber}
+                          {text.teamLabel(slotNumber)}
                         </Text>
                         <Text className="mt-0.5 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                          {isCurrent ? "Aktualnie przypisana" : "Dotknij, aby przypisać"}
+                          {isCurrent ? text.currentlyAssignedLabel : text.tapToAssignLabel}
                         </Text>
                       </Pressable>
                     );
@@ -2144,7 +2734,7 @@ export function RealizationOnboardingScreen({
               <View className="mt-3 flex-row items-center gap-2">
                 <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
                 <Text className="text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  Zmieniam przydział drużyny...
+                  {text.switchingTeamAssignment}
                 </Text>
               </View>
             )}
@@ -2161,7 +2751,7 @@ export function RealizationOnboardingScreen({
               onPress={() => setIsTeamPickerOpen(false)}
             >
               <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                Zamknij
+                {text.closeAction}
               </Text>
             </Pressable>
           </View>

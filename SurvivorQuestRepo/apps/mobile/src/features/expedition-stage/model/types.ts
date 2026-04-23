@@ -4,6 +4,7 @@ import type {
   RealizationLanguageOption,
 } from "../../onboarding/model/types";
 import { getRealizationLanguageLabel } from "../../onboarding/model/types";
+import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
 
 export type ExpeditionTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
@@ -155,6 +156,41 @@ export const DEFAULT_STATION_PIN_CUSTOMIZATION: StationPinCustomization = {
   color: "#f59e0b",
 };
 
+const EXPEDITION_DEFAULT_TEXT: Record<
+  UiLanguage,
+  {
+    companyName: string;
+    stationLabel: string;
+    stationDescription: string;
+    teamLabel: string;
+  }
+> = {
+  polish: {
+    companyName: "Realizacja terenowa",
+    stationLabel: "Stanowisko",
+    stationDescription: "Opis stanowiska będzie dostępny po pełnym spięciu danych realizacji.",
+    teamLabel: "Drużyna",
+  },
+  english: {
+    companyName: "Outdoor realization",
+    stationLabel: "Station",
+    stationDescription: "Station description will be available after full realization data sync.",
+    teamLabel: "Team",
+  },
+  ukrainian: {
+    companyName: "Виїзна реалізація",
+    stationLabel: "Станція",
+    stationDescription: "Опис станції буде доступний після повної синхронізації даних реалізації.",
+    teamLabel: "Команда",
+  },
+  russian: {
+    companyName: "Выездная реализация",
+    stationLabel: "Станция",
+    stationDescription: "Описание станции будет доступно после полной синхронизации данных реализации.",
+    teamLabel: "Команда",
+  },
+};
+
 const DEFAULT_STATION_POINTS: Record<string, number> = {
   "g-1": 100,
   "g-2": 180,
@@ -170,6 +206,7 @@ export function resolveDefaultStationPoints(stationId: string) {
 export function buildInitialSessionState(session: OnboardingSession): ExpeditionSessionState {
   const stationIds = session.realization?.stationIds?.length ? session.realization.stationIds : ["g-1", "g-2", "g-3"];
   const fallbackLanguage = session.selectedLanguage ?? session.realization?.selectedLanguage ?? session.realization?.language;
+  const text = EXPEDITION_DEFAULT_TEXT[resolveUiLanguage(fallbackLanguage)];
   const fallbackLanguageOptions =
     session.realization?.availableLanguages && session.realization.availableLanguages.length > 0
       ? session.realization.availableLanguages
@@ -189,7 +226,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
   return {
     realization: {
       id: session.realization?.id ?? session.realizationId ?? "offline-realization",
-      companyName: session.realization?.companyName ?? "Realizacja terenowa",
+      companyName: session.realization?.companyName ?? text.companyName,
       introText: session.realization?.introText,
       gameRules: session.realization?.gameRules,
       contactPerson: "",
@@ -217,9 +254,9 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
           : 120,
       stations: stationIds.map((stationId) => ({
         id: stationId,
-        name: `Stanowisko ${stationId}`,
+        name: `${text.stationLabel} ${stationId}`,
         type: "quiz",
-        description: "Opis stanowiska będzie dostępny po pełnym spięciu danych realizacji.",
+        description: text.stationDescription,
         imageUrl: `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(stationId)}`,
         points: resolveDefaultStationPoints(stationId),
         timeLimitSeconds: 0,
@@ -230,7 +267,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
     team: {
       id: `team-slot-${session.team.slotNumber ?? 1}`,
       slotNumber: session.team.slotNumber ?? 1,
-      name: session.team.name || "Drużyna",
+      name: session.team.name || text.teamLabel,
       color: session.team.colorKey,
       badgeKey: session.team.icon,
       points: 0,

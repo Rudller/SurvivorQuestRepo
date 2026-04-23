@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from "expo-audio";
 import { Alert, Animated, Image, Keyboard, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
 import { AnagramMediaPanel, AnagramStationPanel } from "./station-panels/anagram-station-panel";
 import { BoggleStationPanel } from "./station-panels/boggle-station-panel";
@@ -13,6 +14,7 @@ import { MemoryStationPanel } from "./station-panels/memory-station-panel";
 import { MiniSudokuStationPanel } from "./station-panels/mini-sudoku-station-panel";
 import { QuizAudioPanel, resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { RebusStationPanel } from "./station-panels/rebus-station-panel";
+import { AttemptsIndicator } from "./station-panels/shared-ui";
 import { SimonStationPanel } from "./station-panels/simon-station-panel";
 import { WordleInteractionPanel, WordleMediaBoard, type WordleAttempt } from "./station-panels/wordle-station-panel";
 import type {
@@ -22,7 +24,6 @@ import type {
 } from "./types";
 
 import {
-  CAESAR_SHIFT,
   HANGMAN_MAX_MISSES,
   MASTERMIND_MAX_ATTEMPTS,
   MEMORY_MAX_MISTAKES,
@@ -47,6 +48,8 @@ import {
   normalizeWordleSecret,
   resolveBoggleBoard,
   resolveBoggleTarget,
+  resolveCaesarSecret,
+  resolveCaesarShift,
   resolveCorrectAnswerText,
   resolveMatchingPairs,
   resolveMastermindSecret,
@@ -94,6 +97,611 @@ type QuizOutcomePopup = {
   message: string;
 };
 
+type StationPreviewText = {
+  fallbackQuizOptions: string[];
+  audioSourceMissing: string;
+  audioLoadFailed: string;
+  audioPlayFailed: string;
+  timeoutWordle: string;
+  timeoutHangman: string;
+  timeoutMastermind: string;
+  timeoutAnagram: string;
+  timeoutCaesar: string;
+  timeoutMemory: string;
+  timeoutSimon: string;
+  timeoutRebus: string;
+  timeoutBoggle: string;
+  timeoutMiniSudoku: string;
+  timeoutMatching: string;
+  timeoutQuiz: string;
+  timeoutCodeTask: string;
+  codeEnter: string;
+  codeApprovedTestMode: string;
+  codeApproved: string;
+  wordleEnterGuess: string;
+  wordleLengthExact: (length: number) => string;
+  wordleAttemptsExhausted: string;
+  wordleTryAgain: string;
+  wordleNoAttempts: string;
+  wordleFailedPopup: string;
+  wordleSolved: string;
+  wordleSolvedPopup: string;
+  alertErrorTitle: string;
+  quizCorrect: string;
+  quizIncorrect: string;
+  quizWrongPopup: string;
+  quizSuccessPopup: string;
+  hangmanEnterLetter: string;
+  hangmanLetterAlreadyChecked: string;
+  hangmanNoAttempts: (secret: string) => string;
+  hangmanFailedPopup: string;
+  hangmanGoodLetter: string;
+  hangmanMiss: string;
+  hangmanSolved: string;
+  hangmanSolvedPopup: string;
+  mastermindInvalidCode: (length: number) => string;
+  mastermindNoAttempts: (secret: string) => string;
+  mastermindFailedPopup: string;
+  mastermindFeedback: (exact: number, misplaced: number) => string;
+  mastermindSolved: string;
+  mastermindSolvedPopup: string;
+  anagramEnter: string;
+  anagramNoAttempts: string;
+  anagramFailedPopup: string;
+  anagramIncorrect: string;
+  anagramSolved: string;
+  anagramSolvedPopup: string;
+  caesarEnter: string;
+  caesarNoAttempts: (decoded: string) => string;
+  caesarFailedPopup: string;
+  caesarIncorrect: string;
+  caesarSolved: string;
+  caesarSolvedPopup: string;
+  caesarShiftHint: (shift: number) => string;
+  caesarAttemptsLeftLabel: string;
+  memorySolved: string;
+  memorySolvedPopup: string;
+  memoryPairFound: string;
+  memoryMiss: string;
+  memoryFailedPopup: string;
+  simonWrong: string;
+  simonFailedPopup: string;
+  simonProgress: (current: number, total: number) => string;
+  simonSolved: string;
+  simonSolvedPopup: string;
+  rebusEnter: string;
+  rebusNoAttempts: (answer: string) => string;
+  rebusFailedPopup: string;
+  rebusIncorrect: string;
+  rebusSolved: string;
+  rebusSolvedPopup: string;
+  boggleEnterMin: string;
+  boggleMaxLength: (max: number) => string;
+  boggleNoAttempts: (target: string) => string;
+  boggleFailedPopup: string;
+  boggleIncorrect: string;
+  boggleSolved: string;
+  boggleSolvedPopup: string;
+  boggleAdjacentOnly: string;
+  miniSudokuFillAll: string;
+  miniSudokuNoAttempts: (solution: string) => string;
+  miniSudokuFailedPopup: string;
+  miniSudokuIncorrect: string;
+  miniSudokuSolved: string;
+  miniSudokuSolvedPopup: string;
+  matchingSetLine: string;
+  matchingPairGood: string;
+  matchingSolved: string;
+  matchingSolvedPopup: string;
+  matchingNoAttempts: string;
+  matchingFailedPopup: string;
+  matchingWrongPair: string;
+  outcomePassed: string;
+  outcomeTimedOut: string;
+  outcomeFailed: string;
+  matchingChecking: string;
+  matchingCheck: string;
+  matchingAttempts: string;
+  matchingMatched: string;
+  taskDescriptionMissing: string;
+  anagramDisplayHint: string;
+  executionTimerLabel: string;
+  points: string;
+  backToMapNow: string;
+  backToMap: string;
+};
+
+const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
+  fallbackQuizOptions: [
+    "I verify team communication and plan.",
+    "I act without consulting the team.",
+    "I ignore safety rules.",
+    "I split the team and lose contact.",
+  ],
+  audioSourceMissing: "No audio source for this station.",
+  audioLoadFailed: "Failed to load audio recording.",
+  audioPlayFailed: "Failed to play audio recording.",
+  timeoutWordle: "Time for Wordle has expired. Task was not passed.",
+  timeoutHangman: "Time for Hangman has expired. Task was not passed.",
+  timeoutMastermind: "Time for Mastermind has expired. Task was not passed.",
+  timeoutAnagram: "Time for anagram has expired. Task was not passed.",
+  timeoutCaesar: "Time for Caesar cipher has expired. Task was not passed.",
+  timeoutMemory: "Time for Memory has expired. Task was not passed.",
+  timeoutSimon: "Time for Simon has expired. Task was not passed.",
+  timeoutRebus: "Time for rebus has expired. Task was not passed.",
+  timeoutBoggle: "Time for Boggle has expired. Task was not passed.",
+  timeoutMiniSudoku: "Time for mini Sudoku has expired. Task was not passed.",
+  timeoutMatching: "Time for matching pairs has expired. Task was not passed.",
+  timeoutQuiz: "Time for quiz has expired. Task was not passed.",
+  timeoutCodeTask: "Time to complete the task has expired. Task was not passed.",
+  codeEnter: "Enter code to validate this station.",
+  codeApprovedTestMode: "Code approved (test mode).",
+  codeApproved: "Code approved.",
+  wordleEnterGuess: "Enter a guess to check the word.",
+  wordleLengthExact: (length: number) => `The word must be exactly ${length} characters long.`,
+  wordleAttemptsExhausted: "All attempts have been used.",
+  wordleTryAgain: "Not correct — try again.",
+  wordleNoAttempts: "No attempts left. Task not passed.",
+  wordleFailedPopup: "All Wordle attempts were used.",
+  wordleSolved: "Great! Correct word.",
+  wordleSolvedPopup: "Correct word. Task passed.",
+  alertErrorTitle: "Error",
+  quizCorrect: "Correct answer",
+  quizIncorrect: "Wrong answer",
+  quizWrongPopup: "Incorrect answer was selected.",
+  quizSuccessPopup: "Correct answer. Task passed.",
+  hangmanEnterLetter: "Enter one letter.",
+  hangmanLetterAlreadyChecked: "This letter has already been checked.",
+  hangmanNoAttempts: (secret: string) => `No attempts left. Phrase: ${secret}`,
+  hangmanFailedPopup: "All Hangman attempts were used.",
+  hangmanGoodLetter: "Good letter!",
+  hangmanMiss: "Miss.",
+  hangmanSolved: "Great! Full phrase revealed.",
+  hangmanSolvedPopup: "Phrase guessed. Task passed.",
+  mastermindInvalidCode: (length: number) => `Code must have ${length} symbols and use letters A-F.`,
+  mastermindNoAttempts: (secret: string) => `No attempts left. Correct code: ${secret}`,
+  mastermindFailedPopup: "Mastermind attempts were exhausted.",
+  mastermindFeedback: (exact: number, misplaced: number) =>
+    `Exact: ${exact}, misplaced: ${misplaced}.`,
+  mastermindSolved: "Great! Code guessed.",
+  mastermindSolvedPopup: "Code guessed. Task passed.",
+  anagramEnter: "Enter the anagram solution.",
+  anagramNoAttempts: "No attempts left. Task not passed.",
+  anagramFailedPopup: "Failed to solve the anagram.",
+  anagramIncorrect: "Incorrect. Try again.",
+  anagramSolved: "Great! Anagram solved.",
+  anagramSolvedPopup: "Anagram solved correctly.",
+  caesarEnter: "Enter decrypted phrase.",
+  caesarNoAttempts: (decoded: string) => `No attempts left. Correct phrase: ${decoded}`,
+  caesarFailedPopup: "Failed to decrypt the phrase.",
+  caesarIncorrect: "Incorrect. Check the shift and try again.",
+  caesarSolved: "Great! Phrase decrypted.",
+  caesarSolvedPopup: "Caesar cipher solved correctly.",
+  caesarShiftHint: (shift: number) => `Hint: shift +${shift}`,
+  caesarAttemptsLeftLabel: "Attempts left",
+  memorySolved: "Great! All pairs found.",
+  memorySolvedPopup: "Memory game completed.",
+  memoryPairFound: "Good! Pair found.",
+  memoryMiss: "Miss. Try to memorize positions.",
+  memoryFailedPopup: "Too many wrong attempts in Memory.",
+  simonWrong: "Wrong sequence.",
+  simonFailedPopup: "Simon sequence was interrupted.",
+  simonProgress: (current: number, total: number) => `Good! Progress: ${current}/${total}`,
+  simonSolved: "Great! Correct sequence.",
+  simonSolvedPopup: "Simon sequence reproduced correctly.",
+  rebusEnter: "Enter rebus solution.",
+  rebusNoAttempts: (answer: string) => `No attempts left. Correct answer: ${answer}`,
+  rebusFailedPopup: "Failed to solve the rebus.",
+  rebusIncorrect: "Incorrect. Try again.",
+  rebusSolved: "Great! Rebus solved.",
+  rebusSolvedPopup: "Rebus solved correctly.",
+  boggleEnterMin: "Enter a word (minimum 3 letters).",
+  boggleMaxLength: (max: number) => `The word can have up to ${max} letters.`,
+  boggleNoAttempts: (target: string) => `No attempts left. Target word: ${target}`,
+  boggleFailedPopup: "No correct word found in Boggle.",
+  boggleIncorrect: "This is not the target word. Try again.",
+  boggleSolved: "Great! Word found.",
+  boggleSolvedPopup: "Boggle solved correctly.",
+  boggleAdjacentOnly: "Choose adjacent cells only (including diagonals).",
+  miniSudokuFillAll: "Fill all fields with values 1 or 2.",
+  miniSudokuNoAttempts: (solution: string) => `No attempts left. Correct layout: ${solution}`,
+  miniSudokuFailedPopup: "Failed to solve mini Sudoku.",
+  miniSudokuIncorrect: "Layout is incorrect. Check rows and columns.",
+  miniSudokuSolved: "Great! Mini Sudoku solved.",
+  miniSudokuSolvedPopup: "Mini Sudoku solved correctly.",
+  matchingSetLine: "Set items on both sides on the center line.",
+  matchingPairGood: "Good! Pair matched.",
+  matchingSolved: "Great! All pairs matched.",
+  matchingSolvedPopup: "Matching task completed.",
+  matchingNoAttempts: "No attempts left.",
+  matchingFailedPopup: "Too many incorrect matches.",
+  matchingWrongPair: "This is not a correct pair.",
+  outcomePassed: "Passed",
+  outcomeTimedOut: "Time expired",
+  outcomeFailed: "Failed",
+  matchingChecking: "Checking...",
+  matchingCheck: "Check",
+  matchingAttempts: "Attempts",
+  matchingMatched: "Matched",
+  taskDescriptionMissing: "Task description has not been added yet.",
+  anagramDisplayHint: "Jumbled text is displayed word by word, each in a separate row.",
+  executionTimerLabel: "Time left to complete task",
+  points: "Points",
+  backToMapNow: "Back to map now",
+  backToMap: "Back to map",
+};
+
+const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
+  fallbackQuizOptions: [
+    "Я перевіряю комунікацію та план команди.",
+    "Я дію без консультації з командою.",
+    "Я ігнорую правила безпеки.",
+    "Я розділяю команду і втрачаю контакт.",
+  ],
+  audioSourceMissing: "Для цієї станції немає джерела аудіо.",
+  audioLoadFailed: "Не вдалося завантажити аудіозапис.",
+  audioPlayFailed: "Не вдалося відтворити аудіозапис.",
+  timeoutWordle: "Час для Wordle вичерпано. Завдання не зараховано.",
+  timeoutHangman: "Час для Шибениці вичерпано. Завдання не зараховано.",
+  timeoutMastermind: "Час для Mastermind вичерпано. Завдання не зараховано.",
+  timeoutAnagram: "Час для анаграми вичерпано. Завдання не зараховано.",
+  timeoutCaesar: "Час для шифру Цезаря вичерпано. Завдання не зараховано.",
+  timeoutMemory: "Час для Memory вичерпано. Завдання не зараховано.",
+  timeoutSimon: "Час для Simon вичерпано. Завдання не зараховано.",
+  timeoutRebus: "Час для ребуса вичерпано. Завдання не зараховано.",
+  timeoutBoggle: "Час для Boggle вичерпано. Завдання не зараховано.",
+  timeoutMiniSudoku: "Час для міні Sudoku вичерпано. Завдання не зараховано.",
+  timeoutMatching: "Час для поєднання пар вичерпано. Завдання не зараховано.",
+  timeoutQuiz: "Час для вікторини вичерпано. Завдання не зараховано.",
+  timeoutCodeTask: "Час на виконання завдання вичерпано. Завдання не зараховано.",
+  codeEnter: "Введіть код, щоб підтвердити цю станцію.",
+  codeApprovedTestMode: "Код підтверджено (тестовий режим).",
+  codeApproved: "Код підтверджено.",
+  wordleEnterGuess: "Введіть спробу, щоб перевірити слово.",
+  wordleLengthExact: (length: number) => `Слово має містити рівно ${length} символів.`,
+  wordleAttemptsExhausted: "Усі спроби використано.",
+  wordleTryAgain: "Неправильно — спробуйте ще раз.",
+  wordleNoAttempts: "Спроб не залишилося. Завдання не зараховано.",
+  wordleFailedPopup: "Усі спроби Wordle використано.",
+  wordleSolved: "Чудово! Правильне слово.",
+  wordleSolvedPopup: "Правильне слово. Завдання зараховано.",
+  alertErrorTitle: "Помилка",
+  quizCorrect: "Правильна відповідь",
+  quizIncorrect: "Неправильна відповідь",
+  quizWrongPopup: "Вибрано неправильну відповідь.",
+  quizSuccessPopup: "Правильна відповідь. Завдання зараховано.",
+  hangmanEnterLetter: "Введіть одну літеру.",
+  hangmanLetterAlreadyChecked: "Цю літеру вже перевіряли.",
+  hangmanNoAttempts: (secret: string) => `Спроб не залишилося. Фраза: ${secret}`,
+  hangmanFailedPopup: "Усі спроби у Шибениці використано.",
+  hangmanGoodLetter: "Добра літера!",
+  hangmanMiss: "Промах.",
+  hangmanSolved: "Чудово! Усю фразу відкрито.",
+  hangmanSolvedPopup: "Фразу вгадано. Завдання зараховано.",
+  mastermindInvalidCode: (length: number) =>
+    `Код має містити ${length} символів і використовувати літери A-F.`,
+  mastermindNoAttempts: (secret: string) => `Спроб не залишилося. Правильний код: ${secret}`,
+  mastermindFailedPopup: "Спроби в Mastermind вичерпано.",
+  mastermindFeedback: (exact: number, misplaced: number) =>
+    `Точних: ${exact}, не на місці: ${misplaced}.`,
+  mastermindSolved: "Чудово! Код вгадано.",
+  mastermindSolvedPopup: "Код вгадано. Завдання зараховано.",
+  anagramEnter: "Введіть розв'язок анаграми.",
+  anagramNoAttempts: "Спроб не залишилося. Завдання не зараховано.",
+  anagramFailedPopup: "Не вдалося розв'язати анаграму.",
+  anagramIncorrect: "Неправильно. Спробуйте ще раз.",
+  anagramSolved: "Чудово! Анаграму розв'язано.",
+  anagramSolvedPopup: "Анаграму розв'язано правильно.",
+  caesarEnter: "Введіть розшифровану фразу.",
+  caesarNoAttempts: (decoded: string) => `Спроб не залишилося. Правильна фраза: ${decoded}`,
+  caesarFailedPopup: "Не вдалося розшифрувати фразу.",
+  caesarIncorrect: "Неправильно. Перевірте зсув і спробуйте ще раз.",
+  caesarSolved: "Чудово! Фразу розшифровано.",
+  caesarSolvedPopup: "Шифр Цезаря розв'язано правильно.",
+  caesarShiftHint: (shift: number) => `Підказка: зсув +${shift}`,
+  caesarAttemptsLeftLabel: "Залишилось спроб",
+  memorySolved: "Чудово! Усі пари знайдено.",
+  memorySolvedPopup: "Гру Memory завершено.",
+  memoryPairFound: "Добре! Пару знайдено.",
+  memoryMiss: "Промах. Спробуйте запам'ятати позиції.",
+  memoryFailedPopup: "Забагато помилкових спроб у Memory.",
+  simonWrong: "Неправильна послідовність.",
+  simonFailedPopup: "Послідовність Simon перервано.",
+  simonProgress: (current: number, total: number) => `Добре! Прогрес: ${current}/${total}`,
+  simonSolved: "Чудово! Правильна послідовність.",
+  simonSolvedPopup: "Послідовність Simon відтворено правильно.",
+  rebusEnter: "Введіть розв'язок ребуса.",
+  rebusNoAttempts: (answer: string) => `Спроб не залишилося. Правильна відповідь: ${answer}`,
+  rebusFailedPopup: "Не вдалося розв'язати ребус.",
+  rebusIncorrect: "Неправильно. Спробуйте ще раз.",
+  rebusSolved: "Чудово! Ребус розв'язано.",
+  rebusSolvedPopup: "Ребус розв'язано правильно.",
+  boggleEnterMin: "Введіть слово (мінімум 3 літери).",
+  boggleMaxLength: (max: number) => `Слово може містити максимум ${max} літер.`,
+  boggleNoAttempts: (target: string) => `Спроб не залишилося. Цільове слово: ${target}`,
+  boggleFailedPopup: "У Boggle не знайдено правильного слова.",
+  boggleIncorrect: "Це не цільове слово. Спробуйте ще раз.",
+  boggleSolved: "Чудово! Слово знайдено.",
+  boggleSolvedPopup: "Boggle розв'язано правильно.",
+  boggleAdjacentOnly: "Обирайте лише сусідні клітинки (включно з діагоналями).",
+  miniSudokuFillAll: "Заповніть усі поля значеннями 1 або 2.",
+  miniSudokuNoAttempts: (solution: string) => `Спроб не залишилося. Правильний розклад: ${solution}`,
+  miniSudokuFailedPopup: "Не вдалося розв'язати міні Sudoku.",
+  miniSudokuIncorrect: "Розклад неправильний. Перевірте рядки та стовпці.",
+  miniSudokuSolved: "Чудово! Міні Sudoku розв'язано.",
+  miniSudokuSolvedPopup: "Міні Sudoku розв'язано правильно.",
+  matchingSetLine: "Розташуйте елементи з обох боків на центральній лінії.",
+  matchingPairGood: "Добре! Пару поєднано.",
+  matchingSolved: "Чудово! Усі пари поєднано.",
+  matchingSolvedPopup: "Завдання на поєднання пар виконано.",
+  matchingNoAttempts: "Спроб не залишилося.",
+  matchingFailedPopup: "Забагато неправильних поєднань.",
+  matchingWrongPair: "Це неправильна пара.",
+  outcomePassed: "Зараховано",
+  outcomeTimedOut: "Час вичерпано",
+  outcomeFailed: "Не зараховано",
+  matchingChecking: "Перевірка...",
+  matchingCheck: "Перевірити",
+  matchingAttempts: "Спроби",
+  matchingMatched: "Поєднано",
+  taskDescriptionMissing: "Опис завдання ще не додано.",
+  anagramDisplayHint:
+    "Перемішаний текст відображається слово за словом, кожне в окремому рядку.",
+  executionTimerLabel: "Час до завершення завдання",
+  points: "Бали",
+  backToMapNow: "Повернутися до мапи зараз",
+  backToMap: "Повернутися до мапи",
+};
+
+const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
+  fallbackQuizOptions: [
+    "Я проверяю коммуникацию и план команды.",
+    "Я действую без консультации с командой.",
+    "Я игнорирую правила безопасности.",
+    "Я разделяю команду и теряю контакт.",
+  ],
+  audioSourceMissing: "Для этой станции нет источника аудио.",
+  audioLoadFailed: "Не удалось загрузить аудиозапись.",
+  audioPlayFailed: "Не удалось воспроизвести аудиозапись.",
+  timeoutWordle: "Время для Wordle истекло. Задание не зачтено.",
+  timeoutHangman: "Время для Виселицы истекло. Задание не зачтено.",
+  timeoutMastermind: "Время для Mastermind истекло. Задание не зачтено.",
+  timeoutAnagram: "Время для анаграммы истекло. Задание не зачтено.",
+  timeoutCaesar: "Время для шифра Цезаря истекло. Задание не зачтено.",
+  timeoutMemory: "Время для Memory истекло. Задание не зачтено.",
+  timeoutSimon: "Время для Simon истекло. Задание не зачтено.",
+  timeoutRebus: "Время для ребуса истекло. Задание не зачтено.",
+  timeoutBoggle: "Время для Boggle истекло. Задание не зачтено.",
+  timeoutMiniSudoku: "Время для мини Sudoku истекло. Задание не зачтено.",
+  timeoutMatching: "Время для сопоставления пар истекло. Задание не зачтено.",
+  timeoutQuiz: "Время для викторины истекло. Задание не зачтено.",
+  timeoutCodeTask: "Время на выполнение задания истекло. Задание не зачтено.",
+  codeEnter: "Введите код, чтобы подтвердить эту станцию.",
+  codeApprovedTestMode: "Код подтвержден (тестовый режим).",
+  codeApproved: "Код подтвержден.",
+  wordleEnterGuess: "Введите попытку, чтобы проверить слово.",
+  wordleLengthExact: (length: number) => `Слово должно содержать ровно ${length} символов.`,
+  wordleAttemptsExhausted: "Все попытки использованы.",
+  wordleTryAgain: "Неверно — попробуйте ещё раз.",
+  wordleNoAttempts: "Попыток не осталось. Задание не зачтено.",
+  wordleFailedPopup: "Все попытки Wordle использованы.",
+  wordleSolved: "Отлично! Правильное слово.",
+  wordleSolvedPopup: "Правильное слово. Задание зачтено.",
+  alertErrorTitle: "Ошибка",
+  quizCorrect: "Правильный ответ",
+  quizIncorrect: "Неправильный ответ",
+  quizWrongPopup: "Выбран неправильный ответ.",
+  quizSuccessPopup: "Правильный ответ. Задание зачтено.",
+  hangmanEnterLetter: "Введите одну букву.",
+  hangmanLetterAlreadyChecked: "Эта буква уже проверялась.",
+  hangmanNoAttempts: (secret: string) => `Попыток не осталось. Фраза: ${secret}`,
+  hangmanFailedPopup: "Все попытки в Виселице использованы.",
+  hangmanGoodLetter: "Хорошая буква!",
+  hangmanMiss: "Промах.",
+  hangmanSolved: "Отлично! Вся фраза открыта.",
+  hangmanSolvedPopup: "Фраза угадана. Задание зачтено.",
+  mastermindInvalidCode: (length: number) =>
+    `Код должен содержать ${length} символов и использовать буквы A-F.`,
+  mastermindNoAttempts: (secret: string) => `Попыток не осталось. Правильный код: ${secret}`,
+  mastermindFailedPopup: "Попытки в Mastermind исчерпаны.",
+  mastermindFeedback: (exact: number, misplaced: number) =>
+    `Точных: ${exact}, не на месте: ${misplaced}.`,
+  mastermindSolved: "Отлично! Код угадан.",
+  mastermindSolvedPopup: "Код угадан. Задание зачтено.",
+  anagramEnter: "Введите решение анаграммы.",
+  anagramNoAttempts: "Попыток не осталось. Задание не зачтено.",
+  anagramFailedPopup: "Не удалось решить анаграмму.",
+  anagramIncorrect: "Неправильно. Попробуйте ещё раз.",
+  anagramSolved: "Отлично! Анаграмма решена.",
+  anagramSolvedPopup: "Анаграмма решена правильно.",
+  caesarEnter: "Введите расшифрованную фразу.",
+  caesarNoAttempts: (decoded: string) => `Попыток не осталось. Правильная фраза: ${decoded}`,
+  caesarFailedPopup: "Не удалось расшифровать фразу.",
+  caesarIncorrect: "Неправильно. Проверьте сдвиг и попробуйте ещё раз.",
+  caesarSolved: "Отлично! Фраза расшифрована.",
+  caesarSolvedPopup: "Шифр Цезаря решен правильно.",
+  caesarShiftHint: (shift: number) => `Подсказка: сдвиг +${shift}`,
+  caesarAttemptsLeftLabel: "Осталось попыток",
+  memorySolved: "Отлично! Все пары найдены.",
+  memorySolvedPopup: "Игра Memory завершена.",
+  memoryPairFound: "Хорошо! Пара найдена.",
+  memoryMiss: "Промах. Постарайтесь запомнить позиции.",
+  memoryFailedPopup: "Слишком много неверных попыток в Memory.",
+  simonWrong: "Неверная последовательность.",
+  simonFailedPopup: "Последовательность Simon прервана.",
+  simonProgress: (current: number, total: number) => `Хорошо! Прогресс: ${current}/${total}`,
+  simonSolved: "Отлично! Правильная последовательность.",
+  simonSolvedPopup: "Последовательность Simon воспроизведена правильно.",
+  rebusEnter: "Введите решение ребуса.",
+  rebusNoAttempts: (answer: string) => `Попыток не осталось. Правильный ответ: ${answer}`,
+  rebusFailedPopup: "Не удалось решить ребус.",
+  rebusIncorrect: "Неправильно. Попробуйте ещё раз.",
+  rebusSolved: "Отлично! Ребус решен.",
+  rebusSolvedPopup: "Ребус решен правильно.",
+  boggleEnterMin: "Введите слово (минимум 3 буквы).",
+  boggleMaxLength: (max: number) => `Слово может содержать максимум ${max} букв.`,
+  boggleNoAttempts: (target: string) => `Попыток не осталось. Целевое слово: ${target}`,
+  boggleFailedPopup: "В Boggle не найдено правильное слово.",
+  boggleIncorrect: "Это не целевое слово. Попробуйте ещё раз.",
+  boggleSolved: "Отлично! Слово найдено.",
+  boggleSolvedPopup: "Boggle решен правильно.",
+  boggleAdjacentOnly: "Выбирайте только соседние клетки (включая диагонали).",
+  miniSudokuFillAll: "Заполните все поля значениями 1 или 2.",
+  miniSudokuNoAttempts: (solution: string) => `Попыток не осталось. Правильная раскладка: ${solution}`,
+  miniSudokuFailedPopup: "Не удалось решить мини Sudoku.",
+  miniSudokuIncorrect: "Раскладка неверна. Проверьте строки и столбцы.",
+  miniSudokuSolved: "Отлично! Мини Sudoku решен.",
+  miniSudokuSolvedPopup: "Мини Sudoku решен правильно.",
+  matchingSetLine: "Расположите элементы с обеих сторон на центральной линии.",
+  matchingPairGood: "Хорошо! Пара совпала.",
+  matchingSolved: "Отлично! Все пары сопоставлены.",
+  matchingSolvedPopup: "Задание на сопоставление пар завершено.",
+  matchingNoAttempts: "Попыток не осталось.",
+  matchingFailedPopup: "Слишком много неправильных сопоставлений.",
+  matchingWrongPair: "Это неправильная пара.",
+  outcomePassed: "Зачтено",
+  outcomeTimedOut: "Время истекло",
+  outcomeFailed: "Не зачтено",
+  matchingChecking: "Проверка...",
+  matchingCheck: "Проверить",
+  matchingAttempts: "Попытки",
+  matchingMatched: "Сопоставлено",
+  taskDescriptionMissing: "Описание задания ещё не добавлено.",
+  anagramDisplayHint:
+    "Перемешанный текст отображается слово за словом, каждое в отдельной строке.",
+  executionTimerLabel: "Время до завершения задания",
+  points: "Баллы",
+  backToMapNow: "Вернуться к карте сейчас",
+  backToMap: "Вернуться к карте",
+};
+
+const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
+  polish: {
+    fallbackQuizOptions: [
+      "Sprawdzam komunikację i plan zespołu.",
+      "Działam bez konsultacji z drużyną.",
+      "Ignoruję zasady bezpieczeństwa.",
+      "Rozdzielam zespół i tracę kontakt.",
+    ],
+    audioSourceMissing: "Brak źródła audio dla tego stanowiska.",
+    audioLoadFailed: "Nie udało się załadować nagrania audio.",
+    audioPlayFailed: "Nie udało się odtworzyć nagrania audio.",
+    timeoutWordle: "Czas na Wordle minął. Zadanie nie zostało zaliczone.",
+    timeoutHangman: "Czas na Wisielca minął. Zadanie nie zostało zaliczone.",
+    timeoutMastermind: "Czas na Mastermind minął. Zadanie nie zostało zaliczone.",
+    timeoutAnagram: "Czas na anagram minął. Zadanie nie zostało zaliczone.",
+    timeoutCaesar: "Czas na szyfr Cezara minął. Zadanie nie zostało zaliczone.",
+    timeoutMemory: "Czas na grę Memory minął. Zadanie nie zostało zaliczone.",
+    timeoutSimon: "Czas na grę Simon minął. Zadanie nie zostało zaliczone.",
+    timeoutRebus: "Czas na rebus minął. Zadanie nie zostało zaliczone.",
+    timeoutBoggle: "Czas na Boggle minął. Zadanie nie zostało zaliczone.",
+    timeoutMiniSudoku: "Czas na mini Sudoku minął. Zadanie nie zostało zaliczone.",
+    timeoutMatching: "Czas na łączenie par minął. Zadanie nie zostało zaliczone.",
+    timeoutQuiz: "Czas na quiz minął. Zadanie nie zostało zaliczone.",
+    timeoutCodeTask: "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.",
+    codeEnter: "Wpisz kod, aby zatwierdzić stanowisko.",
+    codeApprovedTestMode: "Kod zatwierdzony (tryb testowy).",
+    codeApproved: "Kod zatwierdzony.",
+    wordleEnterGuess: "Wpisz próbę, aby sprawdzić słowo.",
+    wordleLengthExact: (length: number) => `Słowo musi mieć dokładnie ${length} znaków.`,
+    wordleAttemptsExhausted: "Wykorzystano wszystkie próby.",
+    wordleTryAgain: "Nietrafione — spróbuj ponownie.",
+    wordleNoAttempts: "Brak prób. Zadanie niezaliczone.",
+    wordleFailedPopup: "Wykorzystano wszystkie próby Wordle.",
+    wordleSolved: "Brawo! Poprawne słowo.",
+    wordleSolvedPopup: "Poprawne słowo. Zadanie zaliczone.",
+    alertErrorTitle: "Błąd",
+    quizCorrect: "Dobra odpowiedź",
+    quizIncorrect: "Zła odpowiedź",
+    quizWrongPopup: "Wybrano nieprawidłową odpowiedź.",
+    quizSuccessPopup: "Poprawna odpowiedź. Zadanie zaliczone.",
+    hangmanEnterLetter: "Wpisz jedną literę.",
+    hangmanLetterAlreadyChecked: "Ta litera była już sprawdzana.",
+    hangmanNoAttempts: (secret: string) => `Brak prób. Hasło: ${secret}`,
+    hangmanFailedPopup: "Wykorzystano wszystkie próby w Wisielcu.",
+    hangmanGoodLetter: "Dobra litera!",
+    hangmanMiss: "Pudło.",
+    hangmanSolved: "Brawo! Odkryto całe hasło.",
+    hangmanSolvedPopup: "Hasło odgadnięte. Zadanie zaliczone.",
+    mastermindInvalidCode: (length: number) =>
+      `Kod musi mieć ${length} znaki i używać liter A-F.`,
+    mastermindNoAttempts: (secret: string) => `Brak prób. Poprawny kod: ${secret}`,
+    mastermindFailedPopup: "Wyczerpano próby w Mastermind.",
+    mastermindFeedback: (exact: number, misplaced: number) =>
+      `Trafione: ${exact}, na złej pozycji: ${misplaced}.`,
+    mastermindSolved: "Brawo! Kod odgadnięty.",
+    mastermindSolvedPopup: "Kod odgadnięty. Zadanie zaliczone.",
+    anagramEnter: "Wpisz rozwiązanie anagramu.",
+    anagramNoAttempts: "Brak prób. Zadanie niezaliczone.",
+    anagramFailedPopup: "Nie udało się rozwiązać anagramu.",
+    anagramIncorrect: "Niepoprawnie. Spróbuj ponownie.",
+    anagramSolved: "Brawo! Anagram rozwiązany.",
+    anagramSolvedPopup: "Anagram rozwiązany poprawnie.",
+    caesarEnter: "Wpisz odszyfrowaną frazę.",
+    caesarNoAttempts: (decoded: string) => `Brak prób. Poprawna fraza: ${decoded}`,
+    caesarFailedPopup: "Nie udało się odszyfrować frazy.",
+    caesarIncorrect: "Niepoprawnie. Sprawdź przesunięcie i spróbuj ponownie.",
+    caesarSolved: "Brawo! Fraza odszyfrowana.",
+    caesarSolvedPopup: "Szyfr Cezara rozwiązany poprawnie.",
+    caesarShiftHint: (shift: number) => `Wskazówka: przesunięcie +${shift}`,
+    caesarAttemptsLeftLabel: "Pozostało prób",
+    memorySolved: "Brawo! Wszystkie pary znalezione.",
+    memorySolvedPopup: "Gra Memory ukończona.",
+    memoryPairFound: "Dobrze! Para znaleziona.",
+    memoryMiss: "Pudło. Spróbuj zapamiętać pozycje.",
+    memoryFailedPopup: "Za dużo błędnych prób w Memory.",
+    simonWrong: "Błędna sekwencja.",
+    simonFailedPopup: "Sekwencja Simona została przerwana.",
+    simonProgress: (current: number, total: number) => `Dobrze! Postęp: ${current}/${total}`,
+    simonSolved: "Brawo! Sekwencja poprawna.",
+    simonSolvedPopup: "Sekwencja Simona odtworzona poprawnie.",
+    rebusEnter: "Wpisz rozwiązanie rebusu.",
+    rebusNoAttempts: (answer: string) => `Brak prób. Poprawna odpowiedź: ${answer}`,
+    rebusFailedPopup: "Nie udało się rozwiązać rebusu.",
+    rebusIncorrect: "Niepoprawnie. Spróbuj ponownie.",
+    rebusSolved: "Brawo! Rebus rozwiązany.",
+    rebusSolvedPopup: "Rebus rozwiązany poprawnie.",
+    boggleEnterMin: "Wpisz słowo (minimum 3 litery).",
+    boggleMaxLength: (max: number) => `Słowo może mieć maksymalnie ${max} liter.`,
+    boggleNoAttempts: (target: string) => `Brak prób. Szukane słowo: ${target}`,
+    boggleFailedPopup: "Nie znaleziono poprawnego słowa w Boggle.",
+    boggleIncorrect: "To nie jest docelowe słowo. Spróbuj ponownie.",
+    boggleSolved: "Brawo! Słowo odnalezione.",
+    boggleSolvedPopup: "Boggle rozwiązane poprawnie.",
+    boggleAdjacentOnly: "Wybieraj sąsiadujące pola (także po skosie).",
+    miniSudokuFillAll: "Uzupełnij wszystkie pola wartościami 1 lub 2.",
+    miniSudokuNoAttempts: (solution: string) => `Brak prób. Poprawny układ: ${solution}`,
+    miniSudokuFailedPopup: "Nie udało się rozwiązać mini Sudoku.",
+    miniSudokuIncorrect: "Układ niepoprawny. Sprawdź wiersze i kolumny.",
+    miniSudokuSolved: "Brawo! Mini Sudoku rozwiązane.",
+    miniSudokuSolvedPopup: "Mini Sudoku rozwiązane poprawnie.",
+    matchingSetLine: "Ustaw elementy po obu stronach w linii środka.",
+    matchingPairGood: "Dobrze! Para połączona.",
+    matchingSolved: "Brawo! Wszystkie pary połączone.",
+    matchingSolvedPopup: "Zadanie łączenia par ukończone.",
+    matchingNoAttempts: "Brak prób.",
+    matchingFailedPopup: "Za dużo błędnych połączeń.",
+    matchingWrongPair: "To nie jest poprawna para.",
+    outcomePassed: "Zaliczono",
+    outcomeTimedOut: "Czas minął",
+    outcomeFailed: "Nie zaliczono",
+    matchingChecking: "Sprawdzanie...",
+    matchingCheck: "Sprawdź",
+    matchingAttempts: "Próby",
+    matchingMatched: "Dopasowano",
+    taskDescriptionMissing: "Opis zadania nie został jeszcze dodany.",
+    anagramDisplayHint:
+      "Rozsypanka jest wyświetlana wyraz po wyrazie, a każdy wyraz znajduje się w osobnym wierszu.",
+    executionTimerLabel: "Czas do ukończenia zadania",
+    points: "Punkty",
+    backToMapNow: "Wróć do mapy teraz",
+    backToMap: "Wróć do mapy",
+  },
+  english: STATION_PREVIEW_TEXT_ENGLISH,
+  ukrainian: STATION_PREVIEW_TEXT_UKRAINIAN,
+  russian: STATION_PREVIEW_TEXT_RUSSIAN,
+};
+
 
 export function StationPreviewOverlay({
   station: stationProp,
@@ -106,7 +714,11 @@ export function StationPreviewOverlay({
   debugOutcomePreview,
   onDebugOutcomePreviewConsumed,
 }: StationPreviewOverlayProps) {
+  const uiLanguage = useUiLanguage();
+  const text = STATION_PREVIEW_TEXT[uiLanguage];
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
+  const shortestEdge = Math.min(viewportHeight, viewportWidth);
+  const isTabletOverlay = viewportWidth >= 900 || shortestEdge >= 700;
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [wordleInput, setWordleInput] = useState("");
@@ -198,13 +810,8 @@ export function StationPreviewOverlay({
   const quizOutcomeActionRef = useRef<(() => void) | null>(null);
   const quizOptions = useMemo(
     () =>
-      displayedStation?.quizAnswers ?? [
-        "Sprawdzam komunikację i plan zespołu.",
-        "Działam bez konsultacji z drużyną.",
-        "Ignoruję zasady bezpieczeństwa.",
-        "Rozdzielam zespół i tracę kontakt.",
-      ],
-    [displayedStation?.quizAnswers],
+      displayedStation?.quizAnswers ?? text.fallbackQuizOptions,
+    [displayedStation?.quizAnswers, text.fallbackQuizOptions],
   );
   const clearWordleRevealTimeouts = useCallback(() => {
     wordleRevealTimeoutsRef.current.forEach((timeoutId) => {
@@ -303,7 +910,7 @@ export function StationPreviewOverlay({
     async (audioUrl: string) => {
       const normalizedAudioUrl = audioUrl.trim();
       if (!normalizedAudioUrl) {
-        setAudioLoadError("Brak źródła audio dla tego stanowiska.");
+        setAudioLoadError(text.audioSourceMissing);
         setIsAudioLoading(false);
         return null;
       }
@@ -338,7 +945,7 @@ export function StationPreviewOverlay({
         setIsAudioLoading(!player.isLoaded);
         return player;
       } catch {
-        setAudioLoadError("Nie udało się załadować nagrania audio.");
+        setAudioLoadError(text.audioLoadFailed);
         return null;
       } finally {
         if (!audioPlayerRef.current) {
@@ -346,7 +953,7 @@ export function StationPreviewOverlay({
         }
       }
     },
-    [unloadAudioSound],
+    [text.audioLoadFailed, text.audioSourceMissing, unloadAudioSound],
   );
   const handlePlayAudio = useCallback(async () => {
     if (!displayedStation || displayedStation.stationType !== "audio-quiz") {
@@ -367,10 +974,10 @@ export function StationPreviewOverlay({
       await activePlayer.seekTo(0);
       activePlayer.play();
     } catch {
-      setAudioLoadError("Nie udało się odtworzyć nagrania audio.");
+      setAudioLoadError(text.audioPlayFailed);
       setIsAudioPlaying(false);
     }
-  }, [displayedStation, loadAudioSound]);
+  }, [displayedStation, loadAudioSound, text.audioPlayFailed]);
 
   useEffect(() => {
     if (stationProp) {
@@ -526,7 +1133,7 @@ export function StationPreviewOverlay({
     const audioUrl = displayedStation.quizAudioUrl?.trim() ?? "";
     if (!audioUrl) {
       void unloadAudioSound();
-      setAudioLoadError("Brak źródła audio dla tego stanowiska.");
+      setAudioLoadError(text.audioSourceMissing);
       return;
     }
 
@@ -554,7 +1161,7 @@ export function StationPreviewOverlay({
     return () => {
       cancelled = true;
     };
-  }, [displayedStation, loadAudioSound, unloadAudioSound]);
+  }, [displayedStation, loadAudioSound, text.audioSourceMissing, unloadAudioSound]);
 
   useEffect(() => {
     if (!debugOutcomePreview || !displayedStation) {
@@ -806,28 +1413,28 @@ export function StationPreviewOverlay({
     onQuizFailed?.(displayedStation.stationId, "time_limit_expired");
     const timeoutMessage =
       displayedStation.stationType === "wordle"
-        ? "Czas na Wordle minął. Zadanie nie zostało zaliczone."
+        ? text.timeoutWordle
         : displayedStation.stationType === "hangman"
-          ? "Czas na Wisielca minął. Zadanie nie zostało zaliczone."
+          ? text.timeoutHangman
           : displayedStation.stationType === "mastermind"
-            ? "Czas na Mastermind minął. Zadanie nie zostało zaliczone."
+            ? text.timeoutMastermind
             : displayedStation.stationType === "anagram"
-              ? "Czas na anagram minął. Zadanie nie zostało zaliczone."
+              ? text.timeoutAnagram
               : displayedStation.stationType === "caesar-cipher"
-                ? "Czas na szyfr Cezara minął. Zadanie nie zostało zaliczone."
+                ? text.timeoutCaesar
                 : displayedStation.stationType === "memory"
-                  ? "Czas na grę Memory minął. Zadanie nie zostało zaliczone."
+                  ? text.timeoutMemory
                   : displayedStation.stationType === "simon"
-                    ? "Czas na grę Simon minął. Zadanie nie zostało zaliczone."
+                    ? text.timeoutSimon
                     : displayedStation.stationType === "rebus"
-                      ? "Czas na rebus minął. Zadanie nie zostało zaliczone."
+                      ? text.timeoutRebus
                       : displayedStation.stationType === "boggle"
-                        ? "Czas na Boggle minął. Zadanie nie zostało zaliczone."
+                        ? text.timeoutBoggle
                         : displayedStation.stationType === "mini-sudoku"
-                          ? "Czas na mini Sudoku minął. Zadanie nie zostało zaliczone."
+                          ? text.timeoutMiniSudoku
                           : displayedStation.stationType === "matching"
-                            ? "Czas na łączenie par minął. Zadanie nie zostało zaliczone."
-                            : "Czas na quiz minął. Zadanie nie zostało zaliczone.";
+                            ? text.timeoutMatching
+                            : text.timeoutQuiz;
     showQuizOutcomePopup("timeout", timeoutMessage);
   }, [
     displayedStation,
@@ -874,7 +1481,7 @@ export function StationPreviewOverlay({
     onTimeExpired?.(displayedStation.stationId);
     showQuizOutcomePopup(
       "timeout",
-      "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.",
+      text.timeoutCodeTask,
     );
   }, [
     displayedStation,
@@ -882,6 +1489,7 @@ export function StationPreviewOverlay({
     onTimeExpired,
     remainingTimeSeconds,
     showQuizOutcomePopup,
+    text.timeoutCodeTask,
   ]);
 
   const wordleSecretForInputReset =
@@ -916,7 +1524,9 @@ export function StationPreviewOverlay({
 
   const isMatchingStationForPulse = displayedStation?.stationType === "matching";
   const matchingPairsForPulse =
-    displayedStation && isMatchingStationForPulse ? resolveMatchingPairs(displayedStation) : [];
+    displayedStation && isMatchingStationForPulse
+      ? resolveMatchingPairs(displayedStation, uiLanguage)
+      : [];
   const matchingAllMatchedForPulse =
     isMatchingStationForPulse &&
     matchingPairsForPulse.length > 0 &&
@@ -1117,8 +1727,10 @@ export function StationPreviewOverlay({
       : [scrambleWord(anagramTarget || "SURVIVOR", `${station.stationId}-anagram-word-0`)];
   const normalizedAnagramInput = normalizePuzzleWord(anagramInput);
   const anagramAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - anagramAttempts);
-  const caesarDecoded = isCaesarStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "SURVIVOR QUEST") : "";
-  const caesarEncoded = isCaesarStation ? caesarShift(caesarDecoded, CAESAR_SHIFT) : "";
+  const caesarShiftValue = isCaesarStation ? resolveCaesarShift(station) : 0;
+  const caesarDecoded = isCaesarStation ? resolveCaesarSecret(station) : "";
+  const caesarEncoded = isCaesarStation ? caesarShift(caesarDecoded, caesarShiftValue) : "";
+  const caesarMaxLength = Math.max(1, Array.from(caesarDecoded).length || 32);
   const normalizedCaesarInput = normalizePuzzleText(caesarInput);
   const caesarAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - caesarAttempts);
   const memoryMatchedCount = memoryDeck.filter((card) => card.matched).length;
@@ -1139,7 +1751,7 @@ export function StationPreviewOverlay({
   const miniSudokuPuzzle = isMiniSudokuStation ? resolveMiniSudokuPuzzle(station) : null;
   const normalizedMiniSudokuValues = miniSudokuValues.map((value) => value.replace(/[^1-2]/g, "").slice(0, 1));
   const miniSudokuAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - miniSudokuAttempts);
-  const matchingPairs = isMatchingStation ? resolveMatchingPairs(station) : [];
+  const matchingPairs = isMatchingStation ? resolveMatchingPairs(station, uiLanguage) : [];
   const matchingAllRightOptions = isMatchingStation
     ? shuffleDeterministic(
         matchingPairs.map((pair) => pair.right),
@@ -1278,14 +1890,14 @@ export function StationPreviewOverlay({
   };
   const submitVerificationCode = async () => {
     if (!verificationCode.trim()) {
-      setCodeResult("Wpisz kod, aby zatwierdzić stanowisko.");
+      setCodeResult(text.codeEnter);
       return;
     }
 
     if (!onCompleteTask) {
       setIsCodeInputInvalid(false);
       setIsCodeInputSuccess(true);
-      setCodeResult("Kod zatwierdzony (tryb testowy).");
+      setCodeResult(text.codeApprovedTestMode);
       if (codeInputSuccessTimeoutRef.current) {
         clearTimeout(codeInputSuccessTimeoutRef.current);
       }
@@ -1312,7 +1924,7 @@ export function StationPreviewOverlay({
 
     setIsCodeInputInvalid(false);
     setIsCodeInputSuccess(true);
-    setCodeResult("Kod zatwierdzony.");
+    setCodeResult(text.codeApproved);
     if (codeInputSuccessTimeoutRef.current) {
       clearTimeout(codeInputSuccessTimeoutRef.current);
     }
@@ -1327,12 +1939,12 @@ export function StationPreviewOverlay({
     }
 
     if (!normalizedWordleInput.trim()) {
-      setWordleResult("Wpisz próbę, aby sprawdzić słowo.");
+      setWordleResult(text.wordleEnterGuess);
       return;
     }
 
     if (!wordleLength || normalizedWordleInput.length !== wordleLength) {
-      setWordleResult(`Słowo musi mieć dokładnie ${wordleLength} znaków.`);
+      setWordleResult(text.wordleLengthExact(wordleLength));
       return;
     }
 
@@ -1348,7 +1960,7 @@ export function StationPreviewOverlay({
     }
 
     if (wordleAttempts.length >= WORDLE_MAX_ATTEMPTS) {
-      setWordleResult("Wykorzystano wszystkie próby.");
+      setWordleResult(text.wordleAttemptsExhausted);
       return;
     }
 
@@ -1371,20 +1983,20 @@ export function StationPreviewOverlay({
     if (!solved) {
       const exhausted = nextAttempts.length >= WORDLE_MAX_ATTEMPTS;
       if (!exhausted) {
-        setWordleResult("Nietrafione — spróbuj ponownie.");
+        setWordleResult(text.wordleTryAgain);
         return;
       }
 
-      setWordleResult("Brak prób. Zadanie niezaliczone.");
+      setWordleResult(text.wordleNoAttempts);
       onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", "Wykorzystano wszystkie próby Wordle.");
+      showQuizOutcomePopup("failed", text.wordleFailedPopup);
       return;
     }
 
     if (!onCompleteTask) {
-      setWordleResult("Brawo! Poprawne słowo.");
+      setWordleResult(text.wordleSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Poprawne słowo. Zadanie zaliczone.");
+      showQuizOutcomePopup("success", text.wordleSolvedPopup);
       return;
     }
 
@@ -1393,13 +2005,13 @@ export function StationPreviewOverlay({
     setIsSubmittingWordleGuess(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setWordleResult("Brawo! Poprawne słowo.");
+    setWordleResult(text.wordleSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Poprawne słowo. Zadanie zaliczone.");
+    showQuizOutcomePopup("success", text.wordleSolvedPopup);
   };
   const submitQuizAnswer = async (index: number) => {
     if (!isClassicQuizStation && !isAudioQuizStation) {
@@ -1420,7 +2032,7 @@ export function StationPreviewOverlay({
     setSelectedQuizOption(index);
     setQuizSubmitError(null);
     const correct = station.quizCorrectAnswerIndex === index;
-    setQuizResult(correct ? "Dobra odpowiedź" : "Zła odpowiedź");
+    setQuizResult(correct ? text.quizCorrect : text.quizIncorrect);
     quizFeedbackAnimation.setValue(0);
     Animated.timing(quizFeedbackAnimation, {
       toValue: 1,
@@ -1430,13 +2042,13 @@ export function StationPreviewOverlay({
 
     if (!correct) {
       onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", "Wybrano nieprawidłową odpowiedź.");
+      showQuizOutcomePopup("failed", text.quizWrongPopup);
       return;
     }
 
     if (!onCompleteTask) {
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Poprawna odpowiedź. Zadanie zaliczone.");
+      showQuizOutcomePopup("success", text.quizSuccessPopup);
       return;
     }
 
@@ -1446,12 +2058,12 @@ export function StationPreviewOverlay({
 
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Poprawna odpowiedź. Zadanie zaliczone.");
+    showQuizOutcomePopup("success", text.quizSuccessPopup);
   };
   const submitHangmanGuess = async (forcedLetter?: string) => {
     if (!isHangmanStation) {
@@ -1462,7 +2074,7 @@ export function StationPreviewOverlay({
     const letter = normalizeHangmanSecret(candidate).replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "").slice(0, 1);
 
     if (!letter) {
-      setHangmanResult("Wpisz jedną literę.");
+      setHangmanResult(text.hangmanEnterLetter);
       return;
     }
 
@@ -1478,7 +2090,7 @@ export function StationPreviewOverlay({
 
     if (guessedHangmanSet.has(letter) || hangmanMisses.includes(letter)) {
       setHangmanInput("");
-      setHangmanResult("Ta litera była już sprawdzana.");
+      setHangmanResult(text.hangmanLetterAlreadyChecked);
       return;
     }
 
@@ -1501,20 +2113,20 @@ export function StationPreviewOverlay({
 
     if (!solvedNow) {
       if (!isHit && nextMisses.length >= HANGMAN_MAX_MISSES) {
-        setHangmanResult(`Brak prób. Hasło: ${hangmanSecret}`);
+        setHangmanResult(text.hangmanNoAttempts(hangmanSecret));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Wykorzystano wszystkie próby w Wisielcu.");
+        showQuizOutcomePopup("failed", text.hangmanFailedPopup);
         return;
       }
 
-      setHangmanResult(isHit ? "Dobra litera!" : "Pudło.");
+      setHangmanResult(isHit ? text.hangmanGoodLetter : text.hangmanMiss);
       return;
     }
 
     if (!onCompleteTask) {
-      setHangmanResult("Brawo! Odkryto całe hasło.");
+      setHangmanResult(text.hangmanSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Hasło odgadnięte. Zadanie zaliczone.");
+      showQuizOutcomePopup("success", text.hangmanSolvedPopup);
       return;
     }
 
@@ -1523,13 +2135,13 @@ export function StationPreviewOverlay({
     setIsSubmittingHangmanGuess(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setHangmanResult("Brawo! Odkryto całe hasło.");
+    setHangmanResult(text.hangmanSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Hasło odgadnięte. Zadanie zaliczone.");
+    showQuizOutcomePopup("success", text.hangmanSolvedPopup);
   };
   const submitMastermindGuess = async () => {
     if (!isMastermindStation) {
@@ -1537,7 +2149,7 @@ export function StationPreviewOverlay({
     }
 
     if (normalizedMastermindInput.length !== mastermindSecret.length) {
-      setMastermindResult(`Kod musi mieć ${mastermindSecret.length} znaki i używać liter A-F.`);
+      setMastermindResult(text.mastermindInvalidCode(mastermindSecret.length));
       return;
     }
 
@@ -1553,19 +2165,19 @@ export function StationPreviewOverlay({
 
     if (feedback.exact !== mastermindSecret.length) {
       if (nextAttempts.length >= MASTERMIND_MAX_ATTEMPTS) {
-        setMastermindResult(`Brak prób. Poprawny kod: ${mastermindSecret}`);
+        setMastermindResult(text.mastermindNoAttempts(mastermindSecret));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Wyczerpano próby w Mastermind.");
+        showQuizOutcomePopup("failed", text.mastermindFailedPopup);
         return;
       }
-      setMastermindResult(`Trafione: ${feedback.exact}, na złej pozycji: ${feedback.misplaced}.`);
+      setMastermindResult(text.mastermindFeedback(feedback.exact, feedback.misplaced));
       return;
     }
 
     if (!onCompleteTask) {
-      setMastermindResult("Brawo! Kod odgadnięty.");
+      setMastermindResult(text.mastermindSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Kod odgadnięty. Zadanie zaliczone.");
+      showQuizOutcomePopup("success", text.mastermindSolvedPopup);
       return;
     }
 
@@ -1574,13 +2186,13 @@ export function StationPreviewOverlay({
     setIsSubmittingMastermindGuess(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setMastermindResult("Brawo! Kod odgadnięty.");
+    setMastermindResult(text.mastermindSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Kod odgadnięty. Zadanie zaliczone.");
+    showQuizOutcomePopup("success", text.mastermindSolvedPopup);
   };
   const submitAnagram = async () => {
     if (!isAnagramStation) {
@@ -1588,7 +2200,7 @@ export function StationPreviewOverlay({
     }
 
     if (!normalizedAnagramInput) {
-      setAnagramResult("Wpisz rozwiązanie anagramu.");
+      setAnagramResult(text.anagramEnter);
       return;
     }
 
@@ -1602,20 +2214,20 @@ export function StationPreviewOverlay({
       const nextAttempts = anagramAttempts + 1;
       setAnagramAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setAnagramResult("Brak prób. Zadanie niezaliczone.");
+        setAnagramResult(text.anagramNoAttempts);
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Nie udało się rozwiązać anagramu.");
+        showQuizOutcomePopup("failed", text.anagramFailedPopup);
         return;
       }
 
-      setAnagramResult("Niepoprawnie. Spróbuj ponownie.");
+      setAnagramResult(text.anagramIncorrect);
       return;
     }
 
     if (!onCompleteTask) {
-      setAnagramResult("Brawo! Anagram rozwiązany.");
+      setAnagramResult(text.anagramSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Anagram rozwiązany poprawnie.");
+      showQuizOutcomePopup("success", text.anagramSolvedPopup);
       return;
     }
 
@@ -1624,13 +2236,13 @@ export function StationPreviewOverlay({
     setIsSubmittingAnagram(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setAnagramResult("Brawo! Anagram rozwiązany.");
+    setAnagramResult(text.anagramSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Anagram rozwiązany poprawnie.");
+    showQuizOutcomePopup("success", text.anagramSolvedPopup);
   };
   const submitCaesar = async () => {
     if (!isCaesarStation) {
@@ -1638,7 +2250,7 @@ export function StationPreviewOverlay({
     }
 
     if (!normalizedCaesarInput) {
-      setCaesarResult("Wpisz odszyfrowaną frazę.");
+      setCaesarResult(text.caesarEnter);
       return;
     }
 
@@ -1652,20 +2264,20 @@ export function StationPreviewOverlay({
       const nextAttempts = caesarAttempts + 1;
       setCaesarAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setCaesarResult(`Brak prób. Poprawna fraza: ${caesarDecoded}`);
+        setCaesarResult(text.caesarNoAttempts(caesarDecoded));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Nie udało się odszyfrować frazy.");
+        showQuizOutcomePopup("failed", text.caesarFailedPopup);
         return;
       }
 
-      setCaesarResult("Niepoprawnie. Sprawdź przesunięcie i spróbuj ponownie.");
+      setCaesarResult(text.caesarIncorrect);
       return;
     }
 
     if (!onCompleteTask) {
-      setCaesarResult("Brawo! Fraza odszyfrowana.");
+      setCaesarResult(text.caesarSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Szyfr Cezara rozwiązany poprawnie.");
+      showQuizOutcomePopup("success", text.caesarSolvedPopup);
       return;
     }
 
@@ -1674,13 +2286,13 @@ export function StationPreviewOverlay({
     setIsSubmittingCaesar(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setCaesarResult("Brawo! Fraza odszyfrowana.");
+    setCaesarResult(text.caesarSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Szyfr Cezara rozwiązany poprawnie.");
+    showQuizOutcomePopup("success", text.caesarSolvedPopup);
   };
   const handleMemoryCardPress = async (cardId: string) => {
     if (!isMemoryStation || isInteractiveLocked || memoryBusy || isSubmittingMemory || memoryAllMatched || memoryAttemptsLeft <= 0) {
@@ -1718,9 +2330,9 @@ export function StationPreviewOverlay({
       setMemorySelection([]);
       if (matchedDeck.every((entry) => entry.matched)) {
         if (!onCompleteTask) {
-          setMemoryResult("Brawo! Wszystkie pary znalezione.");
+          setMemoryResult(text.memorySolved);
           onQuizPassed?.(station.stationId);
-          showQuizOutcomePopup("success", "Gra Memory ukończona.");
+          showQuizOutcomePopup("success", text.memorySolvedPopup);
           return;
         }
 
@@ -1729,14 +2341,14 @@ export function StationPreviewOverlay({
         setIsSubmittingMemory(false);
         if (error) {
           setQuizSubmitError(error);
-          Alert.alert("Błąd", error);
+          Alert.alert(text.alertErrorTitle, error);
           return;
         }
-        setMemoryResult("Brawo! Wszystkie pary znalezione.");
+        setMemoryResult(text.memorySolved);
         onQuizPassed?.(station.stationId);
-        showQuizOutcomePopup("success", "Gra Memory ukończona.");
+        showQuizOutcomePopup("success", text.memorySolvedPopup);
       } else {
-        setMemoryResult("Dobrze! Para znaleziona.");
+        setMemoryResult(text.memoryPairFound);
       }
       return;
     }
@@ -1744,7 +2356,7 @@ export function StationPreviewOverlay({
     const nextMistakes = memoryMistakes + 1;
     setMemoryMistakes(nextMistakes);
     setMemoryBusy(true);
-    setMemoryResult("Pudło. Spróbuj zapamiętać pozycje.");
+    setMemoryResult(text.memoryMiss);
     if (memoryHideTimeoutRef.current) {
       clearTimeout(memoryHideTimeoutRef.current);
     }
@@ -1761,7 +2373,7 @@ export function StationPreviewOverlay({
 
     if (nextMistakes >= MEMORY_MAX_MISTAKES) {
       onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", "Za dużo błędnych prób w Memory.");
+      showQuizOutcomePopup("failed", text.memoryFailedPopup);
     }
   };
   const handleSimonPress = async (buttonId: string) => {
@@ -1776,20 +2388,20 @@ export function StationPreviewOverlay({
     const isPrefixValid = nextInput.every((entry, index) => entry === simonSequence[index]);
     if (!isPrefixValid) {
       onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      setSimonResult("Błędna sekwencja.");
-      showQuizOutcomePopup("failed", "Sekwencja Simona została przerwana.");
+      setSimonResult(text.simonWrong);
+      showQuizOutcomePopup("failed", text.simonFailedPopup);
       return;
     }
 
     if (nextInput.length < simonSequence.length) {
-      setSimonResult(`Dobrze! Postęp: ${nextInput.length}/${simonSequence.length}`);
+      setSimonResult(text.simonProgress(nextInput.length, simonSequence.length));
       return;
     }
 
     if (!onCompleteTask) {
-      setSimonResult("Brawo! Sekwencja poprawna.");
+      setSimonResult(text.simonSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Sekwencja Simona odtworzona poprawnie.");
+      showQuizOutcomePopup("success", text.simonSolvedPopup);
       return;
     }
 
@@ -1798,13 +2410,13 @@ export function StationPreviewOverlay({
     setIsSubmittingSimon(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setSimonResult("Brawo! Sekwencja poprawna.");
+    setSimonResult(text.simonSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Sekwencja Simona odtworzona poprawnie.");
+    showQuizOutcomePopup("success", text.simonSolvedPopup);
   };
   const submitRebus = async () => {
     if (!isRebusStation) {
@@ -1812,7 +2424,7 @@ export function StationPreviewOverlay({
     }
 
     if (!normalizedRebusInput) {
-      setRebusResult("Wpisz rozwiązanie rebusu.");
+      setRebusResult(text.rebusEnter);
       return;
     }
 
@@ -1826,20 +2438,20 @@ export function StationPreviewOverlay({
       const nextAttempts = rebusAttempts + 1;
       setRebusAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setRebusResult(`Brak prób. Poprawna odpowiedź: ${rebusAnswer}`);
+        setRebusResult(text.rebusNoAttempts(rebusAnswer));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Nie udało się rozwiązać rebusu.");
+        showQuizOutcomePopup("failed", text.rebusFailedPopup);
         return;
       }
 
-      setRebusResult("Niepoprawnie. Spróbuj ponownie.");
+      setRebusResult(text.rebusIncorrect);
       return;
     }
 
     if (!onCompleteTask) {
-      setRebusResult("Brawo! Rebus rozwiązany.");
+      setRebusResult(text.rebusSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Rebus rozwiązany poprawnie.");
+      showQuizOutcomePopup("success", text.rebusSolvedPopup);
       return;
     }
 
@@ -1848,13 +2460,13 @@ export function StationPreviewOverlay({
     setIsSubmittingRebus(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setRebusResult("Brawo! Rebus rozwiązany.");
+    setRebusResult(text.rebusSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Rebus rozwiązany poprawnie.");
+    showQuizOutcomePopup("success", text.rebusSolvedPopup);
   };
   const submitBoggle = async () => {
     if (!isBoggleStation) {
@@ -1862,11 +2474,11 @@ export function StationPreviewOverlay({
     }
 
     if (!normalizedBoggleInput || normalizedBoggleInput.length < 3) {
-      setBoggleResult("Wpisz słowo (minimum 3 litery).");
+      setBoggleResult(text.boggleEnterMin);
       return;
     }
     if (normalizedBoggleInput.length > boggleMaxInputLength) {
-      setBoggleResult(`Słowo może mieć maksymalnie ${boggleMaxInputLength} liter.`);
+      setBoggleResult(text.boggleMaxLength(boggleMaxInputLength));
       return;
     }
 
@@ -1882,20 +2494,20 @@ export function StationPreviewOverlay({
       const nextAttempts = boggleAttempts + 1;
       setBoggleAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setBoggleResult(`Brak prób. Szukane słowo: ${boggleTargetWord}`);
+        setBoggleResult(text.boggleNoAttempts(boggleTargetWord));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Nie znaleziono poprawnego słowa w Boggle.");
+        showQuizOutcomePopup("failed", text.boggleFailedPopup);
         return;
       }
 
-      setBoggleResult("To nie jest docelowe słowo. Spróbuj ponownie.");
+      setBoggleResult(text.boggleIncorrect);
       return;
     }
 
     if (!onCompleteTask) {
-      setBoggleResult("Brawo! Słowo odnalezione.");
+      setBoggleResult(text.boggleSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Boggle rozwiązane poprawnie.");
+      showQuizOutcomePopup("success", text.boggleSolvedPopup);
       return;
     }
 
@@ -1904,13 +2516,13 @@ export function StationPreviewOverlay({
     setIsSubmittingBoggle(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setBoggleResult("Brawo! Słowo odnalezione.");
+    setBoggleResult(text.boggleSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Boggle rozwiązane poprawnie.");
+    showQuizOutcomePopup("success", text.boggleSolvedPopup);
   };
   const selectBoggleBoardCell = (cellIndex: number) => {
     if (!isBoggleStation || isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0) {
@@ -1943,7 +2555,7 @@ export function StationPreviewOverlay({
       const nextRow = Math.floor(cellIndex / boggleBoardSide);
       const nextCol = cellIndex % boggleBoardSide;
       if (Math.abs(previousRow - nextRow) > 1 || Math.abs(previousCol - nextCol) > 1) {
-        setBoggleResult("Wybieraj sąsiadujące pola (także po skosie).");
+        setBoggleResult(text.boggleAdjacentOnly);
         return;
       }
     }
@@ -1984,7 +2596,7 @@ export function StationPreviewOverlay({
 
     const attemptedValues = miniSudokuPuzzle.given.map((givenValue, index) => givenValue ?? normalizedMiniSudokuValues[index] ?? "");
     if (attemptedValues.some((value) => value !== "1" && value !== "2")) {
-      setMiniSudokuResult("Uzupełnij wszystkie pola wartościami 1 lub 2.");
+      setMiniSudokuResult(text.miniSudokuFillAll);
       return;
     }
 
@@ -1997,20 +2609,20 @@ export function StationPreviewOverlay({
       const nextAttempts = miniSudokuAttempts + 1;
       setMiniSudokuAttempts(nextAttempts);
       if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setMiniSudokuResult(`Brak prób. Poprawny układ: ${miniSudokuPuzzle.solution.join(" ")}`);
+        setMiniSudokuResult(text.miniSudokuNoAttempts(miniSudokuPuzzle.solution.join(" ")));
         onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", "Nie udało się rozwiązać mini Sudoku.");
+        showQuizOutcomePopup("failed", text.miniSudokuFailedPopup);
         return;
       }
 
-      setMiniSudokuResult("Układ niepoprawny. Sprawdź wiersze i kolumny.");
+      setMiniSudokuResult(text.miniSudokuIncorrect);
       return;
     }
 
     if (!onCompleteTask) {
-      setMiniSudokuResult("Brawo! Mini Sudoku rozwiązane.");
+      setMiniSudokuResult(text.miniSudokuSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Mini Sudoku rozwiązane poprawnie.");
+      showQuizOutcomePopup("success", text.miniSudokuSolvedPopup);
       return;
     }
 
@@ -2019,13 +2631,13 @@ export function StationPreviewOverlay({
     setIsSubmittingMiniSudoku(false);
     if (error) {
       setQuizSubmitError(error);
-      Alert.alert("Błąd", error);
+      Alert.alert(text.alertErrorTitle, error);
       return;
     }
 
-    setMiniSudokuResult("Brawo! Mini Sudoku rozwiązane.");
+    setMiniSudokuResult(text.miniSudokuSolved);
     onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", "Mini Sudoku rozwiązane poprawnie.");
+    showQuizOutcomePopup("success", text.miniSudokuSolvedPopup);
   };
   const submitMatchingPair = async () => {
     if (!isMatchingStation || isInteractiveLocked || isSubmittingMatching || matchingAllMatched || matchingAttemptsLeft <= 0) {
@@ -2033,7 +2645,7 @@ export function StationPreviewOverlay({
     }
 
     if (!matchingSelectedLeft || !matchingSelectedRight) {
-      setMatchingResult("Ustaw elementy po obu stronach w linii środka.");
+      setMatchingResult(text.matchingSetLine);
       return;
     }
 
@@ -2049,14 +2661,14 @@ export function StationPreviewOverlay({
       setMatchingLeftCarouselIndex(0);
       setMatchingRightCarouselIndex(0);
       if (nextMatched.length < matchingPairs.length) {
-        setMatchingResult("Dobrze! Para połączona.");
+        setMatchingResult(text.matchingPairGood);
         return;
       }
 
       if (!onCompleteTask) {
-        setMatchingResult("Brawo! Wszystkie pary połączone.");
+        setMatchingResult(text.matchingSolved);
         onQuizPassed?.(station.stationId);
-        showQuizOutcomePopup("success", "Zadanie łączenia par ukończone.");
+        showQuizOutcomePopup("success", text.matchingSolvedPopup);
         return;
       }
 
@@ -2065,26 +2677,26 @@ export function StationPreviewOverlay({
       setIsSubmittingMatching(false);
       if (error) {
         setQuizSubmitError(error);
-        Alert.alert("Błąd", error);
+        Alert.alert(text.alertErrorTitle, error);
         return;
       }
 
-      setMatchingResult("Brawo! Wszystkie pary połączone.");
+      setMatchingResult(text.matchingSolved);
       onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", "Zadanie łączenia par ukończone.");
+      showQuizOutcomePopup("success", text.matchingSolvedPopup);
       return;
     }
 
     const nextAttempts = matchingAttempts + 1;
     setMatchingAttempts(nextAttempts);
     if (nextAttempts >= MEMORY_MAX_MISTAKES) {
-      setMatchingResult("Brak prób.");
+      setMatchingResult(text.matchingNoAttempts);
       onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", "Za dużo błędnych połączeń.");
+      showQuizOutcomePopup("failed", text.matchingFailedPopup);
       return;
     }
 
-    setMatchingResult("To nie jest poprawna para.");
+    setMatchingResult(text.matchingWrongPair);
   };
   const overlayBackdropStyle = {
     opacity: overlaySlideAnimation.interpolate({
@@ -2109,12 +2721,12 @@ export function StationPreviewOverlay({
   const isTimeoutOutcomePopup = quizOutcomePopup?.variant === "timeout";
   const quizOutcomeTitle = (() => {
     if (quizOutcomePopup?.variant === "success") {
-      return "Zaliczono";
+      return text.outcomePassed;
     }
     if (isTimeoutOutcomePopup) {
-      return "Czas minął";
+      return text.outcomeTimedOut;
     }
-    return "Nie zaliczono";
+    return text.outcomeFailed;
   })();
   const quizOutcomeAccent =
     quizOutcomePopup?.variant === "success"
@@ -2183,7 +2795,7 @@ export function StationPreviewOverlay({
               disabled={!matchingCanSubmit}
             >
               <Text className="px-2 text-center text-[15px] font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {isSubmittingMatching ? "Sprawdzanie..." : "Sprawdź"}
+                {isSubmittingMatching ? text.matchingChecking : text.matchingCheck}
               </Text>
             </Pressable>
           </Animated.View>
@@ -2192,10 +2804,10 @@ export function StationPreviewOverlay({
         <View className="w-full px-1">
           <View className="flex-row items-center justify-between">
             <Text className="text-base font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Próby: {matchingAttemptsLeft}
+              {text.matchingAttempts}: {matchingAttemptsLeft}
             </Text>
             <Text className="text-base font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              Dopasowano: {matchingMatchedLeft.length}/{matchingPairs.length}
+              {text.matchingMatched}: {matchingMatchedLeft.length}/{matchingPairs.length}
             </Text>
           </View>
         </View>
@@ -2398,14 +3010,39 @@ export function StationPreviewOverlay({
     ),
     "caesar-cipher": () => (
       <CaesarStationPanel
-        caesarEncoded={caesarEncoded}
-        caesarAttemptsLeft={caesarAttemptsLeft}
         caesarInput={caesarInput}
+        caesarMaxLength={caesarMaxLength}
         caesarResult={caesarResult}
         isActionDisabled={isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0}
         isSubmittingCaesar={isSubmittingCaesar}
         onChangeInput={(value) => {
-          setCaesarInput(value);
+          setCaesarInput(value.slice(0, caesarMaxLength));
+          setCaesarResult(null);
+          setQuizSubmitError(null);
+        }}
+        onAppendCharacter={(character) => {
+          if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
+            return;
+          }
+
+          setCaesarInput((current) => {
+            if (current.length >= caesarMaxLength) {
+              return current;
+            }
+            if (character === " " && (current.length === 0 || current.endsWith(" "))) {
+              return current;
+            }
+            return `${current}${character}`.slice(0, caesarMaxLength);
+          });
+          setCaesarResult(null);
+          setQuizSubmitError(null);
+        }}
+        onBackspace={() => {
+          if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
+            return;
+          }
+
+          setCaesarInput((current) => current.slice(0, -1));
           setCaesarResult(null);
           setQuizSubmitError(null);
         }}
@@ -2486,6 +3123,9 @@ export function StationPreviewOverlay({
     ),
   };
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
+  const stationHeaderLabel = isCaesarStation
+    ? station.typeLabel
+    : `${station.name} • ${station.typeLabel}`;
 
   return (
     <Animated.View className="absolute inset-0 z-50" style={[{ backgroundColor: "rgba(15, 25, 20, 0.9)" }, overlayBackdropStyle]}>
@@ -2494,22 +3134,33 @@ export function StationPreviewOverlay({
           <View className="flex-row items-start justify-between gap-3 px-4 pb-2 pt-4">
             <View className="flex-1">
                 <Text
-                  className="text-[11px] uppercase tracking-widest"
-                  style={{ color: EXPEDITION_THEME.textSubtle }}
+                  className="uppercase tracking-widest"
+                  style={{ color: EXPEDITION_THEME.textSubtle, fontSize: isTabletOverlay ? 13 : 11 }}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
-                  {`${station.name} • ${station.typeLabel}`}
+                  {stationHeaderLabel}
                 </Text>
             </View>
             <Pressable
-              className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              className="items-center justify-center rounded-full border active:opacity-90"
+              style={{
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: EXPEDITION_THEME.panelMuted,
+                width: isTabletOverlay ? 48 : 36,
+                height: isTabletOverlay ? 48 : 36,
+              }}
               onPress={onRequestClose ?? onClose}
+              hitSlop={8}
             >
               <Text
-                className="text-base font-semibold text-center"
-                style={{ color: EXPEDITION_THEME.textPrimary, lineHeight: 16, includeFontPadding: false }}
+                className="font-semibold text-center"
+                style={{
+                  color: EXPEDITION_THEME.textPrimary,
+                  lineHeight: isTabletOverlay ? 20 : 16,
+                  fontSize: isTabletOverlay ? 20 : 16,
+                  includeFontPadding: false,
+                }}
               >
                 ✕
               </Text>
@@ -2528,7 +3179,33 @@ export function StationPreviewOverlay({
                   backgroundColor: EXPEDITION_THEME.panelMuted,
                 }}
               >
-                {renderedStationMedia ? (
+                {isCaesarStation ? (
+                  <View className="flex-1 px-4 pb-3 pt-4">
+                    <View className="flex-1 items-center justify-center">
+                      <Text
+                        className="text-center font-black tracking-[5px]"
+                        style={{ color: EXPEDITION_THEME.accentStrong, fontSize: isTabletOverlay ? 72 : 48, lineHeight: isTabletOverlay ? 76 : 52 }}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.55}
+                        numberOfLines={2}
+                      >
+                        {caesarEncoded}
+                      </Text>
+                      <Text
+                        className="mt-3 text-center font-semibold"
+                        style={{ color: EXPEDITION_THEME.textMuted, fontSize: isTabletOverlay ? 24 : 18 }}
+                      >
+                        {text.caesarShiftHint(caesarShiftValue)}
+                      </Text>
+                    </View>
+                    <AttemptsIndicator
+                      label={text.caesarAttemptsLeftLabel}
+                      attemptsLeft={caesarAttemptsLeft}
+                      maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
+                      align="center"
+                    />
+                  </View>
+                ) : renderedStationMedia ? (
                   renderedStationMedia
                 ) : shouldShowQuizFallbackGraphic ? (
                   <View className="flex-1 items-center justify-center">
@@ -2562,40 +3239,48 @@ export function StationPreviewOverlay({
                   className="my-3 px-1"
                 >
                   <Text
-                    className="text-base leading-6"
-                    style={{ color: EXPEDITION_THEME.textMuted, textAlign: "justify" }}
+                    className="leading-6"
+                    style={{ color: EXPEDITION_THEME.textMuted, textAlign: "justify", fontSize: isTabletOverlay ? 18 : 16 }}
                   >
                     {stationDescription.length > 0
                       ? stationDescription
-                      : "Opis zadania nie został jeszcze dodany."}
+                      : text.taskDescriptionMissing}
                   </Text>
                 </View>
-              ) : stationDescription.length > 0 ? (
+              ) : !isCaesarStation && stationDescription.length > 0 ? (
                 <Text
-                  className={`${isNumericCodeStation ? "mt-2" : "mt-3"} text-sm leading-5`}
-                  style={{ color: EXPEDITION_THEME.textMuted }}
+                  className={`${isNumericCodeStation ? "mt-2" : "mt-3"} leading-5`}
+                  style={{ color: EXPEDITION_THEME.textMuted, fontSize: isTabletOverlay ? 16 : 14 }}
                 >
                   {stationDescription}
                 </Text>
               ) : null}
               {isAnagramStation ? (
-                <Text className="mt-2 text-xs leading-5" style={{ color: EXPEDITION_THEME.textSubtle }}>
-                  Rozsypanka jest wyświetlana wyraz po wyrazie, a każdy wyraz znajduje się w osobnym wierszu.
+                <Text className="mt-2 leading-5" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: isTabletOverlay ? 14 : 12 }}>
+                  {text.anagramDisplayHint}
                 </Text>
               ) : null}
 
               {isQuizStation && !isMatchingStation && !isBoggleStation ? (
                 <View
-                  className="mt-3 rounded-2xl border px-3 py-3"
+                  className="mt-3 rounded-2xl border"
                   style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
                 >
-                  <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    {resolveStationQuizPrompt({ station, wordleLength })}
+                  <Text
+                    className="font-semibold"
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: isTabletOverlay ? 21 : 16, paddingHorizontal: 12, paddingTop: 12 }}
+                  >
+                    {resolveStationQuizPrompt({ station, wordleLength, uiLanguage })}
                   </Text>
+                  <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                   {renderedQuizStation}
+                  </View>
 
                   {quizSubmitError ? (
-                    <Text className="mt-2 text-center text-xs" style={{ color: EXPEDITION_THEME.danger }}>
+                    <Text
+                      className="mt-2 text-center"
+                      style={{ color: EXPEDITION_THEME.danger, fontSize: isTabletOverlay ? 14 : 12 }}
+                    >
                       {quizSubmitError}
                     </Text>
                   ) : null}
@@ -2654,7 +3339,7 @@ export function StationPreviewOverlay({
                     className="mt-1 text-center text-[10px] uppercase tracking-widest"
                     style={{ color: EXPEDITION_THEME.textSubtle }}
                   >
-                    Czas do ukończenia zadania
+                    {text.executionTimerLabel}
                   </Text>
                 </View>
               ) : null}
@@ -2664,7 +3349,7 @@ export function StationPreviewOverlay({
                   style={{ borderColor: "rgba(252, 211, 77, 0.4)", backgroundColor: "rgba(252, 211, 77, 0.1)" }}
                 >
                   <Text className="text-[10px] uppercase tracking-widest" style={{ color: "#fcd34d" }}>
-                    Punkty
+                    {text.points}
                   </Text>
                   <Text className="mt-0.5 text-right text-lg font-extrabold" style={{ color: "#fcd34d" }}>
                     {station.points}
@@ -2730,8 +3415,8 @@ export function StationPreviewOverlay({
               }}
               onPress={closeQuizOutcomePopup}
             >
-              <Text className="text-base font-semibold" style={{ color: "#f8fafc" }}>
-                {isTimeoutOutcomePopup ? "Wróć do mapy teraz" : "Wróć do mapy"}
+              <Text className="w-full text-center text-base font-semibold" style={{ color: "#f8fafc" }}>
+                {isTimeoutOutcomePopup ? text.backToMapNow : text.backToMap}
               </Text>
             </Pressable>
           </View>

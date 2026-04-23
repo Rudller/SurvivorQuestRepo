@@ -56,6 +56,9 @@ export type RealizationLanguageOption = {
   label: string;
 };
 
+type ResolvedLanguageLabelLocale = "polish" | "english" | "ukrainian" | "russian";
+type LanguageLabelLocale = RealizationLanguage;
+
 export function isRealizationLanguage(value: unknown): value is RealizationLanguage {
   return (
     value === "polish" ||
@@ -66,12 +69,52 @@ export function isRealizationLanguage(value: unknown): value is RealizationLangu
   );
 }
 
-export function getRealizationLanguageLabel(value: RealizationLanguage) {
-  if (value === "polish") return "Polski";
-  if (value === "english") return "Angielski";
-  if (value === "ukrainian") return "Ukraiński";
-  if (value === "russian") return "Rosyjski";
-  return "Inne";
+export function getRealizationLanguageLabel(value: RealizationLanguage, locale: LanguageLabelLocale = "polish") {
+  const labels: Record<RealizationLanguage, Record<ResolvedLanguageLabelLocale, string>> = {
+    polish: {
+      polish: "Polski",
+      english: "Polish",
+      ukrainian: "Польська",
+      russian: "Польский",
+    },
+    english: {
+      polish: "Angielski",
+      english: "English",
+      ukrainian: "Англійська",
+      russian: "Английский",
+    },
+    ukrainian: {
+      polish: "Ukraiński",
+      english: "Ukrainian",
+      ukrainian: "Українська",
+      russian: "Украинский",
+    },
+    russian: {
+      polish: "Rosyjski",
+      english: "Russian",
+      ukrainian: "Російська",
+      russian: "Русский",
+    },
+    other: {
+      polish: "English",
+      english: "English",
+      ukrainian: "English",
+      russian: "English",
+    },
+  };
+
+  if (value === "other") {
+    return labels.other.english;
+  }
+
+  const resolvedLocale: ResolvedLanguageLabelLocale =
+    locale === "english" || locale === "ukrainian" || locale === "russian"
+      ? locale
+      : locale === "other"
+        ? "english"
+        : "polish";
+
+  return labels[value][resolvedLocale];
 }
 
 export function getRealizationLanguageFlag(value: RealizationLanguage) {

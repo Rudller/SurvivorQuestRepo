@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ActivityIndicator, Alert, AppState, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import type {
@@ -11,6 +11,7 @@ import type {
 } from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
 import { EXPEDITION_THEME } from "../features/onboarding/model/constants";
+import { UiLanguageProvider, resolveUiLanguage, type UiLanguage } from "../features/i18n";
 import {
   fetchMobileSessionState,
   isSessionTokenInvalidError,
@@ -96,35 +97,113 @@ function parseInlineRules(text: string): InlineRulesPart[] {
 type GameRulesScreenProps = {
   rulesText: string;
   onClose: () => void;
+  language: UiLanguage;
 };
 
-function GameRulesPopup({ rulesText, onClose }: GameRulesScreenProps) {
+const MOBILE_APP_TEXT: Record<
+  UiLanguage,
+  {
+    gameRulesTitle: string;
+    noGameRules: string;
+    close: string;
+    introFallback: string;
+    introTextLabel: string;
+    waitForStart: string;
+    sessionRefreshTitle: string;
+    sessionResetNotice: string;
+    mobileSessionReset: string;
+    serverReconnect: string;
+  }
+> = {
+  polish: {
+    gameRulesTitle: "Zasady gry",
+    noGameRules: "Brak zasad gry dla tej realizacji.",
+    close: "Zamknij",
+    introFallback: "Przygotujcie się do gry. Czekajcie na globalny start aplikacji od administratora.",
+    introTextLabel: "Tekst wstępu",
+    waitForStart: "Czekamy na zatwierdzenie startu aplikacji...",
+    sessionRefreshTitle: "Sesja wymaga odświeżenia",
+    sessionResetNotice:
+      "Wykryto reset realizacji lub wygaśnięcie sesji{reasonSuffix}. Przekierowaliśmy do Etapu 3, aby ponownie potwierdzić drużynę.",
+    mobileSessionReset: "Sesja mobilna została zresetowana ({reason}).",
+    serverReconnect: "Brak połączenia z serwerem. Ponawiam sprawdzenie startu...",
+  },
+  english: {
+    gameRulesTitle: "Game rules",
+    noGameRules: "No game rules available for this realization.",
+    close: "Close",
+    introFallback: "Get ready for the game. Wait for the global app start approval from the administrator.",
+    introTextLabel: "Intro text",
+    waitForStart: "Waiting for app start approval...",
+    sessionRefreshTitle: "Session needs refresh",
+    sessionResetNotice:
+      "A realization reset or session expiration was detected{reasonSuffix}. We redirected you to Step 3 to confirm the team again.",
+    mobileSessionReset: "Mobile session was reset ({reason}).",
+    serverReconnect: "No connection to the server. Retrying start check...",
+  },
+  ukrainian: {
+    gameRulesTitle: "Правила гри",
+    noGameRules: "Для цієї реалізації немає правил гри.",
+    close: "Закрити",
+    introFallback: "Підготуйтеся до гри. Дочекайтеся глобального старту застосунку від адміністратора.",
+    introTextLabel: "Вступний текст",
+    waitForStart: "Очікуємо підтвердження старту застосунку...",
+    sessionRefreshTitle: "Сесію потрібно оновити",
+    sessionResetNotice:
+      "Виявлено скидання реалізації або завершення сесії{reasonSuffix}. Вас перенаправлено до кроку 3 для повторного підтвердження команди.",
+    mobileSessionReset: "Мобільну сесію скинуто ({reason}).",
+    serverReconnect: "Немає з'єднання із сервером. Повторюємо перевірку старту...",
+  },
+  russian: {
+    gameRulesTitle: "Правила игры",
+    noGameRules: "Для этой реализации нет правил игры.",
+    close: "Закрыть",
+    introFallback: "Подготовьтесь к игре. Дождитесь глобального старта приложения от администратора.",
+    introTextLabel: "Вступительный текст",
+    waitForStart: "Ожидаем подтверждение старта приложения...",
+    sessionRefreshTitle: "Сессию нужно обновить",
+    sessionResetNotice:
+      "Обнаружен сброс реализации или истечение сессии{reasonSuffix}. Вас перенаправили на шаг 3 для повторного подтверждения команды.",
+    mobileSessionReset: "Мобильная сессия была сброшена ({reason}).",
+    serverReconnect: "Нет соединения с сервером. Повторяем проверку старта...",
+  },
+};
+
+function interpolate(template: string, values: Record<string, string>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
+}
+
+function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) {
+  const text = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(rulesText);
+  const { height: windowHeight } = useWindowDimensions();
+  const panelHeight = Math.min(Math.max(windowHeight * 0.78, 420), 760);
 
   return (
     <View
-      className="absolute inset-0 items-center justify-center px-5"
+      className="absolute inset-0 items-center justify-center px-6"
       style={{ backgroundColor: "rgba(5, 10, 8, 0.58)" }}
     >
       <View
-        className="w-full max-w-[380px] rounded-3xl border px-4 py-4"
-        style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+        className="w-full max-w-[560px] rounded-3xl border p-5"
+        style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel, height: panelHeight }}
       >
         <Text className="text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-          Zasady gry
+          {text.gameRulesTitle}
         </Text>
 
         <ScrollView
-          className="mt-2 rounded-2xl border px-3 py-3"
+          className="mt-3 flex-1 rounded-2xl border"
+          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20 }}
+          scrollIndicatorInsets={{ top: 8, bottom: 8 }}
           style={{
             borderColor: EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panelMuted,
-            maxHeight: 280,
           }}
         >
           {blocks.length === 0 ? (
             <Text className="text-xs leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
-              Brak zasad gry dla tej realizacji.
+              {text.noGameRules}
             </Text>
           ) : (
             blocks.map((block, blockIndex) => {
@@ -160,12 +239,12 @@ function GameRulesPopup({ rulesText, onClose }: GameRulesScreenProps) {
         </ScrollView>
 
         <Pressable
-          className="mt-3 rounded-2xl border px-4 py-2.5"
+          className="mt-4 rounded-2xl border px-4 py-2.5"
           style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
           onPress={onClose}
         >
           <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-            Zamknij
+            {text.close}
           </Text>
         </Pressable>
       </View>
@@ -173,13 +252,14 @@ function GameRulesPopup({ rulesText, onClose }: GameRulesScreenProps) {
   );
 }
 
-function IntroTextPreview({ text }: { text: string }) {
+function IntroTextPreview({ text, language }: { text: string; language: UiLanguage }) {
+  const uiText = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(text);
 
   if (blocks.length === 0) {
     return (
       <Text className="mt-3 text-base leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
-        Przygotujcie się do gry. Czekajcie na globalny start aplikacji od administratora.
+        {uiText.introFallback}
       </Text>
     );
   }
@@ -225,6 +305,12 @@ export function MobileApp() {
   const [isWaitingForAdminStart, setIsWaitingForAdminStart] = useState(false);
   const [waitingError, setWaitingError] = useState<string | null>(null);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
+  const uiLanguage = resolveUiLanguage(
+    onboardingSession?.selectedLanguage ??
+      onboardingSession?.realization?.selectedLanguage ??
+      onboardingSession?.realization?.language,
+  );
+  const text = MOBILE_APP_TEXT[uiLanguage];
 
   useEffect(() => {
     if (Platform.OS !== "android") {
@@ -330,8 +416,7 @@ export function MobileApp() {
     const realizationCode = onboardingSession?.realizationCode?.trim().toUpperCase() ?? "";
     const apiBaseUrl = onboardingSession?.apiBaseUrl?.trim() || null;
     const reasonSuffix = reason && reason.trim().length > 0 ? ` (${reason.trim()})` : "";
-    const notice =
-      `Wykryto reset realizacji lub wygaśnięcie sesji${reasonSuffix}. Przekierowaliśmy do Etapu 3, aby ponownie potwierdzić drużynę.`;
+    const notice = interpolate(text.sessionResetNotice, { reasonSuffix });
 
     if (realizationCode) {
       setRecoveryIntent({
@@ -343,7 +428,7 @@ export function MobileApp() {
       setRecoveryIntent(null);
     }
 
-    Alert.alert("Sesja wymaga odświeżenia", notice);
+    Alert.alert(text.sessionRefreshTitle, notice);
     setIsWaitingForAdminStart(false);
     setWaitingError(null);
     setOnboardingSession(null);
@@ -404,6 +489,7 @@ export function MobileApp() {
                     onboardingSession.realization.customLanguage,
                   selectedLanguage:
                     nextState.realization.selectedLanguage ??
+                    nextSelectedLanguage ??
                     onboardingSession.realization.selectedLanguage,
                   availableLanguages:
                     nextState.realization.availableLanguages &&
@@ -433,12 +519,12 @@ export function MobileApp() {
 
         if (isSessionTokenInvalidError(error)) {
           const reason = resolveSessionInvalidReason(error);
-          setWaitingError(`Sesja mobilna została zresetowana (${reason}).`);
+          setWaitingError(interpolate(text.mobileSessionReset, { reason }));
           await resetToOnboardingWithMessage(reason);
           return;
         }
 
-        setWaitingError("Brak połączenia z serwerem. Ponawiam sprawdzenie startu...");
+        setWaitingError(text.serverReconnect);
         timeoutId = setTimeout(() => {
           void pollUntilStarted();
         }, ADMIN_START_POLL_INTERVAL_MS);
@@ -453,7 +539,7 @@ export function MobileApp() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isWaitingForAdminStart, onboardingSession]);
+  }, [isWaitingForAdminStart, onboardingSession, text.mobileSessionReset, text.serverReconnect]);
 
   if (isHydratingSession) {
     return (
@@ -478,13 +564,13 @@ export function MobileApp() {
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
             >
               <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-                Tekst wstępu
+                {text.introTextLabel}
               </Text>
-              <IntroTextPreview text={onboardingSession.realization?.introText?.trim() || ""} />
+              <IntroTextPreview text={onboardingSession.realization?.introText?.trim() || ""} language={uiLanguage} />
               <View className="mt-5 flex-row items-center gap-2">
                 <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
                 <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  {waitingError ?? "Czekamy na zatwierdzenie startu aplikacji..."}
+                  {waitingError ?? text.waitForStart}
                 </Text>
               </View>
             </View>
@@ -504,39 +590,42 @@ export function MobileApp() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
-        {onboardingSession ? (
-          <ExpeditionStageScreen
-            session={onboardingSession}
-            onSessionInvalid={(reason) => {
-              void resetToOnboardingWithMessage(reason);
-            }}
-            onSelectedLanguageChange={(language) => {
-              void handleSelectedLanguageChange(language);
-            }}
-          />
-        ) : (
-          <RealizationOnboardingScreen
-            onComplete={(session) => void handleComplete(session)}
-            recoveryIntent={recoveryIntent}
-            onRecoveryConsumed={() => setRecoveryIntent(null)}
-          />
-        )}
-        {onboardingSession && shouldShowRulesPopup ? (
-          <GameRulesPopup
-            rulesText={onboardingSession.realization?.gameRules?.trim() || ""}
-            onClose={() => {
-              const nextSession: OnboardingSession = {
-                ...onboardingSession,
-                showGameRulesAfterStart: false,
-              };
-              setOnboardingSession(nextSession);
-              void AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
-            }}
-          />
-        ) : null}
-        <StatusBar style="light" hidden />
-      </SafeAreaView>
+      <UiLanguageProvider language={uiLanguage}>
+        <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
+          {onboardingSession ? (
+            <ExpeditionStageScreen
+              session={onboardingSession}
+              onSessionInvalid={(reason) => {
+                void resetToOnboardingWithMessage(reason);
+              }}
+              onSelectedLanguageChange={(language) => {
+                void handleSelectedLanguageChange(language);
+              }}
+            />
+          ) : (
+            <RealizationOnboardingScreen
+              onComplete={(session) => void handleComplete(session)}
+              recoveryIntent={recoveryIntent}
+              onRecoveryConsumed={() => setRecoveryIntent(null)}
+            />
+          )}
+          {onboardingSession && shouldShowRulesPopup ? (
+            <GameRulesPopup
+              rulesText={onboardingSession.realization?.gameRules?.trim() || ""}
+              language={uiLanguage}
+              onClose={() => {
+                const nextSession: OnboardingSession = {
+                  ...onboardingSession,
+                  showGameRulesAfterStart: false,
+                };
+                setOnboardingSession(nextSession);
+                void AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+              }}
+            />
+          ) : null}
+          <StatusBar style="light" hidden />
+        </SafeAreaView>
+      </UiLanguageProvider>
     </SafeAreaProvider>
   );
 }
