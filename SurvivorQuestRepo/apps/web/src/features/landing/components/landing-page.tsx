@@ -31,6 +31,8 @@ const LANDING_NAV_ITEMS = [
 ] as const;
 
 export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail, contactPhone }: LandingPageProps) {
+  const currentYear = new Date().getFullYear();
+
   return (
     <>
       <header className="sticky top-0 z-30 w-full border-b border-[#446251]/70 bg-[#12221b]/85 backdrop-blur">
@@ -250,7 +252,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section id="kontakt" className="sq-section scroll-mt-28 relative overflow-hidden rounded-3xl border border-[#446251]/80 bg-[#162921]/90 p-6 sm:p-8 lg:p-10">
+        <section id="kontakt" className="sq-section scroll-mt-28 relative overflow-hidden rounded-3xl border border-[#446251]/80 bg-[#162921]/90 p-6 sm:p-8 lg:p-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(240,201,119,0.24),transparent_50%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.18),transparent_45%)]" />
         <div className="relative grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-center">
@@ -309,6 +311,40 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
           </div>
         </div>
         </section>
+
+        <footer className="sq-section rounded-3xl border border-[#446251]/65 bg-[#12221b]/75 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-[#f3f5ef]">SurvivorQuest</p>
+              <p className="text-xs text-[#98ad9c]">Platforma eventowa: panel admina + aplikacja mobilna</p>
+              <p className="text-xs text-[#98ad9c]">© {currentYear} SurvivorQuest. Wszelkie prawa zastrzeżone.</p>
+            </div>
+
+            <div className="grid gap-1 text-sm">
+              <Link href={`mailto:${contactEmail}`} className="text-[#f0c977] underline-offset-4 hover:underline">
+                {contactEmail}
+              </Link>
+              <Link
+                href={`tel:${contactPhone.replace(/\s+/g, "")}`}
+                className="text-[#f0c977] underline-offset-4 hover:underline"
+              >
+                {contactPhone}
+              </Link>
+            </div>
+
+            <div className="grid gap-1 text-sm text-[#bdcdbf]">
+              <Link href="/download" className="underline-offset-4 hover:text-[#f0c977] hover:underline">
+                Pobierz aplikację
+              </Link>
+              <Link href="/polityka-prywatnosci" className="underline-offset-4 hover:text-[#f0c977] hover:underline">
+                Polityka prywatności
+              </Link>
+              <Link href="/polityka-cookies" className="underline-offset-4 hover:text-[#f0c977] hover:underline">
+                Polityka cookies
+              </Link>
+            </div>
+          </div>
+        </footer>
       </main>
     </>
   );

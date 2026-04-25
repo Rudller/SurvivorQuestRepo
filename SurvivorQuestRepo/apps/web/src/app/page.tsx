@@ -1,4 +1,22 @@
+import type { Metadata } from "next";
 import { LandingPage } from "@/features/landing/components/landing-page";
+
+export const metadata: Metadata = {
+  title: "SurvivorQuest | Gry terenowe i realizacje eventowe",
+  description:
+    "SurvivorQuest to platforma do organizacji gier terenowych i eventów firmowych: panel admina, aplikacja mobilna i monitoring realizacji na żywo.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "SurvivorQuest | Gry terenowe i realizacje eventowe",
+    description:
+      "Panel admina + aplikacja mobilna do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji.",
+    url: "/",
+    type: "website",
+    locale: "pl_PL",
+  },
+};
 
 export default function HomePage() {
   const adminPanelHref =

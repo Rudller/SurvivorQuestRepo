@@ -1,26 +1,26 @@
 export const TRUST_METRICS = [
-  { value: "2", label: "aplikacje w jednym systemie: panel admina + mobile" },
-  { value: "Live", label: "monitoring statusów zespołów i punktacji w czasie rzeczywistym" },
-  { value: "6", label: "typów realizacji obsługiwanych przez platformę" },
+  { value: "1", label: "spójny ekosystem: panel admina i aplikacja mobilna" },
+  { value: "Live", label: "podgląd statusów zespołów i punktacji w czasie rzeczywistym" },
+  { value: "6", label: "typów realizacji obsługiwanych od startu" },
 ] as const;
 
 export const BENEFITS = [
   {
     title: "Panel admina do pełnej konfiguracji realizacji",
     description:
-      "Tworzysz scenariusze, konfigurujesz stacje i ustawiasz przebieg eventu z jednego miejsca.",
+      "Tworzysz scenariusze, konfigurujesz stacje i ustawiasz przebieg eventu bez przełączania narzędzi.",
     points: ["Edycja scenariuszy oraz kolejności stacji", "Szybka konfiguracja zespołów, instruktorów i harmonogramu"],
   },
   {
     title: "Aplikacja mobilna dla uczestników wydarzenia",
     description:
-      "Zespoły wykonują zadania na telefonie, a postęp od razu zapisuje się w systemie.",
+      "Zespoły realizują zadania na telefonie, a wyniki natychmiast trafiają do panelu koordynatora.",
     points: ["Obsługa quizów, zadań czasowych i punktowych", "Czytelny status zadania i nawigacja po etapach gry"],
   },
   {
     title: "Monitoring i podsumowanie realizacji",
     description:
-      "Koordynator widzi postęp drużyn na żywo, reaguje na problemy i zamyka event z podsumowaniem.",
+      "Koordynator widzi postęp drużyn na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
     points: ["Podgląd aktywności, punktów i logów zdarzeń", "Kompletny obraz przebiegu wydarzenia po zakończeniu"],
   },
 ] as const;

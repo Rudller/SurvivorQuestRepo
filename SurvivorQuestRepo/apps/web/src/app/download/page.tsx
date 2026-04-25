@@ -4,6 +4,16 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Pobierz aplikację | SurvivorQuest",
   description: "Pobierz aplikację mobilną SurvivorQuest na Androida i iOS.",
+  alternates: {
+    canonical: "/download",
+  },
+  openGraph: {
+    title: "Pobierz aplikację | SurvivorQuest",
+    description: "Pobierz aplikację mobilną SurvivorQuest na Androida i iOS.",
+    url: "/download",
+    type: "website",
+    locale: "pl_PL",
+  },
 };
 
 function DownloadButton({
