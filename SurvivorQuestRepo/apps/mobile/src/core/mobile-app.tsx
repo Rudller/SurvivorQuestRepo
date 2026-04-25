@@ -19,6 +19,8 @@ import {
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
+const TABLET_MIN_SHORT_EDGE = 700;
+const TABLET_MIN_WIDTH = 900;
 
 type OnboardingRecoveryIntent = {
   realizationCode: string;
@@ -176,25 +178,49 @@ function interpolate(template: string, values: Record<string, string>) {
 function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) {
   const text = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(rulesText);
-  const { height: windowHeight } = useWindowDimensions();
-  const panelHeight = Math.min(Math.max(windowHeight * 0.78, 420), 760);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const shortestEdge = Math.min(windowWidth, windowHeight);
+  const isTablet = windowWidth >= TABLET_MIN_WIDTH || shortestEdge >= TABLET_MIN_SHORT_EDGE;
+  const panelHeight = isTablet
+    ? Math.min(Math.max(windowHeight * 0.84, 560), 980)
+    : Math.min(Math.max(windowHeight * 0.78, 420), 760);
+  const panelMaxWidth = isTablet ? 920 : 560;
+  const panelPadding = isTablet ? 24 : 20;
+  const titleFontSize = isTablet ? 13 : 11;
+  const rulesFontSize = isTablet ? 16 : 12;
+  const rulesLineHeight = isTablet ? 28 : 20;
+  const closeFontSize = isTablet ? 17 : 14;
+  const closePaddingVertical = isTablet ? 14 : 10;
 
   return (
     <View
-      className="absolute inset-0 items-center justify-center px-6"
-      style={{ backgroundColor: "rgba(5, 10, 8, 0.58)" }}
+      className="absolute inset-0 items-center justify-center"
+      style={{
+        backgroundColor: "rgba(5, 10, 8, 0.58)",
+        paddingHorizontal: isTablet ? 28 : 24,
+      }}
     >
       <View
-        className="w-full max-w-[560px] rounded-3xl border p-5"
-        style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel, height: panelHeight }}
+        className="w-full rounded-3xl border"
+        style={{
+          borderColor: EXPEDITION_THEME.border,
+          backgroundColor: EXPEDITION_THEME.panel,
+          height: panelHeight,
+          maxWidth: panelMaxWidth,
+          padding: panelPadding,
+        }}
       >
-        <Text className="text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+        <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong, fontSize: titleFontSize }}>
           {text.gameRulesTitle}
         </Text>
 
         <ScrollView
           className="mt-3 flex-1 rounded-2xl border"
-          contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20 }}
+          contentContainerStyle={{
+            paddingHorizontal: isTablet ? 18 : 12,
+            paddingTop: isTablet ? 16 : 12,
+            paddingBottom: isTablet ? 28 : 20,
+          }}
           scrollIndicatorInsets={{ top: 8, bottom: 8 }}
           style={{
             borderColor: EXPEDITION_THEME.border,
@@ -202,7 +228,7 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
           }}
         >
           {blocks.length === 0 ? (
-            <Text className="text-xs leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
+            <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: rulesFontSize, lineHeight: rulesLineHeight }}>
               {text.noGameRules}
             </Text>
           ) : (
@@ -213,8 +239,8 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
               return (
                 <Text
                   key={`${block.kind}-${blockIndex}`}
-                  className="mb-1.5 text-xs leading-5"
-                  style={{ color: EXPEDITION_THEME.textPrimary }}
+                  className="mb-1.5"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: rulesFontSize, lineHeight: rulesLineHeight }}
                 >
                   {prefix ? (
                     <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
@@ -239,11 +265,16 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
         </ScrollView>
 
         <Pressable
-          className="mt-4 rounded-2xl border px-4 py-2.5"
-          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+          className="mt-4 rounded-2xl border px-4"
+          style={{
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panelStrong,
+            paddingVertical: closePaddingVertical,
+            minHeight: isTablet ? 56 : 44,
+          }}
           onPress={onClose}
         >
-          <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: closeFontSize }}>
             {text.close}
           </Text>
         </Pressable>

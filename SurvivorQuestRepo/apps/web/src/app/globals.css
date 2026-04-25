@@ -12,6 +12,10 @@
   --font-mono: var(--font-inter);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background:
     radial-gradient(circle at 8% 0%, rgba(240, 201, 119, 0.22) 0%, rgba(240, 201, 119, 0) 34%),
@@ -20,4 +24,49 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), Arial, Helvetica, sans-serif;
   min-height: 100vh;
+}
+
+.sq-section {
+  animation: sq-fade-up 420ms ease-out both;
+}
+
+.sq-card-lift {
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.sq-card-lift:hover {
+  transform: translateY(-3px);
+  border-color: rgba(240, 201, 119, 0.45);
+}
+
+@keyframes sq-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .sq-section {
+    animation: none;
+  }
+
+  .sq-card-lift {
+    transition: none;
+  }
+
+  .sq-card-lift:hover {
+    transform: none;
+  }
 }

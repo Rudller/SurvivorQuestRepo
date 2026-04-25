@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo } from "react";
-import type { Station } from "../types/station";
+import { useEffect, useMemo, useState } from "react";
+import type { Station, StationType } from "../types/station";
+import { stationTypeOptions } from "../types/station";
 import {
   getStationTypeLabel,
   formatTimeLimit,
@@ -11,6 +12,7 @@ import {
   type StationSortField,
   type SortDirection,
 } from "../station.utils";
+import { filterStationsCatalog, groupStationsByType } from "../station-catalog.utils";
 
 interface StationsTableProps {
   stations: Station[];
@@ -29,6 +31,10 @@ export function StationsTable({
   onSortDirectionChange,
   onEdit,
 }: StationsTableProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTypes, setSelectedTypes] = useState<StationType[]>([]);
+  const [collapsedTypes, setCollapsedTypes] = useState<StationType[]>([]);
+
   const sortedGames = useMemo(() => {
     const list = [...stations];
 
@@ -47,28 +53,123 @@ export function StationsTable({
     return list;
   }, [stations, sortField, sortDirection]);
 
+  const typeCounts = useMemo(() => {
+    const counts = new Map<StationType, number>();
+    sortedGames.forEach((station) => {
+      counts.set(station.type, (counts.get(station.type) ?? 0) + 1);
+    });
+    return counts;
+  }, [sortedGames]);
+
+  const filteredGames = useMemo(
+    () =>
+      filterStationsCatalog({
+        stations: sortedGames,
+        searchQuery,
+        selectedTypes,
+      }),
+    [sortedGames, searchQuery, selectedTypes],
+  );
+
+  const groupedGames = useMemo(() => groupStationsByType(filteredGames), [filteredGames]);
+  const collapsedTypeSet = useMemo(() => new Set(collapsedTypes), [collapsedTypes]);
+  const hasFilters = searchQuery.trim().length > 0 || selectedTypes.length > 0;
+
+  useEffect(() => {
+    const availableTypes = new Set(groupedGames.map((group) => group.type));
+    setCollapsedTypes((current) => {
+      const next = current.filter((type) => availableTypes.has(type));
+      return next.length === current.length ? current : next;
+    });
+  }, [groupedGames]);
+
+  function toggleTypeFilter(type: StationType) {
+    setSelectedTypes((current) =>
+      current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    );
+  }
+
+  function clearFilters() {
+    setSearchQuery("");
+    setSelectedTypes([]);
+  }
+
+  function toggleGroupCollapse(type: StationType) {
+    setCollapsedTypes((current) =>
+      current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-        <h3 className="text-sm font-medium text-zinc-200">Lista stanowisk</h3>
+      <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h3 className="text-sm font-medium text-zinc-200">Lista stanowisk</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-zinc-400">Sortuj po</label>
+            <select
+              value={sortField}
+              onChange={(event) => onSortFieldChange(event.target.value as StationSortField)}
+              className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+            >
+              <option value="name">Nazwa</option>
+              <option value="type">Typ</option>
+            </select>
+            <select
+              value={sortDirection}
+              onChange={(event) => onSortDirectionChange(event.target.value as SortDirection)}
+              className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+            >
+              <option value="asc">Rosnąco</option>
+              <option value="desc">Malejąco</option>
+            </select>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs text-zinc-400">Sortuj po</label>
-          <select
-            value={sortField}
-            onChange={(event) => onSortFieldChange(event.target.value as StationSortField)}
-            className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Szukaj po nazwie, typie lub opisie..."
+            className="min-w-60 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-amber-400/80"
+          />
+          <span className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-400">
+            Wyniki: {filteredGames.length}/{sortedGames.length}
+          </span>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasFilters}
+            className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <option value="name">Nazwa</option>
-            <option value="type">Typ</option>
-          </select>
-          <select
-            value={sortDirection}
-            onChange={(event) => onSortDirectionChange(event.target.value as SortDirection)}
-            className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
-          >
-            <option value="asc">Rosnąco</option>
-            <option value="desc">Malejąco</option>
-          </select>
+            Wyczyść
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {stationTypeOptions.map((option) => {
+            const isActive = selectedTypes.includes(option.value);
+            const count = typeCounts.get(option.value) ?? 0;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleTypeFilter(option.value)}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  isActive
+                    ? "border-amber-300 bg-amber-300/15 text-amber-200"
+                    : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
+                }`}
+              >
+                {option.label} ({count})
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -79,60 +180,90 @@ export function StationsTable({
         </div>
       )}
 
-      {sortedGames.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/60">
-          <div className="min-w-[1180px]">
-            <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
-              <span>Obraz</span>
-              <span>Nazwa</span>
-              <span>Typ</span>
-              <span>Opis</span>
-              <span>Punkty</span>
-              <span>Czas</span>
-              <span>Kod</span>
-              <span>Aktualizacja</span>
-              <span>Akcje</span>
-            </div>
-
-            <div className="divide-y divide-zinc-800">
-              {sortedGames.map((game) => (
-                <div key={game.id} className="px-4 py-3">
-                  <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] items-center gap-3">
-                    <Image
-                      src={game.imageUrl}
-                      alt={game.name}
-                      width={72}
-                      height={72}
-                      unoptimized={isSvgImageUrl(game.imageUrl)}
-                      className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
-                    />
-                    <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
-                    <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
-                      {getStationTypeLabel(game.type)}
-                    </span>
-                    <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
-                    <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
-                    <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
-                    <p className="text-xs text-zinc-300">
-                      {isCompletionCodeRequired(game.type) ? (game.completionCode ? "Skonfigurowany" : "Brak") : "Niewymagany"}
-                    </p>
-                    <p className="text-xs text-zinc-500">{new Date(game.updatedAt).toLocaleDateString("pl-PL")}</p>
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => onEdit(game)}
-                        className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                      >
-                        Edytuj
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      {sortedGames.length > 0 && groupedGames.length === 0 && (
+        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+          <p className="text-sm font-medium text-zinc-200">Brak wyników dla wybranych filtrów</p>
+          <p className="mt-1 text-sm text-zinc-400">Zmień frazę wyszukiwania lub odznacz część kategorii.</p>
         </div>
       )}
+
+      {groupedGames.map((group) => {
+        const isCollapsed = collapsedTypeSet.has(group.type);
+
+        return (
+          <section key={group.type} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
+            <button
+              type="button"
+              onClick={() => toggleGroupCollapse(group.type)}
+              className="flex w-full items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-left transition hover:bg-zinc-900/90"
+            >
+              <span className="text-sm font-medium text-zinc-100">
+                {group.label} <span className="text-zinc-500">({group.stations.length})</span>
+              </span>
+              <span className="text-xs text-zinc-400">{isCollapsed ? "Pokaż" : "Ukryj"}</span>
+            </button>
+
+            {!isCollapsed && (
+              <div className="overflow-x-auto">
+                <div className="min-w-[1180px]">
+                  <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] gap-3 border-b border-zinc-800 bg-zinc-900/50 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
+                    <span>Obraz</span>
+                    <span>Nazwa</span>
+                    <span>Typ</span>
+                    <span>Opis</span>
+                    <span>Punkty</span>
+                    <span>Czas</span>
+                    <span>Kod</span>
+                    <span>Aktualizacja</span>
+                    <span>Akcje</span>
+                  </div>
+
+                  <div className="divide-y divide-zinc-800">
+                    {group.stations.map((game) => (
+                      <div key={game.id} className="px-4 py-3">
+                        <div className="grid grid-cols-[72px_1.2fr_1fr_2fr_110px_110px_130px_120px_120px] items-center gap-3">
+                          <Image
+                            src={game.imageUrl}
+                            alt={game.name}
+                            width={72}
+                            height={72}
+                            unoptimized={isSvgImageUrl(game.imageUrl)}
+                            className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
+                          />
+                          <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
+                          <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
+                            {getStationTypeLabel(game.type)}
+                          </span>
+                          <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
+                          <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
+                          <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
+                          <p className="text-xs text-zinc-300">
+                            {isCompletionCodeRequired(game.type)
+                              ? game.completionCode
+                                ? "Skonfigurowany"
+                                : "Brak"
+                              : "Niewymagany"}
+                          </p>
+                          <p className="text-xs text-zinc-500">{new Date(game.updatedAt).toLocaleDateString("pl-PL")}</p>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => onEdit(game)}
+                              className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                            >
+                              Edytuj
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

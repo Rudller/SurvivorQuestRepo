@@ -120,7 +120,7 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
     return text.wordleFallback(wordleLength);
   }
   if (station.stationType === "hangman") {
-    return station.quizQuestion?.trim() || text.hangmanFallback;
+    return text.hangmanFallback;
   }
   if (station.stationType === "mastermind") {
     return station.quizQuestion?.trim() || text.mastermindFallback;

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
 import { useUploadStationImageMutation } from "@/features/games/api/station.api";
+import { filterStationCatalogItems } from "@/features/games/station-catalog.utils";
 import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
@@ -370,6 +371,8 @@ export function RealizationStationsEditor({
   const [stationLocationErrors, setStationLocationErrors] = useState<Record<string, string>>({});
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
+  const [stationSearchQuery, setStationSearchQuery] = useState("");
+  const [selectedStationTypes, setSelectedStationTypes] = useState<RealizationStationDraft["type"][]>([]);
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
 
   const stationTypeLabelByValue = useMemo(
@@ -397,6 +400,34 @@ export function RealizationStationsEditor({
 
   const activeExpandedStationIndex =
     expandedStationIndex !== null && expandedStationIndex < stations.length ? expandedStationIndex : null;
+  const stationEntries = useMemo(
+    () =>
+      stations.map((station, index) => ({
+        station,
+        index,
+        name: station.name,
+        description: station.description,
+        type: station.type,
+      })),
+    [stations],
+  );
+  const filteredStationEntries = useMemo(
+    () =>
+      filterStationCatalogItems({
+        items: stationEntries,
+        searchQuery: stationSearchQuery,
+        selectedTypes: selectedStationTypes,
+      }),
+    [stationEntries, stationSearchQuery, selectedStationTypes],
+  );
+  const hasStationFilters = stationSearchQuery.trim().length > 0 || selectedStationTypes.length > 0;
+  const stationTypeCounts = useMemo(() => {
+    const counts = new Map<RealizationStationDraft["type"], number>();
+    stations.forEach((station) => {
+      counts.set(station.type, (counts.get(station.type) ?? 0) + 1);
+    });
+    return counts;
+  }, [stations]);
 
   useEffect(() => {
     setExpandedStationIndex((current) => {
@@ -428,6 +459,20 @@ export function RealizationStationsEditor({
       setEditingLanguage(baseLanguage);
     }
   }, [baseLanguage, editableLanguages, editingLanguage]);
+
+  useEffect(() => {
+    if (activeExpandedStationIndex === null) {
+      return;
+    }
+
+    const isExpandedStationVisible = filteredStationEntries.some(
+      (entry) => entry.index === activeExpandedStationIndex,
+    );
+
+    if (!isExpandedStationVisible) {
+      setExpandedStationIndex(null);
+    }
+  }, [activeExpandedStationIndex, filteredStationEntries]);
 
   function updateStation(index: number, patch: Partial<RealizationStationDraft>) {
     onChange(stations.map((station, currentIndex) => (currentIndex === index ? { ...station, ...patch } : station)));
@@ -622,7 +667,21 @@ export function RealizationStationsEditor({
     );
   }
 
+  function toggleStationTypeFilter(type: RealizationStationDraft["type"]) {
+    setSelectedStationTypes((current) =>
+      current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    );
+  }
+
+  function clearStationFilters() {
+    setStationSearchQuery("");
+    setSelectedStationTypes([]);
+  }
+
   function addStation() {
+    clearStationFilters();
     onChange([...stations, createEmptyRealizationStationDraft()]);
     setExpandedStationIndex(stations.length);
   }
@@ -789,15 +848,65 @@ export function RealizationStationsEditor({
         </button>
       </div>
 
+      <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={stationSearchQuery}
+            onChange={(event) => setStationSearchQuery(event.target.value)}
+            placeholder="Szukaj stanowiska po nazwie, typie lub opisie..."
+            className="min-w-60 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-amber-400/80"
+          />
+          <span className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-400">
+            Wyniki: {filteredStationEntries.length}/{stations.length}
+          </span>
+          <button
+            type="button"
+            onClick={clearStationFilters}
+            disabled={!hasStationFilters}
+            className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Wyczyść
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {stationTypeOptions.map((option) => {
+            const isActive = selectedStationTypes.includes(option.value);
+            const count = stationTypeCounts.get(option.value) ?? 0;
+
+            return (
+              <button
+                key={`realization-stations-filter-${option.value}`}
+                type="button"
+                onClick={() => toggleStationTypeFilter(option.value)}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  isActive
+                    ? "border-amber-300 bg-amber-300/15 text-amber-200"
+                    : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
+                }`}
+              >
+                {option.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {stations.length === 0 && (
         <p className="rounded-lg border border-dashed border-zinc-700 bg-zinc-950/70 p-3 text-xs text-zinc-500">
           Brak stanowisk. Dodaj przynajmniej jedno stanowisko do realizacji.
         </p>
       )}
 
+      {stations.length > 0 && filteredStationEntries.length === 0 && (
+        <p className="rounded-lg border border-dashed border-zinc-700 bg-zinc-950/70 p-3 text-xs text-zinc-500">
+          Brak stanowisk pasujących do filtrów. Zmień wyszukiwanie lub kategorie.
+        </p>
+      )}
+
       <div className="space-y-3">
-        {stations.map((station, index) => {
-          const stationKey = getStationKey(index, station);
+        {filteredStationEntries.map(({ station, index: stationIndex }) => {
+          const stationKey = getStationKey(stationIndex, station);
           const imageMode = stationImageModes[stationKey] ?? "upload";
           const audioMode = stationAudioModes[stationKey] ?? "upload";
           const audioFile = station.pendingAudioFile ?? null;
@@ -829,7 +938,7 @@ export function RealizationStationsEditor({
 
           return (
             <div
-              key={station.id ?? `new-${index}`}
+              key={station.id ?? `new-${stationIndex}`}
               className={`rounded-lg border bg-zinc-950/70 ${
                 showValidation && hasStationValidationError ? "border-red-500/60" : "border-zinc-700"
               }`}
@@ -837,14 +946,14 @@ export function RealizationStationsEditor({
               <div className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between">
                 <button
                   type="button"
-                  onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
+                  onClick={() => setExpandedStationIndex((current) => (current === stationIndex ? null : stationIndex))}
                   className="min-w-0 flex-1 text-left"
                 >
                   <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-zinc-100">
                     <span className="inline-flex min-w-9 justify-center rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-zinc-300">
-                      #{index + 1}
+                      #{stationIndex + 1}
                     </span>
-                    <span className="min-w-0 break-words">{station.name.trim() || `Stanowisko ${index + 1}`}</span>
+                    <span className="min-w-0 break-words">{station.name.trim() || `Stanowisko ${stationIndex + 1}`}</span>
                   </p>
                   <p className="text-xs text-zinc-500">
                     {stationTypeLabelByValue.get(station.type) ?? "Quiz"} • {Number.isFinite(station.points) ? station.points : 0} pkt •{" "}
@@ -859,8 +968,8 @@ export function RealizationStationsEditor({
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
-                      onClick={() => moveStation(index, "up")}
-                      disabled={index === 0}
+                      onClick={() => moveStation(stationIndex, "up")}
+                      disabled={stationIndex === 0}
                       title="Przesuń w górę"
                       className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -868,8 +977,8 @@ export function RealizationStationsEditor({
                     </button>
                     <button
                       type="button"
-                      onClick={() => moveStation(index, "down")}
-                      disabled={index === stations.length - 1}
+                      onClick={() => moveStation(stationIndex, "down")}
+                      disabled={stationIndex === stations.length - 1}
                       title="Przesuń w dół"
                       className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -877,14 +986,14 @@ export function RealizationStationsEditor({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setExpandedStationIndex((current) => (current === index ? null : index))}
+                      onClick={() => setExpandedStationIndex((current) => (current === stationIndex ? null : stationIndex))}
                       className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
                     >
-                      {activeExpandedStationIndex === index ? "Zwiń" : "Rozwiń"}
+                      {activeExpandedStationIndex === stationIndex ? "Zwiń" : "Rozwiń"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeStation(index)}
+                      onClick={() => removeStation(stationIndex)}
                       className="rounded-md border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400 hover:text-red-200"
                     >
                       Usuń
@@ -893,14 +1002,14 @@ export function RealizationStationsEditor({
                 </div>
               </div>
 
-              {activeExpandedStationIndex === index && (
+              {activeExpandedStationIndex === stationIndex && (
                 <div className="space-y-3 border-t border-zinc-800 p-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
                       <input
                         value={selectedStationName}
-                        onChange={(event) => updateStationForSelectedLanguage(index, { name: event.target.value })}
+                        onChange={(event) => updateStationForSelectedLanguage(stationIndex, { name: event.target.value })}
                         className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
                           shouldValidateLanguageFields && stationValidation.missingName
                             ? "border-red-500/70 focus:border-red-400/80"
@@ -919,7 +1028,7 @@ export function RealizationStationsEditor({
                         onChange={(event) => {
                           const nextType = event.target.value as RealizationStationDraft["type"];
                           const existingQuiz = station.quiz;
-                          updateStation(index, {
+                          updateStation(stationIndex, {
                             type: nextType,
                             completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
                             imageUrl: isImageSupportedStationType(nextType) ? station.imageUrl : "",
@@ -979,7 +1088,7 @@ export function RealizationStationsEditor({
                           value={station.completionCode ?? ""}
                           onChange={(event) => {
                             const nextValue = event.target.value.toUpperCase();
-                            updateStation(index, { completionCode: nextValue });
+                            updateStation(stationIndex, { completionCode: nextValue });
                             setStationCompletionCodeMode(stationKey, resolveCompletionCodeGeneratorMode(nextValue));
                           }}
                           placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
@@ -992,7 +1101,7 @@ export function RealizationStationsEditor({
                         <button
                           type="button"
                           onClick={() =>
-                            updateStation(index, { completionCode: generateSampleCompletionCode(8, completionCodeMode) })
+                            updateStation(stationIndex, { completionCode: generateSampleCompletionCode(8, completionCodeMode) })
                           }
                           className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                         >
@@ -1034,7 +1143,7 @@ export function RealizationStationsEditor({
                                 type="button"
                                 onClick={() => {
                                   setStationAudioMode(stationKey, "url");
-                                  updateStation(index, {
+                                  updateStation(stationIndex, {
                                     pendingAudioFile: null,
                                     pendingAudioLanguage: undefined,
                                   });
@@ -1059,7 +1168,7 @@ export function RealizationStationsEditor({
                                   className="hidden"
                                   onChange={(event) => {
                                     const selected = event.target.files?.[0] ?? null;
-                                    updateStation(index, {
+                                    updateStation(stationIndex, {
                                       pendingAudioFile: selected,
                                       pendingAudioLanguage: selected ? editingLanguage : undefined,
                                     });
@@ -1082,7 +1191,7 @@ export function RealizationStationsEditor({
                                 type="url"
                                 value={selectedStationQuiz?.audioUrl ?? ""}
                                 onChange={(event) =>
-                                  updateStationForSelectedLanguage(index, {
+                                  updateStationForSelectedLanguage(stationIndex, {
                                     quiz: {
                                       question: selectedStationQuiz?.question ?? "",
                                       answers: selectedStationQuizAnswers,
@@ -1118,7 +1227,7 @@ export function RealizationStationsEditor({
                               : selectedStationQuiz?.question ?? ""
                           }
                           onChange={(event) =>
-                            updateStationForSelectedLanguage(index, {
+                            updateStationForSelectedLanguage(stationIndex, {
                                 quiz: {
                                   question:
                                     station.type === "memory" && !event.target.value.trim()
@@ -1150,7 +1259,7 @@ export function RealizationStationsEditor({
                           <button
                             type="button"
                             onClick={() =>
-                              updateStationForSelectedLanguage(index, {
+                              updateStationForSelectedLanguage(stationIndex, {
                                 quiz: {
                                   question: generateSimonSequence(10),
                                   answers: selectedStationQuizAnswers,
@@ -1178,7 +1287,7 @@ export function RealizationStationsEditor({
                                 name={`realization-station-quiz-correct-${stationKey}`}
                                 checked={selectedStationCorrectAnswerIndex === answerIndex}
                                 onChange={() =>
-                                  updateStationForSelectedLanguage(index, {
+                                  updateStationForSelectedLanguage(stationIndex, {
                                     quiz: {
                                       question: selectedStationQuiz?.question ?? "",
                                       answers: selectedStationQuizAnswers,
@@ -1192,7 +1301,7 @@ export function RealizationStationsEditor({
                               <input
                                 value={answer}
                                 onChange={(event) =>
-                                  updateStationForSelectedLanguage(index, {
+                                    updateStationForSelectedLanguage(stationIndex, {
                                     quiz: {
                                       question: selectedStationQuiz?.question ?? "",
                                       answers: selectedStationQuizAnswers.map((item, idx) =>
@@ -1225,7 +1334,7 @@ export function RealizationStationsEditor({
                                   <input
                                     value={pair.left}
                                     onChange={(event) =>
-                                      updateStationForSelectedLanguage(index, {
+                                      updateStationForSelectedLanguage(stationIndex, {
                                         quiz: {
                                           question: selectedStationQuiz?.question ?? "",
                                           answers: selectedStationQuizAnswers.map((item, idx) =>
@@ -1248,7 +1357,7 @@ export function RealizationStationsEditor({
                                   <input
                                     value={pair.right}
                                     onChange={(event) =>
-                                      updateStationForSelectedLanguage(index, {
+                                      updateStationForSelectedLanguage(stationIndex, {
                                         quiz: {
                                           question: selectedStationQuiz?.question ?? "",
                                           answers: selectedStationQuizAnswers.map((item, idx) =>
@@ -1288,7 +1397,7 @@ export function RealizationStationsEditor({
                     <textarea
                       rows={3}
                       value={selectedStationDescription}
-                      onChange={(event) => updateStationForSelectedLanguage(index, { description: event.target.value })}
+                      onChange={(event) => updateStationForSelectedLanguage(stationIndex, { description: event.target.value })}
                       className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
                         "border-zinc-700 focus:border-amber-400/80"
                       }`}
@@ -1346,7 +1455,7 @@ export function RealizationStationsEditor({
                                 void handleImageFile(
                                   event.target.files?.[0] ?? null,
                                   (url) => {
-                                    updateStation(index, { imageUrl: url });
+                                    updateStation(stationIndex, { imageUrl: url });
                                     setStationImageError(stationKey, null);
                                   },
                                   (error) => setStationImageError(stationKey, error),
@@ -1369,7 +1478,7 @@ export function RealizationStationsEditor({
                             void handleImagePaste(
                               event,
                               (url) => {
-                                updateStation(index, { imageUrl: url });
+                                updateStation(stationIndex, { imageUrl: url });
                                 setStationImageError(stationKey, null);
                               },
                               (error) => setStationImageError(stationKey, error),
@@ -1390,7 +1499,7 @@ export function RealizationStationsEditor({
                           type="url"
                           value={station.imageUrl}
                           onChange={(event) => {
-                            updateStation(index, { imageUrl: event.target.value });
+                            updateStation(stationIndex, { imageUrl: event.target.value });
                             setStationImageError(stationKey, null);
                           }}
                           placeholder="https://..."
@@ -1403,7 +1512,7 @@ export function RealizationStationsEditor({
                         {station.imageUrl.trim() && (
                           <button
                             type="button"
-                            onClick={() => updateStation(index, { imageUrl: "" })}
+                            onClick={() => updateStation(stationIndex, { imageUrl: "" })}
                             className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
                           >
                             Wyczyść
@@ -1425,7 +1534,7 @@ export function RealizationStationsEditor({
                           <button
                             key={value}
                             type="button"
-                            onClick={() => updateStation(index, { points: value })}
+                            onClick={() => updateStation(stationIndex, { points: value })}
                             className={`rounded-md border px-2.5 py-1 text-xs transition ${
                               station.points === value
                                 ? "border-amber-300 bg-amber-400/20 text-amber-200"
@@ -1441,7 +1550,7 @@ export function RealizationStationsEditor({
                       type="number"
                       min={1}
                       value={station.points}
-                      onChange={(event) => updateStation(index, { points: Number(event.target.value) })}
+                      onChange={(event) => updateStation(stationIndex, { points: Number(event.target.value) })}
                       className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
                         showValidation && stationValidation.invalidPoints
                           ? "border-red-500/70 focus:border-red-400/80"
@@ -1469,7 +1578,7 @@ export function RealizationStationsEditor({
                         max={600}
                         step={15}
                         value={station.timeLimitSeconds}
-                        onChange={(event) => updateStation(index, { timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) })}
+                        onChange={(event) => updateStation(stationIndex, { timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) })}
                         className="w-full accent-amber-400"
                       />
                       <input
@@ -1478,7 +1587,7 @@ export function RealizationStationsEditor({
                         max={600}
                         step={15}
                         value={station.timeLimitSeconds}
-                        onChange={(event) => updateStation(index, { timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) })}
+                        onChange={(event) => updateStation(stationIndex, { timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) })}
                         placeholder="0 = brak limitu"
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${
                           showValidation && stationValidation.invalidTimeLimit
@@ -1503,7 +1612,7 @@ export function RealizationStationsEditor({
                         max={90}
                         value={typeof station.latitude === "number" ? station.latitude : ""}
                         onChange={(event) =>
-                          updateStation(index, {
+                          updateStation(stationIndex, {
                             latitude: event.target.value === "" ? undefined : Number(event.target.value),
                           })
                         }
@@ -1525,7 +1634,7 @@ export function RealizationStationsEditor({
                         max={180}
                         value={typeof station.longitude === "number" ? station.longitude : ""}
                         onChange={(event) =>
-                          updateStation(index, {
+                          updateStation(stationIndex, {
                             longitude: event.target.value === "" ? undefined : Number(event.target.value),
                           })
                         }
@@ -1545,7 +1654,7 @@ export function RealizationStationsEditor({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => requestCurrentLocation(index, stationKey)}
+                          onClick={() => requestCurrentLocation(stationIndex, stationKey)}
                           disabled={isLocating}
                           className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -1554,7 +1663,7 @@ export function RealizationStationsEditor({
                         {hasCoordinates && (
                           <button
                             type="button"
-                            onClick={() => updateStation(index, { latitude: undefined, longitude: undefined })}
+                            onClick={() => updateStation(stationIndex, { latitude: undefined, longitude: undefined })}
                             className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
                           >
                             Wyczyść GPS
@@ -1567,7 +1676,7 @@ export function RealizationStationsEditor({
                       longitude={station.longitude}
                       recenterToken={recenterToken}
                       onPick={({ latitude, longitude }) => {
-                        updateStation(index, { latitude, longitude });
+                        updateStation(stationIndex, { latitude, longitude });
                         setStationLocationError(stationKey, null);
                       }}
                     />

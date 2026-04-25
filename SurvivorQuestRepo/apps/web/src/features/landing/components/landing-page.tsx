@@ -9,6 +9,7 @@ import {
   TRUST_LOGO_SLOTS,
   TRUST_METRICS,
 } from "@/features/landing/model/content";
+import { LandingScrollLink } from "./landing-scroll-link";
 import { PhotoSlotCard } from "./photo-slot-card";
 import { SectionHeading } from "./section-heading";
 
@@ -20,32 +21,67 @@ type LandingPageProps = {
   contactPhone: string;
 };
 
+const LANDING_NAV_ITEMS = [
+  { href: "#funkcje", label: "Funkcje" },
+  { href: "#materialy", label: "Materiały" },
+  { href: "#przeplyw", label: "Przepływ" },
+  { href: "#scenariusze", label: "Scenariusze" },
+  { href: "#faq", label: "FAQ" },
+  { href: "#kontakt", label: "Kontakt" },
+] as const;
+
 export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail, contactPhone }: LandingPageProps) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:gap-10 sm:px-6 sm:py-8 lg:gap-12 lg:px-8 lg:py-10">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <Image
-            src="/icon.png"
-            alt="Logo SurvivorQuest"
-            width={40}
-            height={40}
-            className="size-10 rounded-xl border border-[#446251]/70"
-          />
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[#98ad9c]">SurvivorQuest</p>
-            <p className="text-xs text-[#bdcdbf]">Platforma eventowa: panel admina + aplikacja mobilna</p>
+    <>
+      <header className="sticky top-0 z-30 w-full border-b border-[#446251]/70 bg-[#12221b]/85 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/icon.png"
+                alt="Logo SurvivorQuest"
+                width={40}
+                height={40}
+                className="size-10 rounded-xl"
+              />
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-[#98ad9c]">SurvivorQuest</p>
+                <p className="text-xs text-[#bdcdbf]">Platforma eventowa: panel admina + aplikacja mobilna</p>
+              </div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Link
+                href="/download"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/80 px-4 py-2.5 text-sm font-medium text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977] sm:w-auto"
+              >
+                Pobierz aplikację
+              </Link>
+              <Link
+                href={adminPanelHref}
+                className="inline-flex w-full items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/80 px-4 py-2.5 text-sm font-medium text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977] sm:w-auto"
+              >
+                Panel admina
+              </Link>
+            </div>
           </div>
+          <nav aria-label="Nawigacja sekcji strony" className="overflow-x-auto border-t border-[#446251]/35 pt-1">
+              <div className="flex min-w-max items-center gap-1">
+                {LANDING_NAV_ITEMS.map((item) => (
+                  <LandingScrollLink
+                    key={item.href}
+                    href={item.href}
+                    className="group relative inline-flex items-center justify-center px-3 py-2 text-xs font-medium tracking-wide text-[#98ad9c] transition hover:text-[#f3f5ef] focus-visible:outline-none focus-visible:text-[#f3f5ef] after:absolute after:bottom-0 after:left-1/2 after:h-px after:w-0 after:-translate-x-1/2 after:bg-gradient-to-r after:from-transparent after:via-[#f0c977] after:to-transparent after:transition-all after:duration-300 hover:after:w-[75%] focus-visible:after:w-[75%]"
+                  >
+                    {item.label}
+                  </LandingScrollLink>
+                ))}
+              </div>
+          </nav>
         </div>
-        <Link
-          href={adminPanelHref}
-          className="inline-flex w-full items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/80 px-4 py-2.5 text-sm font-medium text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977] sm:w-auto"
-        >
-          Panel admina
-        </Link>
       </header>
 
-      <section className="relative overflow-hidden rounded-3xl border border-[#446251]/75 bg-[#162921]/90 p-6 shadow-[0_0_0_1px_rgba(68,98,81,0.2),0_40px_90px_-50px_rgba(0,0,0,0.95)] sm:p-8 lg:p-10">
+      <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 pb-6 pt-6 sm:gap-10 sm:px-6 sm:pb-8 sm:pt-8 lg:gap-12 lg:px-8 lg:pb-10 lg:pt-10">
+        <section className="sq-section relative overflow-hidden rounded-3xl border border-[#446251]/75 bg-[#162921]/90 p-6 shadow-[0_0_0_1px_rgba(68,98,81,0.2),0_40px_90px_-50px_rgba(0,0,0,0.95)] sm:p-8 lg:p-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(240,201,119,0.28),transparent_46%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.2),transparent_48%)]" />
 
@@ -64,13 +100,13 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href={demoHref}
-                className="inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-5 py-3 text-sm font-semibold text-[#13231b] transition hover:bg-[#ffd98d]"
+                className="inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-5 py-3 text-sm font-semibold text-[#13231b] transition hover:-translate-y-0.5 hover:bg-[#ffd98d]"
               >
                 Zobacz demo aplikacji
               </Link>
               <Link
                 href={quoteHref}
-                className="inline-flex items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/85 px-5 py-3 text-sm font-semibold text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977]"
+                className="inline-flex items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/85 px-5 py-3 text-sm font-semibold text-[#f3f5ef] transition hover:-translate-y-0.5 hover:border-[#f0c977]/60 hover:text-[#f0c977]"
               >
                 Kontakt i wdrożenie
               </Link>
@@ -78,7 +114,10 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
 
             <div className="mt-7 grid gap-3 sm:grid-cols-3">
               {TRUST_METRICS.map((metric) => (
-                <article key={metric.label} className="rounded-2xl border border-[#446251]/65 bg-[#12221b]/85 p-4">
+                <article
+                  key={metric.label}
+                  className="sq-card-lift rounded-2xl border border-[#446251]/65 bg-[#12221b]/85 p-4"
+                >
                   <p className="text-xl font-semibold text-[#f3f5ef]">{metric.value}</p>
                   <p className="mt-1 text-xs text-[#98ad9c]">{metric.label}</p>
                 </article>
@@ -95,7 +134,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-5 sm:p-6">
+      <section className="sq-section rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-5 sm:p-6">
         <p className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-[#98ad9c]">
           Miejsca na social proof
         </p>
@@ -103,7 +142,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
           {TRUST_LOGO_SLOTS.map((logoSlot, index) => (
             <div
               key={`${logoSlot}-${index}`}
-              className="rounded-xl border border-dashed border-[#446251]/75 bg-[#162921]/90 px-3 py-4 text-center text-xs text-[#bdcdbf]"
+              className="sq-card-lift rounded-xl border border-dashed border-[#446251]/75 bg-[#162921]/90 px-3 py-4 text-center text-xs text-[#bdcdbf]"
             >
               {logoSlot}
             </div>
@@ -111,7 +150,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
+      <section id="funkcje" className="sq-section scroll-mt-28 rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
         <SectionHeading
           eyebrow="Funkcje platformy"
           title="Najważniejsze moduły SurvivorQuest"
@@ -119,7 +158,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         />
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {BENEFITS.map((benefit) => (
-            <article key={benefit.title} className="rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
+            <article key={benefit.title} className="sq-card-lift rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
               <h3 className="text-base font-semibold text-[#f3f5ef]">{benefit.title}</h3>
               <p className="mt-3 text-sm text-[#bdcdbf]">{benefit.description}</p>
               <ul className="mt-4 space-y-2">
@@ -135,7 +174,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
+      <section id="materialy" className="sq-section scroll-mt-28 rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
         <SectionHeading
           eyebrow="Materiały i widoki"
           title="Miejsce na zdjęcia z realizacji oraz zrzuty ekranu aplikacji."
@@ -148,7 +187,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
+      <section id="przeplyw" className="sq-section scroll-mt-28 rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
         <SectionHeading
           eyebrow="Przepływ pracy w aplikacji"
           title="Od konfiguracji scenariusza do podsumowania realizacji."
@@ -156,7 +195,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         />
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {PROCESS_STEPS.map((step) => (
-            <article key={step.title} className="rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
+            <article key={step.title} className="sq-card-lift rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
               <h3 className="text-base font-semibold text-[#f3f5ef]">{step.title}</h3>
               <p className="mt-3 text-sm text-[#bdcdbf]">{step.description}</p>
             </article>
@@ -164,7 +203,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
+      <section id="scenariusze" className="sq-section scroll-mt-28 rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
         <SectionHeading
           eyebrow="Scenariusze użycia"
           title="Przykłady jak platforma działa podczas eventu."
@@ -172,7 +211,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         />
         <div className="mt-6 grid gap-5">
           {CASE_STUDIES.map((caseStudy) => (
-            <article key={caseStudy.title} className="rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
+            <article key={caseStudy.title} className="sq-card-lift rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-5">
               <h3 className="text-lg font-semibold text-[#f3f5ef]">{caseStudy.title}</h3>
               <p className="mt-3 text-sm text-[#bdcdbf]">
                 <span className="font-medium text-[#f3f5ef]">Wyzwanie:</span> {caseStudy.challenge}
@@ -184,7 +223,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
                 {caseStudy.photos.map((photo) => (
                   <div
                     key={photo}
-                    className="rounded-xl border border-dashed border-[#446251]/75 bg-[#12221b]/90 p-4 text-xs text-[#98ad9c]"
+                    className="sq-card-lift rounded-xl border border-dashed border-[#446251]/75 bg-[#12221b]/90 p-4 text-xs text-[#98ad9c]"
                   >
                     {photo}
                   </div>
@@ -195,7 +234,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
+      <section id="faq" className="sq-section scroll-mt-28 rounded-3xl border border-[#446251]/65 bg-[#12221b]/80 p-6 sm:p-8">
         <SectionHeading
           eyebrow="FAQ"
           title="Najczęstsze pytania o funkcje platformy."
@@ -203,7 +242,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         />
         <div className="mt-6 space-y-3">
           {FAQ_ITEMS.map((item) => (
-            <details key={item.question} className="rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-4">
+            <details key={item.question} className="sq-card-lift rounded-2xl border border-[#446251]/70 bg-[#162921]/85 p-4">
               <summary className="cursor-pointer text-sm font-semibold text-[#f3f5ef]">{item.question}</summary>
               <p className="mt-3 text-sm text-[#bdcdbf]">{item.answer}</p>
             </details>
@@ -211,7 +250,7 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-3xl border border-[#446251]/80 bg-[#162921]/90 p-6 sm:p-8 lg:p-10">
+      <section id="kontakt" className="sq-section scroll-mt-28 relative overflow-hidden rounded-3xl border border-[#446251]/80 bg-[#162921]/90 p-6 sm:p-8 lg:p-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(240,201,119,0.24),transparent_50%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.18),transparent_45%)]" />
         <div className="relative grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-center">
@@ -227,19 +266,19 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <Link
                 href={demoHref}
-                className="inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-5 py-3 text-sm font-semibold text-[#13231b] transition hover:bg-[#ffd98d]"
+                className="inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-5 py-3 text-sm font-semibold text-[#13231b] transition hover:-translate-y-0.5 hover:bg-[#ffd98d]"
               >
                 Zobacz demo aplikacji
               </Link>
               <Link
                 href={quoteHref}
-                className="inline-flex items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/85 px-5 py-3 text-sm font-semibold text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977]"
+                className="inline-flex items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/85 px-5 py-3 text-sm font-semibold text-[#f3f5ef] transition hover:-translate-y-0.5 hover:border-[#f0c977]/60 hover:text-[#f0c977]"
               >
                 Kontakt i wdrożenie
               </Link>
             </div>
           </div>
-          <div className="rounded-2xl border border-[#446251]/70 bg-[#12221b]/90 p-5 text-sm text-[#bdcdbf]">
+          <div className="sq-card-lift rounded-2xl border border-[#446251]/70 bg-[#12221b]/90 p-5 text-sm text-[#bdcdbf]">
             <div className="flex items-center gap-3">
               <Image
                 src="/icon.png"
@@ -269,7 +308,8 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
             <p className="mt-4 text-xs text-[#98ad9c]">Odpowiadamy zwykle w ten sam dzień roboczy.</p>
           </div>
         </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }

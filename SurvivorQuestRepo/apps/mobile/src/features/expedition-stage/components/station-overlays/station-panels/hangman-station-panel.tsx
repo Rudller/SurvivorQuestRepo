@@ -1,172 +1,147 @@
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { HANGMAN_ALPHABET, HANGMAN_MAX_MISSES } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { useStationPanelLayout } from "./shared-ui";
 
 type HangmanStationPanelProps = {
   stationId: string;
   hangmanMisses: string[];
   hangmanAttemptsLeft: number;
-  hangmanMaskedSecret: string;
-  hangmanInput: string;
   hangmanResult: string | null;
   guessedHangmanSet: Set<string>;
-  isInputEditable: boolean;
   isGuessDisabled: boolean;
   isSubmittingHangmanGuess: boolean;
-  onChangeInput: (value: string) => void;
-  onSubmitGuess: () => void;
   onSubmitLetter: (letter: string) => void;
 };
 
 type HangmanStationText = {
-  misses: string;
-  remaining: string;
+  attempts: string;
   wrongLetters: string;
-  placeholder: string;
-  guess: string;
 };
 
 const HANGMAN_STATION_TEXT_ENGLISH: HangmanStationText = {
-  misses: "Misses",
-  remaining: "Remaining",
+  attempts: "Attempts",
   wrongLetters: "Wrong letters",
-  placeholder: "Enter a letter",
-  guess: "Guess",
 };
 
 const HANGMAN_STATION_TEXT: Record<UiLanguage, HangmanStationText> = {
   polish: {
-    misses: "Pudła",
-    remaining: "Pozostało",
+    attempts: "Próby",
     wrongLetters: "Błędne litery",
-    placeholder: "Wpisz literę",
-    guess: "Zgadnij",
   },
   english: HANGMAN_STATION_TEXT_ENGLISH,
   ukrainian: {
-    misses: "Промахи",
-    remaining: "Залишилось",
+    attempts: "Спроби",
     wrongLetters: "Неправильні літери",
-    placeholder: "Введіть літеру",
-    guess: "Вгадати",
   },
   russian: {
-    misses: "Промахи",
-    remaining: "Осталось",
+    attempts: "Попытки",
     wrongLetters: "Неверные буквы",
-    placeholder: "Введите букву",
-    guess: "Угадать",
   },
 };
+
+const HANGMAN_KEYBOARD_ROWS = [
+  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+  ["Z", "X", "C", "V", "B", "N", "M"],
+  ["Ą", "Ć", "Ę", "Ł", "Ń", "Ó", "Ś", "Ź", "Ż"],
+] as const;
 
 export function HangmanStationPanel({
   stationId,
   hangmanMisses,
   hangmanAttemptsLeft,
-  hangmanMaskedSecret,
-  hangmanInput,
   hangmanResult,
   guessedHangmanSet,
-  isInputEditable,
   isGuessDisabled,
   isSubmittingHangmanGuess,
-  onChangeInput,
-  onSubmitGuess,
   onSubmitLetter,
 }: HangmanStationPanelProps) {
   const uiLanguage = useUiLanguage();
   const text = HANGMAN_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const keyboardGap = layout.isTablet ? 10 : 6;
+  const keySize = layout.isTablet ? 54 : 28;
+  const keyboardVerticalMargin = layout.isTablet ? 12 : 8;
+  const polishLettersRowGap = layout.isTablet ? 14 : 10;
+  const polishLettersRowIndex = HANGMAN_KEYBOARD_ROWS.length - 1;
+  const safeMaxAttempts = Math.max(1, HANGMAN_MAX_MISSES);
+  const safeAttemptsLeft = Math.max(0, Math.min(safeMaxAttempts, hangmanAttemptsLeft));
+  const attemptsDotSize = layout.isTablet ? 16 : 11;
+  const attemptsDotGap = layout.isTablet ? 12 : 8;
 
   return (
     <View className="mt-3">
-      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.misses}: {hangmanMisses.length}/{HANGMAN_MAX_MISSES}
+      <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+        {text.attempts}
       </Text>
-      <View className="mt-1">
-        <AttemptsIndicator
-          label={text.remaining}
-          attemptsLeft={hangmanAttemptsLeft}
-          maxAttempts={HANGMAN_MAX_MISSES}
-        />
-      </View>
-      <Text
-        className="mt-2 font-bold"
-        style={{ color: EXPEDITION_THEME.textPrimary, letterSpacing: 1.8, fontSize: layout.isTablet ? 28 : 18 }}
-      >
-        {hangmanMaskedSecret}
-      </Text>
-        {hangmanMisses.length > 0 ? (
-          <Text className="mt-1" style={{ color: EXPEDITION_THEME.danger, fontSize: layout.infoFontSize }}>
-            {text.wrongLetters}: {hangmanMisses.join(", ")}
-          </Text>
-        ) : null}
-
-      <View className="mt-3 flex-row gap-2">
-        <TextInput
-          className="flex-1 rounded-xl border px-4"
-          style={{
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panelStrong,
-            color: EXPEDITION_THEME.textPrimary,
-            fontSize: layout.inputFontSize,
-            paddingVertical: layout.isTablet ? 12 : 8,
-          }}
-          placeholder={text.placeholder}
-          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          value={hangmanInput}
-          onChangeText={onChangeInput}
-          editable={isInputEditable}
-          onSubmitEditing={onSubmitGuess}
-        />
-        <Pressable
-          className="items-center justify-center rounded-xl px-5 active:opacity-90"
-          style={{
-            backgroundColor: isGuessDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
-            minHeight: layout.actionMinHeight,
-          }}
-            onPress={onSubmitGuess}
-            disabled={isGuessDisabled}
-          >
-            <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
-              {isSubmittingHangmanGuess ? "..." : text.guess}
-            </Text>
-          </Pressable>
-        </View>
-
-      <View className="mt-3 flex-row flex-wrap gap-1.5">
-        {HANGMAN_ALPHABET.map((letter) => {
-          const used = guessedHangmanSet.has(letter) || hangmanMisses.includes(letter);
+      <View className="mt-1 flex-row justify-center" style={{ columnGap: attemptsDotGap }}>
+        {Array.from({ length: safeMaxAttempts }).map((_, index) => {
+          const isActive = index < safeAttemptsLeft;
+          const activeColor = EXPEDITION_THEME.accentStrong;
           return (
-            <Pressable
-              key={`${stationId}-hangman-letter-${letter}`}
-              className="items-center justify-center rounded-md border active:opacity-90"
+            <View
+              key={`${stationId}-hangman-attempt-${index}`}
+              className="rounded-full border"
               style={{
-                width: layout.isTablet ? 38 : 32,
-                height: layout.isTablet ? 38 : 32,
-                borderColor: used ? "rgba(161, 161, 170, 0.6)" : EXPEDITION_THEME.border,
-                backgroundColor: used ? "rgba(113, 113, 122, 0.22)" : EXPEDITION_THEME.panelStrong,
+                width: attemptsDotSize,
+                height: attemptsDotSize,
+                borderColor: isActive ? activeColor : EXPEDITION_THEME.border,
+                backgroundColor: isActive ? activeColor : "transparent",
               }}
-              onPress={() => {
-                onSubmitLetter(letter);
-              }}
-              disabled={used || isGuessDisabled}
-              hitSlop={4}
-            >
-              <Text
-                className="font-semibold"
-                style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 14 : 11 }}
-              >
-                {letter}
-              </Text>
-            </Pressable>
+            />
           );
         })}
+      </View>
+      {hangmanMisses.length > 0 ? (
+        <Text className="mt-2" style={{ color: EXPEDITION_THEME.danger, fontSize: layout.infoFontSize }}>
+          {text.wrongLetters}: {hangmanMisses.join(", ")}
+        </Text>
+      ) : null}
+
+      <View style={{ rowGap: keyboardGap, marginVertical: keyboardVerticalMargin }}>
+        {HANGMAN_KEYBOARD_ROWS.map((row, rowIndex) => (
+          <View
+            key={`${stationId}-hangman-row-${rowIndex}`}
+            className="flex-row justify-center"
+            style={{
+              columnGap: keyboardGap,
+              marginTop: rowIndex === polishLettersRowIndex ? polishLettersRowGap : 0,
+            }}
+          >
+            {row.map((letter) => {
+              const used = guessedHangmanSet.has(letter) || hangmanMisses.includes(letter);
+              const isValidLetter = HANGMAN_ALPHABET.includes(letter);
+              return (
+                <Pressable
+                  key={`${stationId}-hangman-letter-${letter}`}
+                  className="items-center justify-center rounded-2xl border active:opacity-85"
+                  style={{
+                    width: keySize,
+                    height: keySize,
+                    borderColor: used ? "rgba(161, 161, 170, 0.6)" : EXPEDITION_THEME.border,
+                    backgroundColor: used ? "rgba(113, 113, 122, 0.22)" : EXPEDITION_THEME.panelStrong,
+                    opacity: isGuessDisabled || used || !isValidLetter ? 0.45 : 1,
+                  }}
+                  onPress={() => {
+                    onSubmitLetter(letter);
+                  }}
+                  disabled={isGuessDisabled || used || !isValidLetter || isSubmittingHangmanGuess}
+                  hitSlop={layout.isTablet ? 8 : 4}
+                >
+                  <Text
+                    className="font-semibold"
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 21 : 13 }}
+                  >
+                    {letter}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
       {hangmanResult ? (
         <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>

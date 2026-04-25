@@ -726,7 +726,6 @@ export function StationPreviewOverlay({
   const [wordleResult, setWordleResult] = useState<string | null>(null);
   const [wordleRevealedCellCounts, setWordleRevealedCellCounts] = useState<number[]>([]);
   const [isWordleRevealAnimating, setIsWordleRevealAnimating] = useState(false);
-  const [hangmanInput, setHangmanInput] = useState("");
   const [hangmanGuessedLetters, setHangmanGuessedLetters] = useState<string[]>([]);
   const [hangmanMisses, setHangmanMisses] = useState<string[]>([]);
   const [hangmanResult, setHangmanResult] = useState<string | null>(null);
@@ -1013,7 +1012,6 @@ export function StationPreviewOverlay({
     setWordleResult(null);
     setWordleRevealedCellCounts([]);
     setIsWordleRevealAnimating(false);
-    setHangmanInput("");
     setHangmanGuessedLetters([]);
     setHangmanMisses([]);
     setHangmanResult(null);
@@ -1677,15 +1675,30 @@ export function StationPreviewOverlay({
     return map;
   })();
   const wordleKeyboardKeyGap = 2;
-  const wordleKeyboardKeyWidth = (() => {
-    const availableWidth =
-      wordleKeyboardContainerWidth > 0 ? wordleKeyboardContainerWidth : Math.max(260, viewportWidth - 72);
-    return Math.max(24, Math.floor((availableWidth - 9 * wordleKeyboardKeyGap) / 10));
+  const wordleLayoutWidth =
+    wordleKeyboardContainerWidth > 0 ? wordleKeyboardContainerWidth : Math.max(260, viewportWidth - 72);
+  const wordleInputCellGap = wordleDisplayLength >= 12 ? 2 : wordleDisplayLength >= 8 ? 4 : 6;
+  const wordleInputActionGap = wordleDisplayLength >= 12 ? 4 : 6;
+  const wordleBoardCellSize = (() => {
+    const fitForMedia = Math.floor(
+      (wordleLayoutWidth - wordleInputCellGap * (wordleDisplayLength - 1)) / wordleDisplayLength,
+    );
+    const fitForInput = Math.floor(
+      (wordleLayoutWidth - wordleInputCellGap * wordleDisplayLength - wordleInputActionGap) /
+        (wordleDisplayLength + 1),
+    );
+    const minCellSize = isTabletOverlay ? 10 : 8;
+    const maxCellSize = isTabletOverlay ? 52 : 38;
+    const computed = Math.min(fitForMedia, fitForInput);
+    return Math.max(minCellSize, Math.min(maxCellSize, computed));
   })();
-  const wordleBoardCellSize = wordleKeyboardKeyWidth;
+  const wordleKeyboardKeyWidth = Math.max(
+    24,
+    Math.floor((wordleLayoutWidth - 9 * wordleKeyboardKeyGap) / 10),
+  );
   const guessedHangmanSet = new Set(hangmanGuessedLetters);
   const hangmanSecret = isHangmanStation ? resolvePuzzleSecret(station, "hangman") : "";
-  const hangmanMaskedSecret = isHangmanStation
+  const hangmanMaskedCharacters = isHangmanStation
     ? Array.from(hangmanSecret)
         .map((character) => {
           if (!isGuessableHangmanCharacter(character)) {
@@ -1694,9 +1707,7 @@ export function StationPreviewOverlay({
 
           return guessedHangmanSet.has(character) ? character : "_";
         })
-        .join(" ")
-    : "";
-  const normalizedHangmanInput = normalizeHangmanSecret(hangmanInput).replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "").slice(0, 1);
+    : [];
   const hangmanHasWon = isHangmanStation
     ? Array.from(hangmanSecret).every((character) => !isGuessableHangmanCharacter(character) || guessedHangmanSet.has(character))
     : false;
@@ -2065,12 +2076,12 @@ export function StationPreviewOverlay({
     onQuizPassed?.(station.stationId);
     showQuizOutcomePopup("success", text.quizSuccessPopup);
   };
-  const submitHangmanGuess = async (forcedLetter?: string) => {
+  const submitHangmanGuess = async (letterCandidate: string) => {
     if (!isHangmanStation) {
       return;
     }
 
-    const candidate = (forcedLetter ?? normalizedHangmanInput).trim();
+    const candidate = letterCandidate.trim();
     const letter = normalizeHangmanSecret(candidate).replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "").slice(0, 1);
 
     if (!letter) {
@@ -2089,7 +2100,6 @@ export function StationPreviewOverlay({
     }
 
     if (guessedHangmanSet.has(letter) || hangmanMisses.includes(letter)) {
-      setHangmanInput("");
       setHangmanResult(text.hangmanLetterAlreadyChecked);
       return;
     }
@@ -2097,7 +2107,7 @@ export function StationPreviewOverlay({
     const isHit = hangmanSecret.includes(letter);
     const nextGuessedLetters = isHit ? [...hangmanGuessedLetters, letter] : hangmanGuessedLetters;
     const nextMisses = isHit ? hangmanMisses : [...hangmanMisses, letter];
-    setHangmanInput("");
+    setHangmanResult(null);
     setQuizSubmitError(null);
 
     if (isHit) {
@@ -2742,6 +2752,8 @@ export function StationPreviewOverlay({
         attempts={wordleAttempts}
         revealedCellCounts={wordleRevealedCellCounts}
         cellSize={wordleBoardCellSize}
+        letterGap={wordleInputCellGap}
+        rowGap={wordleDisplayLength >= 12 ? 4 : 6}
       />
     ),
     anagram: () => (
@@ -2898,6 +2910,8 @@ export function StationPreviewOverlay({
         displayLength={wordleDisplayLength}
         inputCharacters={wordleInputCharacters}
         boardCellSize={wordleBoardCellSize}
+        inputCellGap={wordleInputCellGap}
+        inputActionGap={wordleInputActionGap}
         keyboardKeySize={wordleKeyboardKeyWidth}
         keyboardKeyGap={wordleKeyboardKeyGap}
         keyStateByLetter={wordleKeyStateByLetter}
@@ -2935,11 +2949,8 @@ export function StationPreviewOverlay({
         stationId={station.stationId}
         hangmanMisses={hangmanMisses}
         hangmanAttemptsLeft={hangmanAttemptsLeft}
-        hangmanMaskedSecret={hangmanMaskedSecret}
-        hangmanInput={hangmanInput}
         hangmanResult={hangmanResult}
         guessedHangmanSet={guessedHangmanSet}
-        isInputEditable={station.status !== "done" && station.status !== "failed" && !isSubmittingHangmanGuess}
         isGuessDisabled={
           station.status === "done" ||
           station.status === "failed" ||
@@ -2950,14 +2961,6 @@ export function StationPreviewOverlay({
           hangmanHasWon
         }
         isSubmittingHangmanGuess={isSubmittingHangmanGuess}
-        onChangeInput={(value) => {
-          setHangmanInput(value);
-          setHangmanResult(null);
-          setQuizSubmitError(null);
-        }}
-        onSubmitGuess={() => {
-          void submitHangmanGuess();
-        }}
         onSubmitLetter={(letter) => {
           void submitHangmanGuess(letter);
         }}
@@ -3204,6 +3207,39 @@ export function StationPreviewOverlay({
                       maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
                       align="center"
                     />
+                  </View>
+                ) : isHangmanStation ? (
+                  <View className="flex-1 px-4 pb-3 pt-4">
+                    <View className="flex-1 items-center justify-center">
+                      <View
+                        className="flex-row flex-wrap justify-center"
+                        style={{
+                          maxWidth: "100%",
+                          columnGap: isTabletOverlay ? 10 : 6,
+                          rowGap: isTabletOverlay ? 12 : 7,
+                        }}
+                      >
+                        {hangmanMaskedCharacters.map((character, index) => {
+                          if (character === " ") {
+                            return <View key={`${station.stationId}-hangman-gap-${index}`} style={{ width: isTabletOverlay ? 28 : 18 }} />;
+                          }
+
+                          return (
+                            <Text
+                              key={`${station.stationId}-hangman-char-${index}`}
+                              className="font-black"
+                              style={{
+                                color: EXPEDITION_THEME.accentStrong,
+                                fontSize: isTabletOverlay ? 48 : 33,
+                                lineHeight: isTabletOverlay ? 52 : 36,
+                              }}
+                            >
+                              {character}
+                            </Text>
+                          );
+                        })}
+                      </View>
+                    </View>
                   </View>
                 ) : renderedStationMedia ? (
                   renderedStationMedia

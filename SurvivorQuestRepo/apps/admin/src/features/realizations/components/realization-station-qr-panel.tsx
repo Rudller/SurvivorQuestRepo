@@ -97,6 +97,15 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
         .filter(([, completionCode]) => Boolean(completionCode)),
     );
   }, [realization.scenarioStations]);
+  const downloadableQrCount = useMemo(() => {
+    if (!data) {
+      return 0;
+    }
+    return data.entries.reduce(
+      (count, entry) => count + (qrImagesByStationId[entry.stationId] ? 1 : 0),
+      0,
+    );
+  }, [data, qrImagesByStationId]);
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -109,6 +118,30 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     } catch {
       setCopyError("Nie udało się skopiować linku QR.");
     }
+  }
+
+  function handleDownloadAllQrs() {
+    if (!data) {
+      return;
+    }
+    setCopyError(null);
+
+    const downloadableEntries = data.entries
+      .map((entry) => ({ entry, qrImage: qrImagesByStationId[entry.stationId] }))
+      .filter((item): item is { entry: (typeof data.entries)[number]; qrImage: string } => Boolean(item.qrImage));
+    if (!downloadableEntries.length) {
+      setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
+      return;
+    }
+
+    downloadableEntries.forEach(({ entry, qrImage }, index) => {
+      window.setTimeout(() => {
+        const anchor = document.createElement("a");
+        anchor.href = qrImage;
+        anchor.download = `qr-${realization.id}-${entry.stationId}.png`;
+        anchor.click();
+      }, index * 100);
+    });
   }
 
   return (
@@ -140,6 +173,14 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                 className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
               >
                 {isFetching ? "Odświeżanie danych..." : "Odśwież dane"}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadAllQrs}
+                disabled={downloadableQrCount === 0}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Pobierz wszystkie PNG {downloadableQrCount > 0 ? `(${downloadableQrCount})` : ""}
               </button>
               <button
                 type="button"

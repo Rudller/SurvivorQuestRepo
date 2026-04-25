@@ -95,6 +95,7 @@ function WordleRevealCell({
 }: WordleRevealCellProps) {
   const flipScaleAnimation = useRef(new Animated.Value(1)).current;
   const wasRevealedRef = useRef(isRevealed);
+  const revealLetterFontSize = Math.max(9, Math.min(24, Math.floor(cellSize * 0.58)));
   const [displayedState, setDisplayedState] = useState<WordleCellState | undefined>(
     isRevealed ? state : undefined,
   );
@@ -154,7 +155,7 @@ function WordleRevealCell({
         transform: [{ scaleY: flipScaleAnimation }],
       }}
     >
-      <Text className="text-base font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+      <Text className="font-bold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: revealLetterFontSize }}>
         {letter || " "}
       </Text>
     </Animated.View>
@@ -224,6 +225,8 @@ type WordleInteractionPanelProps = {
   displayLength: number;
   inputCharacters: string[];
   boardCellSize: number;
+  inputCellGap: number;
+  inputActionGap: number;
   keyboardKeySize: number;
   keyboardKeyGap: number;
   keyStateByLetter: Map<string, WordleCellState>;
@@ -243,6 +246,8 @@ export function WordleInteractionPanel({
   displayLength,
   inputCharacters,
   boardCellSize,
+  inputCellGap,
+  inputActionGap,
   keyboardKeySize,
   keyboardKeyGap,
   keyStateByLetter,
@@ -259,6 +264,8 @@ export function WordleInteractionPanel({
   const uiLanguage = useUiLanguage();
   const text = WORDLE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const inputLetterFontSize = Math.max(9, Math.min(layout.isTablet ? 20 : 16, Math.floor(boardCellSize * 0.58)));
+  const backspaceFontSize = Math.max(9, Math.min(layout.isTablet ? 18 : 14, Math.floor(boardCellSize * 0.52)));
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
   const previousInputRef = useRef<string[]>(inputCharacters);
   const inputShakeAnimation = useRef(new Animated.Value(0)).current;
@@ -320,38 +327,38 @@ export function WordleInteractionPanel({
 
   return (
     <View className="mt-3">
-      <Animated.View className="mt-3 w-full justify-center" style={inputRowShakeStyle}>
-        <View className="flex-row justify-center" style={{ columnGap: 6 }}>
-          {Array.from({ length: displayLength }).map((_, index) => {
-            const letter = inputCharacters[index] ?? "";
-            return (
-              <Animated.View
-                key={`${stationId}-wordle-input-cell-${index}`}
-                style={{
-                  transform: [{ scale: inputPopAnimationsRef.current[index] }],
-                }}
-              >
-                <View
-                  className="items-center justify-center rounded-lg border"
+      <Animated.View className="mt-3 w-full items-center justify-center" style={inputRowShakeStyle}>
+        <View className="flex-row items-center justify-center" style={{ columnGap: inputActionGap }}>
+          <View className="flex-row justify-center" style={{ columnGap: inputCellGap }}>
+            {Array.from({ length: displayLength }).map((_, index) => {
+              const letter = inputCharacters[index] ?? "";
+              return (
+                <Animated.View
+                  key={`${stationId}-wordle-input-cell-${index}`}
                   style={{
-                    width: boardCellSize,
-                    height: boardCellSize,
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelStrong,
+                    transform: [{ scale: inputPopAnimationsRef.current[index] }],
                   }}
                 >
-                  <Text
-                    className="font-bold"
-                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 14 }}
+                  <View
+                    className="items-center justify-center rounded-lg border"
+                    style={{
+                      width: boardCellSize,
+                      height: boardCellSize,
+                      borderColor: EXPEDITION_THEME.border,
+                      backgroundColor: EXPEDITION_THEME.panelStrong,
+                    }}
                   >
-                    {letter || " "}
-                  </Text>
-                </View>
-              </Animated.View>
-            );
-          })}
-        </View>
-        <View className="absolute right-0 top-0 bottom-0 justify-center">
+                    <Text
+                      className="font-bold"
+                      style={{ color: EXPEDITION_THEME.textPrimary, fontSize: inputLetterFontSize }}
+                    >
+                      {letter || " "}
+                    </Text>
+                  </View>
+                </Animated.View>
+              );
+            })}
+          </View>
           <Pressable
             className="items-center justify-center rounded-lg border active:opacity-90"
             style={{
@@ -365,7 +372,7 @@ export function WordleInteractionPanel({
             onPress={onBackspace}
             hitSlop={4}
           >
-            <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.isTablet ? 18 : 14 }}>
+            <Text className="font-semibold text-zinc-950" style={{ fontSize: backspaceFontSize }}>
               ⌫
             </Text>
           </Pressable>
