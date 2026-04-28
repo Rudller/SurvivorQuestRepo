@@ -57,6 +57,7 @@ export type RealizationEntity = {
   durationMinutes: number;
   locationRequired: boolean;
   showLeaderboard: boolean;
+  teamStationNumberingEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -101,6 +102,7 @@ export type ValidatedRealizationPayload = {
   positionsCount: number;
   durationMinutes: number;
   showLeaderboard: boolean;
+  teamStationNumberingEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

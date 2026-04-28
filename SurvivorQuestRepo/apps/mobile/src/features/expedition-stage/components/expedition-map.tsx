@@ -3,7 +3,7 @@ import { Platform, Text, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
-import type { MapCoordinate, PlayerLocation, StationPin } from "../model/types";
+import { DEFAULT_STATION_PIN_CUSTOMIZATION, type MapCoordinate, type PlayerLocation, type StationPin } from "../model/types";
 
 const DEFAULT_MAP_TILE_URL =
   process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim() || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -16,7 +16,9 @@ type ExpeditionMapProps = {
   pins: StationPin[];
   selectedStationId: string | null;
   focusCoordinate: MapCoordinate | null;
-  onSelectStation: (stationId: string) => void;
+  playerIcon: string;
+  playerColor?: string | null;
+  onSelectStation: (stationId: string | null) => void;
 };
 
 const EXPEDITION_MAP_TEXT: Record<UiLanguage, { webNotice: string }> = {
@@ -93,53 +95,137 @@ function buildOsmWebViewHtml(payload: unknown) {
         padding: 0;
         background: #0f1914;
       }
+      .station-marker-wrapper {
+        position: relative;
+        width: 34px;
+        height: 46px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+      }
+      .station-marker-spike {
+        position: absolute;
+        left: 50%;
+        top: 34px;
+        margin-left: -6px;
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 9px solid var(--pin-color, #f59e0b);
+        filter: drop-shadow(0 2px 3px rgba(3, 7, 18, 0.35));
+        z-index: 0;
+        pointer-events: none;
+      }
       .station-marker {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 30px;
-        min-height: 30px;
-        border-radius: 15px;
-        color: #0b1220;
-        font-size: 15px;
-        line-height: 1;
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
         box-sizing: border-box;
+        box-shadow: 0 8px 18px rgba(3, 7, 18, 0.4);
+        z-index: 1;
+      }
+      .station-marker-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        color: #f8fafc;
+      }
+      .station-marker-icon svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        fill: none;
+        line-height: 1;
+      }
+      .station-marker-number {
+        position: absolute;
+        right: -7px;
+        top: -7px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 999px;
+        border: 1px solid rgba(15, 23, 42, 0.85);
+        background: #f8fafc;
+        color: #0f172a;
+        font-size: 9px;
+        font-weight: 700;
+        line-height: 14px;
+        text-align: center;
+        box-sizing: border-box;
+        pointer-events: none;
       }
       .station-marker--selected {
         border: 2.5px solid #f0c977;
+        transform: scale(1.08);
+        box-shadow: 0 0 0 3px rgba(240, 201, 119, 0.18), 0 8px 18px rgba(3, 7, 18, 0.55);
       }
       .station-marker--default {
-        border: 1.5px solid #0f172a;
+        border: 1.75px solid rgba(15, 23, 42, 0.8);
       }
       .player-marker {
         position: relative;
-        width: 28px;
-        height: 28px;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .player-marker-shadow {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 22px;
+        height: 22px;
+        margin-left: -11px;
+        margin-top: -11px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.16);
       }
       .player-marker-dot {
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 14px;
-        height: 14px;
-        margin-left: -7px;
-        margin-top: -7px;
-        border-radius: 7px;
-        border: 2px solid #ffffff;
-        background-color: #2563eb;
-        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+        width: 22px;
+        height: 22px;
+        margin-left: -11px;
+        margin-top: -11px;
+        border-radius: 999px;
+        border: 2px solid #f8fafc;
+        background: var(--player-accent, #0ea5e9);
+        box-shadow: 0 0 0 1px rgba(8, 47, 73, 0.28), 0 1px 2px rgba(2, 6, 23, 0.35);
       }
-      .player-marker-heading {
+      .player-marker-dot::after {
+        content: "";
         position: absolute;
         left: 50%;
-        top: 0;
-        margin-left: -5px;
-        width: 0;
-        height: 0;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-bottom: 10px solid #2563eb;
-        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+        top: 50%;
+        width: 4px;
+        height: 4px;
+        margin-left: -2px;
+        margin-top: -2px;
+        border-radius: 999px;
+        background: #e0f2fe;
+      }
+      .player-marker-badge {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -52%);
+        font-size: 11px;
+        line-height: 1;
+        color: #f8fafc;
+        text-shadow: 0 1px 1px rgba(2, 6, 23, 0.4);
+        pointer-events: none;
       }
     </style>
   </head>
@@ -176,6 +262,24 @@ function buildOsmWebViewHtml(payload: unknown) {
         }
         return L.latLng(value.latitude, value.longitude);
       }
+      function normalizePlayerColor(value) {
+        if (typeof value !== "string") {
+          return "#0ea5e9";
+        }
+        const trimmed = value.trim();
+        if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(trimmed)) {
+          return trimmed;
+        }
+        return "#0ea5e9";
+      }
+      function escapeInlineText(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
 
       lastPayloadCenter = toLatLngIfFinite(payload.center);
       lastAutoFocusedPlayer = toLatLngIfFinite(payload.player);
@@ -184,6 +288,19 @@ function buildOsmWebViewHtml(payload: unknown) {
       map.on("movestart", (event) => {
         if (event && event.originalEvent) {
           userPanLockedUntil = Date.now() + MANUAL_PAN_STATIONARY_LOCK_MS;
+        }
+      });
+      map.on("click", (event) => {
+        const rawTarget = event && event.originalEvent ? event.originalEvent.target : null;
+        if (
+          rawTarget &&
+          typeof rawTarget.closest === "function" &&
+          rawTarget.closest(".station-marker-wrapper")
+        ) {
+          return;
+        }
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage("__clear_station_selection__");
         }
       });
 
@@ -196,12 +313,32 @@ function buildOsmWebViewHtml(payload: unknown) {
         stationLayer.clearLayers();
         nextPins.forEach((pin) => {
           const markerClass = pin.isSelected ? "station-marker station-marker--selected" : "station-marker station-marker--default";
+          const stationNumber =
+            Number.isFinite(pin.number) && pin.number > 0
+              ? Math.max(1, Math.round(pin.number))
+              : null;
+          const stationNumberBadge = stationNumber
+            ? '<span class="station-marker-number">' + stationNumber + "</span>"
+            : "";
           const marker = L.marker([pin.latitude, pin.longitude], {
             icon: L.divIcon({
               className: "",
-              html: '<div class="' + markerClass + '" style="background:' + pin.color + ';opacity:' + pin.opacity + ';">' + pin.icon + "</div>",
-              iconSize: [30, 30],
-              iconAnchor: [15, 15],
+              html:
+                '<div class="station-marker-wrapper" style="--pin-color:' +
+                pin.color +
+                ";opacity:" +
+                pin.opacity +
+                ';"><div class="station-marker-spike"></div><div class="' +
+                markerClass +
+                '" style="background:' +
+                pin.color +
+                ';"><span class="station-marker-icon">' +
+                pin.icon +
+                "</span>" +
+                stationNumberBadge +
+                "</div></div>",
+              iconSize: [34, 46],
+              iconAnchor: [17, 44],
             }),
           }).addTo(stationLayer);
 
@@ -226,20 +363,24 @@ function buildOsmWebViewHtml(payload: unknown) {
           }
           return;
         }
-
-        const hasHeading = Number.isFinite(player.heading);
-        const headingRotation = hasHeading ? player.heading : 0;
-        const headingHtml = hasHeading ? '<div class="player-marker-heading"></div>' : "";
+        const playerAccentColor = normalizePlayerColor(player.color);
+        const playerIcon =
+          typeof player.icon === "string"
+            ? Array.from(player.icon.trim()).slice(0, 2).join("")
+            : "";
+        const playerBadgeHtml = playerIcon
+          ? '<span class="player-marker-badge">' + escapeInlineText(playerIcon) + "</span>"
+          : "";
         const icon = L.divIcon({
           className: "",
           html:
-            '<div class="player-marker" style="transform: rotate(' +
-            headingRotation +
-            'deg)"><div class="player-marker-dot"></div>' +
-            headingHtml +
-            "</div>",
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+            '<div class="player-marker" style="--player-accent:' +
+            playerAccentColor +
+            ';"><div class="player-marker-shadow"></div><div class="player-marker-dot">' +
+            playerBadgeHtml +
+            "</div></div>",
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
         });
 
         if (playerMarker) {
@@ -378,6 +519,8 @@ export function ExpeditionMap({
   pins,
   selectedStationId,
   focusCoordinate,
+  playerIcon,
+  playerColor,
   onSelectStation,
 }: ExpeditionMapProps) {
   const uiLanguage = useUiLanguage();
@@ -412,6 +555,8 @@ export function ExpeditionMap({
           ? {
               latitude: playerLocation.latitude,
               longitude: playerLocation.longitude,
+              icon: playerIcon,
+              color: playerColor ?? null,
               heading: normalizeHeading(playerLocation.heading),
               accuracy:
                 typeof playerLocation.accuracy === "number" && Number.isFinite(playerLocation.accuracy)
@@ -431,14 +576,15 @@ export function ExpeditionMap({
           stationId: pin.stationId,
           latitude: pin.coordinate.latitude,
           longitude: pin.coordinate.longitude,
-          icon: pin.customization?.icon || "📍",
+          icon: pin.customization?.icon || DEFAULT_STATION_PIN_CUSTOMIZATION.icon,
           color: resolveStationPinColor(pin, isSelected),
-          opacity: pin.status === "done" || pin.failed ? 0.65 : 1,
+          opacity: pin.status === "done" || pin.failed ? 0.9 : 1,
           isSelected,
+          number: typeof pin.stationNumber === "number" && Number.isFinite(pin.stationNumber) ? pin.stationNumber : null,
         };
       }),
     }),
-    [centerCoordinate, focusCoordinate, playerLocation, renderablePins, selectedStationId],
+    [centerCoordinate, focusCoordinate, playerColor, playerIcon, playerLocation, renderablePins, selectedStationId],
   );
   const webViewRef = useRef<WebView>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -456,11 +602,17 @@ export function ExpeditionMap({
   }, [isMapLoaded, webViewPayload]);
 
   function handleWebViewMessage(event: WebViewMessageEvent) {
-    const stationId = event.nativeEvent.data?.trim();
-    if (!stationId) {
+    const message = event.nativeEvent.data?.trim();
+    if (!message) {
       return;
     }
-    onSelectStation(stationId);
+
+    if (message === "__clear_station_selection__") {
+      onSelectStation(null);
+      return;
+    }
+
+    onSelectStation(message);
   }
 
   return (

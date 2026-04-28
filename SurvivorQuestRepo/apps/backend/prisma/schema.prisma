@@ -185,6 +185,7 @@ model Realization {
   scheduledAt         DateTime
   locationRequired    Boolean            @default(true)
   showLeaderboard     Boolean            @default(true)
+  teamStationNumberingEnabled Boolean    @default(true)
   joinCode            String             @unique
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt

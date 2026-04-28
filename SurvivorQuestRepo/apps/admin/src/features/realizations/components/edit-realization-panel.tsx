@@ -110,6 +110,7 @@ export function EditRealizationPanel({
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
     showLeaderboard: realization.showLeaderboard,
+    teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
@@ -418,6 +419,7 @@ export function EditRealizationPanel({
                   positionsCount: positionsCountForSubmit,
                   durationMinutes: normalizedDurationMinutes,
                   showLeaderboard: editValues.showLeaderboard,
+                  teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
                   status: editValues.status,
                   scheduledAt: normalizedScheduledAt,
                   scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -738,6 +740,21 @@ export function EditRealizationPanel({
                     Pokaż leaderboard na ekranie końcowym (mobile)
                   </label>
 
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.teamStationNumberingEnabled}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          teamStationNumberingEnabled: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Numeracja stanowisk dla drużyn
+                  </label>
+
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
                     <input
@@ -935,6 +952,10 @@ export function EditRealizationPanel({
               <p>
                 <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span>{" "}
                 {editValues.showLeaderboard ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span>{" "}
+                {editValues.teamStationNumberingEnabled ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

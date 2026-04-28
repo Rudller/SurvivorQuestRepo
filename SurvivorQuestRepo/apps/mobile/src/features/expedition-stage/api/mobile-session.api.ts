@@ -390,6 +390,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       showLeaderboard: asBoolean(realization.showLeaderboard ?? realization.show_leaderboard, true),
+      teamStationNumberingEnabled: asBoolean(
+        realization.teamStationNumberingEnabled ?? realization.team_station_numbering_enabled,
+        true,
+      ),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
        durationMinutes:
          Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,

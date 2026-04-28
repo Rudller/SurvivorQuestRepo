@@ -11,6 +11,13 @@ const LIVE_TRACKING_TIME_INTERVAL_MS = 1_500;
 const LIVE_TRACKING_DISTANCE_INTERVAL_METERS = 1;
 const LIVE_TRACKING_POLL_INTERVAL_MS = 7_000;
 const ONE_SHOT_FIX_TIMEOUT_MS = 6_500;
+const MAX_REASONABLE_TRAVEL_SPEED_MPS = 40;
+const ABSOLUTE_IMPOSSIBLE_SPEED_MPS = 80;
+const LOW_CONFIDENCE_ACCURACY_METERS = 80;
+const LOW_CONFIDENCE_JUMP_METERS = 120;
+const HARD_MAX_ACCURACY_METERS = 250;
+const JUMP_DISTANCE_BUFFER_METERS = 35;
+const UNKNOWN_ACCURACY_FALLBACK_METERS = 90;
 const PLAYER_LOCATION_TEXT = {
   polish: {
     locationUnavailableFallback:
@@ -78,6 +85,27 @@ function toPlayerLocation(
   } satisfies PlayerLocation;
 }
 
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceMeters(from: MapCoordinate, to: MapCoordinate) {
+  const earthRadiusMeters = 6_371_000;
+  const latitudeDelta = toRadians(to.latitude - from.latitude);
+  const longitudeDelta = toRadians(to.longitude - from.longitude);
+  const fromLatitudeRadians = toRadians(from.latitude);
+  const toLatitudeRadians = toRadians(to.latitude);
+
+  const a =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(fromLatitudeRadians) *
+      Math.cos(toLatitudeRadians) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
 export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
   const uiLanguage = useUiLanguage();
   const text = PLAYER_LOCATION_TEXT[uiLanguage];
@@ -93,6 +121,68 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         }
       : null,
   );
+  const lastAcceptedLocationRef = useRef<PlayerLocation | null>(
+    initialCoordinate
+      ? {
+          latitude: initialCoordinate.latitude,
+          longitude: initialCoordinate.longitude,
+          at: new Date().toISOString(),
+        }
+      : null,
+  );
+
+  const applyLocationCandidate = useCallback((candidate: PlayerLocation) => {
+    const previous = lastAcceptedLocationRef.current;
+    if (!previous) {
+      lastAcceptedLocationRef.current = candidate;
+      setPlayerLocation(candidate);
+      return true;
+    }
+
+    const previousTimestampMs = new Date(previous.at).getTime();
+    const candidateTimestampMs = new Date(candidate.at).getTime();
+    const elapsedSeconds = Math.max(
+      1,
+      Math.abs(candidateTimestampMs - previousTimestampMs) / 1000,
+    );
+    const distanceMeters = calculateDistanceMeters(previous, candidate);
+    const speedMetersPerSecond = distanceMeters / elapsedSeconds;
+    const candidateAccuracyMeters =
+      typeof candidate.accuracy === "number" && Number.isFinite(candidate.accuracy)
+        ? Math.max(0, candidate.accuracy)
+        : UNKNOWN_ACCURACY_FALLBACK_METERS;
+    const dynamicDistanceLimitMeters =
+      JUMP_DISTANCE_BUFFER_METERS + elapsedSeconds * MAX_REASONABLE_TRAVEL_SPEED_MPS;
+
+    if (speedMetersPerSecond > ABSOLUTE_IMPOSSIBLE_SPEED_MPS) {
+      return false;
+    }
+
+    if (
+      candidateAccuracyMeters >= LOW_CONFIDENCE_ACCURACY_METERS &&
+      distanceMeters >= LOW_CONFIDENCE_JUMP_METERS
+    ) {
+      return false;
+    }
+
+    if (
+      distanceMeters > dynamicDistanceLimitMeters &&
+      candidateAccuracyMeters >= 35
+    ) {
+      return false;
+    }
+
+    if (
+      candidateAccuracyMeters > HARD_MAX_ACCURACY_METERS &&
+      distanceMeters > 25
+    ) {
+      return false;
+    }
+
+    lastAcceptedLocationRef.current = candidate;
+    setPlayerLocation(candidate);
+    return true;
+  }, []);
 
   const requestCurrentLocation = useCallback(async () => {
     const servicesEnabled = await Location.hasServicesEnabledAsync();
@@ -150,12 +240,12 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         accuracy: INITIAL_FIX_ACCURACY,
       });
       const normalized = toPlayerLocation(current.coords, current.timestamp, latestHeadingRef.current);
-      setPlayerLocation(normalized);
+      applyLocationCandidate(normalized);
       return normalized;
     } catch (error) {
       try {
         const oneShotLocation = await getOneShotWatchFix();
-        setPlayerLocation(oneShotLocation);
+        applyLocationCandidate(oneShotLocation);
         return oneShotLocation;
       } catch (oneShotError) {
         void oneShotError;
@@ -164,7 +254,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
       const lastKnown = await Location.getLastKnownPositionAsync();
       if (lastKnown) {
         const normalized = toPlayerLocation(lastKnown.coords, lastKnown.timestamp, latestHeadingRef.current);
-        setPlayerLocation(normalized);
+        applyLocationCandidate(normalized);
         return normalized;
       }
 
@@ -174,7 +264,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
       throw error;
     }
-  }, [text]);
+  }, [applyLocationCandidate, text]);
 
   useEffect(() => {
     let isMounted = true;
@@ -201,7 +291,9 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
 
         const lastKnown = await Location.getLastKnownPositionAsync();
         if (isMounted && lastKnown) {
-          setPlayerLocation(toPlayerLocation(lastKnown.coords, lastKnown.timestamp, latestHeadingRef.current));
+          applyLocationCandidate(
+            toPlayerLocation(lastKnown.coords, lastKnown.timestamp, latestHeadingRef.current),
+          );
         }
 
         void requestCurrentLocation().catch((error: unknown) => {
@@ -235,10 +327,12 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
               return current;
             }
 
-            return {
+            const updated = {
               ...current,
               heading: candidateHeading ?? undefined,
             };
+            lastAcceptedLocationRef.current = updated;
+            return updated;
           });
         });
 
@@ -254,7 +348,9 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
             }
 
             setLocationError(null);
-            setPlayerLocation(toPlayerLocation(update.coords, update.timestamp, latestHeadingRef.current));
+            applyLocationCandidate(
+              toPlayerLocation(update.coords, update.timestamp, latestHeadingRef.current),
+            );
           },
         );
 
@@ -268,7 +364,9 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
               }
 
               setLocationError(null);
-              setPlayerLocation(toPlayerLocation(current.coords, current.timestamp, latestHeadingRef.current));
+              applyLocationCandidate(
+                toPlayerLocation(current.coords, current.timestamp, latestHeadingRef.current),
+              );
             })
             .catch(() => undefined);
         }, LIVE_TRACKING_POLL_INTERVAL_MS);
@@ -292,7 +390,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         clearInterval(pollingTimer);
       }
     };
-  }, [requestCurrentLocation, text]);
+  }, [applyLocationCandidate, requestCurrentLocation, text]);
 
   return {
     playerLocation,

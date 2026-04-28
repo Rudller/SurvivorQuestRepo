@@ -303,89 +303,125 @@ function resolveCoordinateCentroid(coordinates: MapCoordinate[]) {
   } satisfies MapCoordinate;
 }
 
+function buildPinIconSvg(svgBody: string) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgBody}</svg>`;
+}
+
+// Monochrome map pin icons sourced from Lucide (https://unpkg.com/lucide-static).
+const PIN_ICON_SVGS = {
+  done: buildPinIconSvg(
+    '<path d="M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5" /><path d="m9 11 3 3L22 4" />',
+  ),
+  failed: buildPinIconSvg(
+    '<rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="m15 9-6 6" /><path d="m9 9 6 6" />',
+  ),
+  quiz: buildPinIconSvg(
+    '<circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" />',
+  ),
+  "audio-quiz": buildPinIconSvg(
+    '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />',
+  ),
+  time: buildPinIconSvg('<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16.5 12" />'),
+  points: buildPinIconSvg('<circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />'),
+  wordle: buildPinIconSvg(
+    '<rect width="18" height="14" x="3" y="5" rx="2" ry="2" /><path d="M7 15h4M15 15h2M7 11h2M13 11h4" />',
+  ),
+  hangman: buildPinIconSvg('<circle cx="12" cy="5" r="1" /><path d="m9 20 3-6 3 6" /><path d="m6 8 6 2 6-2" /><path d="M12 10v4" />'),
+  mastermind: buildPinIconSvg(
+    '<rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3" /><path d="M9 11.2h5.7" />',
+  ),
+  anagram: buildPinIconSvg(
+    '<path d="m18 14 4 4-4 4" /><path d="m18 2 4 4-4 4" /><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" /><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" /><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" />',
+  ),
+  "caesar-cipher": buildPinIconSvg(
+    '<circle cx="12" cy="16" r="1" /><rect x="3" y="10" width="18" height="12" rx="2" /><path d="M7 10V7a5 5 0 0 1 10 0v3" />',
+  ),
+  memory: buildPinIconSvg(
+    '<path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" /><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" /><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />',
+  ),
+  simon: buildPinIconSvg(
+    '<line x1="6" x2="10" y1="11" y2="11" /><line x1="8" x2="8" y1="9" y2="13" /><line x1="15" x2="15.01" y1="12" y2="12" /><line x1="18" x2="18.01" y1="10" y2="10" /><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z" />',
+  ),
+  rebus: buildPinIconSvg(
+    '<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z" />',
+  ),
+  boggle: buildPinIconSvg(
+    '<path d="M15 12h6" /><path d="M15 6h6" /><path d="m3 13 3.553-7.724a.5.5 0 0 1 .894 0L11 13" /><path d="M3 18h18" /><path d="M4 11h6" />',
+  ),
+  "mini-sudoku": buildPinIconSvg(
+    '<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" />',
+  ),
+  matching: buildPinIconSvg('<path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" x2="16" y1="12" y2="12" />'),
+} as const;
+
 function resolveStationVisual(stationType: ExpeditionStationType | undefined, status: ExpeditionTaskStatus) {
   if (status === "done") {
-    return { icon: "✅", color: "#10b981" };
+    return { icon: PIN_ICON_SVGS.done, color: "#10b981" };
   }
 
   if (status === "failed") {
-    return { icon: "❌", color: "#ef4444" };
+    return { icon: PIN_ICON_SVGS.failed, color: "#ef4444" };
   }
 
   if (stationType === "time") {
-    return { icon: "⏱️", color: "#3b82f6" };
+    return { icon: PIN_ICON_SVGS.time, color: "#3b82f6" };
   }
 
   if (stationType === "points") {
-    return { icon: "🎯", color: "#a855f7" };
+    return { icon: PIN_ICON_SVGS.points, color: "#a855f7" };
   }
 
   if (stationType === "wordle") {
-    return { icon: "🔤", color: "#22c55e" };
+    return { icon: PIN_ICON_SVGS.wordle, color: "#22c55e" };
   }
 
   if (stationType === "hangman") {
-    return { icon: "🪢", color: "#f97316" };
+    return { icon: PIN_ICON_SVGS.hangman, color: "#f97316" };
   }
 
   if (stationType === "mastermind") {
-    return { icon: "🧠", color: "#6366f1" };
+    return { icon: PIN_ICON_SVGS.mastermind, color: "#6366f1" };
   }
 
   if (stationType === "anagram") {
-    return { icon: "🔀", color: "#14b8a6" };
+    return { icon: PIN_ICON_SVGS.anagram, color: "#14b8a6" };
   }
 
   if (stationType === "caesar-cipher") {
-    return { icon: "🔐", color: "#0ea5e9" };
+    return { icon: PIN_ICON_SVGS["caesar-cipher"], color: "#0ea5e9" };
   }
 
   if (stationType === "memory") {
-    return { icon: "🃏", color: "#8b5cf6" };
+    return { icon: PIN_ICON_SVGS.memory, color: "#8b5cf6" };
   }
 
   if (stationType === "simon") {
-    return { icon: "🎛️", color: "#ec4899" };
+    return { icon: PIN_ICON_SVGS.simon, color: "#ec4899" };
   }
 
   if (stationType === "rebus") {
-    return { icon: "🧩", color: "#f59e0b" };
+    return { icon: PIN_ICON_SVGS.rebus, color: "#f59e0b" };
   }
 
   if (stationType === "boggle") {
-    return { icon: "🔠", color: "#10b981" };
+    return { icon: PIN_ICON_SVGS.boggle, color: "#10b981" };
   }
 
   if (stationType === "mini-sudoku") {
-    return { icon: "🔢", color: "#ef4444" };
+    return { icon: PIN_ICON_SVGS["mini-sudoku"], color: "#ef4444" };
   }
 
   if (stationType === "matching") {
-    return { icon: "🔗", color: "#22c55e" };
+    return { icon: PIN_ICON_SVGS.matching, color: "#22c55e" };
   }
 
   if (stationType === "audio-quiz") {
-    return { icon: "🎧", color: "#06b6d4" };
+    return { icon: PIN_ICON_SVGS["audio-quiz"], color: "#06b6d4" };
   }
 
-  if (
-    stationType === "quiz" ||
-    stationType === "wordle" ||
-    stationType === "hangman" ||
-    stationType === "mastermind" ||
-    stationType === "anagram" ||
-    stationType === "caesar-cipher" ||
-    stationType === "memory" ||
-    stationType === "simon" ||
-    stationType === "rebus" ||
-    stationType === "boggle" ||
-    stationType === "mini-sudoku" ||
-    stationType === "matching"
-  ) {
-    return { icon: "❓", color: "#f59e0b" };
-  }
-
-  return DEFAULT_STATION_PIN_CUSTOMIZATION;
+  return stationType === "quiz"
+    ? { icon: PIN_ICON_SVGS.quiz, color: "#f59e0b" }
+    : DEFAULT_STATION_PIN_CUSTOMIZATION;
 }
 
 function resolveStationLabel(
@@ -394,6 +430,43 @@ function resolveStationLabel(
   text: Pick<(typeof EXPEDITION_STAGE_TEXT)["polish"], "stationLabelPrefix">,
 ) {
   return stationName?.trim() ? stationName : `${text.stationLabelPrefix} ${stationId}`;
+}
+
+function resolveTeamStationNumbers(stationIds: string[], slotNumber: number) {
+  const uniqueStationIds: string[] = [];
+  const seenStationIds = new Set<string>();
+
+  for (const stationId of stationIds) {
+    const normalizedStationId = stationId.trim();
+    if (!normalizedStationId || seenStationIds.has(normalizedStationId)) {
+      continue;
+    }
+
+    seenStationIds.add(normalizedStationId);
+    uniqueStationIds.push(normalizedStationId);
+  }
+
+  const stationCount = uniqueStationIds.length;
+  const numberByStationId = new Map<string, number>();
+  if (stationCount === 0) {
+    return numberByStationId;
+  }
+
+  const slotOffset = ((Math.max(1, Math.round(slotNumber)) - 1) % stationCount + stationCount) % stationCount;
+  uniqueStationIds.forEach((stationId, index) => {
+    const stationNumber = ((index - slotOffset + stationCount) % stationCount) + 1;
+    numberByStationId.set(stationId, stationNumber);
+  });
+
+  return numberByStationId;
+}
+
+function formatStationLabelWithNumber(label: string, stationNumber?: number) {
+  if (typeof stationNumber !== "number" || !Number.isFinite(stationNumber) || stationNumber <= 0) {
+    return label;
+  }
+
+  return `${Math.round(stationNumber)}. ${label}`;
 }
 
 function resolveStationTypeLabel(
@@ -586,6 +659,7 @@ export function ExpeditionStageScreen({
     startedAt: string | null;
   } | null>(null);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
+  const hasAutoSelectedStationRef = useRef(false);
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -692,13 +766,33 @@ export function ExpeditionStageScreen({
     () => sessionState.tasks.map((task) => task.stationId).filter((stationId) => stationId.trim().length > 0),
     [sessionState.tasks],
   );
+  const isTeamStationNumberingEnabled = sessionState.realization.teamStationNumberingEnabled;
+  const stationNumberById = useMemo(
+    () =>
+      isTeamStationNumberingEnabled
+        ? resolveTeamStationNumbers(stationIds, sessionState.team.slotNumber)
+        : new Map<string, number>(),
+    [isTeamStationNumberingEnabled, sessionState.team.slotNumber, stationIds],
+  );
 
   useEffect(() => {
-    if (selectedStationId && stationIds.includes(selectedStationId)) {
+    if (selectedStationId) {
+      if (stationIds.includes(selectedStationId)) {
+        return;
+      }
+
+      setSelectedStationId(stationIds[0] ?? null);
       return;
     }
 
-    setSelectedStationId(stationIds[0] ?? null);
+    if (stationIds.length === 0) {
+      return;
+    }
+
+    if (!hasAutoSelectedStationRef.current) {
+      hasAutoSelectedStationRef.current = true;
+      setSelectedStationId(stationIds[0]);
+    }
   }, [selectedStationId, stationIds]);
 
   useEffect(() => {
@@ -818,7 +912,11 @@ export function ExpeditionStageScreen({
 
         return {
           stationId,
-          label: resolveStationLabel(stationId, metadata?.name, text),
+          label: formatStationLabelWithNumber(
+            resolveStationLabel(stationId, metadata?.name, text),
+            stationNumberById.get(stationId),
+          ),
+          stationNumber: stationNumberById.get(stationId),
           coordinate: realStationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
           status: task?.status ?? "todo",
           failed: isFailed,
@@ -832,13 +930,17 @@ export function ExpeditionStageScreen({
       mappableStationIds,
       realStationCoordinates,
       sessionState.tasks,
+      stationNumberById,
       stationMetadataMap,
       text,
     ],
   );
 
   const selectedStationLabel = selectedStationId
-    ? resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name, text)
+    ? formatStationLabelWithNumber(
+        resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name, text),
+        stationNumberById.get(selectedStationId),
+      )
     : null;
   const completedTasks = sessionState.tasks.filter(
     (task) => task.status === "done" || failedTaskIds.has(task.stationId),
@@ -856,11 +958,14 @@ export function ExpeditionStageScreen({
     () =>
       sessionState.tasks.map((task) => ({
         stationId: task.stationId,
-        label: resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name, text),
+        label: formatStationLabelWithNumber(
+          resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name, text),
+          stationNumberById.get(task.stationId),
+        ),
         done: task.status === "done",
         failed: task.status !== "done" && failedTaskIds.has(task.stationId),
       })),
-    [failedTaskIds, sessionState.tasks, stationMetadataMap, text],
+    [failedTaskIds, sessionState.tasks, stationMetadataMap, stationNumberById, text],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
     () => {
@@ -1210,7 +1315,7 @@ export function ExpeditionStageScreen({
     [isQrResolving, isSessionEnded, resolveStationQrToken, text],
   );
 
-  function handleSelectStationFromMap(stationId: string) {
+  function handleSelectStationFromMap(stationId: string | null) {
     setSelectedStationId(stationId);
   }
 
@@ -1380,6 +1485,8 @@ export function ExpeditionStageScreen({
             pins={stationPins}
             selectedStationId={selectedStationId}
             focusCoordinate={null}
+            playerIcon={teamIcon}
+            playerColor={teamColorHex}
             onSelectStation={handleSelectStationFromMap}
           />
         )}

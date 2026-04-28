@@ -61,6 +61,7 @@ export type ExpeditionSessionState = {
     status: "planned" | "in-progress" | "done";
     locationRequired: boolean;
     showLeaderboard: boolean;
+    teamStationNumberingEnabled: boolean;
     scheduledAt: string;
     durationMinutes: number;
     stations: ExpeditionRealizationStation[];
@@ -144,6 +145,7 @@ export type StationPinCustomization = {
 export type StationPin = {
   stationId: string;
   label: string;
+  stationNumber?: number;
   coordinate: MapCoordinate;
   status: ExpeditionTaskStatus;
   failed?: boolean;
@@ -152,7 +154,8 @@ export type StationPin = {
 };
 
 export const DEFAULT_STATION_PIN_CUSTOMIZATION: StationPinCustomization = {
-  icon: "📍",
+  icon:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></svg>',
   color: "#f59e0b",
 };
 
@@ -245,6 +248,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       status: session.realization?.status ?? "in-progress",
       locationRequired: session.realization?.locationRequired ?? false,
       showLeaderboard: session.realization?.showLeaderboard ?? true,
+      teamStationNumberingEnabled: true,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:
         typeof session.realization?.durationMinutes === "number" &&

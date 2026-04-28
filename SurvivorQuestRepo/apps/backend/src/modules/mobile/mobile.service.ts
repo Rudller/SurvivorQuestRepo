@@ -111,6 +111,7 @@ export class MobileService {
           joinCode: realization.joinCode,
           locationRequired: realization.locationRequired,
           showLeaderboard: realization.showLeaderboard,
+          teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
           teamCount: realization.teamCount,
           stationIds: realization.stationIds,
           createdAt: realization.createdAt,
@@ -375,6 +376,7 @@ export class MobileService {
         status: normalizedRealizationStatus,
         locationRequired: realization.locationRequired,
         showLeaderboard: realization.showLeaderboard,
+        teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         stations: realization.scenarioStations.map((station) =>
@@ -1544,6 +1546,7 @@ export class MobileService {
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
         showLeaderboard: realization.showLeaderboard,
+        teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
         stationIds: realization.stationIds,
@@ -1898,6 +1901,7 @@ export class MobileService {
         id: true,
         locationRequired: true,
         showLeaderboard: true,
+        teamStationNumberingEnabled: true,
       },
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
@@ -1920,6 +1924,10 @@ export class MobileService {
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
       showLeaderboard: rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
+      teamStationNumberingEnabled:
+        rowById.get(item.id)?.teamStationNumberingEnabled ??
+        item.teamStationNumberingEnabled ??
+        true,
       joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,

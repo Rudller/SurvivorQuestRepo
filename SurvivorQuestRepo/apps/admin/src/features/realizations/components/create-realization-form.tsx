@@ -92,6 +92,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [peopleCount, setPeopleCount] = useState(10);
   const [durationMinutes, setDurationMinutes] = useState(120);
   const [showLeaderboard, setShowLeaderboard] = useState(true);
+  const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
@@ -342,6 +343,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             positionsCount: positionsCountForSubmit,
             durationMinutes: normalizedDurationMinutes,
             showLeaderboard,
+            teamStationNumberingEnabled,
             status,
             scheduledAt: normalizedScheduledAt,
             scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -365,6 +367,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           setTeamCount(2);
           setDurationMinutes(120);
           setShowLeaderboard(true);
+          setTeamStationNumberingEnabled(true);
           setLogoFile(null);
           setOfferPdfFile(null);
           setOfferPdfName(undefined);
@@ -603,6 +606,16 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
                 className="h-4 w-4 accent-amber-400"
               />
               Pokaż leaderboard na ekranie końcowym (mobile)
+            </label>
+
+            <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={teamStationNumberingEnabled}
+                onChange={(event) => setTeamStationNumberingEnabled(event.target.checked)}
+                className="h-4 w-4 accent-amber-400"
+              />
+              Numeracja stanowisk dla drużyn
             </label>
 
             <label className="space-y-1.5">
@@ -869,6 +882,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           </p>
           <p>
             <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboard ? "Tak" : "Nie"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span> {teamStationNumberingEnabled ? "Tak" : "Nie"}
           </p>
           <p>
             <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}

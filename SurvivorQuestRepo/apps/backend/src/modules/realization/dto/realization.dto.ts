@@ -54,6 +54,7 @@ export type CreateRealizationDto = {
   status?: RealizationStatus;
   scheduledAt?: string;
   showLeaderboard?: boolean;
+  teamStationNumberingEnabled?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
 };
@@ -120,6 +121,7 @@ export function validateRealizationPayload(
   const durationMinutes = Math.round(Number(payload.durationMinutes));
   const scenarioId = payload.scenarioId?.trim() || '';
   const showLeaderboard = payload.showLeaderboard;
+  const teamStationNumberingEnabled = payload.teamStationNumberingEnabled;
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
     : null;
@@ -150,6 +152,12 @@ export function validateRealizationPayload(
   }
 
   if (typeof showLeaderboard !== 'undefined' && typeof showLeaderboard !== 'boolean') {
+    throw new BadRequestException('Invalid payload');
+  }
+  if (
+    typeof teamStationNumberingEnabled !== 'undefined' &&
+    typeof teamStationNumberingEnabled !== 'boolean'
+  ) {
     throw new BadRequestException('Invalid payload');
   }
 
@@ -189,6 +197,7 @@ export function validateRealizationPayload(
     positionsCount,
     durationMinutes,
     showLeaderboard: payload.showLeaderboard ?? true,
+    teamStationNumberingEnabled: payload.teamStationNumberingEnabled ?? true,
     status: payload.status,
     scheduledAt,
     changedBy: payload.changedBy?.trim() || 'admin@local',

@@ -203,7 +203,6 @@ const AUTO_CURRENT_REALIZATION_VALUE = "__auto-current-realization__";
 export default function CurrentRealizationPage() {
   const router = useRouter();
   const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
-  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
   const [selectedRealizationId, setSelectedRealizationId] = useState<"current" | string>("current");
 
@@ -311,6 +310,18 @@ export default function CurrentRealizationPage() {
     isRealizationsLoading ||
     isScenariosLoading ||
     isStationsLoading;
+  const actionButtonBaseClassName =
+    "rounded-xl border px-4 py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-20px_rgba(0,0,0,0.9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 disabled:hover:shadow-none";
+  const actionButtonNeutralClassName =
+    "border-zinc-700/90 bg-zinc-900/70 text-zinc-100 hover:border-zinc-500 hover:bg-zinc-900";
+  const actionButtonAmberClassName =
+    "border-amber-400/45 bg-amber-500/10 text-amber-200 hover:border-amber-300/60 hover:bg-amber-500/18";
+  const actionButtonEmeraldClassName =
+    "border-emerald-400/45 bg-emerald-500/10 text-emerald-200 hover:border-emerald-300/60 hover:bg-emerald-500/18";
+  const actionButtonOrangeClassName =
+    "border-orange-400/45 bg-orange-500/10 text-orange-200 hover:border-orange-300/60 hover:bg-orange-500/18";
+  const actionButtonRedClassName =
+    "border-red-400/45 bg-red-500/10 text-red-200 hover:border-red-300/60 hover:bg-red-500/18";
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -369,7 +380,6 @@ export default function CurrentRealizationPage() {
                       : effectiveSelectedRealizationId
                   }
                   onChange={(event) => {
-                    setIsActionsMenuOpen(false);
                     setIsQrPanelOpen(false);
                     setEditingRealization(null);
                     setSelectedRealizationId(
@@ -398,146 +408,120 @@ export default function CurrentRealizationPage() {
         </div>
 
         {overview && (
-          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
-            <div className="flex justify-center">
+          <div className="mt-4 rounded-2xl border border-zinc-800/90 bg-zinc-950/55 p-4">
+            <div className="mb-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+                Akcje realizacji
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <button
                 type="button"
-                onClick={() => setIsActionsMenuOpen((current) => !current)}
-                aria-expanded={isActionsMenuOpen}
-                className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                onClick={() => {
+                  setIsQrPanelOpen(true);
+                }}
+                className={`${actionButtonBaseClassName} ${actionButtonNeutralClassName}`}
               >
-                <img
-                  src="https://cdn.jsdelivr.net/npm/@tabler/icons@latest/icons/outline/chevrons-down.svg"
-                  alt=""
-                  aria-hidden="true"
-                  className={`h-4 w-4 invert opacity-80 transition-transform ${isActionsMenuOpen ? "rotate-180" : ""}`}
-                />
-                {isActionsMenuOpen ? "Ukryj akcje realizacji" : "Pokaż akcje realizacji"}
-                <img
-                  src="https://cdn.jsdelivr.net/npm/@tabler/icons@latest/icons/outline/chevrons-down.svg"
-                  alt=""
-                  aria-hidden="true"
-                  className={`h-4 w-4 invert opacity-80 transition-transform ${isActionsMenuOpen ? "rotate-180" : ""}`}
-                />
+                Kody QR
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedOverviewRealization) {
+                    return;
+                  }
+                  setEditingRealization(selectedOverviewRealization);
+                }}
+                disabled={isEditActionDisabled}
+                className={`${actionButtonBaseClassName} ${actionButtonAmberClassName}`}
+              >
+                {isScenariosLoading || isStationsLoading ? "Ładowanie edytora..." : "Edytuj realizację"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm("Uruchomić aplikację globalnie dla tej realizacji?")) {
+                    return;
+                  }
+
+                  try {
+                    await startCurrentRealization(selectedRealizationArg).unwrap();
+                  } catch {
+                    // handled by query error rendering/refetch path
+                  }
+                }}
+                disabled={isStartingRealization || overview.realization.status === "in-progress"}
+                className={`${actionButtonBaseClassName} ${actionButtonEmeraldClassName}`}
+              >
+                {isStartingRealization
+                  ? "Uruchamianie..."
+                  : overview.realization.status === "in-progress"
+                    ? "Aplikacja uruchomiona"
+                    : "Start aplikacji"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm("Zakończyć realizację?")) {
+                    return;
+                  }
+
+                  try {
+                    await finishCurrentRealization(selectedRealizationArg).unwrap();
+                  } catch {
+                    // handled by query error rendering/refetch path
+                  }
+                }}
+                disabled={isFinishingRealization || overview.realization.status === "done"}
+                className={`${actionButtonBaseClassName} ${actionButtonNeutralClassName}`}
+              >
+                {isFinishingRealization
+                  ? "Zamykanie..."
+                  : overview.realization.status === "done"
+                    ? "Realizacja zakończona"
+                    : "Zakończ realizację"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "Zresetować realizację? Usunie to podłączenia urządzeń i postęp zadań, ustawi status na planned oraz datę rozpoczęcia na teraz.",
+                    )
+                  ) {
+                    return;
+                  }
+
+                  try {
+                    await resetCurrentRealization(selectedRealizationArg).unwrap();
+                  } catch {
+                    // handled by query error rendering/refetch path
+                  }
+                }}
+                disabled={isResettingRealization}
+                className={`${actionButtonBaseClassName} ${actionButtonOrangeClassName}`}
+              >
+                {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm("Czy na pewno chcesz zresetować wszystkie ukończone zadania?")) {
+                    return;
+                  }
+
+                  try {
+                    await resetCompletedTasks(selectedRealizationArg).unwrap();
+                  } catch {
+                    // handled by query error rendering/refetch path
+                  }
+                }}
+                disabled={isResettingTasks}
+                className={`${actionButtonBaseClassName} ${actionButtonRedClassName}`}
+              >
+                {isResettingTasks ? "Resetowanie..." : "Resetuj ukończone zadania"}
               </button>
             </div>
-
-            {isActionsMenuOpen ? (
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsActionsMenuOpen(false);
-                    setIsQrPanelOpen(true);
-                  }}
-                  className="rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                >
-                  Kody QR
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!selectedOverviewRealization) {
-                      return;
-                    }
-                    setIsActionsMenuOpen(false);
-                    setEditingRealization(selectedOverviewRealization);
-                  }}
-                  disabled={isEditActionDisabled}
-                  className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isScenariosLoading || isStationsLoading ? "Ładowanie edytora..." : "Edytuj realizację"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Uruchomić aplikację globalnie dla tej realizacji?")) {
-                      return;
-                    }
-
-                    try {
-                      setIsActionsMenuOpen(false);
-                      await startCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isStartingRealization || overview.realization.status === "in-progress"}
-                  className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isStartingRealization
-                    ? "Uruchamianie..."
-                    : overview.realization.status === "in-progress"
-                      ? "Aplikacja uruchomiona"
-                      : "Start aplikacji"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Zakończyć realizację?")) {
-                      return;
-                    }
-
-                    try {
-                      setIsActionsMenuOpen(false);
-                      await finishCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isFinishingRealization || overview.realization.status === "done"}
-                  className="rounded-md border border-zinc-400/40 bg-zinc-500/10 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isFinishingRealization
-                    ? "Zamykanie..."
-                    : overview.realization.status === "done"
-                      ? "Realizacja zakończona"
-                      : "Zakończ realizację"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        "Zresetować realizację? Usunie to podłączenia urządzeń i postęp zadań, ustawi status na planned oraz datę rozpoczęcia na teraz.",
-                      )
-                    ) {
-                      return;
-                    }
-
-                    try {
-                      setIsActionsMenuOpen(false);
-                      await resetCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isResettingRealization}
-                  className="rounded-md border border-orange-400/40 bg-orange-500/10 px-3 py-2 text-xs font-medium text-orange-200 transition hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Czy na pewno chcesz zresetować wszystkie ukończone zadania?")) {
-                      return;
-                    }
-
-                    try {
-                      setIsActionsMenuOpen(false);
-                      await resetCompletedTasks(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isResettingTasks}
-                  className="rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isResettingTasks ? "Resetowanie..." : "Resetuj ukończone zadania"}
-                </button>
-              </div>
-            ) : null}
           </div>
         )}
 
