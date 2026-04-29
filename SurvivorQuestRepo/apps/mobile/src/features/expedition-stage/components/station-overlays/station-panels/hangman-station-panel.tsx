@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { HANGMAN_ALPHABET, HANGMAN_MAX_MISSES } from "../puzzle-helpers";
-import { useStationPanelLayout } from "./shared-ui";
+import { useStationPanelLayout, withAlpha } from "./shared-ui";
 
 type HangmanStationPanelProps = {
   stationId: string;
@@ -121,8 +121,8 @@ export function HangmanStationPanel({
                   style={{
                     width: keySize,
                     height: keySize,
-                    borderColor: used ? "rgba(161, 161, 170, 0.6)" : EXPEDITION_THEME.border,
-                    backgroundColor: used ? "rgba(113, 113, 122, 0.22)" : EXPEDITION_THEME.panelStrong,
+                    borderColor: used ? withAlpha(EXPEDITION_THEME.textSubtle, 0.58) : EXPEDITION_THEME.border,
+                    backgroundColor: used ? withAlpha(EXPEDITION_THEME.textSubtle, 0.2) : EXPEDITION_THEME.panelStrong,
                     opacity: isGuessDisabled || used || !isValidLetter ? 0.45 : 1,
                   }}
                   onPress={() => {

@@ -80,7 +80,7 @@ export function BottomCountdownPanel({
       className="rounded-[30px] border px-4 py-3"
       style={{
         borderColor: EXPEDITION_THEME.border,
-        backgroundColor: "rgba(22, 41, 33, 0.9)",
+        backgroundColor: EXPEDITION_THEME.panel,
       }}
     >
       <View className="flex-row items-center justify-between">

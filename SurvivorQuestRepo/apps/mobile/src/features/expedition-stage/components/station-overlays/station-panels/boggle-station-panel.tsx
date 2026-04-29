@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout, withAlpha } from "./shared-ui";
 
 type BoggleStationPanelProps = {
   stationId: string;
@@ -96,12 +96,12 @@ export function BoggleStationPanel({
             <Pressable
               key={`${stationId}-boggle-${index}`}
               className="relative w-[32%] rounded-xl border"
-              style={{
-                height: layout.isTablet ? 112 : 96,
-                borderColor: selectedCellSet.has(index) ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-                backgroundColor: selectedCellSet.has(index) ? "rgba(245, 158, 11, 0.22)" : EXPEDITION_THEME.panelStrong,
-                opacity: isActionDisabled ? 0.55 : 1,
-              }}
+                style={{
+                  height: layout.isTablet ? 112 : 96,
+                  borderColor: selectedCellSet.has(index) ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                  backgroundColor: selectedCellSet.has(index) ? withAlpha(EXPEDITION_THEME.accent, 0.22) : EXPEDITION_THEME.panelStrong,
+                  opacity: isActionDisabled ? 0.55 : 1,
+                }}
               disabled={isActionDisabled}
               onPress={() => {
                 onPressBoardCell(index);
@@ -162,7 +162,10 @@ export function BoggleStationPanel({
           onPress={onBackspaceInput}
           disabled={isActionDisabled || boggleInput.length === 0}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.isTablet ? 22 : 16 }}>
+          <Text
+            className="font-semibold"
+            style={{ color: resolveActionLabelColor(isActionDisabled || boggleInput.length === 0), fontSize: layout.isTablet ? 22 : 16 }}
+          >
             ⌫
           </Text>
         </Pressable>
@@ -175,7 +178,10 @@ export function BoggleStationPanel({
           onPress={onSubmit}
           disabled={isActionDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text
+            className="font-semibold"
+            style={{ color: resolveActionLabelColor(isActionDisabled), fontSize: layout.actionFontSize }}
+          >
             {isSubmittingBoggle ? "..." : text.check}
           </Text>
         </Pressable>

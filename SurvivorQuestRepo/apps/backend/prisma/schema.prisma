@@ -110,6 +110,7 @@ model Station {
   id               String             @id @default(uuid())
   name             String
   type             StationType
+  categories       String[]           @default([])
   description      String
   imageUrl         String?
   points           Int

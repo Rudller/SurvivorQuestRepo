@@ -18,6 +18,27 @@ function resolveImageUrl(imageUrl: string | undefined, seed: string) {
   return imageUrl?.trim() || buildStationFallbackImage(seed);
 }
 
+function normalizeStationCategories(categories: string[] | undefined) {
+  if (!categories) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const category of categories) {
+    const trimmed = category.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 function normalizeStationQuiz(
   quiz: StationQuiz | undefined,
   stationType: StationDraftInput['type'],
@@ -111,6 +132,7 @@ export function normalizeStationDraft(
   return {
     name: normalizedName,
     type: input.type,
+    categories: normalizeStationCategories(input.categories),
     description: input.description.trim() || DEFAULT_STATION_DESCRIPTION,
     imageUrl: resolveImageUrl(input.imageUrl, normalizedName || currentId),
     points: Math.round(input.points),

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS } from "../../../onboarding/model/constants";
+import { EXPEDITION_THEME, TEAM_COLORS, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import type { ExpeditionLeaderboardEntry } from "../../model/types";
 import type { RealizationFinishOverlayProps } from "./types";
 
@@ -287,7 +287,7 @@ function TeamBannerCard({
     <View
       className="rounded-2xl border px-3 py-2"
       style={{
-        borderColor: isCurrentTeam ? "rgba(52, 211, 153, 0.72)" : "rgba(68, 98, 81, 0.78)",
+        borderColor: isCurrentTeam ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
         backgroundColor: palette.cardHex,
       }}
     >
@@ -343,7 +343,7 @@ function TeamBannerCard({
             className="h-1.5 rounded-full"
             style={{
               width: `${safeProgressPercent}%`,
-              backgroundColor: isCurrentTeam ? "#6ee7b7" : palette.textColor,
+              backgroundColor: isCurrentTeam ? EXPEDITION_THEME.accentStrong : palette.textColor,
             }}
           />
         </View>
@@ -373,8 +373,8 @@ function EmptyPodiumBanner({
     <View
       className="rounded-2xl border px-3 py-2"
       style={{
-        borderColor: "rgba(68, 98, 81, 0.6)",
-        backgroundColor: "rgba(31, 51, 42, 0.72)",
+        borderColor: EXPEDITION_THEME.border,
+        backgroundColor: EXPEDITION_THEME.panelMuted,
       }}
     >
       <View className="flex-row items-center gap-1">
@@ -386,7 +386,7 @@ function EmptyPodiumBanner({
       <Text className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle }}>
         {text.emptyPodiumSlot}
       </Text>
-      <View className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: "rgba(148, 163, 184, 0.2)" }} />
+      <View className="mt-2 h-1.5 rounded-full" style={{ backgroundColor: EXPEDITION_THEME.border }} />
     </View>
   );
 }
@@ -400,7 +400,7 @@ function TeamRankRow({ position, entry, isCurrentTeam, compact = false, text }: 
           width: compact ? 30 : 40,
           textAlign: "center",
           textAlignVertical: "center",
-          color: isCurrentTeam ? "#6ee7b7" : EXPEDITION_THEME.textPrimary,
+          color: isCurrentTeam ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textPrimary,
         }}
       >
         #{position}
@@ -429,6 +429,7 @@ export function RealizationFinishOverlay({
   const uiLanguage = useUiLanguage();
   const text = REALIZATION_FINISH_TEXT[uiLanguage];
   const dateLocale = REALIZATION_FINISH_DATE_LOCALE[uiLanguage];
+  const isLightTheme = getExpeditionThemeMode() === "light";
   const { width } = useWindowDimensions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(14)).current;
@@ -482,13 +483,16 @@ export function RealizationFinishOverlay({
   }
 
   return (
-    <View className="absolute inset-0 z-[70] items-center justify-center px-4" style={{ backgroundColor: "rgba(5, 10, 8, 0.85)" }}>
+    <View
+      className="absolute inset-0 z-[70] items-center justify-center px-4"
+      style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.56)" }}
+    >
       <Animated.View
         className="w-full rounded-3xl border"
         style={{
           maxWidth: isTablet ? 1120 : 640,
           borderColor: EXPEDITION_THEME.border,
-          backgroundColor: "rgba(16, 31, 25, 0.97)",
+          backgroundColor: EXPEDITION_THEME.panel,
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
           padding: isTablet ? 28 : 18,
@@ -497,7 +501,7 @@ export function RealizationFinishOverlay({
         {showLeaderboard ? (
           <Pressable
             className="absolute right-4 top-4 rounded-lg border px-3 py-1.5 active:opacity-90"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(31, 51, 42, 0.82)" }}
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
             onPress={() => setIsFullLeaderboardVisible(true)}
           >
             <Text
@@ -553,7 +557,7 @@ export function RealizationFinishOverlay({
         ) : null}
 
         <View className="mt-4">
-          <Text className="text-xs uppercase tracking-widest" style={{ color: "#6ee7b7" }}>
+          <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
             {text.yourTeam}
           </Text>
           {currentTeamEntry ? (
@@ -585,7 +589,7 @@ export function RealizationFinishOverlay({
 
         <Text
           className={isTablet ? "mt-5 text-base font-semibold" : "mt-4 text-sm font-semibold"}
-          style={{ color: "#fde68a", textAlign: "center", lineHeight: isTablet ? 24 : 20 }}
+          style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center", lineHeight: isTablet ? 24 : 20 }}
         >
           {text.finalInstruction}{" "}
           <Text style={{ fontWeight: "900" }}>{text.finalInstructionBold}</Text> {text.finalInstructionSuffix}
@@ -607,7 +611,7 @@ export function RealizationFinishOverlay({
       {showLeaderboard && isFullLeaderboardVisible ? (
         <View
           className="absolute inset-0 items-center justify-center px-4"
-          style={{ backgroundColor: "rgba(4, 10, 8, 0.82)" }}
+          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(4, 10, 8, 0.82)" }}
         >
           <View
             className="w-full overflow-hidden rounded-3xl border"
@@ -615,13 +619,13 @@ export function RealizationFinishOverlay({
               maxWidth: isTablet ? 1120 : 640,
               maxHeight: isTablet ? 760 : 600,
               borderColor: EXPEDITION_THEME.border,
-              backgroundColor: "rgba(9, 20, 16, 0.98)",
+              backgroundColor: EXPEDITION_THEME.panel,
             }}
           >
             <View className="border-b px-4 pb-3 pt-4" style={{ borderColor: EXPEDITION_THEME.border }}>
               <View className="flex-row items-center justify-between">
                 <View>
-                  <Text className={isTablet ? "text-lg font-extrabold uppercase tracking-widest" : "text-base font-extrabold uppercase tracking-wider"} style={{ color: "#86efac" }}>
+                  <Text className={isTablet ? "text-lg font-extrabold uppercase tracking-widest" : "text-base font-extrabold uppercase tracking-wider"} style={{ color: EXPEDITION_THEME.accentStrong }}>
                     {text.matchSummary}
                   </Text>
                   <Text className={isTablet ? "mt-1 text-base font-bold" : "mt-1 text-sm font-bold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
@@ -630,7 +634,7 @@ export function RealizationFinishOverlay({
                 </View>
                 <Pressable
                   className="rounded-lg border px-3 py-1.5 active:opacity-90"
-                  style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(24, 45, 37, 0.96)" }}
+                  style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
                   onPress={() => setIsFullLeaderboardVisible(false)}
                 >
                   <Text className={isTablet ? "text-xs font-semibold uppercase tracking-wide" : "text-[11px] font-semibold uppercase tracking-wide"} style={{ color: EXPEDITION_THEME.textPrimary }}>
@@ -642,18 +646,18 @@ export function RealizationFinishOverlay({
 
             <View
               className="flex-row items-center border-b px-4 py-2"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(24, 45, 37, 0.94)" }}
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
             >
-              <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ width: 74, color: "#9ca3af" }}>
+              <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ width: 74, color: EXPEDITION_THEME.textSubtle }}>
                 {text.place}
               </Text>
-              <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ flex: 1, color: "#9ca3af" }}>
+              <Text className="text-[11px] font-bold uppercase tracking-wide" style={{ flex: 1, color: EXPEDITION_THEME.textSubtle }}>
                 {text.team}
               </Text>
-              <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 96, color: "#9ca3af" }}>
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 96, color: EXPEDITION_THEME.textSubtle }}>
                 {text.progress}
               </Text>
-              <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 84, color: "#9ca3af" }}>
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-right" style={{ width: 84, color: EXPEDITION_THEME.textSubtle }}>
                 {text.points}
               </Text>
             </View>
@@ -675,19 +679,19 @@ export function RealizationFinishOverlay({
                       key={`full-table-${entry.teamId}`}
                       className="flex-row items-center border-b px-4 py-2.5"
                       style={{
-                        borderColor: "rgba(68, 98, 81, 0.55)",
+                        borderColor: EXPEDITION_THEME.border,
                         backgroundColor: isCurrentTeam
-                          ? "rgba(20, 74, 57, 0.95)"
+                          ? EXPEDITION_THEME.panelStrong
                           : index % 2 === 0
-                            ? "rgba(16, 33, 27, 0.95)"
-                            : "rgba(12, 26, 21, 0.95)",
+                            ? EXPEDITION_THEME.panelMuted
+                            : EXPEDITION_THEME.panel,
                       }}
                     >
                       <View
                         className="absolute bottom-1 left-0 top-1 w-1 rounded-r"
-                        style={{ backgroundColor: isCurrentTeam ? "#6ee7b7" : "transparent" }}
+                        style={{ backgroundColor: isCurrentTeam ? EXPEDITION_THEME.accentStrong : "transparent" }}
                       />
-                      <Text className={isTablet ? "text-base font-extrabold" : "text-sm font-extrabold"} style={{ width: 74, color: isCurrentTeam ? "#6ee7b7" : EXPEDITION_THEME.textPrimary }}>
+                      <Text className={isTablet ? "text-base font-extrabold" : "text-sm font-extrabold"} style={{ width: 74, color: isCurrentTeam ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textPrimary }}>
                         #{entry.position}
                       </Text>
                       <View style={{ flex: 1 }}>
@@ -702,8 +706,14 @@ export function RealizationFinishOverlay({
                         <Text className="text-right text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                           {safeProgressDone}/{safeProgressTotal}
                         </Text>
-                        <View className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "rgba(148, 163, 184, 0.25)" }}>
-                          <View className="h-1.5 rounded-full" style={{ width: `${safeProgressPercent}%`, backgroundColor: isCurrentTeam ? "#6ee7b7" : "#93c5fd" }} />
+                        <View className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: EXPEDITION_THEME.border }}>
+                          <View
+                            className="h-1.5 rounded-full"
+                            style={{
+                              width: `${safeProgressPercent}%`,
+                              backgroundColor: isCurrentTeam ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.accent,
+                            }}
+                          />
                         </View>
                       </View>
                       <Text className={isTablet ? "text-lg font-extrabold" : "text-base font-extrabold"} style={{ width: 84, textAlign: "right", color: EXPEDITION_THEME.textPrimary }}>

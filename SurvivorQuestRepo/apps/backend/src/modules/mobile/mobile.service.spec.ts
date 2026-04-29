@@ -330,6 +330,44 @@ describe('MobileService failed task snapshots', () => {
 
     expect([...failedStationIds]).toEqual([]);
   });
+
+  it('clears failed outcome for station after admin task reset', async () => {
+    const { service, prisma } = createService();
+    prisma.eventLog.findMany.mockResolvedValue([
+      {
+        eventType: 'task_reset_by_admin',
+        payload: { stationId: 'station-1' },
+      },
+      {
+        eventType: 'task_failed',
+        payload: { stationId: 'station-1' },
+      },
+      {
+        eventType: 'task_failed',
+        payload: { stationId: 'station-2' },
+      },
+    ]);
+
+    const failedStationIds = await (service as never).getFailedTaskStationIds({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+    });
+
+    expect([...failedStationIds]).toEqual(['station-2']);
+    expect(prisma.eventLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            expect.objectContaining({
+              eventType: {
+                in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
+              },
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
 });
 
 describe('MobileService current realization resolver', () => {

@@ -12,6 +12,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@reduxjs/toolkit": "^2.11.2",
     "@tanstack/react-table": "^8.21.3",
+    "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "next": "16.1.6",
     "qrcode": "^1.5.4",

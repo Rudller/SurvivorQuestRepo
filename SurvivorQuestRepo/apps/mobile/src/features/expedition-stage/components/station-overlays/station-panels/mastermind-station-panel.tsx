@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { MASTERMIND_MAX_ATTEMPTS, MASTERMIND_SYMBOLS } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 export type MastermindAttempt = {
   guess: string;
@@ -94,6 +94,7 @@ export function MastermindStationPanel({
   const uiLanguage = useUiLanguage();
   const text = MASTERMIND_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const actionLabelColor = resolveActionLabelColor(isActionDisabled);
 
   return (
     <View className="mt-3">
@@ -151,7 +152,7 @@ export function MastermindStationPanel({
           onPress={onSubmitGuess}
           disabled={isActionDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text className="font-semibold" style={{ color: actionLabelColor, fontSize: layout.actionFontSize }}>
             {isSubmittingMastermindGuess ? "..." : text.check}
           </Text>
         </Pressable>

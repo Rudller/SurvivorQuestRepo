@@ -34,6 +34,18 @@ function toMobileAdminRealizationPath(realizationId: string | undefined, suffix 
   return buildApiPath(`/mobile/admin/realizations/${encodeURIComponent(normalizedId)}${suffix}`);
 }
 
+function toMobileAdminTeamTaskPath(
+  realizationId: string | undefined,
+  teamId: string,
+  stationId: string,
+  action: "reset" | "complete" | "fail",
+) {
+  return toMobileAdminRealizationPath(
+    realizationId,
+    `/teams/${encodeURIComponent(teamId)}/tasks/${encodeURIComponent(stationId)}/${action}`,
+  );
+}
+
 function normalizeOverview(raw: unknown): CurrentRealizationOverview {
   const source = asRecord(raw);
   const realization = asRecord(source.realization);
@@ -57,10 +69,21 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         .filter(Boolean),
       stations: asArray(realization.stations).map((value) => {
         const item = asRecord(value);
+        const latitudeCandidate = item.latitude ?? item.lat;
+        const longitudeCandidate = item.longitude ?? item.lng;
         return {
           stationId: asString(item.stationId ?? item.station_id),
           stationName: asString(item.stationName ?? item.station_name),
+          stationType: asString(item.stationType ?? item.station_type, "quiz"),
           defaultPoints: asNumber(item.defaultPoints ?? item.default_points),
+          latitude:
+            typeof latitudeCandidate === "number" && Number.isFinite(latitudeCandidate)
+              ? latitudeCandidate
+              : null,
+          longitude:
+            typeof longitudeCandidate === "number" && Number.isFinite(longitudeCandidate)
+              ? longitudeCandidate
+              : null,
         };
       }),
       updatedAt: asString(realization.updatedAt ?? realization.updated_at),
@@ -166,6 +189,16 @@ export type CurrentRealizationStationQrResponse = {
   }>;
 };
 
+type TeamTaskAdminMutationResponse = {
+  realizationId: string;
+  teamId: string;
+  stationId: string;
+  pointsTotal: number;
+  pointsAwarded: number;
+  taskStatus: CurrentRealizationOverview["teams"][number]["tasks"][number]["status"];
+  updatedAt: string;
+};
+
 export const currentRealizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getCurrentRealizationOverview: build.query<
@@ -237,6 +270,37 @@ export const currentRealizationApi = baseApi.injectEndpoints({
         return toMobileAdminRealizationPath(realizationId, `/station-qr${suffix}`);
       },
     }),
+    resetCurrentRealizationTeamTask: build.mutation<
+      TeamTaskAdminMutationResponse,
+      { realizationId?: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "reset"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    completeCurrentRealizationTeamTask: build.mutation<
+      TeamTaskAdminMutationResponse,
+      { realizationId?: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "complete"),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    failCurrentRealizationTeamTask: build.mutation<
+      TeamTaskAdminMutationResponse,
+      { realizationId?: string; teamId: string; stationId: string; reason?: string }
+    >({
+      query: ({ realizationId, teamId, stationId, reason }) => ({
+        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "fail"),
+        method: "POST",
+        body: typeof reason === "string" && reason.trim().length > 0 ? { reason } : undefined,
+      }),
+      invalidatesTags: ["Realization"],
+    }),
   }),
 });
 
@@ -247,4 +311,7 @@ export const {
   useFinishCurrentRealizationMutation,
   useResetCurrentRealizationMutation,
   useGetCurrentRealizationStationQrsQuery,
+  useResetCurrentRealizationTeamTaskMutation,
+  useCompleteCurrentRealizationTeamTaskMutation,
+  useFailCurrentRealizationTeamTaskMutation,
 } = currentRealizationApi;

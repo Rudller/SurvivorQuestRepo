@@ -89,6 +89,28 @@ function resolveApiErrorMessage(error: unknown) {
   return null;
 }
 
+function normalizeCategoryValue(value: string) {
+  return value.trim();
+}
+
+function normalizeCategories(categories: string[]) {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const category of categories) {
+    const trimmed = normalizeCategoryValue(category);
+    const dedupeKey = trimmed.toLocaleLowerCase();
+    if (!trimmed || seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
@@ -96,6 +118,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
 
   const [name, setName] = useState("");
   const [type, setType] = useState<StationType>("quiz");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [categoryInput, setCategoryInput] = useState("");
   const [description, setDescription] = useState(resolveDefaultStationDescription("quiz"));
   const [imageUrl, setImageUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -122,6 +146,16 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const hasLongitude = typeof longitude === "number" && Number.isFinite(longitude);
   const hasCoordinates = hasLatitude && hasLongitude;
   const quizLikeCopy = getQuizLikeStationCopy(type);
+
+  const addCategory = () => {
+    const nextCategory = normalizeCategoryValue(categoryInput);
+    if (!nextCategory) {
+      return;
+    }
+
+    setCategories((current) => normalizeCategories([...current, nextCategory]));
+    setCategoryInput("");
+  };
 
   return (
     <>
@@ -217,6 +251,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               await createStation({
                 name: name.trim(),
                 type,
+                categories,
                 description: description.trim() || resolveDefaultStationDescription(type),
                 imageUrl: nextImageUrl || undefined,
                 points,
@@ -231,6 +266,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               }).unwrap();
               setName("");
               setType("quiz");
+              setCategories([]);
+              setCategoryInput("");
               setDescription(resolveDefaultStationDescription("quiz"));
               setImageUrl("");
               setImageFile(null);
@@ -310,6 +347,55 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               ))}
             </select>
           </label>
+
+          <div className="space-y-1.5">
+            <span className="text-xs uppercase tracking-wider text-zinc-400">Kategorie</span>
+            <div className="flex gap-2">
+              <input
+                value={categoryInput}
+                onChange={(event) => setCategoryInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  addCategory();
+                }}
+                placeholder="Wpisz kategorię i naciśnij Enter"
+                className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+              <button
+                type="button"
+                onClick={addCategory}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+              >
+                Dodaj
+              </button>
+            </div>
+            {categories.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {categories.map((category, index) => (
+                  <span
+                    key={`${category}-${index}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200"
+                  >
+                    {category}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCategories((current) => current.filter((_, categoryIndex) => categoryIndex !== index))
+                      }
+                      aria-label={`Usuń kategorię ${category}`}
+                      className="rounded-full text-zinc-400 transition hover:text-zinc-100"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {isCompletionCodeRequired(type) ? (
             <label className="space-y-1.5">

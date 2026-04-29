@@ -4,7 +4,7 @@ import { Animated, Easing, PanResponder, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { MEMORY_MAX_MISTAKES } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, useStationPanelLayout, withAlpha } from "./shared-ui";
 
 type MatchingStationPanelProps = {
   matchingAttemptsLeft: number;
@@ -122,6 +122,13 @@ export function MatchingStationPanel({
   const rightPrev = getCarouselItem(matchingRightOptions, matchingRightIndex, -1);
   const rightCurrent = getCarouselItem(matchingRightOptions, matchingRightIndex, 0);
   const rightNext = getCarouselItem(matchingRightOptions, matchingRightIndex, 1);
+  const centerLineColor = withAlpha(EXPEDITION_THEME.accentStrong, 0.45);
+  const sideCardBorderColor = withAlpha(EXPEDITION_THEME.border, 0.68);
+  const sideCardTopEdgeColor = withAlpha(EXPEDITION_THEME.accentStrong, 0.35);
+  const sideCardBottomEdgeColor = withAlpha(EXPEDITION_THEME.textSubtle, 0.52);
+  const sideCardBackgroundColor = withAlpha(EXPEDITION_THEME.panelMuted, 0.78);
+  const centerCardBorderColor = withAlpha(EXPEDITION_THEME.accentStrong, 0.7);
+  const centerCardBackgroundColor = withAlpha(EXPEDITION_THEME.panelStrong, 0.95);
 
   const settleColumn = useCallback((translateY: Animated.Value) => {
     Animated.spring(translateY, {
@@ -317,7 +324,7 @@ export function MatchingStationPanel({
           style={{
             top: Math.round(MATCHING_STACK_HEIGHT / 2),
             height: 2,
-            backgroundColor: "rgba(250, 204, 21, 0.45)",
+            backgroundColor: centerLineColor,
           }}
         />
 
@@ -336,10 +343,10 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(244, 244, 245, 0.22)",
-                  borderTopColor: "rgba(250, 250, 250, 0.4)",
-                  borderBottomColor: "rgba(0, 0, 0, 0.68)",
-                  backgroundColor: "rgba(24, 24, 27, 0.7)",
+                  borderColor: sideCardBorderColor,
+                  borderTopColor: sideCardTopEdgeColor,
+                  borderBottomColor: sideCardBottomEdgeColor,
+                  backgroundColor: sideCardBackgroundColor,
                   opacity: MATCHING_SIDE_CARD_OPACITY,
                   overflow: "hidden",
                   transform: SIDE_TOP_CARD_TRANSFORM,
@@ -362,8 +369,8 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(250, 204, 21, 0.7)",
-                  backgroundColor: "rgba(63, 63, 70, 0.95)",
+                  borderColor: centerCardBorderColor,
+                  backgroundColor: centerCardBackgroundColor,
                 }}
               >
                 <Text
@@ -383,10 +390,10 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(244, 244, 245, 0.22)",
-                  borderTopColor: "rgba(0, 0, 0, 0.68)",
-                  borderBottomColor: "rgba(250, 250, 250, 0.4)",
-                  backgroundColor: "rgba(24, 24, 27, 0.7)",
+                  borderColor: sideCardBorderColor,
+                  borderTopColor: sideCardBottomEdgeColor,
+                  borderBottomColor: sideCardTopEdgeColor,
+                  backgroundColor: sideCardBackgroundColor,
                   opacity: MATCHING_SIDE_CARD_OPACITY,
                   overflow: "hidden",
                   transform: SIDE_BOTTOM_CARD_TRANSFORM,
@@ -432,10 +439,10 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(244, 244, 245, 0.22)",
-                  borderTopColor: "rgba(250, 250, 250, 0.4)",
-                  borderBottomColor: "rgba(0, 0, 0, 0.68)",
-                  backgroundColor: "rgba(24, 24, 27, 0.7)",
+                  borderColor: sideCardBorderColor,
+                  borderTopColor: sideCardTopEdgeColor,
+                  borderBottomColor: sideCardBottomEdgeColor,
+                  backgroundColor: sideCardBackgroundColor,
                   opacity: MATCHING_SIDE_CARD_OPACITY,
                   overflow: "hidden",
                   transform: SIDE_TOP_CARD_TRANSFORM,
@@ -458,8 +465,8 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(250, 204, 21, 0.7)",
-                  backgroundColor: "rgba(63, 63, 70, 0.95)",
+                  borderColor: centerCardBorderColor,
+                  backgroundColor: centerCardBackgroundColor,
                 }}
               >
                 <Text
@@ -479,10 +486,10 @@ export function MatchingStationPanel({
                 style={{
                   width: MATCHING_CARD_WIDTH,
                   height: MATCHING_CARD_HEIGHT,
-                  borderColor: "rgba(244, 244, 245, 0.22)",
-                  borderTopColor: "rgba(0, 0, 0, 0.68)",
-                  borderBottomColor: "rgba(250, 250, 250, 0.4)",
-                  backgroundColor: "rgba(24, 24, 27, 0.7)",
+                  borderColor: sideCardBorderColor,
+                  borderTopColor: sideCardBottomEdgeColor,
+                  borderBottomColor: sideCardTopEdgeColor,
+                  backgroundColor: sideCardBackgroundColor,
                   opacity: MATCHING_SIDE_CARD_OPACITY,
                   overflow: "hidden",
                   transform: SIDE_BOTTOM_CARD_TRANSFORM,

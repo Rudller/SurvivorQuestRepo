@@ -1444,7 +1444,7 @@ export class MobileService {
     });
     const latestTaskOutcomeByTeam = new Map<
       string,
-      Map<string, 'failed' | 'done'>
+      Map<string, 'failed' | 'done' | 'reset'>
     >();
     for (const log of logs) {
       if (
@@ -1456,7 +1456,9 @@ export class MobileService {
 
       if (
         !log.teamId ||
-        (log.eventType !== 'task_failed' && log.eventType !== 'task_completed')
+        (log.eventType !== 'task_failed' &&
+          log.eventType !== 'task_completed' &&
+          log.eventType !== 'task_reset_by_admin')
       ) {
         continue;
       }
@@ -1468,7 +1470,7 @@ export class MobileService {
 
       const teamOutcome =
         latestTaskOutcomeByTeam.get(log.teamId) ||
-        new Map<string, 'failed' | 'done'>();
+        new Map<string, 'failed' | 'done' | 'reset'>();
       if (!latestTaskOutcomeByTeam.has(log.teamId)) {
         latestTaskOutcomeByTeam.set(log.teamId, teamOutcome);
       }
@@ -1476,7 +1478,11 @@ export class MobileService {
       if (!teamOutcome.has(stationId)) {
         teamOutcome.set(
           stationId,
-          log.eventType === 'task_failed' ? 'failed' : 'done',
+          log.eventType === 'task_failed'
+            ? 'failed'
+            : log.eventType === 'task_completed'
+              ? 'done'
+              : 'reset',
         );
       }
     }
@@ -1657,6 +1663,209 @@ export class MobileService {
       realizationId: realization.id,
       resetCount: resettableTasks.length,
       affectedTeams: affectedTeamIds.length,
+    };
+  }
+
+  async resetMobileAdminTeamTask(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+  }) {
+    const { realization, team, station, existingProgress, stationId } =
+      await this.resolveMobileAdminTeamTaskContext(input);
+    const resetAt = new Date();
+    const failedStationIds = await this.getFailedTaskStationIds({
+      realizationId: realization.id,
+      teamId: team.id,
+    });
+    const previousStatus =
+      this.fromTaskStatus(
+        existingProgress?.status,
+        failedStationIds.has(stationId),
+      ) || 'todo';
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.TODO,
+          pointsAwarded: 0,
+          startedAt: null,
+          finishedAt: null,
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId,
+          status: TaskStatus.TODO,
+          pointsAwarded: 0,
+          startedAt: null,
+          finishedAt: null,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'task_reset_by_admin',
+      payload: {
+        stationId,
+        stationType: station.type,
+        previousStatus,
+        previousPointsAwarded: existingProgress?.pointsAwarded || 0,
+        resetAt: resetAt.toISOString(),
+      },
+    });
+
+    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+
+    return {
+      realizationId: realization.id,
+      teamId: team.id,
+      stationId,
+      pointsTotal,
+      pointsAwarded: 0,
+      taskStatus: 'todo' as const,
+      updatedAt: resetAt.toISOString(),
+    };
+  }
+
+  async completeMobileAdminTeamTask(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+  }) {
+    const { realization, team, station, existingProgress, stationId } =
+      await this.resolveMobileAdminTeamTaskContext(input);
+    const finishedAt = new Date();
+    const startedAt = existingProgress?.startedAt || finishedAt;
+    const awardedPoints = Math.max(0, Math.round(station.points));
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.DONE,
+          pointsAwarded: awardedPoints,
+          startedAt,
+          finishedAt,
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId,
+          status: TaskStatus.DONE,
+          pointsAwarded: awardedPoints,
+          startedAt,
+          finishedAt,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'task_completed',
+      payload: {
+        stationId,
+        stationType: station.type,
+        pointsAwarded: awardedPoints,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        scoring: {
+          mode: 'admin-fixed',
+          basePoints: awardedPoints,
+        },
+      },
+    });
+
+    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+
+    return {
+      realizationId: realization.id,
+      teamId: team.id,
+      stationId,
+      pointsTotal,
+      pointsAwarded: awardedPoints,
+      taskStatus: 'done' as const,
+      updatedAt: finishedAt.toISOString(),
+    };
+  }
+
+  async failMobileAdminTeamTask(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+    reason?: string;
+  }) {
+    const { realization, team, station, existingProgress, stationId } =
+      await this.resolveMobileAdminTeamTaskContext(input);
+    const finishedAt = new Date();
+    const startedAt = existingProgress?.startedAt || null;
+    const failureReason = this.resolveTaskFailureReason(input.reason);
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.DONE,
+          pointsAwarded: 0,
+          startedAt,
+          finishedAt,
+        },
+      });
+    } else {
+      await this.prisma.teamTaskProgress.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId,
+          status: TaskStatus.DONE,
+          pointsAwarded: 0,
+          startedAt: null,
+          finishedAt,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'task_failed',
+      payload: {
+        stationId,
+        stationType: station.type,
+        reason: failureReason.code,
+        reasonLabel: failureReason.label,
+        reasonRaw: failureReason.raw,
+        startedAt: startedAt ? startedAt.toISOString() : null,
+        finishedAt: finishedAt.toISOString(),
+      },
+    });
+
+    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+
+    return {
+      realizationId: realization.id,
+      teamId: team.id,
+      stationId,
+      pointsTotal,
+      pointsAwarded: 0,
+      taskStatus: 'failed' as const,
+      updatedAt: finishedAt.toISOString(),
     };
   }
 
@@ -2183,7 +2392,74 @@ export class MobileService {
     return {
       stationId,
       stationName: station?.name ?? `Stanowisko ${stationId}`,
+      stationType: station?.type ?? 'quiz',
       defaultPoints: station?.points ?? 0,
+      latitude:
+        typeof station?.latitude === 'number' && Number.isFinite(station.latitude)
+          ? station.latitude
+          : null,
+      longitude:
+        typeof station?.longitude === 'number' &&
+        Number.isFinite(station.longitude)
+          ? station.longitude
+          : null,
+    };
+  }
+
+  private async resolveMobileAdminTeamTaskContext(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+  }) {
+    const teamId = input.teamId?.trim();
+    const stationId = input.stationId?.trim();
+    if (!teamId || !stationId) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const realization = await this.resolveMobileAdminRealizationOrThrow(
+      input.realizationId,
+    );
+    if (!realization.stationIds.includes(stationId)) {
+      throw new BadRequestException('Station not available in this realization');
+    }
+
+    const [team, station, existingProgress] = await Promise.all([
+      this.prisma.team.findFirst({
+        where: {
+          id: teamId,
+          realizationId: realization.id,
+        },
+        select: {
+          id: true,
+        },
+      }),
+      this.stationService.findStationById(stationId),
+      this.prisma.teamTaskProgress.findUnique({
+        where: {
+          realizationId_teamId_stationId: {
+            realizationId: realization.id,
+            teamId,
+            stationId,
+          },
+        },
+      }),
+    ]);
+
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
+
+    return {
+      realization,
+      team,
+      station,
+      existingProgress,
+      stationId,
     };
   }
 
@@ -2569,7 +2845,7 @@ export class MobileService {
           {
             teamId: input.teamId,
             eventType: {
-              in: ['task_failed', 'task_completed'],
+              in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
             },
           },
           {

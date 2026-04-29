@@ -1,6 +1,6 @@
 export type CurrentRealizationStatus = "planned" | "in-progress" | "done";
 
-export type CurrentTeamTaskStatus = "todo" | "in-progress" | "done";
+export type CurrentTeamTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
 export type CurrentTeamStatus = "unassigned" | "ready" | "active" | "offline";
 
@@ -15,7 +15,14 @@ export type CurrentRealizationOverview = {
     joinCode: string;
     teamCount: number;
     stationIds: string[];
-    stations: Array<{ stationId: string; stationName: string; defaultPoints: number }>;
+    stations: Array<{
+      stationId: string;
+      stationName: string;
+      stationType: string;
+      defaultPoints: number;
+      latitude: number | null;
+      longitude: number | null;
+    }>;
     updatedAt: string;
   };
   teams: Array<{

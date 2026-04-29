@@ -91,6 +91,7 @@ function normalizeMatchingAnswer(value: string) {
 export type CreateStationDto = {
   name: string;
   type: StationType;
+  categories?: string[];
   description: string;
   imageUrl?: string;
   points: number;
@@ -174,6 +175,35 @@ function ensureCoordinates(body: Record<string, unknown>) {
     latitude: ensureCoordinate(body.latitude, -90, 90),
     longitude: ensureCoordinate(body.longitude, -180, 180),
   };
+}
+
+function ensureStationCategories(value: unknown): string[] | undefined {
+  if (typeof value === 'undefined') {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const seen = new Set<string>();
+  const categories: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    categories.push(normalized);
+  }
+
+  return categories;
 }
 
 function ensureCompletionCode(
@@ -270,6 +300,7 @@ function ensureStationBody(payload: unknown): CreateStationDto {
   return {
     name: ensureTrimmedString(body.name),
     type,
+    categories: ensureStationCategories(body.categories),
     description: ensureStringAllowingEmpty(body.description),
     imageUrl:
       typeof body.imageUrl === 'string' && body.imageUrl.trim()
@@ -336,6 +367,7 @@ export function toCreateStationEntity(
     imageUrl: dto.imageUrl || buildStationFallbackImage(dto.name),
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    categories: dto.categories ?? [],
     completionCode: dto.completionCode,
     quiz: dto.quiz,
     latitude: dto.latitude,
@@ -358,6 +390,7 @@ export function toUpdateStationEntity(
     imageUrl: dto.imageUrl || buildStationFallbackImage(dto.name),
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    categories: dto.categories ?? current.categories,
     completionCode: dto.completionCode,
     quiz: dto.quiz,
     latitude: dto.latitude,
@@ -377,6 +410,7 @@ export function toStationDraftInput(
     imageUrl: dto.imageUrl,
     points: dto.points,
     timeLimitSeconds: parsedTimeLimitSeconds,
+    categories: dto.categories,
     completionCode: dto.completionCode,
     quiz: dto.quiz,
     latitude: dto.latitude,

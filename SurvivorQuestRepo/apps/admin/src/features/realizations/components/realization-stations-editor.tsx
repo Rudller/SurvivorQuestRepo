@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
 import { useUploadStationImageMutation } from "@/features/games/api/station.api";
-import { filterStationCatalogItems } from "@/features/games/station-catalog.utils";
+import { filterStationCatalogItems, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
 import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
@@ -70,6 +70,7 @@ const supportedStationTranslationLanguages: RealizationLanguage[] = [
   "russian",
   "other",
 ];
+const UNCATEGORIZED_FILTER_LABEL = "Bez kategorii";
 
 function isRealizationLanguage(value: string): value is RealizationLanguage {
   return (
@@ -85,10 +86,32 @@ function toQuizAnswersTuple(answers: string[]) {
   return [answers[0] ?? "", answers[1] ?? "", answers[2] ?? "", answers[3] ?? ""] as [string, string, string, string];
 }
 
+function normalizeStationCategories(categories: string[] | null | undefined) {
+  if (!Array.isArray(categories)) {
+    return [] as string[];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const category of categories) {
+    const trimmed = category.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export function createEmptyRealizationStationDraft(): RealizationStationDraft {
   return {
     name: "",
     type: "quiz",
+    categories: [],
     description: DEFAULT_STATION_DESCRIPTION,
     imageUrl: "",
     points: 100,
@@ -198,6 +221,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     id: station.id,
     name: station.name,
     type: station.type,
+    categories: normalizeStationCategories(station.categories),
     description: station.description,
     imageUrl: station.imageUrl,
     points: station.points,
@@ -241,6 +265,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     id: station.id,
     name: station.name.trim(),
     type: station.type,
+    categories: normalizeStationCategories(station.categories),
     description: station.description.trim() || DEFAULT_STATION_DESCRIPTION,
     imageUrl: isImageSupportedStationType(station.type) ? station.imageUrl.trim() : "",
     points: Math.round(station.points),
@@ -371,8 +396,9 @@ export function RealizationStationsEditor({
   const [stationLocationErrors, setStationLocationErrors] = useState<Record<string, string>>({});
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
+  const [stationCategoryInputs, setStationCategoryInputs] = useState<Record<string, string>>({});
   const [stationSearchQuery, setStationSearchQuery] = useState("");
-  const [selectedStationTypes, setSelectedStationTypes] = useState<RealizationStationDraft["type"][]>([]);
+  const [selectedStationCategories, setSelectedStationCategories] = useState<string[]>([]);
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
 
   const stationTypeLabelByValue = useMemo(
@@ -408,6 +434,7 @@ export function RealizationStationsEditor({
         name: station.name,
         description: station.description,
         type: station.type,
+        categories: station.categories,
       })),
     [stations],
   );
@@ -416,18 +443,45 @@ export function RealizationStationsEditor({
       filterStationCatalogItems({
         items: stationEntries,
         searchQuery: stationSearchQuery,
-        selectedTypes: selectedStationTypes,
+        selectedCategories: selectedStationCategories,
       }),
-    [stationEntries, stationSearchQuery, selectedStationTypes],
+    [stationEntries, stationSearchQuery, selectedStationCategories],
   );
-  const hasStationFilters = stationSearchQuery.trim().length > 0 || selectedStationTypes.length > 0;
-  const stationTypeCounts = useMemo(() => {
-    const counts = new Map<RealizationStationDraft["type"], number>();
+  const hasStationFilters = stationSearchQuery.trim().length > 0 || selectedStationCategories.length > 0;
+  const stationCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
     stations.forEach((station) => {
-      counts.set(station.type, (counts.get(station.type) ?? 0) + 1);
+      const categories = normalizeStationCategories(station.categories);
+      if (categories.length === 0) {
+        counts.set(uncategorizedStationGroupKey, (counts.get(uncategorizedStationGroupKey) ?? 0) + 1);
+        return;
+      }
+
+      categories.forEach((category) => {
+        counts.set(category, (counts.get(category) ?? 0) + 1);
+      });
     });
     return counts;
   }, [stations]);
+  const stationCategoryFilterOptions = useMemo(
+    () =>
+      Array.from(stationCategoryCounts.entries())
+        .sort(([left], [right]) => {
+          if (left === uncategorizedStationGroupKey) {
+            return 1;
+          }
+          if (right === uncategorizedStationGroupKey) {
+            return -1;
+          }
+          return left.localeCompare(right, "pl", { sensitivity: "base" });
+        })
+        .map(([value, count]) => ({
+          value,
+          count,
+          label: value === uncategorizedStationGroupKey ? UNCATEGORIZED_FILTER_LABEL : value,
+        })),
+    [stationCategoryCounts],
+  );
 
   useEffect(() => {
     setExpandedStationIndex((current) => {
@@ -617,6 +671,27 @@ export function RealizationStationsEditor({
     window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
   }
 
+  function setStationCategoryInput(stationKey: string, value: string) {
+    setStationCategoryInputs((current) => ({ ...current, [stationKey]: value }));
+  }
+
+  function addStationCategory(index: number, category: string) {
+    const nextCategory = category.trim();
+    if (!nextCategory) {
+      return;
+    }
+
+    updateStation(index, {
+      categories: normalizeStationCategories([...(stations[index]?.categories ?? []), nextCategory]),
+    });
+  }
+
+  function removeStationCategory(index: number, categoryToRemove: string) {
+    updateStation(index, {
+      categories: normalizeStationCategories(stations[index]?.categories).filter((category) => category !== categoryToRemove),
+    });
+  }
+
   function requestCurrentLocation(index: number, stationKey: string) {
     if (typeof window === "undefined") {
       return;
@@ -667,17 +742,17 @@ export function RealizationStationsEditor({
     );
   }
 
-  function toggleStationTypeFilter(type: RealizationStationDraft["type"]) {
-    setSelectedStationTypes((current) =>
-      current.includes(type)
-        ? current.filter((item) => item !== type)
-        : [...current, type],
+  function toggleStationCategoryFilter(category: string) {
+    setSelectedStationCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category],
     );
   }
 
   function clearStationFilters() {
     setStationSearchQuery("");
-    setSelectedStationTypes([]);
+    setSelectedStationCategories([]);
   }
 
   function addStation() {
@@ -726,6 +801,11 @@ export function RealizationStationsEditor({
       return next;
     });
     setStationMapRecenterTokens((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
+    setStationCategoryInputs((current) => {
       const next = { ...current };
       delete next[stationKey];
       return next;
@@ -853,7 +933,7 @@ export function RealizationStationsEditor({
           <input
             value={stationSearchQuery}
             onChange={(event) => setStationSearchQuery(event.target.value)}
-            placeholder="Szukaj stanowiska po nazwie, typie lub opisie..."
+            placeholder="Szukaj stanowiska po nazwie, kategorii lub opisie..."
             className="min-w-60 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-amber-400/80"
           />
           <span className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-400">
@@ -870,22 +950,21 @@ export function RealizationStationsEditor({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {stationTypeOptions.map((option) => {
-            const isActive = selectedStationTypes.includes(option.value);
-            const count = stationTypeCounts.get(option.value) ?? 0;
+          {stationCategoryFilterOptions.map((option) => {
+            const isActive = selectedStationCategories.includes(option.value);
 
             return (
               <button
-                key={`realization-stations-filter-${option.value}`}
+                key={`realization-stations-filter-category-${option.value}`}
                 type="button"
-                onClick={() => toggleStationTypeFilter(option.value)}
+                onClick={() => toggleStationCategoryFilter(option.value)}
                 className={`rounded-full border px-3 py-1 text-xs transition ${
                   isActive
                     ? "border-amber-300 bg-amber-300/15 text-amber-200"
                     : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
                 }`}
               >
-                {option.label} ({count})
+                {option.label} ({option.count})
               </button>
             );
           })}
@@ -928,6 +1007,8 @@ export function RealizationStationsEditor({
           const selectedStationQuiz = isEditingBaseLanguage ? station.quiz : selectedTranslation?.quiz;
           const selectedStationQuizAnswers = selectedStationQuiz?.answers ?? createEmptyQuizAnswers();
           const selectedStationCorrectAnswerIndex = selectedStationQuiz?.correctAnswerIndex ?? 0;
+          const stationCategories = normalizeStationCategories(station.categories);
+          const stationCategoryInput = stationCategoryInputs[stationKey] ?? "";
           const quizLikeCopy = getQuizLikeStationCopy(station.type);
           const shouldValidateLanguageFields = showValidation && isEditingBaseLanguage;
           const hasCoordinates =
@@ -1062,6 +1143,58 @@ export function RealizationStationsEditor({
                         ))}
                       </select>
                     </label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Kategorie</span>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={stationCategoryInput}
+                        onChange={(event) => setStationCategoryInput(stationKey, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") {
+                            return;
+                          }
+                          event.preventDefault();
+                          addStationCategory(stationIndex, stationCategoryInput);
+                          setStationCategoryInput(stationKey, "");
+                        }}
+                        placeholder="Np. Integracja"
+                        className="min-w-52 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addStationCategory(stationIndex, stationCategoryInput);
+                          setStationCategoryInput(stationKey, "");
+                        }}
+                        className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                      >
+                        + Dodaj kategorię
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {stationCategories.length > 0 ? (
+                        stationCategories.map((category) => (
+                          <span
+                            key={`${stationKey}-category-${category}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200"
+                          >
+                            <span>{category}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeStationCategory(stationIndex, category)}
+                              className="rounded-full border border-zinc-600 px-1 text-[10px] leading-none text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
+                              aria-label={`Usuń kategorię ${category}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <p className="text-xs text-zinc-500">Brak kategorii. Dodaj tagi, aby łatwiej filtrować stanowiska.</p>
+                      )}
+                    </div>
                   </div>
 
                   {isCompletionCodeRequired(station.type) ? (

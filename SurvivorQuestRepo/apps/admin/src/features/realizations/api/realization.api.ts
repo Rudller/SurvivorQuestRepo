@@ -14,6 +14,7 @@ type StationDto = {
   id: string;
   name: string;
   type?: StationType;
+  categories?: string[] | null;
   description: string;
   imageUrl?: string | null;
   points: number;
@@ -304,6 +305,27 @@ function deriveStationKind(station: StationDto): StationKind {
   return "template";
 }
 
+function normalizeStationCategories(categories: string[] | null | undefined) {
+  if (!Array.isArray(categories)) {
+    return [] as string[];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const category of categories) {
+    const trimmed = category.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 function normalizeStation(station: StationDto): Station {
   const trimmedName = station.name?.trim() || "Untitled station";
   const safePoints = Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
@@ -317,6 +339,7 @@ function normalizeStation(station: StationDto): Station {
     id: station.id,
     name: trimmedName,
     type: station.type ?? "quiz",
+    categories: normalizeStationCategories(station.categories),
     description: station.description?.trim() || "",
     imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
     points: safePoints,

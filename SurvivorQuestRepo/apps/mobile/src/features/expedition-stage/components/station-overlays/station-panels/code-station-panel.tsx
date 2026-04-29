@@ -8,7 +8,7 @@ import {
   isInvalidCompletionCodeErrorMessage,
 } from "../puzzle-helpers";
 import type { StationTestType, StationTestViewModel } from "../types";
-import { useStationPanelLayout } from "./shared-ui";
+import { resolveActionLabelColor, useStationPanelLayout, withAlpha } from "./shared-ui";
 
 type CodeStationText = {
   timedPlaceholder: string;
@@ -92,6 +92,9 @@ export function CodeStationPanel({
   const uiLanguage = useUiLanguage();
   const text = CODE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const successColor = "#34d399";
+  const successSurfaceColor = withAlpha(successColor, 0.2);
+  const dangerSurfaceColor = withAlpha(EXPEDITION_THEME.danger, 0.16);
   const codeInputShakeStyle = {
     transform: [{ translateX: codeInputShakeAnimation }],
   } as const;
@@ -110,14 +113,14 @@ export function CodeStationPanel({
                 codeInputShakeStyle,
                 {
                   borderColor: isCodeInputSuccess
-                    ? "#34d399"
+                    ? successColor
                     : isCodeInputInvalid
                       ? EXPEDITION_THEME.danger
                       : EXPEDITION_THEME.border,
                   backgroundColor: isCodeInputSuccess
-                    ? "rgba(52, 211, 153, 0.2)"
+                    ? successSurfaceColor
                     : isCodeInputInvalid
-                      ? "rgba(239, 111, 108, 0.16)"
+                      ? dangerSurfaceColor
                       : EXPEDITION_THEME.panelStrong,
                 },
               ]}
@@ -198,7 +201,7 @@ export function CodeStationPanel({
                     <Text
                       className={`${isSubmitKey ? "text-xl" : "text-base"} font-semibold text-center`}
                       style={{
-                        color: isSubmitKey ? "#09090b" : EXPEDITION_THEME.textPrimary,
+                        color: isSubmitKey ? resolveActionLabelColor(isDisabled) : EXPEDITION_THEME.textPrimary,
                         width: "100%",
                         textAlign: "center",
                         textAlignVertical: "center",
@@ -214,24 +217,24 @@ export function CodeStationPanel({
         </View>
       ) : (
         <Animated.View style={codeInputShakeStyle}>
-            <TextInput
-              className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} rounded-xl border px-4`}
-              style={{
-                borderColor: isCodeInputSuccess
-                  ? "#34d399"
+          <TextInput
+            className={`${isNumericCodeStation ? "mt-1.5" : "mt-2"} rounded-xl border px-4`}
+            style={{
+              borderColor: isCodeInputSuccess
+                ? successColor
                 : isCodeInputInvalid
                   ? EXPEDITION_THEME.danger
                   : EXPEDITION_THEME.border,
               backgroundColor: isCodeInputSuccess
-                ? "rgba(52, 211, 153, 0.2)"
+                ? successSurfaceColor
                 : isCodeInputInvalid
-                  ? "rgba(239, 111, 108, 0.16)"
+                  ? dangerSurfaceColor
                   : EXPEDITION_THEME.panelStrong,
-                color: EXPEDITION_THEME.textPrimary,
-                fontSize: layout.inputFontSize,
-                paddingVertical: layout.isTablet ? 12 : 8,
-              }}
-              placeholder={getCodePlaceholder(station.stationType, text)}
+              color: EXPEDITION_THEME.textPrimary,
+              fontSize: layout.inputFontSize,
+              paddingVertical: layout.isTablet ? 12 : 8,
+            }}
+            placeholder={getCodePlaceholder(station.stationType, text)}
             placeholderTextColor={EXPEDITION_THEME.textSubtle}
             autoCapitalize="characters"
             autoCorrect={false}
@@ -260,7 +263,10 @@ export function CodeStationPanel({
           disabled={isCodeActionDisabled}
           onPress={onSubmitVerificationCode}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text
+            className="font-semibold"
+            style={{ color: resolveActionLabelColor(isCodeActionDisabled), fontSize: layout.actionFontSize }}
+          >
             {isSubmittingCode ? text.submitting : text.submitCode}
           </Text>
         </Pressable>

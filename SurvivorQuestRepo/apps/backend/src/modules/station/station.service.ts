@@ -85,6 +85,7 @@ export class StationService {
           id: station.id,
           name: station.name,
           type: toPrismaStationType(station.type),
+          categories: station.categories,
           description: station.description,
           imageUrl: station.imageUrl,
           points: station.points,
@@ -107,6 +108,7 @@ export class StationService {
         data: {
           name: updatedStation.name,
           type: toPrismaStationType(updatedStation.type),
+          categories: updatedStation.categories,
           description: updatedStation.description,
           imageUrl: updatedStation.imageUrl,
           points: updatedStation.points,
@@ -160,6 +162,7 @@ export class StationService {
             data: {
               name: source.name,
               type: toPrismaStationType(source.type),
+              categories: source.categories,
               description: source.description,
               imageUrl: source.imageUrl,
               points: source.points,
@@ -197,6 +200,7 @@ export class StationService {
           id: stationId,
           name: normalized.name,
           type: toPrismaStationType(normalized.type),
+          categories: normalized.categories ?? [],
           description: normalized.description,
           imageUrl: normalized.imageUrl,
           points: normalized.points,
@@ -229,6 +233,7 @@ export class StationService {
         data: {
           name: normalized.name,
           type: toPrismaStationType(normalized.type),
+          categories: normalized.categories ?? current.categories,
           description: normalized.description,
           imageUrl: normalized.imageUrl,
           points: normalized.points,

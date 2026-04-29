@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
-import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../../onboarding/model/constants";
 import { WORDLE_MAX_ATTEMPTS, type WordleCellState } from "../puzzle-helpers";
-import { useStationPanelLayout } from "./shared-ui";
+import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 export type WordleAttempt = {
   guess: string;
@@ -76,6 +76,14 @@ function resolveWordleColors(state?: WordleCellState) {
             ? WORDLE_TILE_COLORS.absent
             : EXPEDITION_THEME.border,
   };
+}
+
+function resolveWordleLetterColor(state?: WordleCellState) {
+  if (!state) {
+    return EXPEDITION_THEME.textPrimary;
+  }
+
+  return getExpeditionThemeMode() === "light" ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
 }
 
 type WordleRevealCellProps = {
@@ -155,7 +163,7 @@ function WordleRevealCell({
         transform: [{ scaleY: flipScaleAnimation }],
       }}
     >
-      <Text className="font-bold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: revealLetterFontSize }}>
+      <Text className="font-bold" style={{ color: resolveWordleLetterColor(displayedState), fontSize: revealLetterFontSize }}>
         {letter || " "}
       </Text>
     </Animated.View>
@@ -264,6 +272,10 @@ export function WordleInteractionPanel({
   const uiLanguage = useUiLanguage();
   const text = WORDLE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const isBackspaceDisabled = isInteractiveDisabled || !canBackspace;
+  const hasSubmitAccent = !isInteractiveDisabled && canSubmit;
+  const backspaceLabelColor = resolveActionLabelColor(isBackspaceDisabled);
+  const submitLabelColor = resolveActionLabelColor(!hasSubmitAccent);
   const inputLetterFontSize = Math.max(9, Math.min(layout.isTablet ? 20 : 16, Math.floor(boardCellSize * 0.58)));
   const backspaceFontSize = Math.max(9, Math.min(layout.isTablet ? 18 : 14, Math.floor(boardCellSize * 0.52)));
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
@@ -364,18 +376,18 @@ export function WordleInteractionPanel({
             style={{
               width: boardCellSize,
               height: boardCellSize,
-              borderColor: EXPEDITION_THEME.accent,
-              backgroundColor: EXPEDITION_THEME.accent,
-              opacity: isInteractiveDisabled || !canBackspace ? 0.45 : 1,
-            }}
-            disabled={isInteractiveDisabled || !canBackspace}
-            onPress={onBackspace}
-            hitSlop={4}
-          >
-            <Text className="font-semibold text-zinc-950" style={{ fontSize: backspaceFontSize }}>
-              ⌫
-            </Text>
-          </Pressable>
+               borderColor: EXPEDITION_THEME.accent,
+               backgroundColor: EXPEDITION_THEME.accent,
+               opacity: isBackspaceDisabled ? 0.45 : 1,
+             }}
+             disabled={isBackspaceDisabled}
+             onPress={onBackspace}
+             hitSlop={4}
+           >
+             <Text className="font-semibold" style={{ color: backspaceLabelColor, fontSize: backspaceFontSize }}>
+               ⌫
+             </Text>
+           </Pressable>
         </View>
       </Animated.View>
 
@@ -410,12 +422,15 @@ export function WordleInteractionPanel({
                   }}
                   hitSlop={3}
                 >
-                  <Text
-                    className="font-semibold"
-                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 16 }}
-                  >
-                    {key}
-                  </Text>
+                   <Text
+                     className="font-semibold"
+                     style={{
+                       color: resolveWordleLetterColor(keyStateByLetter.get(key)),
+                       fontSize: layout.isTablet ? 18 : 16,
+                     }}
+                   >
+                     {key}
+                   </Text>
                 </Pressable>
               );
             })}
@@ -428,14 +443,14 @@ export function WordleInteractionPanel({
           className="items-center justify-center rounded-xl active:opacity-90"
           style={{
             width: "50%",
-            backgroundColor: !isInteractiveDisabled && canSubmit ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
+            backgroundColor: hasSubmitAccent ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
             opacity: isInteractiveDisabled ? 0.45 : 1,
             minHeight: layout.actionMinHeight,
           }}
           onPress={handleSubmitPress}
           disabled={isInteractiveDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text className="font-semibold" style={{ color: submitLabelColor, fontSize: layout.actionFontSize }}>
             {isSubmitting ? text.checking : isRevealing ? text.revealing : text.checkWord}
           </Text>
         </Pressable>

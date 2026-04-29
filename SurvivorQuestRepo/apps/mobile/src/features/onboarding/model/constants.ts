@@ -1,6 +1,24 @@
 import type { TeamColor, TeamColorOption } from "./types";
 
-export const EXPEDITION_THEME = {
+export type ExpeditionThemePalette = {
+  background: string;
+  mapLine: string;
+  mapNode: string;
+  panel: string;
+  panelMuted: string;
+  panelStrong: string;
+  border: string;
+  accent: string;
+  accentStrong: string;
+  textPrimary: string;
+  textMuted: string;
+  textSubtle: string;
+  danger: string;
+};
+
+export type ExpeditionThemeMode = "dark" | "light";
+
+const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   background: "#0f1914",
   mapLine: "#365344",
   mapNode: "#567562",
@@ -14,7 +32,88 @@ export const EXPEDITION_THEME = {
   textMuted: "#bdcdbf",
   textSubtle: "#98ad9c",
   danger: "#ef6f6c",
-} as const;
+};
+
+const EXPEDITION_THEME_LIGHT: ExpeditionThemePalette = {
+  background: "#dde2c9",
+  mapLine: "#9cab88",
+  mapNode: "#81946f",
+  panel: "rgba(233, 239, 213, 0.96)",
+  panelMuted: "rgba(226, 234, 203, 0.98)",
+  panelStrong: "rgba(214, 224, 190, 0.98)",
+  border: "#9fad87",
+  accent: "#b99046",
+  accentStrong: "#9d7736",
+  textPrimary: "#243123",
+  textMuted: "#4e6148",
+  textSubtle: "#67795f",
+  danger: "#ae5954",
+};
+
+const EXPEDITION_THEMES: Record<ExpeditionThemeMode, ExpeditionThemePalette> = {
+  dark: EXPEDITION_THEME_DARK,
+  light: EXPEDITION_THEME_LIGHT,
+};
+
+let activeExpeditionThemeMode: ExpeditionThemeMode = "dark";
+
+export function setExpeditionThemeMode(mode: ExpeditionThemeMode) {
+  activeExpeditionThemeMode = mode;
+}
+
+export function getExpeditionThemeMode() {
+  return activeExpeditionThemeMode;
+}
+
+export function getExpeditionThemePalette(mode: ExpeditionThemeMode = activeExpeditionThemeMode) {
+  return EXPEDITION_THEMES[mode];
+}
+
+function resolveThemeToken(token: keyof ExpeditionThemePalette) {
+  return getExpeditionThemePalette()[token];
+}
+
+export const EXPEDITION_THEME: ExpeditionThemePalette = {
+  get background() {
+    return resolveThemeToken("background");
+  },
+  get mapLine() {
+    return resolveThemeToken("mapLine");
+  },
+  get mapNode() {
+    return resolveThemeToken("mapNode");
+  },
+  get panel() {
+    return resolveThemeToken("panel");
+  },
+  get panelMuted() {
+    return resolveThemeToken("panelMuted");
+  },
+  get panelStrong() {
+    return resolveThemeToken("panelStrong");
+  },
+  get border() {
+    return resolveThemeToken("border");
+  },
+  get accent() {
+    return resolveThemeToken("accent");
+  },
+  get accentStrong() {
+    return resolveThemeToken("accentStrong");
+  },
+  get textPrimary() {
+    return resolveThemeToken("textPrimary");
+  },
+  get textMuted() {
+    return resolveThemeToken("textMuted");
+  },
+  get textSubtle() {
+    return resolveThemeToken("textSubtle");
+  },
+  get danger() {
+    return resolveThemeToken("danger");
+  },
+};
 
 type TeamColorLabelLocale = "polish" | "english" | "ukrainian" | "russian";
 

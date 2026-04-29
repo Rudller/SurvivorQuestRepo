@@ -96,6 +96,28 @@ function resolveApiErrorMessage(error: unknown) {
   return null;
 }
 
+function normalizeCategoryValue(value: string) {
+  return value.trim();
+}
+
+function normalizeCategories(categories: string[]) {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const category of categories) {
+    const trimmed = normalizeCategoryValue(category);
+    const dedupeKey = trimmed.toLocaleLowerCase();
+    if (!trimmed || seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
@@ -110,6 +132,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [categoryInput, setCategoryInput] = useState("");
   const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>(
     resolveCompletionCodeGeneratorMode(station.completionCode ?? ""),
   );
@@ -117,6 +140,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [editValues, setEditValues] = useState({
     name: station.name,
     type: station.type as StationType,
+    categories: normalizeCategories(station.categories ?? []),
     description: station.description,
     imageUrl: station.imageUrl,
     points: station.points,
@@ -140,6 +164,19 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const hasLongitude = typeof editValues.longitude === "number" && Number.isFinite(editValues.longitude);
   const hasCoordinates = hasLatitude && hasLongitude;
   const quizLikeCopy = getQuizLikeStationCopy(editValues.type);
+
+  const addCategory = () => {
+    const nextCategory = normalizeCategoryValue(categoryInput);
+    if (!nextCategory) {
+      return;
+    }
+
+    setEditValues((prev) => ({
+      ...prev,
+      categories: normalizeCategories([...prev.categories, nextCategory]),
+    }));
+    setCategoryInput("");
+  };
 
   return (
     <>
@@ -240,6 +277,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   id: station.id,
                   name: editValues.name.trim(),
                   type: editValues.type,
+                  categories: editValues.categories,
                   description: editValues.description.trim() || DEFAULT_STATION_DESCRIPTION,
                   imageUrl: isImageSupportedStationType(editValues.type) ? editValues.imageUrl.trim() || undefined : undefined,
                   points: editValues.points,
@@ -308,6 +346,58 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 ))}
               </select>
             </label>
+
+            <div className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Kategorie</span>
+              <div className="flex gap-2">
+                <input
+                  value={categoryInput}
+                  onChange={(event) => setCategoryInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    addCategory();
+                  }}
+                  placeholder="Wpisz kategorię i naciśnij Enter"
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <button
+                  type="button"
+                  onClick={addCategory}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                >
+                  Dodaj
+                </button>
+              </div>
+              {editValues.categories.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {editValues.categories.map((category, index) => (
+                    <span
+                      key={`${category}-${index}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200"
+                    >
+                      {category}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            categories: prev.categories.filter((_, categoryIndex) => categoryIndex !== index),
+                          }))
+                        }
+                        aria-label={`Usuń kategorię ${category}`}
+                        className="rounded-full text-zinc-400 transition hover:text-zinc-100"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
             {isCompletionCodeRequired(editValues.type) ? (
               <label className="space-y-1.5">

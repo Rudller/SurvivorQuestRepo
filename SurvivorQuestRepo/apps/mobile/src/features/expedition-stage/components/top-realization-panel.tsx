@@ -1,6 +1,7 @@
-import { Image, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
-import { EXPEDITION_THEME } from "../../onboarding/model/constants";
+import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -11,6 +12,11 @@ type TopRealizationPanelProps = {
   teamColorLabel: string;
   teamIcon: string;
   points: number;
+  languageFlag?: string;
+  showLanguageButton?: boolean;
+  onOpenLanguagePicker?: () => void;
+  themeMode: ExpeditionThemeMode;
+  onToggleTheme: () => void;
 };
 
 const TOP_REALIZATION_PANEL_TEXT: Record<
@@ -59,6 +65,36 @@ function resolveCardTextColor(hexColor: string) {
   return brightness > 172 ? "#0f172a" : "#f8fafc";
 }
 
+function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: string }) {
+  if (mode === "light") {
+    return (
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="4.5" stroke={color} strokeWidth="2" />
+        <Path d="M12 2.5V5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M12 19V21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M4.9 4.9L6.7 6.7" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M17.3 17.3L19.1 19.1" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M2.5 12H5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M19 12H21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M4.9 19.1L6.7 17.3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M17.3 6.7L19.1 4.9" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20.7 15.2A8.7 8.7 0 1 1 8.8 3.3a7 7 0 1 0 11.9 11.9Z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function TopRealizationPanel({
   companyName,
   logoUrl,
@@ -68,6 +104,11 @@ export function TopRealizationPanel({
   teamColorLabel,
   teamIcon,
   points,
+  languageFlag,
+  showLanguageButton = false,
+  onOpenLanguagePicker,
+  themeMode,
+  onToggleTheme,
 }: TopRealizationPanelProps) {
   const uiLanguage = useUiLanguage();
   const text = TOP_REALIZATION_PANEL_TEXT[uiLanguage];
@@ -80,7 +121,7 @@ export function TopRealizationPanel({
       className="rounded-3xl border p-1.5"
       style={{
         borderColor: EXPEDITION_THEME.border,
-        backgroundColor: "rgba(22, 41, 33, 0.88)",
+        backgroundColor: EXPEDITION_THEME.panel,
       }}
     >
       <View className="h-48 flex-row items-stretch gap-2">
@@ -97,12 +138,38 @@ export function TopRealizationPanel({
           )}
         </View>
 
-        <View className="flex-1 justify-between py-0">
-          <Text className="text-xl font-bold my-auto ml-2" style={{ color: EXPEDITION_THEME.textPrimary }} numberOfLines={1}>
-            {companyName}
-          </Text>
+        <View className="flex-1">
+          <View className="h-1/2 pl-2">
+            <View className="h-full flex-row items-center gap-2">
+              <Text
+                className="flex-1 text-xl font-bold"
+                style={{ color: EXPEDITION_THEME.textPrimary, includeFontPadding: false }}
+                numberOfLines={1}
+              >
+                {companyName}
+              </Text>
+              <View className="flex-row items-center gap-2">
+                {showLanguageButton && languageFlag && onOpenLanguagePicker ? (
+                  <Pressable
+                    className="h-11 w-11 items-center justify-center rounded-full active:opacity-90"
+                    style={{ backgroundColor: EXPEDITION_THEME.panelStrong }}
+                    onPress={onOpenLanguagePicker}
+                  >
+                    <Text className="text-lg">{languageFlag}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  className="mr-1 h-11 w-11 items-center justify-center rounded-full active:opacity-90"
+                  style={{ backgroundColor: EXPEDITION_THEME.panelStrong }}
+                  onPress={onToggleTheme}
+                >
+                  <ThemeModeIcon mode={themeMode} color={EXPEDITION_THEME.textPrimary} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
           <View
-            className="mt-1 h-1/2 justify-center rounded-xl border px-2 py-1"
+            className="h-1/2 justify-center rounded-xl border px-2 py-1"
             style={{
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: teamColorHex,

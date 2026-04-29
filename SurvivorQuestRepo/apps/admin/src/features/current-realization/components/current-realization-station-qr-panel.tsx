@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import JSZip from "jszip";
 import QRCode from "qrcode";
 import { useGetCurrentRealizationStationQrsQuery } from "../api/current-realization.api";
 import type { CurrentRealizationOverview } from "../types/current-realization-overview";
+import { buildStationQrArchiveFileName, buildStationQrFileName } from "@/shared/lib/station-qr-file-name";
 
 type CurrentRealizationStationQrPanelProps = {
   realization: CurrentRealizationOverview["realization"];
@@ -45,6 +47,7 @@ export function CurrentRealizationStationQrPanel({
   const [qrImagesByStationId, setQrImagesByStationId] = useState<Record<string, string>>({});
   const [copiedStationId, setCopiedStationId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   useEffect(() => {
     if (!data) {
@@ -84,9 +87,16 @@ export function CurrentRealizationStationQrPanel({
   }, [data]);
 
   const expiresLabel = data?.expiresAt ? new Date(data.expiresAt).toLocaleString("pl-PL") : null;
-  const downloadableQrCount = data
-    ? data.entries.reduce((count, entry) => count + (qrImagesByStationId[entry.stationId] ? 1 : 0), 0)
-    : 0;
+  const downloadableEntries = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    return data.entries
+      .map((entry) => ({ entry, qrImage: qrImagesByStationId[entry.stationId] }))
+      .filter((item): item is { entry: (typeof data.entries)[number]; qrImage: string } => Boolean(item.qrImage));
+  }, [data, qrImagesByStationId]);
+  const downloadableQrCount = downloadableEntries.length;
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -107,9 +117,6 @@ export function CurrentRealizationStationQrPanel({
     }
     setCopyError(null);
 
-    const downloadableEntries = data.entries
-      .map((entry) => ({ entry, qrImage: qrImagesByStationId[entry.stationId] }))
-      .filter((item): item is { entry: (typeof data.entries)[number]; qrImage: string } => Boolean(item.qrImage));
     if (!downloadableEntries.length) {
       setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
@@ -119,10 +126,53 @@ export function CurrentRealizationStationQrPanel({
       window.setTimeout(() => {
         const anchor = document.createElement("a");
         anchor.href = qrImage;
-        anchor.download = `qr-${realization.id}-${entry.stationId}.png`;
+        anchor.download = buildStationQrFileName(realization.companyName, entry.stationName);
         anchor.click();
       }, index * 100);
     });
+  }
+
+  async function handleDownloadQrZip() {
+    if (!downloadableEntries.length) {
+      setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
+      return;
+    }
+
+    setCopyError(null);
+    setIsDownloadingZip(true);
+
+    try {
+      const zip = new JSZip();
+      const usedFileNameCounts = new Map<string, number>();
+
+      downloadableEntries.forEach(({ entry, qrImage }) => {
+        const baseFileName = buildStationQrFileName(realization.companyName, entry.stationName);
+        const fileNameCount = (usedFileNameCounts.get(baseFileName) ?? 0) + 1;
+        usedFileNameCounts.set(baseFileName, fileNameCount);
+        const fileName =
+          fileNameCount > 1 ? baseFileName.replace(/\.png$/i, ` (${fileNameCount}).png`) : baseFileName;
+        const base64MarkerIndex = qrImage.indexOf("base64,");
+        if (base64MarkerIndex < 0) {
+          return;
+        }
+        zip.file(fileName, qrImage.slice(base64MarkerIndex + "base64,".length), { base64: true });
+      });
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = window.URL.createObjectURL(zipBlob);
+      const anchor = document.createElement("a");
+      anchor.href = zipUrl;
+      anchor.download = buildStationQrArchiveFileName(realization.companyName);
+      anchor.click();
+
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(zipUrl);
+      }, 1000);
+    } catch {
+      setCopyError("Nie udało się przygotować paczki ZIP.");
+    } finally {
+      setIsDownloadingZip(false);
+    }
   }
 
   return (
@@ -165,6 +215,16 @@ export function CurrentRealizationStationQrPanel({
               </button>
               <button
                 type="button"
+                onClick={() => void handleDownloadQrZip()}
+                disabled={downloadableQrCount === 0 || isDownloadingZip}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDownloadingZip
+                  ? "Przygotowywanie paczki ZIP..."
+                  : `Pobierz paczkę ZIP${downloadableQrCount > 0 ? ` (${downloadableQrCount})` : ""}`}
+              </button>
+              <button
+                type="button"
                 onClick={onClose}
                 className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
               >
@@ -190,7 +250,7 @@ export function CurrentRealizationStationQrPanel({
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {data.entries.map((entry) => {
                 const qrImage = qrImagesByStationId[entry.stationId];
-                const fileName = `qr-${realization.id}-${entry.stationId}.png`;
+                const fileName = buildStationQrFileName(realization.companyName, entry.stationName);
 
                 return (
                   <article

@@ -234,10 +234,34 @@ function parseStationTranslationsData(
   return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
+function normalizeStationCategories(
+  categories: string[] | null | undefined,
+): string[] {
+  if (!Array.isArray(categories)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const category of categories) {
+    const trimmed = category.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export function mapStation(input: {
   id: string;
   name: string;
   type: PrismaStationType;
+  categories: string[] | null;
   description: string;
   imageUrl: string | null;
   points: number;
@@ -259,6 +283,7 @@ export function mapStation(input: {
     id: input.id,
     name: input.name,
     type: fromPrismaStationType(input.type),
+    categories: normalizeStationCategories(input.categories),
     description: input.description,
     imageUrl: input.imageUrl || buildStationFallbackImage(input.name),
     points: input.points,

@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import type { ExpeditionTaskStatus } from "../../model/types";
 import type { StationTestMenuOverlayProps } from "./types";
 
@@ -140,13 +140,18 @@ export function StationTestMenuOverlay({
 }: StationTestMenuOverlayProps) {
   const uiLanguage = useUiLanguage();
   const text = STATION_TEST_MENU_TEXT[uiLanguage];
+  const isLightTheme = getExpeditionThemeMode() === "light";
+  const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
 
   if (!visible) {
     return null;
   }
 
   return (
-    <View className="absolute inset-0 z-40 items-center justify-center px-4" style={{ backgroundColor: "rgba(15, 25, 20, 0.78)" }}>
+    <View
+      className="absolute inset-0 z-40 items-center justify-center px-4"
+      style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.78)" }}
+    >
       <View
         className="w-full max-w-[560px] rounded-3xl border p-4"
         style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
@@ -242,7 +247,9 @@ export function StationTestMenuOverlay({
                       style={{ backgroundColor: EXPEDITION_THEME.accent }}
                       onPress={() => onEnterStation(station.stationId)}
                     >
-                      <Text className="text-xs font-semibold text-zinc-950">{text.enter}</Text>
+                      <Text className="text-xs font-semibold" style={{ color: accentButtonTextColor }}>
+                        {text.enter}
+                      </Text>
                     </Pressable>
                   </View>
                   <Text className="mt-1 text-xs" style={{ color: getStatusColor(station.status, Boolean(station.quizFailed)) }}>

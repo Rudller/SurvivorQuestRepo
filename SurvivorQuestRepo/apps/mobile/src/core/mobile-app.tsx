@@ -1,8 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ActivityIndicator, Alert, AppState, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import type {
@@ -10,7 +21,13 @@ import type {
   RealizationLanguage,
 } from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
-import { EXPEDITION_THEME } from "../features/onboarding/model/constants";
+import {
+  EXPEDITION_THEME,
+  getExpeditionThemeMode,
+  getExpeditionThemePalette,
+  setExpeditionThemeMode,
+  type ExpeditionThemeMode,
+} from "../features/onboarding/model/constants";
 import { UiLanguageProvider, resolveUiLanguage, type UiLanguage } from "../features/i18n";
 import {
   fetchMobileSessionState,
@@ -18,9 +35,12 @@ import {
 } from "../features/expedition-stage/api/mobile-session.api";
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
+const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
 const TABLET_MIN_SHORT_EDGE = 700;
 const TABLET_MIN_WIDTH = 900;
+
+type MobileThemePreference = ExpeditionThemeMode;
 
 type OnboardingRecoveryIntent = {
   realizationCode: string;
@@ -115,6 +135,9 @@ const MOBILE_APP_TEXT: Record<
     sessionResetNotice: string;
     mobileSessionReset: string;
     serverReconnect: string;
+    themeLabel: string;
+    themeLight: string;
+    themeDark: string;
   }
 > = {
   polish: {
@@ -129,6 +152,9 @@ const MOBILE_APP_TEXT: Record<
       "Wykryto reset realizacji lub wygaśnięcie sesji{reasonSuffix}. Przekierowaliśmy do Etapu 3, aby ponownie potwierdzić drużynę.",
     mobileSessionReset: "Sesja mobilna została zresetowana ({reason}).",
     serverReconnect: "Brak połączenia z serwerem. Ponawiam sprawdzenie startu...",
+    themeLabel: "Motyw",
+    themeLight: "Jasny",
+    themeDark: "Ciemny",
   },
   english: {
     gameRulesTitle: "Game rules",
@@ -142,6 +168,9 @@ const MOBILE_APP_TEXT: Record<
       "A realization reset or session expiration was detected{reasonSuffix}. We redirected you to Step 3 to confirm the team again.",
     mobileSessionReset: "Mobile session was reset ({reason}).",
     serverReconnect: "No connection to the server. Retrying start check...",
+    themeLabel: "Theme",
+    themeLight: "Light",
+    themeDark: "Dark",
   },
   ukrainian: {
     gameRulesTitle: "Правила гри",
@@ -155,6 +184,9 @@ const MOBILE_APP_TEXT: Record<
       "Виявлено скидання реалізації або завершення сесії{reasonSuffix}. Вас перенаправлено до кроку 3 для повторного підтвердження команди.",
     mobileSessionReset: "Мобільну сесію скинуто ({reason}).",
     serverReconnect: "Немає з'єднання із сервером. Повторюємо перевірку старту...",
+    themeLabel: "Тема",
+    themeLight: "Світла",
+    themeDark: "Темна",
   },
   russian: {
     gameRulesTitle: "Правила игры",
@@ -168,6 +200,9 @@ const MOBILE_APP_TEXT: Record<
       "Обнаружен сброс реализации или истечение сессии{reasonSuffix}. Вас перенаправили на шаг 3 для повторного подтверждения команды.",
     mobileSessionReset: "Мобильная сессия была сброшена ({reason}).",
     serverReconnect: "Нет соединения с сервером. Повторяем проверку старта...",
+    themeLabel: "Тема",
+    themeLight: "Светлая",
+    themeDark: "Тёмная",
   },
 };
 
@@ -175,10 +210,49 @@ function interpolate(template: string, values: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 }
 
+function getNextThemePreference(preference: MobileThemePreference): MobileThemePreference {
+  if (preference === "dark") {
+    return "light";
+  }
+
+  return "dark";
+}
+
+function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: string }) {
+  if (mode === "light") {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="4.5" stroke={color} strokeWidth="2" />
+        <Path d="M12 2.5V5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M12 19V21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M4.9 4.9L6.7 6.7" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M17.3 17.3L19.1 19.1" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M2.5 12H5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M19 12H21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M4.9 19.1L6.7 17.3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Path d="M17.3 6.7L19.1 4.9" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M20.7 15.2A8.7 8.7 0 1 1 8.8 3.3a7 7 0 1 0 11.9 11.9Z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) {
   const text = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(rulesText);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const isLightTheme = getExpeditionThemeMode() === "light";
   const shortestEdge = Math.min(windowWidth, windowHeight);
   const isTablet = windowWidth >= TABLET_MIN_WIDTH || shortestEdge >= TABLET_MIN_SHORT_EDGE;
   const panelHeight = isTablet
@@ -196,7 +270,7 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
     <View
       className="absolute inset-0 items-center justify-center"
       style={{
-        backgroundColor: "rgba(5, 10, 8, 0.58)",
+        backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(5, 10, 8, 0.58)",
         paddingHorizontal: isTablet ? 28 : 24,
       }}
     >
@@ -336,12 +410,17 @@ export function MobileApp() {
   const [isWaitingForAdminStart, setIsWaitingForAdminStart] = useState(false);
   const [waitingError, setWaitingError] = useState<string | null>(null);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
+  const [themePreference, setThemePreference] = useState<MobileThemePreference>("dark");
+  const activeThemeMode = themePreference;
+  setExpeditionThemeMode(activeThemeMode);
+  const activeThemePalette = getExpeditionThemePalette(activeThemeMode);
   const uiLanguage = resolveUiLanguage(
     onboardingSession?.selectedLanguage ??
       onboardingSession?.realization?.selectedLanguage ??
       onboardingSession?.realization?.language,
   );
   const text = MOBILE_APP_TEXT[uiLanguage];
+  const statusBarStyle: "light" | "dark" = activeThemeMode === "dark" ? "light" : "dark";
 
   useEffect(() => {
     if (Platform.OS !== "android") {
@@ -355,7 +434,7 @@ export function MobileApp() {
       }
 
       try {
-        await NavigationBar.setButtonStyleAsync("light");
+        await NavigationBar.setButtonStyleAsync(activeThemeMode === "dark" ? "light" : "dark");
         await NavigationBar.setVisibilityAsync("hidden");
       } catch {
         // ignore - immersive mode is best effort on Android devices
@@ -373,19 +452,31 @@ export function MobileApp() {
       isActive = false;
       appStateSubscription.remove();
     };
-  }, []);
+  }, [activeThemeMode]);
 
   useEffect(() => {
     let isActive = true;
 
-    const hydrateSession = async () => {
+    const hydrateSessionAndTheme = async () => {
       try {
-        const storedValue = await AsyncStorage.getItem(ONBOARDING_SESSION_STORAGE_KEY);
-        if (!isActive || !storedValue) {
+        const [storedSession, storedThemePreference] = await Promise.all([
+          AsyncStorage.getItem(ONBOARDING_SESSION_STORAGE_KEY),
+          AsyncStorage.getItem(MOBILE_THEME_PREFERENCE_STORAGE_KEY),
+        ]);
+
+        if (!isActive) {
           return;
         }
 
-        const parsed = JSON.parse(storedValue) as Partial<OnboardingSession>;
+        if (storedThemePreference === "light" || storedThemePreference === "dark") {
+          setThemePreference(storedThemePreference);
+        }
+
+        if (!storedSession) {
+          return;
+        }
+
+        const parsed = JSON.parse(storedSession) as Partial<OnboardingSession>;
         if (typeof parsed?.sessionToken === "string" && parsed.sessionToken.trim().length > 0) {
           setOnboardingSession(parsed as OnboardingSession);
         }
@@ -398,12 +489,32 @@ export function MobileApp() {
       }
     };
 
-    void hydrateSession();
+    void hydrateSessionAndTheme();
 
     return () => {
       isActive = false;
     };
   }, []);
+
+  async function handleThemePreferenceToggle() {
+    const nextPreference = getNextThemePreference(themePreference);
+    setThemePreference(nextPreference);
+    await AsyncStorage.setItem(MOBILE_THEME_PREFERENCE_STORAGE_KEY, nextPreference);
+  }
+
+  const shouldShowGlobalThemeButton = !onboardingSession || isWaitingForAdminStart;
+  const themeSwitchButton = (
+    <Pressable
+      className="absolute right-4 z-50 rounded-full p-2.5 active:opacity-90"
+      style={{
+        top: 14,
+        backgroundColor: activeThemePalette.panelStrong,
+      }}
+      onPress={() => void handleThemePreferenceToggle()}
+    >
+      <ThemeModeIcon mode={activeThemeMode} color={activeThemePalette.textPrimary} />
+    </Pressable>
+  );
 
   async function handleComplete(nextSession: OnboardingSession) {
     setOnboardingSession(nextSession);
@@ -575,11 +686,16 @@ export function MobileApp() {
   if (isHydratingSession) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
+        <SafeAreaView
+          edges={["left", "right"]}
+          className="flex-1"
+          style={{ backgroundColor: activeThemePalette.background }}
+        >
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
           </View>
-          <StatusBar style="light" hidden />
+          {themeSwitchButton}
+          <StatusBar style={statusBarStyle} hidden />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -588,7 +704,11 @@ export function MobileApp() {
   if (onboardingSession && isWaitingForAdminStart) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
+        <SafeAreaView
+          edges={["left", "right"]}
+          className="flex-1"
+          style={{ backgroundColor: activeThemePalette.background }}
+        >
           <View className="flex-1 items-center justify-center px-6">
             <View
               className="w-full rounded-3xl border p-5"
@@ -606,7 +726,8 @@ export function MobileApp() {
               </View>
             </View>
           </View>
-          <StatusBar style="light" hidden />
+          {themeSwitchButton}
+          <StatusBar style={statusBarStyle} hidden />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -622,7 +743,11 @@ export function MobileApp() {
   return (
     <SafeAreaProvider>
       <UiLanguageProvider language={uiLanguage}>
-        <SafeAreaView edges={["left", "right"]} className="flex-1 bg-zinc-950">
+        <SafeAreaView
+          edges={["left", "right"]}
+          className="flex-1"
+          style={{ backgroundColor: activeThemePalette.background }}
+        >
           {onboardingSession ? (
             <ExpeditionStageScreen
               session={onboardingSession}
@@ -632,6 +757,10 @@ export function MobileApp() {
               onSelectedLanguageChange={(language) => {
                 void handleSelectedLanguageChange(language);
               }}
+              themeMode={activeThemeMode}
+              onToggleTheme={() => {
+                void handleThemePreferenceToggle();
+              }}
             />
           ) : (
             <RealizationOnboardingScreen
@@ -640,6 +769,7 @@ export function MobileApp() {
               onRecoveryConsumed={() => setRecoveryIntent(null)}
             />
           )}
+          {shouldShowGlobalThemeButton ? themeSwitchButton : null}
           {onboardingSession && shouldShowRulesPopup ? (
             <GameRulesPopup
               rulesText={onboardingSession.realization?.gameRules?.trim() || ""}
@@ -654,7 +784,7 @@ export function MobileApp() {
               }}
             />
           ) : null}
-          <StatusBar style="light" hidden />
+          <StatusBar style={statusBarStyle} hidden />
         </SafeAreaView>
       </UiLanguageProvider>
     </SafeAreaProvider>

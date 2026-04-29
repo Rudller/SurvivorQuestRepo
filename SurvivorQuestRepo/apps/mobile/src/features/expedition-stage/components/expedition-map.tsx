@@ -59,7 +59,7 @@ function normalizeHeading(heading: number | null | undefined) {
 
 function resolveStationPinColor(pin: StationPin, isSelected: boolean) {
   if (isSelected) {
-    return "#f0c977";
+    return EXPEDITION_THEME.accent;
   }
 
   if (pin.status === "done") {
@@ -75,6 +75,11 @@ function resolveStationPinColor(pin: StationPin, isSelected: boolean) {
 
 function buildOsmWebViewHtml(payload: unknown) {
   const encodedPayload = escapeHtmlData(payload);
+  const mapBackgroundColor = EXPEDITION_THEME.background;
+  const markerNumberBackground = EXPEDITION_THEME.panelMuted;
+  const markerNumberText = EXPEDITION_THEME.textPrimary;
+  const markerNumberBorder = EXPEDITION_THEME.border;
+  const selectedBorderColor = EXPEDITION_THEME.accent;
 
   return `<!doctype html>
 <html>
@@ -93,7 +98,7 @@ function buildOsmWebViewHtml(payload: unknown) {
         width: 100%;
         margin: 0;
         padding: 0;
-        background: #0f1914;
+        background: ${mapBackgroundColor};
       }
       .station-marker-wrapper {
         position: relative;
@@ -154,9 +159,9 @@ function buildOsmWebViewHtml(payload: unknown) {
         height: 16px;
         padding: 0 4px;
         border-radius: 999px;
-        border: 1px solid rgba(15, 23, 42, 0.85);
-        background: #f8fafc;
-        color: #0f172a;
+        border: 1px solid ${markerNumberBorder};
+        background: ${markerNumberBackground};
+        color: ${markerNumberText};
         font-size: 9px;
         font-weight: 700;
         line-height: 14px;
@@ -165,7 +170,7 @@ function buildOsmWebViewHtml(payload: unknown) {
         pointer-events: none;
       }
       .station-marker--selected {
-        border: 2.5px solid #f0c977;
+        border: 2.5px solid ${selectedBorderColor};
         transform: scale(1.08);
         box-shadow: 0 0 0 3px rgba(240, 201, 119, 0.18), 0 8px 18px rgba(3, 7, 18, 0.55);
       }
@@ -538,7 +543,7 @@ export function ExpeditionMap({
 
   if (Platform.OS === "web") {
     return (
-      <View className="h-full items-center justify-center px-6" style={{ backgroundColor: "rgba(0, 0, 0, 0.25)" }}>
+      <View className="h-full items-center justify-center px-6" style={{ backgroundColor: EXPEDITION_THEME.panelMuted }}>
         <Text className="text-center text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
           {text.webNotice}
         </Text>

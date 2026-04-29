@@ -76,6 +76,10 @@ type StartTaskPayload = {
   startedAt?: string;
 };
 
+type AdminFailTaskPayload = {
+  reason?: string;
+};
+
 type ResolveStationQrPayload = {
   sessionToken?: string;
   token?: string;
@@ -253,6 +257,47 @@ export class MobileController {
     return this.mobileService.getMobileAdminStationQrs('current', ttlCandidate);
   }
 
+  @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/reset')
+  @UseGuards(AdminSessionGuard)
+  async resetMobileAdminCurrentTeamTask(
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.resetMobileAdminTeamTask({
+      realizationId: 'current',
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/complete')
+  @UseGuards(AdminSessionGuard)
+  async completeMobileAdminCurrentTeamTask(
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.completeMobileAdminTeamTask({
+      realizationId: 'current',
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/fail')
+  @UseGuards(AdminSessionGuard)
+  async failMobileAdminCurrentTeamTask(
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+    @Body() payload: AdminFailTaskPayload,
+  ) {
+    return this.mobileService.failMobileAdminTeamTask({
+      realizationId: 'current',
+      teamId,
+      stationId,
+      reason: payload.reason,
+    });
+  }
+
   @Get('admin/realizations/:realizationId')
   @UseGuards(AdminSessionGuard)
   async getMobileAdminRealizationOverview(
@@ -315,5 +360,49 @@ export class MobileController {
       realizationId,
       ttlCandidate,
     );
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/reset')
+  @UseGuards(AdminSessionGuard)
+  async resetMobileAdminTeamTask(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.resetMobileAdminTeamTask({
+      realizationId,
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/complete')
+  @UseGuards(AdminSessionGuard)
+  async completeMobileAdminTeamTask(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.completeMobileAdminTeamTask({
+      realizationId,
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/fail')
+  @UseGuards(AdminSessionGuard)
+  async failMobileAdminTeamTask(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+    @Body() payload: AdminFailTaskPayload,
+  ) {
+    return this.mobileService.failMobileAdminTeamTask({
+      realizationId,
+      teamId,
+      stationId,
+      reason: payload.reason,
+    });
   }
 }

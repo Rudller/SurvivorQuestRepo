@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import type { QuizPrestartOverlayProps } from "./types";
 
 const QUIZ_PRESTART_TEXT: Record<
@@ -139,6 +139,8 @@ export function QuizPrestartOverlay({
 }: QuizPrestartOverlayProps) {
   const uiLanguage = useUiLanguage();
   const text = QUIZ_PRESTART_TEXT[uiLanguage];
+  const isLightTheme = getExpeditionThemeMode() === "light";
+  const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
   const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const [displayStationName, setDisplayStationName] = useState(stationName);
@@ -240,7 +242,13 @@ export function QuizPrestartOverlay({
           : text.descriptionQuiz;
 
   return (
-    <Animated.View className="absolute inset-0 z-50 items-center justify-center px-3" style={[{ backgroundColor: "rgba(15, 25, 20, 0.88)" }, backdropStyle]}>
+    <Animated.View
+      className="absolute inset-0 z-50 items-center justify-center px-3"
+      style={[
+        { backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.88)" },
+        backdropStyle,
+      ]}
+    >
       <Animated.View
         className="w-full max-w-[560px] rounded-3xl border px-4 py-4"
         style={[{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }, panelStyle]}
@@ -273,7 +281,9 @@ export function QuizPrestartOverlay({
             onPress={onStart}
             disabled={isStarting}
           >
-            <Text className="text-sm font-semibold text-zinc-950">{isStarting ? text.starting : text.start}</Text>
+            <Text className="text-sm font-semibold" style={{ color: accentButtonTextColor }}>
+              {isStarting ? text.starting : text.start}
+            </Text>
           </Pressable>
         </View>
       </Animated.View>

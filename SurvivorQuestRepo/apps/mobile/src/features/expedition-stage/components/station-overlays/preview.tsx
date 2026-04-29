@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from "expo-audio";
 import { Alert, Animated, Image, Keyboard, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { AnagramMediaPanel, AnagramStationPanel } from "./station-panels/anagram-station-panel";
 import { BoggleStationPanel } from "./station-panels/boggle-station-panel";
 import { CaesarStationPanel } from "./station-panels/caesar-station-panel";
@@ -719,6 +719,7 @@ export function StationPreviewOverlay({
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const shortestEdge = Math.min(viewportHeight, viewportWidth);
   const isTabletOverlay = viewportWidth >= 900 || shortestEdge >= 700;
+  const isLightTheme = getExpeditionThemeMode() === "light";
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [wordleInput, setWordleInput] = useState("");
@@ -2744,6 +2745,7 @@ export function StationPreviewOverlay({
       : isTimeoutOutcomePopup
         ? { border: "rgba(245, 158, 11, 0.55)", bg: "rgba(245, 158, 11, 0.16)", text: "#fcd34d", icon: "⏳" }
         : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
+  const quizOutcomeButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
   const stationMediaRendererByType: Partial<Record<StationTestType, () => ReactNode>> = {
     wordle: () => (
       <WordleMediaBoard
@@ -3131,7 +3133,13 @@ export function StationPreviewOverlay({
     : `${station.name} • ${station.typeLabel}`;
 
   return (
-    <Animated.View className="absolute inset-0 z-50" style={[{ backgroundColor: "rgba(15, 25, 20, 0.9)" }, overlayBackdropStyle]}>
+    <Animated.View
+      className="absolute inset-0 z-50"
+      style={[
+        { backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.9)" },
+        overlayBackdropStyle,
+      ]}
+    >
       <Animated.View className="flex-1 px-3 pb-5 pt-9" style={overlayPanelStyle}>
         <View className="flex-1 rounded-3xl border" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}>
           <View className="flex-row items-start justify-between gap-3 px-4 pb-2 pt-4">
@@ -3400,7 +3408,7 @@ export function StationPreviewOverlay({
       {quizOutcomePopup ? (
         <View
           className="absolute inset-0 items-center justify-center px-6"
-          style={{ zIndex: 80, backgroundColor: "rgba(15, 25, 20, 0.6)" }}
+          style={{ zIndex: 80, backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.3)" : "rgba(15, 25, 20, 0.6)" }}
         >
           <View
             className="relative w-full max-w-md rounded-3xl border px-6 py-6"
@@ -3451,7 +3459,7 @@ export function StationPreviewOverlay({
               }}
               onPress={closeQuizOutcomePopup}
             >
-              <Text className="w-full text-center text-base font-semibold" style={{ color: "#f8fafc" }}>
+              <Text className="w-full text-center text-base font-semibold" style={{ color: quizOutcomeButtonTextColor }}>
                 {isTimeoutOutcomePopup ? text.backToMapNow : text.backToMap}
               </Text>
             </Pressable>

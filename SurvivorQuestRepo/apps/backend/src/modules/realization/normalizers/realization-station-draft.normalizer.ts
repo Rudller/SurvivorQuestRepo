@@ -71,6 +71,7 @@ export function normalizeScenarioStationDrafts(
       {
         name: draft.name.trim(),
         type: stationType,
+        categories: draft.categories,
         description: draft.description?.trim() || DEFAULT_STATION_DESCRIPTION,
         imageUrl: draft.imageUrl?.trim() || undefined,
         points: Math.round(draft.points),

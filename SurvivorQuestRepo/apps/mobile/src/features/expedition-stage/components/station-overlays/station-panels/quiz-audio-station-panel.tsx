@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import type { StationTestViewModel } from "../types";
-import { useStationPanelLayout } from "./shared-ui";
+import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type QuizPromptArgs = {
   station: StationTestViewModel;
@@ -191,6 +191,15 @@ export function QuizAudioPanel({
   const uiLanguage = useUiLanguage();
   const text = QUIZ_PROMPT_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const isPlayAudioDisabled =
+    station.status === "done" ||
+    station.status === "failed" ||
+    isSubmittingQuizAnswer ||
+    isAudioLoading ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired ||
+    !hasAudioSource;
+  const playAudioLabelColor = resolveActionLabelColor(isPlayAudioDisabled);
   const quizFeedbackStyle = {
     opacity: quizFeedbackAnimation,
     transform: [
@@ -211,13 +220,7 @@ export function QuizAudioPanel({
             className="items-center justify-center rounded-xl active:opacity-90"
             style={{
               backgroundColor:
-                station.status === "done" ||
-                station.status === "failed" ||
-                isSubmittingQuizAnswer ||
-                isAudioLoading ||
-                (hasTimedLimit && !hasTimerStarted) ||
-                isTimeExpired ||
-                !hasAudioSource
+                isPlayAudioDisabled
                   ? EXPEDITION_THEME.panelMuted
                   : EXPEDITION_THEME.accent,
               minHeight: layout.actionMinHeight,
@@ -225,17 +228,9 @@ export function QuizAudioPanel({
             onPress={() => {
               onPlayAudio();
             }}
-            disabled={
-              station.status === "done" ||
-              station.status === "failed" ||
-              isSubmittingQuizAnswer ||
-              isAudioLoading ||
-              (hasTimedLimit && !hasTimerStarted) ||
-              isTimeExpired ||
-              !hasAudioSource
-            }
+              disabled={isPlayAudioDisabled}
             >
-              <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+              <Text className="font-semibold" style={{ color: playAudioLabelColor, fontSize: layout.actionFontSize }}>
                 {isAudioPlaying ? text.audioPlaying : text.playAudio}
               </Text>
             </Pressable>

@@ -44,6 +44,7 @@ export type StationEntity = {
   id: string;
   name: string;
   type: StationType;
+  categories: string[];
   description: string;
   imageUrl: string;
   points: number;
@@ -65,6 +66,7 @@ export type StationEntity = {
 export type StationDraftInput = {
   name: string;
   type: StationType;
+  categories?: string[];
   description: string;
   imageUrl?: string;
   points: number;

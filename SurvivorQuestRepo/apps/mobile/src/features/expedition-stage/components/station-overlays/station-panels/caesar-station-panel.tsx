@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
-import { useStationPanelLayout } from "./shared-ui";
+import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type CaesarStationPanelProps = {
   caesarInput: string;
@@ -130,7 +130,10 @@ export function CaesarStationPanel({
           onPress={onSubmit}
           disabled={isActionDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text
+            className="font-semibold"
+            style={{ color: resolveActionLabelColor(isActionDisabled), fontSize: layout.actionFontSize }}
+          >
             {isSubmittingCaesar ? "..." : text.check}
           </Text>
         </Pressable>
@@ -208,11 +211,11 @@ export function CaesarStationPanel({
             disabled={!canAppendCharacter}
             onPress={() => onAppendCharacter(" ")}
             hitSlop={3}
-            >
-              <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 16 : 13 }}>
-                {text.space}
-              </Text>
-            </Pressable>
+          >
+            <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 16 : 13 }}>
+              {text.space}
+            </Text>
+          </Pressable>
           <Pressable
             className="items-center justify-center rounded-2xl border px-4 active:opacity-85"
             style={{
@@ -226,7 +229,10 @@ export function CaesarStationPanel({
             onPress={onBackspace}
             hitSlop={3}
           >
-            <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.isTablet ? 18 : 14 }}>
+            <Text
+              className="font-semibold"
+              style={{ color: resolveActionLabelColor(!canBackspace), fontSize: layout.isTablet ? 18 : 14 }}
+            >
               ⌫
             </Text>
           </Pressable>

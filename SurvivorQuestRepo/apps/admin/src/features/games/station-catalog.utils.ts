@@ -1,24 +1,28 @@
 import type { Station, StationType } from "./types/station";
-import { stationTypeOptions } from "./types/station";
 import { getStationTypeLabel } from "./station.utils";
 
 type FilterStationsCatalogArgs = {
   stations: Station[];
   searchQuery: string;
-  selectedTypes: StationType[];
+  selectedCategories?: string[];
+  selectedTypes?: StationType[];
 };
 
 export type StationCatalogItem = {
   name: string;
   description: string;
   type: StationType;
+  categories?: string[];
 };
 
 export type StationGroup = {
-  type: StationType;
+  category: string;
   label: string;
   stations: Station[];
 };
+
+export const uncategorizedStationGroupKey = "__uncategorized__";
+const uncategorizedStationGroupLabel = "Bez kategorii";
 
 function normalizeSearchValue(value: string) {
   return value
@@ -30,26 +34,38 @@ function normalizeSearchValue(value: string) {
 
 export function buildStationSearchText(station: StationCatalogItem) {
   return normalizeSearchValue(
-    [station.name, station.description, getStationTypeLabel(station.type)].join(" "),
+    [station.name, station.description, getStationTypeLabel(station.type), ...(station.categories ?? [])].join(" "),
   );
 }
 
 type FilterStationCatalogItemsArgs<T extends StationCatalogItem> = {
   items: T[];
   searchQuery: string;
-  selectedTypes: StationType[];
+  selectedCategories?: string[];
+  selectedTypes?: StationType[];
 };
+
+export function getStationGroupCategories(station: Pick<StationCatalogItem, "categories">) {
+  const categories = station.categories?.map((category) => category.trim()).filter(Boolean) ?? [];
+  return categories.length > 0 ? categories : [uncategorizedStationGroupKey];
+}
 
 export function filterStationCatalogItems<T extends StationCatalogItem>({
   items,
   searchQuery,
+  selectedCategories,
   selectedTypes,
 }: FilterStationCatalogItemsArgs<T>) {
   const normalizedQuery = normalizeSearchValue(searchQuery);
-  const selectedTypeSet = selectedTypes.length > 0 ? new Set(selectedTypes) : null;
+  const selectedTypeSet = selectedTypes?.length ? new Set(selectedTypes) : null;
+  const selectedCategorySet = selectedCategories?.length ? new Set(selectedCategories) : null;
 
   return items.filter((item) => {
     if (selectedTypeSet && !selectedTypeSet.has(item.type)) {
+      return false;
+    }
+
+    if (selectedCategorySet && !getStationGroupCategories(item).some((category) => selectedCategorySet.has(category))) {
       return false;
     }
 
@@ -64,40 +80,44 @@ export function filterStationCatalogItems<T extends StationCatalogItem>({
 export function filterStationsCatalog({
   stations,
   searchQuery,
+  selectedCategories,
   selectedTypes,
 }: FilterStationsCatalogArgs) {
   return filterStationCatalogItems({
     items: stations,
     searchQuery,
+    selectedCategories,
     selectedTypes,
   });
 }
 
-const stationTypeOrder = new Map(
-  stationTypeOptions.map((option, index) => [option.value, index]),
-);
-
-export function groupStationsByType(stations: Station[]): StationGroup[] {
-  const grouped = new Map<StationType, Station[]>();
+export function groupStationsByCategory(stations: Station[]): StationGroup[] {
+  const grouped = new Map<string, Station[]>();
 
   stations.forEach((station) => {
-    const current = grouped.get(station.type);
-    if (current) {
-      current.push(station);
-      return;
-    }
-    grouped.set(station.type, [station]);
+    getStationGroupCategories(station).forEach((category) => {
+      const current = grouped.get(category);
+      if (current) {
+        current.push(station);
+        return;
+      }
+      grouped.set(category, [station]);
+    });
   });
 
   return Array.from(grouped.entries())
     .sort((left, right) => {
-      const leftOrder = stationTypeOrder.get(left[0]) ?? Number.MAX_SAFE_INTEGER;
-      const rightOrder = stationTypeOrder.get(right[0]) ?? Number.MAX_SAFE_INTEGER;
-      return leftOrder - rightOrder;
+      if (left[0] === uncategorizedStationGroupKey) {
+        return 1;
+      }
+      if (right[0] === uncategorizedStationGroupKey) {
+        return -1;
+      }
+      return left[0].localeCompare(right[0], "pl", { sensitivity: "base" });
     })
-    .map(([type, groupStations]) => ({
-      type,
-      label: getStationTypeLabel(type),
+    .map(([category, groupStations]) => ({
+      category,
+      label: category === uncategorizedStationGroupKey ? uncategorizedStationGroupLabel : category,
       stations: groupStations,
     }));
 }

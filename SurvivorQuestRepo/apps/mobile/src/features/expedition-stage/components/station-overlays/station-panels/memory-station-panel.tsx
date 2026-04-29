@@ -94,7 +94,9 @@ export function MemoryStationPanel({
             disabled={isInteractiveLocked || memoryBusy || card.matched || card.revealed || memoryAttemptsLeft <= 0}
             hitSlop={4}
           >
-            <Text style={{ fontSize: layout.isTablet ? 30 : 20 }}>{card.revealed || card.matched ? card.symbol : "?"}</Text>
+            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 30 : 20 }}>
+              {card.revealed || card.matched ? card.symbol : "?"}
+            </Text>
           </Pressable>
         ))}
       </View>

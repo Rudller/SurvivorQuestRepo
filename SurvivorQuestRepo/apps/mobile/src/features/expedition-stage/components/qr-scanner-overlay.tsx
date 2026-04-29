@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../onboarding/model/constants";
 
 type QrScannerOverlayProps = {
   visible: boolean;
@@ -58,6 +59,10 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
 export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: QrScannerOverlayProps) {
   const uiLanguage = useUiLanguage();
   const text = QR_SCANNER_OVERLAY_TEXT[uiLanguage];
+  const isLightTheme = getExpeditionThemeMode() === "light";
+  const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
+  const backdropColor = isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.65)";
+  const cameraOverlayTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
   const [isMounted, setIsMounted] = useState(visible);
@@ -135,38 +140,60 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
   } as const;
 
   return (
-    <Animated.View className="absolute inset-0 z-50" style={[{ backgroundColor: "rgba(0, 0, 0, 0.85)" }, backdropStyle]}>
+    <Animated.View
+      className="absolute inset-0 z-50"
+      style={[{ backgroundColor: backdropColor }, backdropStyle]}
+    >
       <Animated.View className="absolute inset-0 items-center justify-center px-4" style={panelStyle}>
-        <View className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-4">
+        <View
+          className="w-full max-w-xl rounded-2xl border p-4"
+          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+        >
           <View className="flex-row items-start justify-between gap-3">
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-widest text-zinc-300">{text.title}</Text>
-              <Text className="mt-1 text-sm text-zinc-100">{text.subtitle}</Text>
+              <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                {text.title}
+              </Text>
+              <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                {text.subtitle}
+              </Text>
             </View>
             <Pressable
               className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
-              style={{ borderColor: "#3f3f46", backgroundColor: "#27272a" }}
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
               onPress={onClose}
             >
-              <Text className="text-base font-semibold text-zinc-100">✕</Text>
+              <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                ✕
+              </Text>
             </Pressable>
           </View>
 
           {!permission?.granted ? (
-            <View className="mt-4 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3">
-              <Text className="text-sm font-semibold text-zinc-100">{text.cameraAccessTitle}</Text>
-              <Text className="mt-1 text-xs text-zinc-300">
+            <View
+              className="mt-4 rounded-xl border px-3 py-3"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+            >
+              <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                {text.cameraAccessTitle}
+              </Text>
+              <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
                 {text.cameraAccessDescription}
               </Text>
               <Pressable
                 className="mt-3 rounded-lg bg-amber-400 px-3 py-2 active:opacity-90"
                 onPress={() => void requestPermission()}
               >
-                <Text className="text-center text-sm font-semibold text-zinc-950">{text.enableCamera}</Text>
+                <Text className="text-center text-sm font-semibold" style={{ color: accentButtonTextColor }}>
+                  {text.enableCamera}
+                </Text>
               </Pressable>
             </View>
           ) : (
-            <View className="mt-3 rounded-xl border border-zinc-700 bg-black" style={{ height: 420 }}>
+            <View
+              className="mt-3 rounded-xl border bg-black"
+              style={{ height: 420, borderColor: EXPEDITION_THEME.border }}
+            >
               <CameraView
                 style={{ flex: 1 }}
                 active={visible}
@@ -249,10 +276,12 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
                 </View>
               </View>
               {isResolving ? (
-                <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/55">
-                  <View className="flex-row items-center gap-2 rounded-xl bg-black/70 px-3 py-2">
+                <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/45">
+                  <View className="flex-row items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(0, 0, 0, 0.52)" }}>
                     <ActivityIndicator color="#fbbf24" />
-                    <Text className="text-sm text-zinc-100">{text.verifyingCode}</Text>
+                    <Text className="text-sm" style={{ color: cameraOverlayTextColor }}>
+                      {text.verifyingCode}
+                    </Text>
                   </View>
                 </View>
               ) : null}

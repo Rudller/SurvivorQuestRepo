@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type AnagramStationPanelProps = {
   anagramAttemptsLeft: number;
@@ -110,7 +110,10 @@ export function AnagramStationPanel({
           onPress={onSubmit}
           disabled={isActionDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text
+            className="font-semibold"
+            style={{ color: resolveActionLabelColor(isActionDisabled), fontSize: layout.actionFontSize }}
+          >
             {isSubmittingAnagram ? "..." : text.check}
           </Text>
         </Pressable>

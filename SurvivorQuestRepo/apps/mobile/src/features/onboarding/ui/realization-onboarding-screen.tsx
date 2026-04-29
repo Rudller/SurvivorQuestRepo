@@ -2334,7 +2334,10 @@ export function RealizationOnboardingScreen({
                         style={{ backgroundColor: EXPEDITION_THEME.accent }}
                         onPress={() => void saveApiServerOverride()}
                       >
-                        <Text className={`text-center ${isTabletLayout ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>
+                        <Text
+                          className={`text-center ${isTabletLayout ? "text-base" : "text-sm"} font-semibold`}
+                          style={{ color: EXPEDITION_THEME.background }}
+                        >
                           {text.saveAction}
                         </Text>
                       </Pressable>
@@ -2372,7 +2375,9 @@ export function RealizationOnboardingScreen({
                   onPress={() => setScreen("code")}
                   disabled={apiConnectionStatus !== "connected"}
                 >
-                  <Text className="text-center font-semibold text-zinc-950">{text.goToStepTwoAction}</Text>
+                  <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.background }}>
+                    {text.goToStepTwoAction}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -2419,7 +2424,9 @@ export function RealizationOnboardingScreen({
                 style={{ backgroundColor: EXPEDITION_THEME.accent }}
                 onPress={() => void onSubmitCode()}
               >
-                <Text className="text-center text-base font-semibold text-zinc-950">{text.activateRealizationAction}</Text>
+                <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.background }}>
+                  {text.activateRealizationAction}
+                </Text>
               </Pressable>
 
               <Pressable
@@ -2557,7 +2564,7 @@ export function RealizationOnboardingScreen({
                   onPress={() => setScreen("customization")}
                   disabled={!selectedTeam}
                 >
-                  <Text className="text-center font-semibold text-zinc-950">
+                  <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.background }}>
                     {text.goToBannerEditorAction}
                   </Text>
                 </Pressable>

@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
+import {
+  EXPEDITION_THEME,
+  TEAM_COLORS,
+  getExpeditionThemeMode,
+  type ExpeditionThemeMode,
+} from "../../onboarding/model/constants";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -40,9 +45,12 @@ type ExpeditionStageScreenProps = {
   session: OnboardingSession;
   onSessionInvalid?: (reason?: string) => void;
   onSelectedLanguageChange?: (language: RealizationLanguage) => void;
+  themeMode: ExpeditionThemeMode;
+  onToggleTheme: () => void;
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
+const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
 
 type TransientPopup = {
   id: number;
@@ -271,6 +279,14 @@ function interpolate(template: string, values: Record<string, string>) {
 
 function toCoordinate(latitude: number, longitude: number): MapCoordinate {
   return { latitude, longitude };
+}
+
+function areCoordinatesEqual(left: MapCoordinate | null, right: MapCoordinate | null) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.latitude === right.latitude && left.longitude === right.longitude;
 }
 
 function toStationCoordinate(latitude?: number, longitude?: number): MapCoordinate | null {
@@ -618,6 +634,8 @@ export function ExpeditionStageScreen({
   session,
   onSessionInvalid,
   onSelectedLanguageChange,
+  themeMode,
+  onToggleTheme,
 }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const uiLanguage = useUiLanguage();
@@ -625,6 +643,7 @@ export function ExpeditionStageScreen({
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const shortestEdge = Math.min(viewportWidth, viewportHeight);
   const isTabletLayout = viewportWidth >= 900 || shortestEdge >= 700;
+  const isLightTheme = getExpeditionThemeMode() === "light";
   const {
     sessionState,
     isLoading,
@@ -663,6 +682,7 @@ export function ExpeditionStageScreen({
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiChromeOpacity = useRef(new Animated.Value(1)).current;
   const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
   const lastPopupSourceValuesRef = useRef<{
     errorMessage: string | null;
@@ -675,6 +695,26 @@ export function ExpeditionStageScreen({
     actionError: null,
     actionMessage: null,
   });
+  const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTestMenuHoldTimeout = useCallback(() => {
+    if (testMenuHoldTimeoutRef.current) {
+      clearTimeout(testMenuHoldTimeoutRef.current);
+      testMenuHoldTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleTestMenuHoldStart = useCallback(() => {
+    clearTestMenuHoldTimeout();
+    testMenuHoldTimeoutRef.current = setTimeout(() => {
+      testMenuHoldTimeoutRef.current = null;
+      setIsStationTestMenuOpen(true);
+    }, TEST_MENU_TRIGGER_HOLD_MS);
+  }, [clearTestMenuHoldTimeout]);
+
+  const handleTestMenuHoldEnd = useCallback(() => {
+    clearTestMenuHoldTimeout();
+  }, [clearTestMenuHoldTimeout]);
 
   const showTransientPopup = useCallback((message: string, tone: "error" | "success") => {
     const popupId = Date.now();
@@ -739,6 +779,10 @@ export function ExpeditionStageScreen({
   );
 
   useEffect(() => {
+    const updateMapAnchor = (nextAnchor: MapCoordinate) => {
+      setMapAnchor((current) => (areCoordinatesEqual(current, nextAnchor) ? current : nextAnchor));
+    };
+
     const shouldResolveAnchorFromData =
       !mapAnchor ||
       (mapAnchor.latitude === DEFAULT_MAP_ANCHOR.latitude && mapAnchor.longitude === DEFAULT_MAP_ANCHOR.longitude);
@@ -748,17 +792,17 @@ export function ExpeditionStageScreen({
     }
 
     if (playerLocation) {
-      setMapAnchor(toCoordinate(playerLocation.latitude, playerLocation.longitude));
+      updateMapAnchor(toCoordinate(playerLocation.latitude, playerLocation.longitude));
       return;
     }
 
     if (stationCoordinateAnchor) {
-      setMapAnchor(stationCoordinateAnchor);
+      updateMapAnchor(stationCoordinateAnchor);
       return;
     }
 
     if (!isLoading) {
-      setMapAnchor(DEFAULT_MAP_ANCHOR);
+      updateMapAnchor(DEFAULT_MAP_ANCHOR);
     }
   }, [isLoading, mapAnchor, playerLocation, stationCoordinateAnchor]);
 
@@ -820,8 +864,9 @@ export function ExpeditionStageScreen({
       if (popupTimeoutRef.current) {
         clearTimeout(popupTimeoutRef.current);
       }
+      clearTestMenuHoldTimeout();
     };
-  }, []);
+  }, [clearTestMenuHoldTimeout]);
 
   useEffect(() => {
     if (!isSessionInvalid) {
@@ -1232,6 +1277,16 @@ export function ExpeditionStageScreen({
     }
   }, [activeStationTestId, timedCloseConfirmStation]);
 
+  useEffect(() => {
+    uiChromeOpacity.stopAnimation();
+    uiChromeOpacity.setValue(0.58);
+    Animated.timing(uiChromeOpacity, {
+      toValue: 1,
+      duration: 420,
+      useNativeDriver: true,
+    }).start();
+  }, [themeMode, uiChromeOpacity]);
+
   async function handleOpenQrScanner() {
     if (isSessionEnded) {
       setActionError(text.realizationEndedScannerBlocked);
@@ -1492,36 +1547,34 @@ export function ExpeditionStageScreen({
         )}
       </View>
 
+      <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
-        <TopRealizationPanel
-          companyName={
-            sessionState.realization.companyName ||
-            session.realization?.companyName ||
-            `${text.realizationPrefix} ${session.realizationCode}`
-          }
-          logoUrl={sessionState.realization.logoUrl}
-          teamName={teamName}
-          teamSlot={sessionState.team.slotNumber ?? session.team.slotNumber}
-          teamColorHex={teamColorHex}
-          teamColorLabel={teamColorLabel}
-          teamIcon={teamIcon}
-          points={sessionState.team.points}
-        />
+        <Pressable onPressIn={handleTestMenuHoldStart} onPressOut={handleTestMenuHoldEnd}>
+          <TopRealizationPanel
+            companyName={
+              sessionState.realization.companyName ||
+              session.realization?.companyName ||
+              `${text.realizationPrefix} ${session.realizationCode}`
+            }
+            logoUrl={sessionState.realization.logoUrl}
+            teamName={teamName}
+            teamSlot={sessionState.team.slotNumber ?? session.team.slotNumber}
+            teamColorHex={teamColorHex}
+            teamColorLabel={teamColorLabel}
+            teamIcon={teamIcon}
+            points={sessionState.team.points}
+            languageFlag={currentLanguageFlag}
+            showLanguageButton={hasMultipleLanguageOptions}
+            onOpenLanguagePicker={() => setIsLanguagePickerOpen(true)}
+            themeMode={themeMode}
+            onToggleTheme={onToggleTheme}
+          />
+        </Pressable>
 
         <View className="mt-2 items-end">
-          {hasMultipleLanguageOptions ? (
-            <Pressable
-              className="mb-2 h-11 w-11 items-center justify-center rounded-full border active:opacity-90"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
-              onPress={() => setIsLanguagePickerOpen(true)}
-            >
-              <Text className="text-xl">{currentLanguageFlag}</Text>
-            </Pressable>
-          ) : null}
-
           <View
             className="w-56 rounded-2xl border px-3 py-2"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
           >
             <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
               {text.tasks}
@@ -1537,7 +1590,7 @@ export function ExpeditionStageScreen({
                         ? "rgba(52, 211, 153, 0.2)"
                         : item.failed
                           ? "rgba(127, 29, 29, 0.3)"
-                          : "rgba(15, 23, 42, 0.2)",
+                          : EXPEDITION_THEME.panelStrong,
                     }}
                   >
                     {item.done ? (
@@ -1568,16 +1621,6 @@ export function ExpeditionStageScreen({
             </View>
           </View>
 
-          <Pressable
-            className="mt-2 rounded-full border px-3 py-1.5 active:opacity-90"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.9)" }}
-            onPress={() => setIsStationTestMenuOpen(true)}
-          >
-            <Text className="text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {text.testMenu}
-            </Text>
-          </Pressable>
-
         </View>
       </View>
 
@@ -1585,7 +1628,7 @@ export function ExpeditionStageScreen({
         {selectedStationLabel ? (
           <View
             className="mb-2 rounded-full border px-3 py-1"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: "rgba(22, 41, 33, 0.88)" }}
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
           >
             <Text className="text-xs" style={{ color: EXPEDITION_THEME.textPrimary }}>
               {selectedStationLabel}
@@ -1611,7 +1654,11 @@ export function ExpeditionStageScreen({
             className="w-full max-w-[560px] rounded-2xl border px-3 py-2"
             style={{
               borderColor: EXPEDITION_THEME.border,
-              backgroundColor: transientPopup.tone === "error" ? "rgba(127, 29, 29, 0.9)" : "rgba(22, 41, 33, 0.94)",
+              backgroundColor: transientPopup.tone === "error"
+                ? isLightTheme
+                  ? "rgba(185, 92, 87, 0.28)"
+                  : "rgba(127, 29, 29, 0.9)"
+                : EXPEDITION_THEME.panel,
             }}
           >
             <Text
@@ -1763,7 +1810,10 @@ export function ExpeditionStageScreen({
       >
         <Pressable
           className="flex-1 items-center justify-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", paddingHorizontal: isTabletLayout ? 36 : 24 }}
+          style={{
+            backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)",
+            paddingHorizontal: isTabletLayout ? 36 : 24,
+          }}
           onPress={() => setTimedCloseConfirmStation(null)}
         >
           <Pressable
@@ -1832,7 +1882,7 @@ export function ExpeditionStageScreen({
                   });
                 }}
               >
-                <Text className="font-semibold" style={{ color: "#fecaca", fontSize: isTabletLayout ? 19 : 14 }}>
+                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.danger, fontSize: isTabletLayout ? 19 : 14 }}>
                   {text.timedTaskAlertCloseAndFail}
                 </Text>
               </Pressable>
@@ -1849,7 +1899,7 @@ export function ExpeditionStageScreen({
       >
         <Pressable
           className="flex-1 justify-center px-6"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.55)" }}
+          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
           onPress={() => setIsLanguagePickerOpen(false)}
         >
           <Pressable
@@ -1911,6 +1961,7 @@ export function ExpeditionStageScreen({
           </Pressable>
         </Pressable>
       </Modal>
+      </Animated.View>
 
     </View>
   );

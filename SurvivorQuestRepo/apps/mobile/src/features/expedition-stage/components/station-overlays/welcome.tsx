@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { parseIntroBlocks, parseIntroInline } from "./puzzle-helpers";
 import type { WelcomePreviewOverlayProps } from "./types";
 
@@ -37,6 +37,7 @@ const WELCOME_PREVIEW_TEXT: Record<
 export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePreviewOverlayProps) {
   const uiLanguage = useUiLanguage();
   const text = WELCOME_PREVIEW_TEXT[uiLanguage];
+  const isLightTheme = getExpeditionThemeMode() === "light";
 
   if (!visible) {
     return null;
@@ -44,7 +45,10 @@ export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePr
   const blocks = parseIntroBlocks(introText?.trim() || "");
 
   return (
-    <View className="absolute inset-0 z-50 items-center justify-center px-4" style={{ backgroundColor: "rgba(15, 25, 20, 0.78)" }}>
+    <View
+      className="absolute inset-0 z-50 items-center justify-center px-4"
+      style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.78)" }}
+    >
       <View
         className="w-full max-w-[560px] rounded-3xl border p-5"
         style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}

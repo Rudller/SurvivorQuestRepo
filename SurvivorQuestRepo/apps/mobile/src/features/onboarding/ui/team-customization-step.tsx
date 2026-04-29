@@ -306,7 +306,7 @@ export function TeamCustomizationStep({
           onPress={() => void onSave()}
           disabled={!canSave}
         >
-          <Text className="text-center font-semibold text-zinc-950">
+          <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.background }}>
             {isSaving ? text.startingAction : text.startAction}
           </Text>
         </Pressable>

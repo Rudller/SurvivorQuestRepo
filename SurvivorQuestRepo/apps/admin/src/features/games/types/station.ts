@@ -55,6 +55,7 @@ export type Station = {
   id: string;
   name: string;
   type: StationType;
+  categories: string[];
   description: string;
   imageUrl: string;
   points: number;

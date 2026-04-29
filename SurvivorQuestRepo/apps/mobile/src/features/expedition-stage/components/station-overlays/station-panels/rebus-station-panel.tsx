@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type RebusStationPanelProps = {
   rebusQuestion: string;
@@ -65,6 +65,7 @@ export function RebusStationPanel({
   const uiLanguage = useUiLanguage();
   const text = REBUS_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const actionLabelColor = resolveActionLabelColor(isActionDisabled);
 
   return (
     <View className="mt-3">
@@ -106,7 +107,7 @@ export function RebusStationPanel({
           onPress={onSubmit}
           disabled={isActionDisabled}
         >
-          <Text className="font-semibold text-zinc-950" style={{ fontSize: layout.actionFontSize }}>
+          <Text className="font-semibold" style={{ color: actionLabelColor, fontSize: layout.actionFontSize }}>
             {isSubmittingRebus ? "..." : text.check}
           </Text>
         </Pressable>

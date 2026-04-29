@@ -2,8 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import type { Station, StationType } from "../types/station";
-import { stationTypeOptions } from "../types/station";
+import type { Station } from "../types/station";
 import {
   getStationTypeLabel,
   formatTimeLimit,
@@ -12,7 +11,12 @@ import {
   type StationSortField,
   type SortDirection,
 } from "../station.utils";
-import { filterStationsCatalog, groupStationsByType } from "../station-catalog.utils";
+import {
+  filterStationsCatalog,
+  getStationGroupCategories,
+  groupStationsByCategory,
+  uncategorizedStationGroupKey,
+} from "../station-catalog.utils";
 
 interface StationsTableProps {
   stations: Station[];
@@ -32,8 +36,8 @@ export function StationsTable({
   onEdit,
 }: StationsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<StationType[]>([]);
-  const [collapsedTypes, setCollapsedTypes] = useState<StationType[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
 
   const sortedGames = useMemo(() => {
     const list = [...stations];
@@ -53,54 +57,76 @@ export function StationsTable({
     return list;
   }, [stations, sortField, sortDirection]);
 
-  const typeCounts = useMemo(() => {
-    const counts = new Map<StationType, number>();
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
     sortedGames.forEach((station) => {
-      counts.set(station.type, (counts.get(station.type) ?? 0) + 1);
+      getStationGroupCategories(station).forEach((category) => {
+        counts.set(category, (counts.get(category) ?? 0) + 1);
+      });
     });
     return counts;
   }, [sortedGames]);
+
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(categoryCounts.entries())
+        .sort((left, right) => {
+          if (left[0] === uncategorizedStationGroupKey) {
+            return 1;
+          }
+          if (right[0] === uncategorizedStationGroupKey) {
+            return -1;
+          }
+          return left[0].localeCompare(right[0], "pl", { sensitivity: "base" });
+        })
+        .map(([value, count]) => ({
+          value,
+          count,
+          label: value === uncategorizedStationGroupKey ? "Bez kategorii" : value,
+        })),
+    [categoryCounts],
+  );
 
   const filteredGames = useMemo(
     () =>
       filterStationsCatalog({
         stations: sortedGames,
         searchQuery,
-        selectedTypes,
+        selectedCategories,
       }),
-    [sortedGames, searchQuery, selectedTypes],
+    [sortedGames, searchQuery, selectedCategories],
   );
 
-  const groupedGames = useMemo(() => groupStationsByType(filteredGames), [filteredGames]);
-  const collapsedTypeSet = useMemo(() => new Set(collapsedTypes), [collapsedTypes]);
-  const hasFilters = searchQuery.trim().length > 0 || selectedTypes.length > 0;
+  const groupedGames = useMemo(() => groupStationsByCategory(filteredGames), [filteredGames]);
+  const collapsedCategorySet = useMemo(() => new Set(collapsedCategories), [collapsedCategories]);
+  const hasFilters = searchQuery.trim().length > 0 || selectedCategories.length > 0;
 
   useEffect(() => {
-    const availableTypes = new Set(groupedGames.map((group) => group.type));
-    setCollapsedTypes((current) => {
-      const next = current.filter((type) => availableTypes.has(type));
+    const availableCategories = new Set(groupedGames.map((group) => group.category));
+    setCollapsedCategories((current) => {
+      const next = current.filter((category) => availableCategories.has(category));
       return next.length === current.length ? current : next;
     });
   }, [groupedGames]);
 
-  function toggleTypeFilter(type: StationType) {
-    setSelectedTypes((current) =>
-      current.includes(type)
-        ? current.filter((item) => item !== type)
-        : [...current, type],
+  function toggleCategoryFilter(category: string) {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category],
     );
   }
 
   function clearFilters() {
     setSearchQuery("");
-    setSelectedTypes([]);
+    setSelectedCategories([]);
   }
 
-  function toggleGroupCollapse(type: StationType) {
-    setCollapsedTypes((current) =>
-      current.includes(type)
-        ? current.filter((item) => item !== type)
-        : [...current, type],
+  function toggleGroupCollapse(category: string) {
+    setCollapsedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category],
     );
   }
 
@@ -134,7 +160,7 @@ export function StationsTable({
           <input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Szukaj po nazwie, typie lub opisie..."
+            placeholder="Szukaj po nazwie, kategorii, typie lub opisie..."
             className="min-w-60 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-amber-400/80"
           />
           <span className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-400">
@@ -151,22 +177,21 @@ export function StationsTable({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {stationTypeOptions.map((option) => {
-            const isActive = selectedTypes.includes(option.value);
-            const count = typeCounts.get(option.value) ?? 0;
+          {categoryOptions.map((option) => {
+            const isActive = selectedCategories.includes(option.value);
 
             return (
               <button
                 key={option.value}
                 type="button"
-                onClick={() => toggleTypeFilter(option.value)}
+                onClick={() => toggleCategoryFilter(option.value)}
                 className={`rounded-full border px-3 py-1 text-xs transition ${
                   isActive
                     ? "border-amber-300 bg-amber-300/15 text-amber-200"
                     : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
                 }`}
               >
-                {option.label} ({count})
+                {option.label} ({option.count})
               </button>
             );
           })}
@@ -188,13 +213,13 @@ export function StationsTable({
       )}
 
       {groupedGames.map((group) => {
-        const isCollapsed = collapsedTypeSet.has(group.type);
+        const isCollapsed = collapsedCategorySet.has(group.category);
 
         return (
-          <section key={group.type} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
+          <section key={group.category} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
             <button
               type="button"
-              onClick={() => toggleGroupCollapse(group.type)}
+              onClick={() => toggleGroupCollapse(group.category)}
               className="flex w-full items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-left transition hover:bg-zinc-900/90"
             >
               <span className="text-sm font-medium text-zinc-100">
