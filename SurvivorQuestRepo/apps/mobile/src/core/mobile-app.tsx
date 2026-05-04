@@ -37,6 +37,7 @@ import {
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
+const STALE_REALIZATION_AUTO_RESUME_GRACE_MS = 6 * 60 * 60 * 1000;
 const TABLET_MIN_SHORT_EDGE = 700;
 const TABLET_MIN_WIDTH = 900;
 
@@ -216,6 +217,41 @@ function getNextThemePreference(preference: MobileThemePreference): MobileThemeP
   }
 
   return "dark";
+}
+
+function resolveRealizationDeadlineTimestamp(
+  realization: Partial<NonNullable<OnboardingSession["realization"]>> | null | undefined,
+) {
+  if (!realization) {
+    return null;
+  }
+
+  const scheduledAt = typeof realization.scheduledAt === "string" ? realization.scheduledAt.trim() : "";
+  if (!scheduledAt) {
+    return null;
+  }
+
+  const scheduledTimestamp = new Date(scheduledAt).getTime();
+  if (!Number.isFinite(scheduledTimestamp)) {
+    return null;
+  }
+
+  const rawDurationMinutes = typeof realization.durationMinutes === "number" ? realization.durationMinutes : NaN;
+  if (!Number.isFinite(rawDurationMinutes)) {
+    return null;
+  }
+
+  const durationMinutes = Math.max(1, Math.round(rawDurationMinutes));
+  return scheduledTimestamp + durationMinutes * 60 * 1000;
+}
+
+function isPersistedSessionStale(session: Partial<OnboardingSession>, nowTimestamp = Date.now()) {
+  const deadlineTimestamp = resolveRealizationDeadlineTimestamp(session.realization);
+  if (deadlineTimestamp === null) {
+    return false;
+  }
+
+  return nowTimestamp > deadlineTimestamp + STALE_REALIZATION_AUTO_RESUME_GRACE_MS;
 }
 
 function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: string }) {
@@ -478,6 +514,10 @@ export function MobileApp() {
 
         const parsed = JSON.parse(storedSession) as Partial<OnboardingSession>;
         if (typeof parsed?.sessionToken === "string" && parsed.sessionToken.trim().length > 0) {
+          if (isPersistedSessionStale(parsed)) {
+            await AsyncStorage.removeItem(ONBOARDING_SESSION_STORAGE_KEY);
+            return;
+          }
           setOnboardingSession(parsed as OnboardingSession);
         }
       } catch {

@@ -149,7 +149,7 @@ type MobileSessionStateResponse = {
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
-const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.14:3001";
+const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.2:3001";
 const PRODUCTION_API_BASE_URL_CANDIDATES = [
   "https://survivorquest.pl/api",
   "https://www.survivorquest.pl/api",
@@ -952,6 +952,18 @@ function addBaseUrlCandidate(list: string[], candidate: string | null) {
   }
 }
 
+function mergeBaseUrlCandidates(...lists: string[][]) {
+  const merged: string[] = [];
+
+  for (const list of lists) {
+    for (const candidate of list) {
+      addBaseUrlCandidate(merged, candidate);
+    }
+  }
+
+  return merged;
+}
+
 function resolveProductionApiBaseUrlCandidates(preferredBaseUrl?: string | null) {
   const candidates: string[] = [];
 
@@ -1428,6 +1440,7 @@ export function RealizationOnboardingScreen({
 
           if (!isCancelled) {
             setApiConnectionStatus("connected");
+            setApiBaseUrlDraft(candidate);
             setApiConfigFeedback(null, null);
           }
           return;
@@ -1619,9 +1632,15 @@ export function RealizationOnboardingScreen({
     setTeamPickerError(null);
     setIsTeamPickerOpen(false);
 
-    const baseUrlCandidates = resolveApiBaseUrlCandidates(
-      preferredApiBaseUrl ?? apiBaseUrlOverride,
+    const normalizedPreferredApiBaseUrl = normalizeApiBaseUrl(
+      preferredApiBaseUrl ?? apiConnectionTarget,
     );
+    const baseUrlCandidates = normalizedPreferredApiBaseUrl
+      ? mergeBaseUrlCandidates(
+          [normalizedPreferredApiBaseUrl],
+          resolveApiBaseUrlCandidates(apiBaseUrlOverride),
+        )
+      : resolveApiBaseUrlCandidates(apiBaseUrlOverride);
 
     if (baseUrlCandidates.length === 0) {
       setApiConnectionStatus("config-missing");
@@ -1654,6 +1673,8 @@ export function RealizationOnboardingScreen({
         throw bootstrapError ?? new Error(text.backendConnectionFailed);
       }
       setApiConnectionStatus("connected");
+      setApiConnectionTarget(resolvedBaseUrl);
+      setApiBaseUrlDraft(resolvedBaseUrl);
 
       const join = await requestMobileApi<MobileJoinResponse>(resolvedBaseUrl, "/api/mobile/session/join", {
         method: "POST",
