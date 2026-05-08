@@ -284,6 +284,12 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         asString(station.completionCodeInputMode ?? station.completion_code_input_mode, "alphanumeric") === "numeric"
           ? "numeric"
           : "alphanumeric",
+      completionCodeLength: (() => {
+        const value = Math.round(
+          asNumber(station.completionCodeLength ?? station.completion_code_length, 0),
+        );
+        return value > 0 ? Math.min(32, value) : undefined;
+      })(),
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       latitude: (() => {
         const value = asNumber(station.latitude ?? station.lat, Number.NaN);
@@ -344,6 +350,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       points: 100,
       timeLimitSeconds: 0,
       completionCodeInputMode: "alphanumeric",
+      completionCodeLength: undefined,
       quiz: undefined,
       latitude: undefined,
       longitude: undefined,
@@ -678,6 +685,7 @@ export async function postMobileResolveStationQr(
         points: number;
       timeLimitSeconds: number;
       completionCodeInputMode?: "numeric" | "alphanumeric";
+      completionCodeLength?: number;
       quiz?: {
         question: string;
         answers: [string, string, string, string];

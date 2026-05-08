@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { MASTERMIND_MAX_ATTEMPTS, MASTERMIND_SYMBOLS } from "../puzzle-helpers";
-import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
+import { AttemptsIndicator, resolveActionLabelColor, StationQuizTaskWrapper, useStationPanelLayout } from "./shared-ui";
 
 export type MastermindAttempt = {
   guess: string;
@@ -16,7 +16,6 @@ type MastermindStationPanelProps = {
   mastermindAttempts: MastermindAttempt[];
   mastermindAttemptsLeft: number;
   mastermindInput: string;
-  mastermindResult: string | null;
   isInputEditable: boolean;
   isActionDisabled: boolean;
   isSymbolDisabled: boolean;
@@ -82,7 +81,6 @@ export function MastermindStationPanel({
   mastermindAttempts,
   mastermindAttemptsLeft,
   mastermindInput,
-  mastermindResult,
   isInputEditable,
   isActionDisabled,
   isSymbolDisabled,
@@ -95,6 +93,11 @@ export function MastermindStationPanel({
   const text = MASTERMIND_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
   const actionLabelColor = resolveActionLabelColor(isActionDisabled);
+  const normalizedMastermindInput = mastermindInput
+    .toUpperCase()
+    .replace(/[^A-F]/g, "")
+    .slice(0, 4);
+  const guessSlots = Array.from({ length: 4 }, (_, index) => normalizedMastermindInput[index] ?? "");
 
   return (
     <View className="mt-3">
@@ -108,18 +111,26 @@ export function MastermindStationPanel({
           maxAttempts={MASTERMIND_MAX_ATTEMPTS}
         />
       </View>
-      <View className="mt-2 gap-1.5">
-        {mastermindAttempts.map((attempt, index) => (
+      <View className="mt-2 flex-row justify-center gap-2">
+        {guessSlots.map((symbol, index) => (
           <View
-            key={`${stationId}-mastermind-${index}`}
-            className="flex-row items-center justify-between rounded-xl border px-3 py-2"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+            key={`${stationId}-mastermind-current-symbol-${index}`}
+            className="items-center justify-center rounded-xl border"
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panelStrong,
+              width: layout.isTablet ? 52 : 44,
+              height: layout.isTablet ? 52 : 44,
+            }}
           >
-            <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {attempt.guess}
-            </Text>
-            <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-              ● {text.exact}: {attempt.exact} • ◐ {text.misplaced}: {attempt.misplaced}
+            <Text
+              className="font-semibold"
+              style={{
+                color: symbol ? EXPEDITION_THEME.textPrimary : EXPEDITION_THEME.textSubtle,
+                fontSize: layout.isTablet ? 22 : 18,
+              }}
+            >
+              {symbol || "•"}
             </Text>
           </View>
         ))}
@@ -138,7 +149,7 @@ export function MastermindStationPanel({
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
           autoCapitalize="characters"
           autoCorrect={false}
-          value={mastermindInput}
+          value={normalizedMastermindInput}
           onChangeText={onChangeInput}
           editable={isInputEditable}
           onSubmitEditing={onSubmitGuess}
@@ -161,24 +172,24 @@ export function MastermindStationPanel({
         {MASTERMIND_SYMBOLS.map((symbol) => (
           <Pressable
             key={`${stationId}-mastermind-symbol-${symbol}`}
-            className="items-center justify-center rounded-md border active:opacity-90"
+            className="items-center justify-center rounded-lg border active:opacity-90"
             style={{
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panelStrong,
-              width: layout.isTablet ? 38 : 32,
-              height: layout.isTablet ? 38 : 32,
+              width: layout.isTablet ? 56 : 44,
+              height: layout.isTablet ? 56 : 44,
             }}
             onPress={() => {
               onAddSymbol(symbol);
             }}
             disabled={isSymbolDisabled}
-            hitSlop={4}
+            hitSlop={8}
           >
             <Text
               className="font-semibold"
               style={{
                 color: EXPEDITION_THEME.textPrimary,
-                fontSize: layout.isTablet ? 16 : 12,
+                fontSize: layout.isTablet ? 22 : 17,
                 textAlign: "center",
                 textAlignVertical: "center",
                 includeFontPadding: false,
@@ -189,11 +200,108 @@ export function MastermindStationPanel({
           </Pressable>
         ))}
       </View>
-      {mastermindResult ? (
-        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
-          {mastermindResult}
-        </Text>
-      ) : null}
+    </View>
+  );
+}
+
+type MastermindAttemptsListProps = {
+  stationId: string;
+  mastermindAttempts: MastermindAttempt[];
+};
+
+export function MastermindAttemptsList({ stationId, mastermindAttempts }: MastermindAttemptsListProps) {
+  const uiLanguage = useUiLanguage();
+  const text = MASTERMIND_STATION_TEXT[uiLanguage];
+  const layout = useStationPanelLayout();
+  const attemptsNewestFirst = [...mastermindAttempts].reverse();
+
+  if (!attemptsNewestFirst.length) {
+    return null;
+  }
+
+  return (
+    <View className="mt-2 gap-1.5">
+      {attemptsNewestFirst.map((attempt, index) => (
+        <View
+          key={`${stationId}-mastermind-history-${index}-${attempt.guess}`}
+          className="flex-row items-center justify-between rounded-xl border px-3 py-2"
+          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+        >
+          <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            {attempt.guess}
+          </Text>
+          <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+            ● {text.exact}: {attempt.exact} • ◐ {text.misplaced}: {attempt.misplaced}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+type MastermindMediaSectionProps = {
+  stationId: string;
+  prompt: string;
+  mastermindAttempts: MastermindAttempt[];
+  mastermindAttemptsLeft: number;
+  mastermindInput: string;
+  isInteractiveLocked: boolean;
+  isSubmittingMastermindGuess: boolean;
+  mastermindSolved: boolean;
+  isTabletOverlay: boolean;
+  quizSubmitError: string | null;
+  onChangeInput: (value: string) => void;
+  onSubmitGuess: () => void;
+  onAddSymbol: (symbol: string) => void;
+};
+
+export function MastermindMediaSection({
+  stationId,
+  prompt,
+  mastermindAttempts,
+  mastermindAttemptsLeft,
+  mastermindInput,
+  isInteractiveLocked,
+  isSubmittingMastermindGuess,
+  mastermindSolved,
+  isTabletOverlay,
+  quizSubmitError,
+  onChangeInput,
+  onSubmitGuess,
+  onAddSymbol,
+}: MastermindMediaSectionProps) {
+  return (
+    <View className="flex-1 px-2 py-2">
+      <StationQuizTaskWrapper
+        prompt={prompt}
+        isTabletOverlay={isTabletOverlay}
+        error={quizSubmitError}
+        errorPlacement="outside"
+        footer={(
+          <MastermindAttemptsList
+            stationId={stationId}
+            mastermindAttempts={mastermindAttempts}
+          />
+        )}
+      >
+        <MastermindStationPanel
+          stationId={stationId}
+          mastermindAttempts={mastermindAttempts}
+          mastermindAttemptsLeft={mastermindAttemptsLeft}
+          mastermindInput={mastermindInput}
+          isInputEditable={!isInteractiveLocked && !isSubmittingMastermindGuess && !mastermindSolved}
+          isActionDisabled={
+            isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0
+          }
+          isSymbolDisabled={
+            isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0
+          }
+          isSubmittingMastermindGuess={isSubmittingMastermindGuess}
+          onChangeInput={onChangeInput}
+          onSubmitGuess={onSubmitGuess}
+          onAddSymbol={onAddSymbol}
+        />
+      </StationQuizTaskWrapper>
     </View>
   );
 }

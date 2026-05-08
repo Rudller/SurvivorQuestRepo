@@ -189,3 +189,13 @@ export function BoggleStationPanel({
     </View>
   );
 }
+
+type BoggleMediaSectionProps = BoggleStationPanelProps;
+
+export function BoggleMediaSection(props: BoggleMediaSectionProps) {
+  return (
+    <View className="flex-1 px-2 py-2">
+      <BoggleStationPanel {...props} />
+    </View>
+  );
+}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, TEAM_COLORS, getExpeditionThemeMode } from "../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import type { ExpeditionLeaderboardEntry } from "../../model/types";
 import type { RealizationFinishOverlayProps } from "./types";
 
@@ -430,11 +431,11 @@ export function RealizationFinishOverlay({
   const text = REALIZATION_FINISH_TEXT[uiLanguage];
   const dateLocale = REALIZATION_FINISH_DATE_LOCALE[uiLanguage];
   const isLightTheme = getExpeditionThemeMode() === "light";
-  const { width } = useWindowDimensions();
+  const adaptiveLayout = useAdaptiveLayout();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(14)).current;
   const [isFullLeaderboardVisible, setIsFullLeaderboardVisible] = useState(false);
-  const isTablet = width >= 900;
+  const isTablet = adaptiveLayout.isTablet;
   const sortedEntries = useMemo(
     () =>
       [...leaderboardEntries].sort(

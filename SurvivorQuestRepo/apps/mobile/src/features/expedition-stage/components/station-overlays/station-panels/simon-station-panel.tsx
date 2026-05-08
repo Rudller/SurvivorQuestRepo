@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
@@ -8,9 +9,11 @@ import { useStationPanelLayout } from "./shared-ui";
 type SimonStationPanelProps = {
   stationId: string;
   simonSequence: string[];
-  simonHiddenHint: string;
-  simonHintVisible: boolean;
+  simonTargetLength: number;
   simonProgress: number;
+  simonActivePlaybackButtonId: string | null;
+  simonActiveInputButtonId: string | null;
+  isSimonPlaybackActive: boolean;
   simonResult: string | null;
   isInteractiveLocked: boolean;
   isSubmittingSimon: boolean;
@@ -18,27 +21,22 @@ type SimonStationPanelProps = {
 };
 
 type SimonStationText = {
-  rememberSequence: string;
   progress: string;
 };
 
 const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
-  rememberSequence: "Remember sequence",
   progress: "Progress",
 };
 
 const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
   polish: {
-    rememberSequence: "Zapamiętaj sekwencję",
     progress: "Postęp",
   },
   english: SIMON_STATION_TEXT_ENGLISH,
   ukrainian: {
-    rememberSequence: "Запам'ятайте послідовність",
     progress: "Прогрес",
   },
   russian: {
-    rememberSequence: "Запомните последовательность",
     progress: "Прогресс",
   },
 };
@@ -46,9 +44,11 @@ const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
 export function SimonStationPanel({
   stationId,
   simonSequence,
-  simonHiddenHint,
-  simonHintVisible,
+  simonTargetLength,
   simonProgress,
+  simonActivePlaybackButtonId,
+  simonActiveInputButtonId,
+  isSimonPlaybackActive,
   simonResult,
   isInteractiveLocked,
   isSubmittingSimon,
@@ -57,41 +57,84 @@ export function SimonStationPanel({
   const uiLanguage = useUiLanguage();
   const text = SIMON_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const [gridWidth, setGridWidth] = useState(0);
+  const simonButtonGap = layout.isTablet ? 12 : 8;
+  const defaultGridWidth = layout.isTablet ? 420 : 312;
+  const simonButtonSize =
+    Math.floor(
+      ((gridWidth > 0 ? gridWidth : defaultGridWidth) - simonButtonGap * 2) / 3,
+    );
+  const safeSequenceLength = Math.max(1, Math.min(simonTargetLength, simonSequence.length));
 
   return (
     <View className="mt-3">
-      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.rememberSequence}:{" "}
-        <Text className="font-bold">
-          {simonHintVisible
-            ? simonSequence
-                .map((id) => SIMON_BUTTONS.find((button) => button.id === id)?.label ?? "")
-                .join(" ")
-            : simonHiddenHint}
-        </Text>
+      <View className="flex-row items-center justify-center" style={{ columnGap: layout.attemptDotGap }}>
+        {Array.from({ length: safeSequenceLength }).map((_, index) => (
+          <View
+            key={`${stationId}-simon-progress-${index}`}
+            className="rounded-full"
+            style={{
+              width: layout.isTablet ? 14 : 11,
+              height: layout.isTablet ? 14 : 11,
+              backgroundColor:
+                index < simonProgress ? EXPEDITION_THEME.accentStrong : "rgba(148, 163, 184, 0.3)",
+            }}
+          />
+        ))}
+      </View>
+      <Text className="mt-1 text-center" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
+        {text.progress}: {simonProgress}/{safeSequenceLength}
       </Text>
-      <Text className="mt-1" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
-        {text.progress}: {simonProgress}/{simonSequence.length}
-      </Text>
-      <View className="mt-2 flex-row flex-wrap justify-between gap-y-2">
+      <View
+        className="mt-2 flex-row flex-wrap self-center"
+        style={{
+          width: "100%",
+          columnGap: simonButtonGap,
+          rowGap: simonButtonGap,
+        }}
+        onLayout={(event) => {
+          const measuredWidth = Math.round(event.nativeEvent.layout.width);
+          if (measuredWidth !== gridWidth) {
+            setGridWidth(measuredWidth);
+          }
+        }}
+      >
         {SIMON_BUTTONS.map((button) => (
+          (() => {
+            const isPlaybackTarget =
+              simonActivePlaybackButtonId === button.id ||
+              simonActiveInputButtonId === button.id;
+            const isButtonDisabled =
+              isInteractiveLocked ||
+              isSubmittingSimon ||
+              isSimonPlaybackActive ||
+              simonProgress >= safeSequenceLength;
+            return (
           <Pressable
             key={`${stationId}-simon-${button.id}`}
-            className="w-[31.5%] items-center justify-center rounded-xl border active:opacity-90"
+            className="items-center justify-center rounded-full border active:opacity-90"
             style={{
-              height: layout.isTablet ? 84 : 64,
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: button.color,
-              opacity: isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length ? 0.55 : 1,
+              width: simonButtonSize,
+              height: simonButtonSize,
+              borderRadius: simonButtonSize / 2,
+               borderWidth: isPlaybackTarget ? 3 : 1,
+               borderColor: isPlaybackTarget ? "rgba(255, 255, 255, 0.95)" : EXPEDITION_THEME.border,
+               backgroundColor: button.color,
+               opacity: isPlaybackTarget ? 0.86 : 0.55,
+               transform: [{ scale: isPlaybackTarget ? 1.08 : 1 }],
+               shadowColor: "#ffffff",
+               shadowOpacity: isPlaybackTarget ? 0.5 : 0,
+               shadowRadius: isPlaybackTarget ? 10 : 0,
+              shadowOffset: { width: 0, height: 0 },
             }}
             onPress={() => {
               onPressButton(button.id);
             }}
-            disabled={isInteractiveLocked || isSubmittingSimon || simonProgress >= simonSequence.length}
+            disabled={isButtonDisabled}
             hitSlop={4}
-          >
-            <Text style={{ fontSize: layout.isTablet ? 34 : 24 }}>{button.label}</Text>
-          </Pressable>
+          />
+            );
+          })()
         ))}
       </View>
       {simonResult ? (

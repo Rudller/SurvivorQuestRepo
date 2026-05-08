@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import type { StationTestViewModel } from "../types";
-import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
+import { useStationPanelLayout } from "./shared-ui";
 
 type QuizPromptArgs = {
   station: StationTestViewModel;
@@ -123,7 +123,7 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
     return text.hangmanFallback;
   }
   if (station.stationType === "mastermind") {
-    return station.quizQuestion?.trim() || text.mastermindFallback;
+    return text.mastermindFallback;
   }
   if (station.stationType === "anagram") {
     return text.anagramFallback;
@@ -158,14 +158,11 @@ type QuizAudioPanelProps = {
   hasTimedLimit: boolean;
   hasTimerStarted: boolean;
   isTimeExpired: boolean;
-  hasAudioSource: boolean;
   isAudioLoading: boolean;
-  isAudioPlaying: boolean;
   audioLoadError: string | null;
   quizResult: string | null;
   feedbackTone: "success" | "error" | null;
   quizFeedbackAnimation: Animated.Value;
-  onPlayAudio: () => void;
   onSubmitQuizAnswer: (index: number) => void;
 };
 
@@ -178,28 +175,16 @@ export function QuizAudioPanel({
   hasTimedLimit,
   hasTimerStarted,
   isTimeExpired,
-  hasAudioSource,
   isAudioLoading,
-  isAudioPlaying,
   audioLoadError,
   quizResult,
   feedbackTone,
   quizFeedbackAnimation,
-  onPlayAudio,
   onSubmitQuizAnswer,
 }: QuizAudioPanelProps) {
   const uiLanguage = useUiLanguage();
   const text = QUIZ_PROMPT_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
-  const isPlayAudioDisabled =
-    station.status === "done" ||
-    station.status === "failed" ||
-    isSubmittingQuizAnswer ||
-    isAudioLoading ||
-    (hasTimedLimit && !hasTimerStarted) ||
-    isTimeExpired ||
-    !hasAudioSource;
-  const playAudioLabelColor = resolveActionLabelColor(isPlayAudioDisabled);
   const quizFeedbackStyle = {
     opacity: quizFeedbackAnimation,
     transform: [
@@ -214,26 +199,8 @@ export function QuizAudioPanel({
 
   return (
     <>
-      {isAudioQuizStation ? (
+      {isAudioQuizStation && (isAudioLoading || audioLoadError) ? (
         <View className="mt-3 rounded-xl border px-3 py-3" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}>
-          <Pressable
-            className="items-center justify-center rounded-xl active:opacity-90"
-            style={{
-              backgroundColor:
-                isPlayAudioDisabled
-                  ? EXPEDITION_THEME.panelMuted
-                  : EXPEDITION_THEME.accent,
-              minHeight: layout.actionMinHeight,
-            }}
-            onPress={() => {
-              onPlayAudio();
-            }}
-              disabled={isPlayAudioDisabled}
-            >
-              <Text className="font-semibold" style={{ color: playAudioLabelColor, fontSize: layout.actionFontSize }}>
-                {isAudioPlaying ? text.audioPlaying : text.playAudio}
-              </Text>
-            </Pressable>
           {isAudioLoading ? (
             <View className="mt-2 flex-row items-center gap-2">
               <ActivityIndicator size="small" color={EXPEDITION_THEME.accentStrong} />

@@ -11,7 +11,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
@@ -28,6 +27,7 @@ import {
   type TeamColor,
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -1163,14 +1163,14 @@ export function RealizationOnboardingScreen({
   onRecoveryConsumed,
 }: RealizationOnboardingScreenProps) {
   const routePulse = useRef(new Animated.Value(0)).current;
-  const { width } = useWindowDimensions();
-  const isTabletLayout = width >= 768;
-  const contentMaxWidth = isTabletLayout ? 560 : 448;
-  const contentHorizontalPadding = isTabletLayout ? 40 : 16;
-  const contentTopPadding = isTabletLayout ? 44 : 24;
-  const contentBottomPadding = isTabletLayout ? 56 : 32;
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isWideLayout;
+  const contentMaxWidth = adaptiveLayout.s(isTabletLayout ? 560 : 448, 420, 700);
+  const contentHorizontalPadding = adaptiveLayout.s(isTabletLayout ? 40 : 16, 14, 48);
+  const contentTopPadding = adaptiveLayout.s(isTabletLayout ? 44 : 24, 20, 56);
+  const contentBottomPadding = adaptiveLayout.s(isTabletLayout ? 56 : 32, 28, 68);
   const contentGapClassName = isTabletLayout ? "gap-8" : "gap-4";
-  const teamPickerListMaxHeight = isTabletLayout ? 420 : 316;
+  const teamPickerListMaxHeight = adaptiveLayout.s(isTabletLayout ? 420 : 316, 280, 500);
 
   const [screen, setScreen] = useState<Screen>("api");
   const [setupState, setSetupState] = useState<SetupState>("idle");

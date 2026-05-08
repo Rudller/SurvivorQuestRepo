@@ -2,14 +2,12 @@ import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
-import { MEMORY_MAX_MISTAKES, type MemoryCard } from "../puzzle-helpers";
-import { AttemptsIndicator, useStationPanelLayout } from "./shared-ui";
+import type { MemoryCard } from "../puzzle-helpers";
+import { StationQuizTaskWrapper, useStationPanelLayout } from "./shared-ui";
 
 type MemoryStationPanelProps = {
   memoryDeck: MemoryCard[];
   memoryMatchedCount: number;
-  memoryMistakes: number;
-  memoryAttemptsLeft: number;
   memoryBusy: boolean;
   memoryResult: string | null;
   isInteractiveLocked: boolean;
@@ -18,40 +16,68 @@ type MemoryStationPanelProps = {
 
 type MemoryStationText = {
   pairs: string;
-  errors: string;
-  attemptsLeft: string;
 };
 
 const MEMORY_STATION_TEXT_ENGLISH: MemoryStationText = {
   pairs: "Pairs",
-  errors: "Errors",
-  attemptsLeft: "Attempts left",
 };
 
 const MEMORY_STATION_TEXT: Record<UiLanguage, MemoryStationText> = {
   polish: {
     pairs: "Pary",
-    errors: "Błędy",
-    attemptsLeft: "Pozostało prób",
   },
   english: MEMORY_STATION_TEXT_ENGLISH,
   ukrainian: {
     pairs: "Пари",
-    errors: "Помилки",
-    attemptsLeft: "Залишилось спроб",
   },
   russian: {
     pairs: "Пары",
-    errors: "Ошибки",
-    attemptsLeft: "Осталось попыток",
   },
 };
+
+type DotMetricProps = {
+  label: string;
+  value: number;
+  max: number;
+  fillColor: string;
+};
+
+function DotMetric({ label, value, max, fillColor }: DotMetricProps) {
+  const layout = useStationPanelLayout();
+  const activeCount = Math.max(0, Math.min(value, max));
+  const dots = Array.from({ length: Math.max(1, max) }, (_, index) => index < activeCount);
+
+  return (
+    <View className="items-center justify-center">
+      <Text
+        className="text-center font-semibold"
+        style={{
+          color: EXPEDITION_THEME.textMuted,
+          fontSize: layout.isTablet ? 16 : 14,
+        }}
+      >
+        {label}: {activeCount}/{Math.max(1, max)}
+      </Text>
+      <View className="mt-2 flex-row flex-wrap items-center justify-center gap-2">
+        {dots.map((isActive, index) => (
+          <View
+            key={`${label}-dot-${index}`}
+            style={{
+              width: layout.isTablet ? 14 : 12,
+              height: layout.isTablet ? 14 : 12,
+              borderRadius: 999,
+              backgroundColor: isActive ? fillColor : "rgba(148, 163, 184, 0.25)",
+            }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
 
 export function MemoryStationPanel({
   memoryDeck,
   memoryMatchedCount,
-  memoryMistakes,
-  memoryAttemptsLeft,
   memoryBusy,
   memoryResult,
   isInteractiveLocked,
@@ -60,26 +86,26 @@ export function MemoryStationPanel({
   const uiLanguage = useUiLanguage();
   const text = MEMORY_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const totalPairs = memoryDeck.length / 2;
+  const matchedPairs = memoryMatchedCount / 2;
 
   return (
     <View className="mt-3">
-      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.pairs}: {memoryMatchedCount / 2}/{memoryDeck.length / 2} • {text.errors}: {memoryMistakes}/{MEMORY_MAX_MISTAKES}
-      </Text>
-      <View className="mt-1">
-        <AttemptsIndicator
-          label={text.attemptsLeft}
-          attemptsLeft={memoryAttemptsLeft}
-          maxAttempts={MEMORY_MAX_MISTAKES}
+      <View className="items-center justify-center">
+        <DotMetric
+          label={text.pairs}
+          value={matchedPairs}
+          max={totalPairs}
+          fillColor="#34d399"
         />
       </View>
-      <View className="mt-2 flex-row flex-wrap justify-between gap-y-2">
+      <View className="mt-3 w-[96%] flex-row flex-wrap justify-between self-center gap-y-1.5">
         {memoryDeck.map((card) => (
           <Pressable
             key={card.id}
-            className="w-[31.5%] items-center justify-center rounded-xl border active:opacity-90"
+            className="w-[15.6%] items-center justify-center rounded-lg border active:opacity-90"
             style={{
-              height: layout.isTablet ? 76 : 64,
+              height: layout.isTablet ? 104 : 84,
               borderColor: card.matched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
               backgroundColor: card.matched
                 ? "rgba(34, 197, 94, 0.2)"
@@ -91,10 +117,10 @@ export function MemoryStationPanel({
             onPress={() => {
               onPressCard(card.id);
             }}
-            disabled={isInteractiveLocked || memoryBusy || card.matched || card.revealed || memoryAttemptsLeft <= 0}
-            hitSlop={4}
+            disabled={isInteractiveLocked || memoryBusy || card.matched || card.revealed}
+            hitSlop={6}
           >
-            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 30 : 20 }}>
+            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 36 : 30 }}>
               {card.revealed || card.matched ? card.symbol : "?"}
             </Text>
           </Pressable>
@@ -105,6 +131,51 @@ export function MemoryStationPanel({
           {memoryResult}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+type MemoryMediaSectionProps = {
+  prompt: string;
+  memoryDeck: MemoryCard[];
+  memoryMatchedCount: number;
+  memoryBusy: boolean;
+  memoryResult: string | null;
+  isInteractiveLocked: boolean;
+  isTabletOverlay: boolean;
+  quizSubmitError: string | null;
+  onPressCard: (cardId: string) => void;
+};
+
+export function MemoryMediaSection({
+  prompt,
+  memoryDeck,
+  memoryMatchedCount,
+  memoryBusy,
+  memoryResult,
+  isInteractiveLocked,
+  isTabletOverlay,
+  quizSubmitError,
+  onPressCard,
+}: MemoryMediaSectionProps) {
+  return (
+    <View className="flex-1 px-2 py-2">
+      <StationQuizTaskWrapper
+        prompt={prompt}
+        isTabletOverlay={isTabletOverlay}
+        showBorder={false}
+        error={quizSubmitError}
+        errorPlacement="outside"
+      >
+        <MemoryStationPanel
+          memoryDeck={memoryDeck}
+          memoryMatchedCount={memoryMatchedCount}
+          memoryBusy={memoryBusy}
+          memoryResult={memoryResult}
+          isInteractiveLocked={isInteractiveLocked}
+          onPressCard={onPressCard}
+        />
+      </StationQuizTaskWrapper>
     </View>
   );
 }

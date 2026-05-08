@@ -2310,6 +2310,16 @@ export class MobileService {
       station,
       languageContext,
     );
+    const quizAudioUrl =
+      (
+        (localized.quiz?.audioUrl &&
+          localized.quiz.audioUrl.trim()) ||
+        (station.quiz?.audioUrl && station.quiz.audioUrl.trim())
+      ) || undefined;
+    const parsedCompletionCode = parseCompletionCode(
+      station.completionCode ?? '',
+    );
+    const completionCodeLength = parsedCompletionCode?.length ?? 0;
 
     return {
       id: station.id,
@@ -2322,12 +2332,15 @@ export class MobileService {
       completionCodeInputMode: resolveCompletionCodeInputMode(
         station.completionCode,
       ),
+      completionCodeLength:
+        completionCodeLength > 0 ? completionCodeLength : undefined,
       quiz:
         localized.quiz && Array.isArray(localized.quiz.answers)
           ? {
               question: localized.quiz.question,
               answers: localized.quiz.answers,
               correctAnswerIndex: localized.quiz.correctAnswerIndex,
+              ...(quizAudioUrl ? { audioUrl: quizAudioUrl } : {}),
             }
           : undefined,
       latitude: station.latitude,

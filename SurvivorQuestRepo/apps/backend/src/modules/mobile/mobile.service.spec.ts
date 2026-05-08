@@ -1,6 +1,8 @@
 import { EventActorType, TeamStatus } from '@prisma/client';
 import { MobileService } from './mobile.service';
 import { BadRequestException } from '@nestjs/common';
+import { resolveRealizationLanguageContext } from './domain/mobile-language.helpers';
+import type { StationEntity } from '../station/station.service';
 
 describe('MobileService team selection', () => {
   function createService() {
@@ -455,5 +457,58 @@ describe('MobileService current realization resolver', () => {
     ]);
 
     expect(result?.id).toBe('planned-most-recent-past');
+  });
+});
+
+describe('MobileService station payload mapper', () => {
+  it('includes quiz audioUrl with fallback to base station quiz', () => {
+    const service = new MobileService({} as never, {} as never, {} as never);
+    const languageContext = resolveRealizationLanguageContext({
+      language: 'other',
+      customLanguage: 'english',
+      selectedLanguage: 'english',
+    });
+
+    const station: StationEntity = {
+      id: 'station-audio-1',
+      name: 'Stanowisko audio',
+      type: 'audio-quiz',
+      categories: [],
+      description: 'Opis stanowiska',
+      imageUrl: 'https://example.com/image.png',
+      points: 10,
+      timeLimitSeconds: 60,
+      quiz: {
+        question: 'Pytanie bazowe',
+        answers: ['A', 'B', 'C', 'D'],
+        correctAnswerIndex: 1,
+        audioUrl: '  https://example.com/base-audio.mp3  ',
+      },
+      translations: {
+        english: {
+          quiz: {
+            question: 'Question in English',
+            answers: ['A', 'B', 'C', 'D'],
+            correctAnswerIndex: 2,
+          },
+        },
+      },
+      kind: 'template',
+      isTemplate: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const payload = (service as never).toMobileStationPayload(
+      station,
+      languageContext,
+    );
+
+    expect(payload.quiz).toEqual({
+      question: 'Question in English',
+      answers: ['A', 'B', 'C', 'D'],
+      correctAnswerIndex: 2,
+      audioUrl: 'https://example.com/base-audio.mp3',
+    });
   });
 });

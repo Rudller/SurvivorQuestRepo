@@ -69,9 +69,6 @@ export function RebusStationPanel({
 
   return (
     <View className="mt-3">
-      <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.rebus}: <Text className="font-bold">{rebusQuestion}</Text>
-      </Text>
       <View className="mt-1">
         <AttemptsIndicator
           label={text.attemptsLeft}

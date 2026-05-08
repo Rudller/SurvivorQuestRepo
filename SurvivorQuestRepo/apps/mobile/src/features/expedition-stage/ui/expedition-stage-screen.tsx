@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import {
@@ -40,6 +40,7 @@ import {
   type ExpeditionTaskStatus,
   type MapCoordinate,
 } from "../model/types";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
@@ -638,11 +639,11 @@ export function ExpeditionStageScreen({
   onToggleTheme,
 }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
+  const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_STAGE_TEXT[uiLanguage];
-  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
-  const shortestEdge = Math.min(viewportWidth, viewportHeight);
-  const isTabletLayout = viewportWidth >= 900 || shortestEdge >= 700;
+  const { width: viewportWidth, height: viewportHeight } = adaptiveLayout;
+  const isTabletLayout = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const {
     sessionState,
@@ -1034,6 +1035,7 @@ export function ExpeditionStageScreen({
                 points: stationCatalog.points ?? resolveDefaultStationPoints(stationCatalog.id),
                 timeLimitSeconds: stationCatalog.timeLimitSeconds ?? 0,
                 completionCodeInputMode: stationCatalog.completionCodeInputMode ?? "alphanumeric",
+                completionCodeLength: stationCatalog.completionCodeLength,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
@@ -1060,6 +1062,7 @@ export function ExpeditionStageScreen({
                 points: resolveDefaultStationPoints(stationId),
                 timeLimitSeconds: 0,
                 completionCodeInputMode: "alphanumeric",
+                completionCodeLength: undefined,
                 timeLimitLabel: formatTimeLimitLabel(0),
                 quizQuestion: undefined,
                 quizAnswers: undefined,
@@ -1496,10 +1499,7 @@ export function ExpeditionStageScreen({
     }
 
     const isAlreadyDone = activeStationTest.status === "done" || activeStationTest.status === "failed";
-    const hasTimeLimit = activeStationTest.timeLimitSeconds > 0;
-    const isInteractiveQuiz = isInteractiveQuizStationType(activeStationTest.stationType);
-    const shouldRequireFailConfirmation = hasTimeLimit || isInteractiveQuiz;
-    if (isAlreadyDone || !shouldRequireFailConfirmation) {
+    if (isAlreadyDone) {
       setActiveStationTestId(null);
       return;
     }
@@ -1812,52 +1812,62 @@ export function ExpeditionStageScreen({
           className="flex-1 items-center justify-center"
           style={{
             backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)",
-            paddingHorizontal: isTabletLayout ? 36 : 24,
+            paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 36 : 24, 20, 44),
           }}
           onPress={() => setTimedCloseConfirmStation(null)}
         >
           <Pressable
             className="w-full border"
             style={{
-              maxWidth: isTabletLayout ? 760 : 460,
-              borderRadius: isTabletLayout ? 28 : 18,
-              paddingHorizontal: isTabletLayout ? 28 : 20,
-              paddingVertical: isTabletLayout ? 26 : 20,
+              maxWidth: adaptiveLayout.s(isTabletLayout ? 760 : 460, 420, 920),
+              borderRadius: adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 34),
+              paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 28 : 20, 16, 34),
+              paddingVertical: adaptiveLayout.s(isTabletLayout ? 26 : 20, 16, 34),
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panel,
             }}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: isTabletLayout ? 28 : 18 }}>
+            <Text
+              className="font-semibold"
+              style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 28 : 18, 17, 32) }}
+            >
               {text.timedTaskAlertTitle}
             </Text>
             <Text
               className="mt-2"
-              style={{ color: EXPEDITION_THEME.textMuted, fontSize: isTabletLayout ? 19 : 14, lineHeight: isTabletLayout ? 30 : 24 }}
+              style={{
+                color: EXPEDITION_THEME.textMuted,
+                fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23),
+                lineHeight: adaptiveLayout.s(isTabletLayout ? 30 : 24, 22, 36),
+              }}
             >
               {text.timedTaskAlertBody}
             </Text>
 
-            <View className="mt-5 flex-row" style={{ columnGap: isTabletLayout ? 14 : 8 }}>
+            <View className="mt-5 flex-row" style={{ columnGap: adaptiveLayout.s(isTabletLayout ? 14 : 8, 6, 18) }}>
               <Pressable
                 className="flex-1 items-center justify-center border active:opacity-90"
                 style={{
-                  borderRadius: isTabletLayout ? 16 : 12,
-                  minHeight: isTabletLayout ? 62 : 48,
+                  borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
+                  minHeight: adaptiveLayout.hit(isTabletLayout ? 62 : 48),
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
                 }}
                 onPress={() => setTimedCloseConfirmStation(null)}
               >
-                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: isTabletLayout ? 19 : 14 }}>
+                <Text
+                  className="font-semibold"
+                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23) }}
+                >
                   {text.timedTaskAlertBack}
                 </Text>
               </Pressable>
               <Pressable
                 className="flex-1 items-center justify-center border active:opacity-90"
                 style={{
-                  borderRadius: isTabletLayout ? 16 : 12,
-                  minHeight: isTabletLayout ? 62 : 48,
+                  borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
+                  minHeight: adaptiveLayout.hit(isTabletLayout ? 62 : 48),
                   borderColor: "rgba(239, 68, 68, 0.7)",
                   backgroundColor: "rgba(239, 68, 68, 0.2)",
                 }}
@@ -1882,7 +1892,10 @@ export function ExpeditionStageScreen({
                   });
                 }}
               >
-                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.danger, fontSize: isTabletLayout ? 19 : 14 }}>
+                <Text
+                  className="font-semibold"
+                  style={{ color: EXPEDITION_THEME.danger, fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23) }}
+                >
                   {text.timedTaskAlertCloseAndFail}
                 </Text>
               </Pressable>

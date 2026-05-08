@@ -11,7 +11,6 @@ import {
   ScrollView,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -33,13 +32,12 @@ import {
   fetchMobileSessionState,
   isSessionTokenInvalidError,
 } from "../features/expedition-stage/api/mobile-session.api";
+import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
 const STALE_REALIZATION_AUTO_RESUME_GRACE_MS = 6 * 60 * 60 * 1000;
-const TABLET_MIN_SHORT_EDGE = 700;
-const TABLET_MIN_WIDTH = 900;
 
 type MobileThemePreference = ExpeditionThemeMode;
 
@@ -287,27 +285,27 @@ function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: stri
 function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) {
   const text = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(rulesText);
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const adaptiveLayout = useAdaptiveLayout();
+  const { height: windowHeight } = adaptiveLayout;
   const isLightTheme = getExpeditionThemeMode() === "light";
-  const shortestEdge = Math.min(windowWidth, windowHeight);
-  const isTablet = windowWidth >= TABLET_MIN_WIDTH || shortestEdge >= TABLET_MIN_SHORT_EDGE;
+  const isTablet = adaptiveLayout.isTablet;
   const panelHeight = isTablet
     ? Math.min(Math.max(windowHeight * 0.84, 560), 980)
     : Math.min(Math.max(windowHeight * 0.78, 420), 760);
-  const panelMaxWidth = isTablet ? 920 : 560;
-  const panelPadding = isTablet ? 24 : 20;
-  const titleFontSize = isTablet ? 13 : 11;
-  const rulesFontSize = isTablet ? 16 : 12;
-  const rulesLineHeight = isTablet ? 28 : 20;
-  const closeFontSize = isTablet ? 17 : 14;
-  const closePaddingVertical = isTablet ? 14 : 10;
+  const panelMaxWidth = adaptiveLayout.s(isTablet ? 920 : 560, 520, 1080);
+  const panelPadding = adaptiveLayout.s(isTablet ? 24 : 20, 16, 32);
+  const titleFontSize = adaptiveLayout.fs(isTablet ? 13 : 11, 10, 16);
+  const rulesFontSize = adaptiveLayout.fs(isTablet ? 16 : 12, 11, 20);
+  const rulesLineHeight = adaptiveLayout.s(isTablet ? 28 : 20, 18, 34);
+  const closeFontSize = adaptiveLayout.fs(isTablet ? 17 : 14, 13, 20);
+  const closePaddingVertical = adaptiveLayout.s(isTablet ? 14 : 10, 8, 18);
 
   return (
     <View
       className="absolute inset-0 items-center justify-center"
       style={{
         backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(5, 10, 8, 0.58)",
-        paddingHorizontal: isTablet ? 28 : 24,
+        paddingHorizontal: adaptiveLayout.s(isTablet ? 28 : 24, 20, 34),
       }}
     >
       <View
@@ -327,9 +325,9 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
         <ScrollView
           className="mt-3 flex-1 rounded-2xl border"
           contentContainerStyle={{
-            paddingHorizontal: isTablet ? 18 : 12,
-            paddingTop: isTablet ? 16 : 12,
-            paddingBottom: isTablet ? 28 : 20,
+            paddingHorizontal: adaptiveLayout.s(isTablet ? 18 : 12, 10, 24),
+            paddingTop: adaptiveLayout.s(isTablet ? 16 : 12, 10, 22),
+            paddingBottom: adaptiveLayout.s(isTablet ? 28 : 20, 16, 34),
           }}
           scrollIndicatorInsets={{ top: 8, bottom: 8 }}
           style={{
@@ -380,7 +378,7 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
             borderColor: EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panelStrong,
             paddingVertical: closePaddingVertical,
-            minHeight: isTablet ? 56 : 44,
+            minHeight: adaptiveLayout.hit(isTablet ? 56 : 44),
           }}
           onPress={onClose}
         >

@@ -132,6 +132,7 @@ export type ExpeditionRealizationStation = {
   points: number;
   timeLimitSeconds: number;
   completionCodeInputMode?: "numeric" | "alphanumeric";
+  completionCodeLength?: number;
   quiz?: ExpeditionStationQuiz;
   latitude?: number;
   longitude?: number;

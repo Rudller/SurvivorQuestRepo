@@ -21,6 +21,7 @@ export type StationTestViewModel = {
   stationId: string;
   stationType: StationTestType;
   completionCodeInputMode?: "numeric" | "alphanumeric";
+  completionCodeLength?: number;
   name: string;
   typeLabel: string;
   description: string;
