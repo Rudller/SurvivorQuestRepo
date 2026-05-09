@@ -1,0 +1,55 @@
+name: Mobile CI Gate
+
+on:
+  pull_request:
+    paths:
+      - "SurvivorQuestRepo/apps/mobile/**"
+      - "SurvivorQuestRepo/package.json"
+      - "SurvivorQuestRepo/pnpm-lock.yaml"
+      - "SurvivorQuestRepo/pnpm-workspace.yaml"
+      - ".github/workflows/mobile-ci-gate.yml"
+
+jobs:
+  mobile-ci-gate:
+    name: Typecheck, lint, test and smoke build (mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: SurvivorQuestRepo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: SurvivorQuestRepo/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Typecheck
+        run: pnpm --filter mobile typecheck
+
+      - name: Lint
+        run: pnpm --filter mobile lint
+
+      - name: Test
+        run: pnpm --filter mobile test
+
+      - name: Smoke build (Expo web export)
+        env:
+          CI: "1"
+        run: |
+          # Native Android/iOS builds require platform toolchains and are too heavy for PR gating.
+          # As a realistic and deterministic smoke gate, export the Expo web bundle, which validates
+          # Metro bundling, asset resolution and app compileability in CI.
+          pnpm --filter mobile build:smoke

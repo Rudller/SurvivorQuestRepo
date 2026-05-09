@@ -17,7 +17,7 @@ import {
 type MiniSudokuStationPanelProps = {
   stationId: string;
   miniSudokuPuzzle: {
-    given: Array<string | null>;
+    given: (string | null)[];
     solution: string[];
   } | null;
   normalizedMiniSudokuValues: string[];

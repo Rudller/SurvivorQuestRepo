@@ -144,6 +144,8 @@ export function useExpeditionSession(session: OnboardingSession) {
       session.team.slotNumber,
     ],
   );
+  // Session consumers should react only to stable identity fields, not to parent object re-creation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableSession = useMemo(() => session, [sessionIdentityKey]);
   const selectedLanguage =
     stableSession.selectedLanguage ??

@@ -1347,6 +1347,8 @@ export function RealizationOnboardingScreen({
     };
   }, []);
 
+  // Recovery replay depends on recovery payload and device readiness; onSubmitCode is intentionally excluded.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!recoveryIntent) {
       return;
@@ -1369,6 +1371,7 @@ export function RealizationOnboardingScreen({
       onRecoveryConsumed?.();
     });
   }, [deviceId, onRecoveryConsumed, recoveryIntent]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     let isActive = true;
@@ -1496,7 +1499,7 @@ export function RealizationOnboardingScreen({
         clearTimeout(timeoutId);
       }
     };
-  }, [refreshCustomizationState, screen]);
+  }, [apiBaseUrl, refreshCustomizationState, screen, sessionToken]);
 
   function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
     const normalizedStatus = normalizeRealizationStatus(activeRealization?.status);

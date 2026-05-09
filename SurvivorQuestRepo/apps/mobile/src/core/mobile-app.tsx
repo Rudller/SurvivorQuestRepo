@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -626,6 +626,7 @@ export function MobileApp() {
     setWaitingError(null);
   }, [onboardingSession]);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!isWaitingForAdminStart || !onboardingSession?.apiBaseUrl || !onboardingSession.sessionToken) {
       return;
@@ -719,7 +720,13 @@ export function MobileApp() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isWaitingForAdminStart, onboardingSession, text.mobileSessionReset, text.serverReconnect]);
+  }, [
+    isWaitingForAdminStart,
+    onboardingSession,
+    text.mobileSessionReset,
+    text.serverReconnect,
+  ]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   if (isHydratingSession) {
     return (

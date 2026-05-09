@@ -60,7 +60,6 @@ import {
   resolveMemoryDeck,
   resolveMiniSudokuPuzzle,
   resolvePuzzleSecret,
-  SIMON_BUTTONS,
   resolveSimonSequence,
   scrambleWord,
   shuffleDeterministic,
@@ -160,15 +159,6 @@ function hasMiniSudokuConflictAtIndex(
     }
   }
 
-  return false;
-}
-
-function hasMiniSudokuAnyConflicts(values: string[], side: number, blockSide: number) {
-  for (let index = 0; index < values.length; index += 1) {
-    if (hasMiniSudokuConflictAtIndex(values, side, blockSide, index)) {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -823,7 +813,7 @@ export function StationPreviewOverlay({
   const [hangmanResult, setHangmanResult] = useState<string | null>(null);
   const [mastermindInput, setMastermindInput] = useState("");
   const [mastermindAttempts, setMastermindAttempts] = useState<MastermindAttempt[]>([]);
-  const [mastermindResult, setMastermindResult] = useState<string | null>(null);
+  const [, setMastermindResult] = useState<string | null>(null);
   const [anagramInput, setAnagramInput] = useState("");
   const [anagramAttempts, setAnagramAttempts] = useState(0);
   const [anagramResult, setAnagramResult] = useState<string | null>(null);
@@ -1286,6 +1276,7 @@ export function StationPreviewOverlay({
     });
   }, [
     overlaySlideAnimation,
+    stationProp,
     stationProp?.points,
     stationProp?.quizFailed,
     stationProp?.startedAt,
@@ -1395,7 +1386,7 @@ export function StationPreviewOverlay({
     clearTimeoutPopupCountdown,
     clearWordleRevealTimeouts,
     codeInputShakeAnimation,
-    displayedStation?.stationId,
+    displayedStation,
     quizFeedbackAnimation,
     stopSimonPlayback,
     timerPulseAnimation,
@@ -1524,7 +1515,7 @@ export function StationPreviewOverlay({
     return () => {
       stopSimonPlayback();
     };
-  }, [displayedStation?.stationId, displayedStation?.stationType, playSimonSequence, primeSimonTonePlayers, stopSimonPlayback]);
+  }, [displayedStation, playSimonSequence, primeSimonTonePlayers, stopSimonPlayback]);
 
   useEffect(() => {
     return () => {
@@ -1649,6 +1640,7 @@ export function StationPreviewOverlay({
     hasTimerStartedForPulse,
     isUrgentPulse,
     isOverlayMounted,
+    remainingTimeSeconds,
     stationStatusForPulse,
     timerPulseAnimation,
   ]);
@@ -1747,6 +1739,7 @@ export function StationPreviewOverlay({
     onQuizFailed,
     remainingTimeSeconds,
     showQuizOutcomePopup,
+    text,
   ]);
 
   useEffect(() => {
@@ -1798,7 +1791,7 @@ export function StationPreviewOverlay({
     if (quizSubmitError !== null) {
       setQuizSubmitError(null);
     }
-  }, [normalizedWordleInputForReset]);
+  }, [normalizedWordleInputForReset, quizSubmitError, wordleResult]);
   useEffect(() => {
     if (!wordleAttempts.length) {
       if (wordleRevealedCellCounts.length > 0) {

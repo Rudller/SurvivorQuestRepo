@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import {
@@ -35,6 +35,7 @@ import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import {
   DEFAULT_STATION_PIN_CUSTOMIZATION,
+  type ExpeditionTask,
   type ExpeditionStationType,
   resolveDefaultStationPoints,
   type ExpeditionTaskStatus,
@@ -642,7 +643,6 @@ export function ExpeditionStageScreen({
   const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_STAGE_TEXT[uiLanguage];
-  const { width: viewportWidth, height: viewportHeight } = adaptiveLayout;
   const isTabletLayout = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const {
@@ -994,7 +994,7 @@ export function ExpeditionStageScreen({
   const taskTotal = sessionState.tasks.length;
   const taskByStationId = useMemo(
     () =>
-      sessionState.tasks.reduce<Record<string, (typeof sessionState.tasks)[number]>>((accumulator, task) => {
+      sessionState.tasks.reduce<Record<string, ExpeditionTask>>((accumulator, task) => {
         accumulator[task.stationId] = task;
         return accumulator;
       }, {}),

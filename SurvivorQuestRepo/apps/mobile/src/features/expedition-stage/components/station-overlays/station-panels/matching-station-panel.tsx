@@ -157,8 +157,10 @@ export function MatchingStationPanel({
     rightDotX = centerX + minimumLineLane / 2;
   }
 
-  const rowCenterY = (index: number) =>
-    verticalPadding + index * (rowHeight + rowGap) + rowHeight / 2;
+  const rowCenterY = useCallback(
+    (index: number) => verticalPadding + index * (rowHeight + rowGap) + rowHeight / 2,
+    [rowGap, rowHeight, verticalPadding],
+  );
 
   const rightConnectedSet = useMemo(
     () => new Set(Object.values(matchingConnections)),
@@ -173,7 +175,7 @@ export function MatchingStationPanel({
         x: leftDotX,
         y: rowCenterY(index),
       })),
-    [leftDotX, matchingLeftOptions, rowHeight, rowGap, verticalPadding],
+    [leftDotX, matchingLeftOptions, rowCenterY],
   );
 
   const rightDots = useMemo<DotPointRight[]>(
@@ -184,10 +186,10 @@ export function MatchingStationPanel({
         x: rightDotX,
         y: rowCenterY(index),
       })),
-    [matchingRightOptions, rightDotX, rowHeight, rowGap, verticalPadding],
+    [matchingRightOptions, rightDotX, rowCenterY],
   );
 
-  const findLeftDotHit = (x: number, y: number): DotPointLeft | null => {
+  const findLeftDotHit = useCallback((x: number, y: number): DotPointLeft | null => {
     const hitRadius = Math.max(
       leftDotRadius * CONNECT_HIT_RADIUS_FACTOR,
       adaptiveLayout.s(40, 32, 54),
@@ -209,9 +211,9 @@ export function MatchingStationPanel({
     });
 
     return bestMatch;
-  };
+  }, [adaptiveLayout, leftDotRadius, leftDots, matchingConnections]);
 
-  const findRightDropTarget = (x: number, y: number): DotPointRight | null => {
+  const findRightDropTarget = useCallback((x: number, y: number): DotPointRight | null => {
     const dropRadius = Math.max(
       rightDotRadius * DROP_HIT_RADIUS_FACTOR,
       adaptiveLayout.s(30, 24, 42),
@@ -233,9 +235,9 @@ export function MatchingStationPanel({
     });
 
     return bestMatch;
-  };
+  }, [adaptiveLayout, rightConnectedSet, rightDotRadius, rightDots]);
 
-  const findRightSnapTarget = (x: number, y: number): DotPointRight | null => {
+  const findRightSnapTarget = useCallback((x: number, y: number): DotPointRight | null => {
     const snapRadius = Math.max(
       rightDotRadius * DROP_HIT_RADIUS_FACTOR * SNAP_RADIUS_BOOST_FACTOR,
       adaptiveLayout.s(44, 36, 64),
@@ -257,7 +259,7 @@ export function MatchingStationPanel({
     }
 
     return bestMatch;
-  };
+  }, [adaptiveLayout, rightConnectedSet, rightDotRadius, rightDots]);
 
   const updateBoardFrame = useCallback(() => {
     if (!boardContainerRef.current) {

@@ -541,16 +541,6 @@ export function ExpeditionMap({
     [pins],
   );
 
-  if (Platform.OS === "web") {
-    return (
-      <View className="h-full items-center justify-center px-6" style={{ backgroundColor: EXPEDITION_THEME.panelMuted }}>
-        <Text className="text-center text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
-          {text.webNotice}
-        </Text>
-      </View>
-    );
-  }
-
   const webViewPayload = useMemo(
     () => ({
       center: centerCoordinate,
@@ -618,6 +608,16 @@ export function ExpeditionMap({
     }
 
     onSelectStation(message);
+  }
+
+  if (Platform.OS === "web") {
+    return (
+      <View className="h-full items-center justify-center px-6" style={{ backgroundColor: EXPEDITION_THEME.panelMuted }}>
+        <Text className="text-center text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          {text.webNotice}
+        </Text>
+      </View>
+    );
   }
 
   return (
