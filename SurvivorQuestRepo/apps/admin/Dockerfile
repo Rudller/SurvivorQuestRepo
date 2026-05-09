@@ -15,11 +15,14 @@ RUN pnpm install --frozen-lockfile --filter admin...
 
 COPY apps/admin apps/admin
 
-WORKDIR /app/apps/admin
+# Keep Docker build on the root workspace lock/config.
+RUN rm -f apps/admin/pnpm-lock.yaml apps/admin/pnpm-workspace.yaml
 
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-RUN pnpm build
+RUN pnpm --filter admin build
+
+WORKDIR /app/apps/admin
 
 ENV NODE_ENV=production
 ENV PORT=3100
