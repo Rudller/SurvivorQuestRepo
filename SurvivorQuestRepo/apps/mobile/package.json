@@ -15,6 +15,7 @@
     "build:smoke": "cross-env EXPO_NO_DOCTOR=1 expo export --platform web --output-dir .expo-test-bundle-ci --clear"
   },
   "dependencies": {
+    "@babel/runtime": "^7.28.4",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "~54.0.33",
     "expo-audio": "~1.1.1",

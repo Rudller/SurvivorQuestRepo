@@ -1,6 +1,8 @@
+import { Animated } from "react-native";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 
 import {
+  HANGMAN_MAX_MISSES,
   MASTERMIND_MAX_ATTEMPTS,
   MEMORY_MAX_MISTAKES,
   TEXT_PUZZLE_MAX_ATTEMPTS,
@@ -9,7 +11,11 @@ import {
   buildWordleEvaluation,
   canBuildWordFromLetters,
   canTraceWordOnBoggle,
+  isGuessableHangmanCharacter,
+  isInvalidCompletionCodeErrorMessage,
+  normalizeHangmanSecret,
   normalizePuzzleWord,
+  type MemoryCard,
   type MatchingPair,
 } from "../puzzle-helpers";
 import type { MastermindAttempt } from "./mastermind-station-panel";
@@ -27,6 +33,7 @@ type SubmitErrorHandler = (error: string) => void;
 
 type StringStateSetter = Dispatch<SetStateAction<string>>;
 type NullableStringStateSetter = Dispatch<SetStateAction<string | null>>;
+type ShowCodeOutcomePopup = (variant: "success" | "failed" | "timeout", message: string, onDismiss?: () => void) => void;
 
 export function sanitizeMastermindInput(value: string) {
   return value
@@ -78,6 +85,104 @@ export function handleMastermindAddSymbol({
 
   setMastermindInput((current) => `${sanitizeMastermindInput(current)}${symbol}`.slice(0, 4));
   setMastermindResult(null);
+}
+
+type TriggerInvalidCodeFeedbackControllerArgs = {
+  codeInputShakeAnimation: Animated.Value;
+  codeInputResetTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  setIsCodeInputInvalid: Dispatch<SetStateAction<boolean>>;
+};
+
+export function triggerInvalidCodeFeedbackController({
+  codeInputShakeAnimation,
+  codeInputResetTimeoutRef,
+  setIsCodeInputInvalid,
+}: TriggerInvalidCodeFeedbackControllerArgs) {
+  setIsCodeInputInvalid(true);
+  codeInputShakeAnimation.stopAnimation();
+  codeInputShakeAnimation.setValue(0);
+  Animated.sequence([
+    Animated.timing(codeInputShakeAnimation, { toValue: -10, duration: 45, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: 10, duration: 45, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: -8, duration: 40, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: 8, duration: 40, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: -4, duration: 35, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: 4, duration: 35, useNativeDriver: true }),
+    Animated.timing(codeInputShakeAnimation, { toValue: 0, duration: 35, useNativeDriver: true }),
+  ]).start();
+
+  if (codeInputResetTimeoutRef.current) {
+    clearTimeout(codeInputResetTimeoutRef.current);
+  }
+  codeInputResetTimeoutRef.current = setTimeout(() => {
+    setIsCodeInputInvalid(false);
+    codeInputResetTimeoutRef.current = null;
+  }, 1000);
+}
+
+type SubmitVerificationCodeControllerArgs = {
+  verificationCode: string;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  showQuizOutcomePopup: ShowCodeOutcomePopup;
+  onClose: () => void;
+  triggerInvalidCodeFeedback: () => void;
+  setIsSubmittingCode: Dispatch<SetStateAction<boolean>>;
+  setIsCodeInputInvalid: Dispatch<SetStateAction<boolean>>;
+  setIsCodeInputSuccess: Dispatch<SetStateAction<boolean>>;
+  setCodeResult: NullableStringStateSetter;
+  text: {
+    codeEnter: string;
+    codeApproved: string;
+  };
+};
+
+export async function submitVerificationCodeController({
+  verificationCode,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  showQuizOutcomePopup,
+  onClose,
+  triggerInvalidCodeFeedback,
+  setIsSubmittingCode,
+  setIsCodeInputInvalid,
+  setIsCodeInputSuccess,
+  setCodeResult,
+  text,
+}: SubmitVerificationCodeControllerArgs) {
+  if (!verificationCode.trim()) {
+    setCodeResult(text.codeEnter);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setIsCodeInputInvalid(false);
+    setIsCodeInputSuccess(true);
+    setCodeResult(text.codeApproved);
+    showQuizOutcomePopup("success", text.codeApproved, onClose);
+    return;
+  }
+
+  setIsSubmittingCode(true);
+  const error = await onCompleteTask(stationId, verificationCode, startedAt ?? undefined);
+  setIsSubmittingCode(false);
+
+  if (error) {
+    if (isInvalidCompletionCodeErrorMessage(error)) {
+      setCodeResult(null);
+      triggerInvalidCodeFeedback();
+      return;
+    }
+    setCodeResult(error);
+    return;
+  }
+
+  setIsCodeInputInvalid(false);
+  setIsCodeInputSuccess(true);
+  setCodeResult(text.codeApproved);
+  showQuizOutcomePopup("success", text.codeApproved, onClose);
 }
 
 type SubmitWordleGuessControllerArgs = {
@@ -226,6 +331,801 @@ export async function submitWordleGuessController({
   setWordleResult(text.wordleSolved);
   onQuizPassed?.(stationId);
   showQuizOutcomePopup("success", text.wordleSolvedPopup);
+}
+
+type SubmitQuizAnswerControllerArgs = {
+  index: number;
+  isClassicQuizStation: boolean;
+  isAudioQuizStation: boolean;
+  selectedQuizOption: number | null;
+  isSubmittingQuizAnswer: boolean;
+  stationStatus: string;
+  hasTimedLimit: boolean;
+  hasTimerStarted: boolean;
+  isTimeExpired: boolean;
+  quizCorrectAnswerIndex?: number;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  quizFeedbackAnimation: Animated.Value;
+  setSelectedQuizOption: Dispatch<SetStateAction<number | null>>;
+  setQuizSubmitError: NullableStringStateSetter;
+  setQuizResult: NullableStringStateSetter;
+  setIsSubmittingQuizAnswer: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    quizCorrect: string;
+    quizIncorrect: string;
+    quizWrongPopup: string;
+    quizSuccessPopup: string;
+  };
+};
+
+export async function submitQuizAnswerController({
+  index,
+  isClassicQuizStation,
+  isAudioQuizStation,
+  selectedQuizOption,
+  isSubmittingQuizAnswer,
+  stationStatus,
+  hasTimedLimit,
+  hasTimerStarted,
+  isTimeExpired,
+  quizCorrectAnswerIndex,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  quizFeedbackAnimation,
+  setSelectedQuizOption,
+  setQuizSubmitError,
+  setQuizResult,
+  setIsSubmittingQuizAnswer,
+  onSubmitError,
+  text,
+}: SubmitQuizAnswerControllerArgs) {
+  if (!isClassicQuizStation && !isAudioQuizStation) {
+    return;
+  }
+
+  if (
+    selectedQuizOption !== null ||
+    isSubmittingQuizAnswer ||
+    stationStatus === "done" ||
+    stationStatus === "failed" ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired
+  ) {
+    return;
+  }
+
+  setSelectedQuizOption(index);
+  setQuizSubmitError(null);
+  const correct = quizCorrectAnswerIndex === index;
+  setQuizResult(correct ? text.quizCorrect : text.quizIncorrect);
+  quizFeedbackAnimation.setValue(0);
+  Animated.timing(quizFeedbackAnimation, {
+    toValue: 1,
+    duration: 260,
+    useNativeDriver: true,
+  }).start();
+
+  if (!correct) {
+    onQuizFailed?.(stationId, "quiz_incorrect_answer");
+    showQuizOutcomePopup("failed", text.quizWrongPopup);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.quizSuccessPopup);
+    return;
+  }
+
+  setIsSubmittingQuizAnswer(true);
+  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  setIsSubmittingQuizAnswer(false);
+
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.quizSuccessPopup);
+}
+
+type SubmitHangmanGuessControllerArgs = {
+  letterCandidate: string;
+  isHangmanStation: boolean;
+  stationStatus: string;
+  isSubmittingHangmanGuess: boolean;
+  hasTimedLimit: boolean;
+  hasTimerStarted: boolean;
+  isTimeExpired: boolean;
+  guessedHangmanSet: Set<string>;
+  hangmanMisses: string[];
+  hangmanGuessedLetters: string[];
+  hangmanSecret: string;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setHangmanResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+  setHangmanGuessedLetters: Dispatch<SetStateAction<string[]>>;
+  setHangmanMisses: Dispatch<SetStateAction<string[]>>;
+  setIsSubmittingHangmanGuess: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    hangmanEnterLetter: string;
+    hangmanLetterAlreadyChecked: string;
+    hangmanNoAttempts: (secret: string) => string;
+    hangmanFailedPopup: string;
+    hangmanGoodLetter: string;
+    hangmanMiss: string;
+    hangmanSolved: string;
+    hangmanSolvedPopup: string;
+  };
+};
+
+export async function submitHangmanGuessController({
+  letterCandidate,
+  isHangmanStation,
+  stationStatus,
+  isSubmittingHangmanGuess,
+  hasTimedLimit,
+  hasTimerStarted,
+  isTimeExpired,
+  guessedHangmanSet,
+  hangmanMisses,
+  hangmanGuessedLetters,
+  hangmanSecret,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setHangmanResult,
+  setQuizSubmitError,
+  setHangmanGuessedLetters,
+  setHangmanMisses,
+  setIsSubmittingHangmanGuess,
+  onSubmitError,
+  text,
+}: SubmitHangmanGuessControllerArgs) {
+  if (!isHangmanStation) {
+    return;
+  }
+
+  const candidate = letterCandidate.trim();
+  const letter = normalizeHangmanSecret(candidate)
+    .replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "")
+    .slice(0, 1);
+  if (!letter) {
+    setHangmanResult(text.hangmanEnterLetter);
+    return;
+  }
+
+  if (
+    stationStatus === "done" ||
+    stationStatus === "failed" ||
+    isSubmittingHangmanGuess ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired
+  ) {
+    return;
+  }
+
+  if (guessedHangmanSet.has(letter) || hangmanMisses.includes(letter)) {
+    setHangmanResult(text.hangmanLetterAlreadyChecked);
+    return;
+  }
+
+  const isHit = hangmanSecret.includes(letter);
+  const nextGuessedLetters = isHit ? [...hangmanGuessedLetters, letter] : hangmanGuessedLetters;
+  const nextMisses = isHit ? hangmanMisses : [...hangmanMisses, letter];
+  setHangmanResult(null);
+  setQuizSubmitError(null);
+  if (isHit) {
+    setHangmanGuessedLetters(nextGuessedLetters);
+  } else {
+    setHangmanMisses(nextMisses);
+  }
+
+  const solvedNow = Array.from(hangmanSecret).every(
+    (character) =>
+      !isGuessableHangmanCharacter(character) || nextGuessedLetters.includes(character),
+  );
+
+  if (!solvedNow) {
+    if (!isHit && nextMisses.length >= HANGMAN_MAX_MISSES) {
+      setHangmanResult(text.hangmanNoAttempts(hangmanSecret));
+      onQuizFailed?.(stationId, "quiz_incorrect_answer");
+      showQuizOutcomePopup("failed", text.hangmanFailedPopup);
+      return;
+    }
+
+    setHangmanResult(isHit ? text.hangmanGoodLetter : text.hangmanMiss);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setHangmanResult(text.hangmanSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.hangmanSolvedPopup);
+    return;
+  }
+
+  setIsSubmittingHangmanGuess(true);
+  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  setIsSubmittingHangmanGuess(false);
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setHangmanResult(text.hangmanSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.hangmanSolvedPopup);
+}
+
+type SubmitAnagramControllerArgs = {
+  isAnagramStation: boolean;
+  normalizedAnagramInput: string;
+  anagramTarget: string;
+  isInteractiveLocked: boolean;
+  isSubmittingAnagram: boolean;
+  anagramAttemptsLeft: number;
+  anagramAttempts: number;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setQuizSubmitError: NullableStringStateSetter;
+  setAnagramAttempts: Dispatch<SetStateAction<number>>;
+  setAnagramResult: NullableStringStateSetter;
+  setIsSubmittingAnagram: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    anagramEnter: string;
+    anagramNoAttempts: string;
+    anagramFailedPopup: string;
+    anagramIncorrect: string;
+    anagramSolved: string;
+    anagramSolvedPopup: string;
+  };
+};
+
+export async function submitAnagramController({
+  isAnagramStation,
+  normalizedAnagramInput,
+  anagramTarget,
+  isInteractiveLocked,
+  isSubmittingAnagram,
+  anagramAttemptsLeft,
+  anagramAttempts,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setQuizSubmitError,
+  setAnagramAttempts,
+  setAnagramResult,
+  setIsSubmittingAnagram,
+  onSubmitError,
+  text,
+}: SubmitAnagramControllerArgs) {
+  if (!isAnagramStation) {
+    return;
+  }
+
+  if (!normalizedAnagramInput) {
+    setAnagramResult(text.anagramEnter);
+    return;
+  }
+
+  if (isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0) {
+    return;
+  }
+
+  setQuizSubmitError(null);
+  const isCorrect = normalizedAnagramInput === anagramTarget;
+  if (!isCorrect) {
+    const nextAttempts = anagramAttempts + 1;
+    setAnagramAttempts(nextAttempts);
+    if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
+      setAnagramResult(text.anagramNoAttempts);
+      onQuizFailed?.(stationId, "quiz_incorrect_answer");
+      showQuizOutcomePopup("failed", text.anagramFailedPopup);
+      return;
+    }
+
+    setAnagramResult(text.anagramIncorrect);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setAnagramResult(text.anagramSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.anagramSolvedPopup);
+    return;
+  }
+
+  setIsSubmittingAnagram(true);
+  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  setIsSubmittingAnagram(false);
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setAnagramResult(text.anagramSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.anagramSolvedPopup);
+}
+
+type HandleAnagramInputChangeControllerArgs = {
+  value: string;
+  setAnagramInput: StringStateSetter;
+  setAnagramResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function handleAnagramInputChangeController({
+  value,
+  setAnagramInput,
+  setAnagramResult,
+  setQuizSubmitError,
+}: HandleAnagramInputChangeControllerArgs) {
+  setAnagramInput(value);
+  setAnagramResult(null);
+  setQuizSubmitError(null);
+}
+
+type SubmitCaesarControllerArgs = {
+  isCaesarStation: boolean;
+  normalizedCaesarInput: string;
+  caesarDecoded: string;
+  isInteractiveLocked: boolean;
+  isSubmittingCaesar: boolean;
+  caesarAttemptsLeft: number;
+  caesarAttempts: number;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setQuizSubmitError: NullableStringStateSetter;
+  setCaesarAttempts: Dispatch<SetStateAction<number>>;
+  setCaesarResult: NullableStringStateSetter;
+  setIsSubmittingCaesar: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    caesarEnter: string;
+    caesarNoAttempts: (secret: string) => string;
+    caesarFailedPopup: string;
+    caesarIncorrect: string;
+    caesarSolved: string;
+    caesarSolvedPopup: string;
+  };
+};
+
+export async function submitCaesarController({
+  isCaesarStation,
+  normalizedCaesarInput,
+  caesarDecoded,
+  isInteractiveLocked,
+  isSubmittingCaesar,
+  caesarAttemptsLeft,
+  caesarAttempts,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setQuizSubmitError,
+  setCaesarAttempts,
+  setCaesarResult,
+  setIsSubmittingCaesar,
+  onSubmitError,
+  text,
+}: SubmitCaesarControllerArgs) {
+  if (!isCaesarStation) {
+    return;
+  }
+
+  if (!normalizedCaesarInput) {
+    setCaesarResult(text.caesarEnter);
+    return;
+  }
+
+  if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
+    return;
+  }
+
+  setQuizSubmitError(null);
+  const isCorrect = normalizedCaesarInput === caesarDecoded;
+  if (!isCorrect) {
+    const nextAttempts = caesarAttempts + 1;
+    setCaesarAttempts(nextAttempts);
+    if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
+      setCaesarResult(text.caesarNoAttempts(caesarDecoded));
+      onQuizFailed?.(stationId, "quiz_incorrect_answer");
+      showQuizOutcomePopup("failed", text.caesarFailedPopup);
+      return;
+    }
+
+    setCaesarResult(text.caesarIncorrect);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setCaesarResult(text.caesarSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.caesarSolvedPopup);
+    return;
+  }
+
+  setIsSubmittingCaesar(true);
+  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  setIsSubmittingCaesar(false);
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setCaesarResult(text.caesarSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.caesarSolvedPopup);
+}
+
+type HandleCaesarInputChangeControllerArgs = {
+  value: string;
+  caesarMaxLength: number;
+  setCaesarInput: StringStateSetter;
+  setCaesarResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function handleCaesarInputChangeController({
+  value,
+  caesarMaxLength,
+  setCaesarInput,
+  setCaesarResult,
+  setQuizSubmitError,
+}: HandleCaesarInputChangeControllerArgs) {
+  setCaesarInput(value.slice(0, caesarMaxLength));
+  setCaesarResult(null);
+  setQuizSubmitError(null);
+}
+
+type AppendCaesarCharacterControllerArgs = {
+  character: string;
+  isInteractiveLocked: boolean;
+  isSubmittingCaesar: boolean;
+  caesarAttemptsLeft: number;
+  caesarMaxLength: number;
+  setCaesarInput: StringStateSetter;
+  setCaesarResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function appendCaesarCharacterController({
+  character,
+  isInteractiveLocked,
+  isSubmittingCaesar,
+  caesarAttemptsLeft,
+  caesarMaxLength,
+  setCaesarInput,
+  setCaesarResult,
+  setQuizSubmitError,
+}: AppendCaesarCharacterControllerArgs) {
+  if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
+    return;
+  }
+
+  setCaesarInput((current) => {
+    if (current.length >= caesarMaxLength) {
+      return current;
+    }
+    if (character === " " && (current.length === 0 || current.endsWith(" "))) {
+      return current;
+    }
+    return `${current}${character}`.slice(0, caesarMaxLength);
+  });
+  setCaesarResult(null);
+  setQuizSubmitError(null);
+}
+
+type BackspaceCaesarInputControllerArgs = {
+  isInteractiveLocked: boolean;
+  isSubmittingCaesar: boolean;
+  caesarAttemptsLeft: number;
+  setCaesarInput: StringStateSetter;
+  setCaesarResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function backspaceCaesarInputController({
+  isInteractiveLocked,
+  isSubmittingCaesar,
+  caesarAttemptsLeft,
+  setCaesarInput,
+  setCaesarResult,
+  setQuizSubmitError,
+}: BackspaceCaesarInputControllerArgs) {
+  if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
+    return;
+  }
+
+  setCaesarInput((current) => current.slice(0, -1));
+  setCaesarResult(null);
+  setQuizSubmitError(null);
+}
+
+type SubmitRebusControllerArgs = {
+  isRebusStation: boolean;
+  normalizedRebusInput: string;
+  rebusAnswer: string;
+  isInteractiveLocked: boolean;
+  isSubmittingRebus: boolean;
+  rebusAttemptsLeft: number;
+  rebusAttempts: number;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setQuizSubmitError: NullableStringStateSetter;
+  setRebusAttempts: Dispatch<SetStateAction<number>>;
+  setRebusResult: NullableStringStateSetter;
+  setIsSubmittingRebus: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    rebusEnter: string;
+    rebusNoAttempts: (answer: string) => string;
+    rebusFailedPopup: string;
+    rebusIncorrect: string;
+    rebusSolved: string;
+    rebusSolvedPopup: string;
+  };
+};
+
+export async function submitRebusController({
+  isRebusStation,
+  normalizedRebusInput,
+  rebusAnswer,
+  isInteractiveLocked,
+  isSubmittingRebus,
+  rebusAttemptsLeft,
+  rebusAttempts,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setQuizSubmitError,
+  setRebusAttempts,
+  setRebusResult,
+  setIsSubmittingRebus,
+  onSubmitError,
+  text,
+}: SubmitRebusControllerArgs) {
+  if (!isRebusStation) {
+    return;
+  }
+
+  if (!normalizedRebusInput) {
+    setRebusResult(text.rebusEnter);
+    return;
+  }
+
+  if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
+    return;
+  }
+
+  setQuizSubmitError(null);
+  const isCorrect = normalizedRebusInput === rebusAnswer;
+  if (!isCorrect) {
+    const nextAttempts = rebusAttempts + 1;
+    setRebusAttempts(nextAttempts);
+    if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
+      setRebusResult(text.rebusNoAttempts(rebusAnswer));
+      onQuizFailed?.(stationId, "quiz_incorrect_answer");
+      showQuizOutcomePopup("failed", text.rebusFailedPopup);
+      return;
+    }
+
+    setRebusResult(text.rebusIncorrect);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setRebusResult(text.rebusSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.rebusSolvedPopup);
+    return;
+  }
+
+  setIsSubmittingRebus(true);
+  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  setIsSubmittingRebus(false);
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setRebusResult(text.rebusSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.rebusSolvedPopup);
+}
+
+type HandleRebusInputChangeControllerArgs = {
+  value: string;
+  setRebusInput: StringStateSetter;
+  setRebusResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function handleRebusInputChangeController({
+  value,
+  setRebusInput,
+  setRebusResult,
+  setQuizSubmitError,
+}: HandleRebusInputChangeControllerArgs) {
+  setRebusInput(value);
+  setRebusResult(null);
+  setQuizSubmitError(null);
+}
+
+type HandleMemoryCardPressControllerArgs = {
+  cardId: string;
+  isMemoryStation: boolean;
+  isInteractiveLocked: boolean;
+  memoryBusy: boolean;
+  isSubmittingMemory: boolean;
+  memoryAllMatched: boolean;
+  memoryDeck: MemoryCard[];
+  memorySelection: string[];
+  memoryHideTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setMemoryDeck: Dispatch<SetStateAction<MemoryCard[]>>;
+  setMemorySelection: Dispatch<SetStateAction<string[]>>;
+  setQuizSubmitError: NullableStringStateSetter;
+  setMemoryResult: NullableStringStateSetter;
+  setIsSubmittingMemory: Dispatch<SetStateAction<boolean>>;
+  setMemoryBusy: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    memorySolved: string;
+    memorySolvedPopup: string;
+    memoryPairFound: string;
+    memoryMiss: string;
+  };
+};
+
+export async function handleMemoryCardPressController({
+  cardId,
+  isMemoryStation,
+  isInteractiveLocked,
+  memoryBusy,
+  isSubmittingMemory,
+  memoryAllMatched,
+  memoryDeck,
+  memorySelection,
+  memoryHideTimeoutRef,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setMemoryDeck,
+  setMemorySelection,
+  setQuizSubmitError,
+  setMemoryResult,
+  setIsSubmittingMemory,
+  setMemoryBusy,
+  onSubmitError,
+  text,
+}: HandleMemoryCardPressControllerArgs) {
+  if (!isMemoryStation || isInteractiveLocked || memoryBusy || isSubmittingMemory || memoryAllMatched) {
+    return;
+  }
+
+  const card = memoryDeck.find((entry) => entry.id === cardId);
+  if (!card || card.matched || card.revealed || memorySelection.length >= 2) {
+    return;
+  }
+
+  const nextDeck = memoryDeck.map((entry) => (entry.id === cardId ? { ...entry, revealed: true } : entry));
+  const nextSelection = [...memorySelection, cardId];
+  setMemoryDeck(nextDeck);
+  setMemorySelection(nextSelection);
+  setQuizSubmitError(null);
+  if (nextSelection.length < 2) {
+    return;
+  }
+
+  const [firstId, secondId] = nextSelection;
+  const firstCard = nextDeck.find((entry) => entry.id === firstId);
+  const secondCard = nextDeck.find((entry) => entry.id === secondId);
+  if (!firstCard || !secondCard) {
+    setMemorySelection([]);
+    return;
+  }
+
+  if (firstCard.symbol === secondCard.symbol) {
+    const matchedDeck = nextDeck.map((entry) =>
+      entry.id === firstId || entry.id === secondId ? { ...entry, matched: true } : entry,
+    );
+    setMemoryDeck(matchedDeck);
+    setMemorySelection([]);
+    if (matchedDeck.every((entry) => entry.matched)) {
+      if (!onCompleteTask) {
+        setMemoryResult(text.memorySolved);
+        onQuizPassed?.(stationId);
+        showQuizOutcomePopup("success", text.memorySolvedPopup);
+        return;
+      }
+
+      setIsSubmittingMemory(true);
+      const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+      setIsSubmittingMemory(false);
+      if (error) {
+        setQuizSubmitError(error);
+        onSubmitError(error);
+        return;
+      }
+      setMemoryResult(text.memorySolved);
+      onQuizPassed?.(stationId);
+      showQuizOutcomePopup("success", text.memorySolvedPopup);
+    } else {
+      setMemoryResult(text.memoryPairFound);
+    }
+    return;
+  }
+
+  setMemoryBusy(true);
+  setMemoryResult(text.memoryMiss);
+  if (memoryHideTimeoutRef.current) {
+    clearTimeout(memoryHideTimeoutRef.current);
+  }
+  memoryHideTimeoutRef.current = setTimeout(() => {
+    setMemoryDeck((current) =>
+      current.map((entry) =>
+        nextSelection.includes(entry.id) && !entry.matched ? { ...entry, revealed: false } : entry,
+      ),
+    );
+    setMemorySelection([]);
+    setMemoryBusy(false);
+    memoryHideTimeoutRef.current = null;
+  }, 650);
 }
 
 type SubmitMastermindGuessControllerArgs = {

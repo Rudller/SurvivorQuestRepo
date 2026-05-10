@@ -20,6 +20,8 @@ import {
 
 const SESSION_POLLING_INTERVAL_MS = 15_000;
 const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
+const TASK_REQUEST_RETRY_DELAYS_MS = [350, 900];
+const MOBILE_REQUEST_TIMEOUT_MS = 12_000;
 
 const EXPEDITION_SESSION_TEXT = {
   polish: {
@@ -29,6 +31,7 @@ const EXPEDITION_SESSION_TEXT = {
     missingApiConfig: "Brakuje konfiguracji API.",
     startTaskFailed: "Nie udało się uruchomić zadania.",
     invalidTaskData: "Nieprawidłowe dane zadania.",
+    requestTimedOut: "Przekroczono czas oczekiwania na odpowiedź serwera.",
     completeTaskFailed: "Nie udało się ukończyć zadania.",
     noLocationServerResponse: "Brak odpowiedzi serwera dla lokalizacji.",
     sendLocationFailed: "Nie udało się wysłać lokalizacji.",
@@ -44,6 +47,7 @@ const EXPEDITION_SESSION_TEXT = {
     missingApiConfig: "Missing API configuration.",
     startTaskFailed: "Failed to start the task.",
     invalidTaskData: "Invalid task data.",
+    requestTimedOut: "Server response timeout exceeded.",
     completeTaskFailed: "Failed to complete the task.",
     noLocationServerResponse: "No server response for location update.",
     sendLocationFailed: "Failed to send location.",
@@ -59,6 +63,7 @@ const EXPEDITION_SESSION_TEXT = {
     missingApiConfig: "Відсутня конфігурація API.",
     startTaskFailed: "Не вдалося запустити завдання.",
     invalidTaskData: "Некоректні дані завдання.",
+    requestTimedOut: "Перевищено час очікування відповіді сервера.",
     completeTaskFailed: "Не вдалося завершити завдання.",
     noLocationServerResponse: "Немає відповіді сервера для оновлення локації.",
     sendLocationFailed: "Не вдалося надіслати локацію.",
@@ -74,6 +79,7 @@ const EXPEDITION_SESSION_TEXT = {
     missingApiConfig: "Отсутствует конфигурация API.",
     startTaskFailed: "Не удалось запустить задание.",
     invalidTaskData: "Некорректные данные задания.",
+    requestTimedOut: "Превышено время ожидания ответа сервера.",
     completeTaskFailed: "Не удалось завершить задание.",
     noLocationServerResponse: "Нет ответа сервера для обновления локации.",
     sendLocationFailed: "Не удалось отправить локацию.",
@@ -88,6 +94,75 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+export function isRetriableNetworkError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("network request failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("network error") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    message.includes("http 408") ||
+    message.includes("http 429") ||
+    message.includes("http 502") ||
+    message.includes("http 503") ||
+    message.includes("http 504")
+  );
+}
+
+function withRequestTimeout<T>(request: () => Promise<T>, timeoutMs: number, timeoutMessage: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    request().then(
+      (result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      },
+      (error: unknown) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+type RunRequestWithRetryArgs<T> = {
+  request: () => Promise<T>;
+  timeoutMs: number;
+  timeoutMessage: string;
+  retryDelaysMs: readonly number[];
+};
+
+export async function runRequestWithRetry<T>({
+  request,
+  timeoutMs,
+  timeoutMessage,
+  retryDelaysMs,
+}: RunRequestWithRetryArgs<T>) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      return await withRequestTimeout(request, timeoutMs, timeoutMessage);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retryDelaysMs.length || !isRetriableNetworkError(error)) {
+        throw error;
+      }
+      await wait(retryDelaysMs[attempt]);
+    }
+  }
+
+  throw lastError ?? new Error(timeoutMessage);
 }
 
 function isOfflineSession(session: OnboardingSession) {
@@ -119,6 +194,70 @@ function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, s
 
   const ratio = Math.max(0, 1 - elapsedSeconds / safeLimit);
   return Math.max(0, Math.round(safeBasePoints * ratio));
+}
+
+type ApplyCompletedTaskStateArgs = {
+  current: ExpeditionSessionState;
+  stationId: string;
+  startedAt?: string;
+  finishedAt: string;
+  requireExistingTask: boolean;
+};
+
+export function applyCompletedTaskState({
+  current,
+  stationId,
+  startedAt,
+  finishedAt,
+  requireExistingTask,
+}: ApplyCompletedTaskStateArgs): ExpeditionSessionState {
+  const existingTask = current.tasks.find((task) => task.stationId === stationId);
+  if (existingTask?.status === "done" || existingTask?.status === "failed") {
+    return current;
+  }
+  if (requireExistingTask && !existingTask) {
+    return current;
+  }
+
+  const station = current.realization.stations.find((item) => item.id === stationId);
+  const basePoints = station?.points ?? resolveDefaultStationPoints(stationId);
+  const effectiveStartedAt = existingTask?.startedAt ?? startedAt ?? finishedAt;
+  const awardedPoints =
+    station?.type === "time"
+      ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
+      : Math.max(0, Math.round(basePoints));
+
+  let taskUpdated = false;
+  const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+    if (task.stationId !== stationId) {
+      return task;
+    }
+    taskUpdated = true;
+    return {
+      ...task,
+      status: "done" as const,
+      pointsAwarded: awardedPoints,
+      startedAt: task.startedAt ?? effectiveStartedAt,
+      finishedAt,
+    };
+  });
+
+  if (!taskUpdated) {
+    return current;
+  }
+
+  return {
+    ...current,
+    tasks: nextTasks,
+    team: {
+      ...current.team,
+      points: current.team.points + awardedPoints,
+    },
+    meta: {
+      ...current.meta,
+      eventLogCount: current.meta.eventLogCount + 1,
+    },
+  };
 }
 
 export function useExpeditionSession(session: OnboardingSession) {
@@ -187,11 +326,12 @@ export function useExpeditionSession(session: OnboardingSession) {
     setIsRefreshing(true);
 
     try {
-      const nextState = await fetchMobileSessionState(
-        apiBaseUrl,
-        session.sessionToken,
-        selectedLanguage,
-      );
+      const nextState = await runRequestWithRetry({
+        request: () => fetchMobileSessionState(apiBaseUrl, session.sessionToken, selectedLanguage),
+        timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+        timeoutMessage: text.requestTimedOut,
+        retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
+      });
       setSessionState(nextState);
       setErrorMessage(null);
       setIsSessionInvalid(false);
@@ -267,10 +407,16 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       try {
-        await postMobileStartTask(apiBaseUrl, {
-          sessionToken: session.sessionToken,
-          stationId: normalizedStationId,
-          startedAt: startedAtIso,
+        await runRequestWithRetry({
+          request: () =>
+            postMobileStartTask(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              stationId: normalizedStationId,
+              startedAt: startedAtIso,
+            }),
+          timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+          timeoutMessage: text.requestTimedOut,
+          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
         });
       } catch (error) {
         return getApiErrorMessage(error, text.startTaskFailed);
@@ -312,46 +458,14 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       if (offlineMode) {
         setSessionState((current) => {
-          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
-          const station = current.realization.stations.find((item) => item.id === normalizedStationId);
-          const basePoints = station?.points ?? resolveDefaultStationPoints(normalizedStationId);
           const finishedAt = new Date().toISOString();
-          const effectiveStartedAt = existingTask?.startedAt ?? startedAt ?? finishedAt;
-          const awardedPoints =
-            station?.type === "time"
-              ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
-              : Math.max(0, Math.round(basePoints));
-
-          if (existingTask?.status === "done" || existingTask?.status === "failed") {
-            return current;
-          }
-
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId) {
-              return task;
-            }
-
-            return {
-              ...task,
-              status: "done" as const,
-              pointsAwarded: awardedPoints,
-              startedAt: task.startedAt ?? effectiveStartedAt,
-              finishedAt,
-            };
+          return applyCompletedTaskState({
+            current,
+            stationId: normalizedStationId,
+            startedAt,
+            finishedAt,
+            requireExistingTask: false,
           });
-
-          return {
-            ...current,
-            tasks: nextTasks,
-            team: {
-              ...current.team,
-              points: current.team.points + awardedPoints,
-            },
-            meta: {
-              ...current.meta,
-              eventLogCount: current.meta.eventLogCount + 1,
-            },
-          };
         });
 
         return null;
@@ -365,55 +479,28 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       try {
         const finishedAt = new Date().toISOString();
-        await postMobileCompleteTask(apiBaseUrl, {
-          sessionToken: session.sessionToken,
-          stationId: normalizedStationId,
-          completionCode: normalizedCode,
-          startedAt,
-          finishedAt,
+        await runRequestWithRetry({
+          request: () =>
+            postMobileCompleteTask(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              stationId: normalizedStationId,
+              completionCode: normalizedCode,
+              startedAt,
+              finishedAt,
+            }),
+          timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+          timeoutMessage: text.requestTimedOut,
+          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
         });
 
         setSessionState((current) => {
-          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
-          const station = current.realization.stations.find((item) => item.id === normalizedStationId);
-
-          if (existingTask?.status === "done" || existingTask?.status === "failed" || !existingTask) {
-            return current;
-          }
-
-          const basePoints = station?.points ?? resolveDefaultStationPoints(normalizedStationId);
-          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
-          const awardedPoints =
-            station?.type === "time"
-              ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
-              : Math.max(0, Math.round(basePoints));
-
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId) {
-              return task;
-            }
-
-            return {
-              ...task,
-              status: "done" as const,
-              pointsAwarded: awardedPoints,
-              startedAt: task.startedAt ?? effectiveStartedAt,
-              finishedAt,
-            };
+          return applyCompletedTaskState({
+            current,
+            stationId: normalizedStationId,
+            startedAt,
+            finishedAt,
+            requireExistingTask: true,
           });
-
-          return {
-            ...current,
-            tasks: nextTasks,
-            team: {
-              ...current.team,
-              points: current.team.points + awardedPoints,
-            },
-            meta: {
-              ...current.meta,
-              eventLogCount: current.meta.eventLogCount + 1,
-            },
-          };
         });
       } catch (error) {
         return getApiErrorMessage(error, text.completeTaskFailed);
@@ -455,19 +542,9 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       try {
-        let result:
-          | {
-              ok: boolean;
-              deduplicated: boolean;
-              lastLocationAt: string;
-              serverReceivedAt: string;
-            }
-          | null = null;
-        let lastError: unknown = null;
-
-        for (let attempt = 0; attempt <= LOCATION_SYNC_RETRY_DELAYS_MS.length; attempt += 1) {
-          try {
-            result = await postMobileTeamLocation(apiBaseUrl, {
+        const result = await runRequestWithRetry({
+          request: () =>
+            postMobileTeamLocation(apiBaseUrl, {
               sessionToken: session.sessionToken,
               latitude: location.latitude,
               longitude: location.longitude,
@@ -475,20 +552,11 @@ export function useExpeditionSession(session: OnboardingSession) {
               speed: location.speed,
               heading: location.heading,
               at: locationAt,
-            });
-            break;
-          } catch (error) {
-            lastError = error;
-            if (attempt >= LOCATION_SYNC_RETRY_DELAYS_MS.length) {
-              throw error;
-            }
-            await wait(LOCATION_SYNC_RETRY_DELAYS_MS[attempt]);
-          }
-        }
-
-        if (!result) {
-          throw lastError ?? new Error(text.noLocationServerResponse);
-        }
+            }),
+          timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+          timeoutMessage: text.requestTimedOut,
+          retryDelaysMs: LOCATION_SYNC_RETRY_DELAYS_MS,
+        });
 
         setSessionState((current) => ({
           ...current,
@@ -559,12 +627,18 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       try {
         const finishedAt = new Date().toISOString();
-        await postMobileFailTask(apiBaseUrl, {
-          sessionToken: session.sessionToken,
-          stationId: normalizedStationId,
-          reason,
-          startedAt,
-          finishedAt,
+        await runRequestWithRetry({
+          request: () =>
+            postMobileFailTask(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              stationId: normalizedStationId,
+              reason,
+              startedAt,
+              finishedAt,
+            }),
+          timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+          timeoutMessage: text.requestTimedOut,
+          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
         });
 
         setSessionState((current) => {
@@ -625,10 +699,16 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       try {
-        const response = await postMobileResolveStationQr(apiBaseUrl, {
-          sessionToken: session.sessionToken,
-          token: normalizedToken,
-          selectedLanguage,
+        const response = await runRequestWithRetry({
+          request: () =>
+            postMobileResolveStationQr(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              token: normalizedToken,
+              selectedLanguage,
+            }),
+          timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+          timeoutMessage: text.requestTimedOut,
+          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
         });
         setSessionState((current) => {
           const normalizedCompletionCodeLength =

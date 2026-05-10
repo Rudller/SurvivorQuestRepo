@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -15,18 +15,9 @@ import {
   type RealizationLanguage,
   type RealizationLanguageOption,
 } from "../../onboarding/model/types";
-import {
-  getApiErrorMessage,
-} from "../api/mobile-session.api";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
-import { QrScannerOverlay } from "../components/qr-scanner-overlay";
 import {
-  QuizPrestartOverlay,
-  RealizationFinishOverlay,
-  StationPreviewOverlay,
-  StationTestMenuOverlay,
-  WelcomePreviewOverlay,
   type StationTestType,
   type StationTestViewModel,
 } from "../components/station-overlays";
@@ -42,6 +33,11 @@ import {
   type MapCoordinate,
 } from "../model/types";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { ExpeditionStageOverlayLayer } from "./expedition-stage-overlay-layer";
+import { ExpeditionStageOverlayProvider, ExpeditionStageSessionProvider } from "./expedition-stage-context";
+import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
+import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
+import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
@@ -52,19 +48,6 @@ type ExpeditionStageScreenProps = {
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
-const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
-
-type TransientPopup = {
-  id: number;
-  message: string;
-  tone: "error" | "success";
-};
-
-type DebugOutcomePreview = {
-  id: number;
-  variant: "success" | "failed";
-  message: string;
-};
 
 const EXPEDITION_STAGE_TEXT: Record<
   UiLanguage,
@@ -270,10 +253,6 @@ const EXPEDITION_STAGE_TEXT: Record<
     close: "Закрыть",
   },
 };
-
-const POPUP_MIN_DURATION_MS = 6_500;
-const POPUP_MAX_DURATION_MS = 12_000;
-const POPUP_MS_PER_CHAR = 45;
 
 function interpolate(template: string, values: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
@@ -643,7 +622,6 @@ export function ExpeditionStageScreen({
   const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_STAGE_TEXT[uiLanguage];
-  const isTabletLayout = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const {
     sessionState,
@@ -662,80 +640,17 @@ export function ExpeditionStageScreen({
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [isScannerOpening, setIsScannerOpening] = useState(false);
-  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
-  const [isQrResolving, setIsQrResolving] = useState(false);
-  const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
-  const [isWelcomePreviewOpen, setIsWelcomePreviewOpen] = useState(false);
-  const [isFinishPreviewOpen, setIsFinishPreviewOpen] = useState(false);
-  const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
-  const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
-  const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
-  const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
-  const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
-  const [timedCloseConfirmStation, setTimedCloseConfirmStation] = useState<{
-    stationId: string;
-    startedAt: string | null;
-  } | null>(null);
-  const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const hasAutoSelectedStationRef = useRef(false);
-  const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const autoLocationSyncTimestampRef = useRef(0);
-  const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiChromeOpacity = useRef(new Animated.Value(1)).current;
-  const [transientPopup, setTransientPopup] = useState<TransientPopup | null>(null);
-  const lastPopupSourceValuesRef = useRef<{
-    errorMessage: string | null;
-    locationError: string | null;
-    actionError: string | null;
-    actionMessage: string | null;
-  }>({
-    errorMessage: null,
-    locationError: null,
-    actionError: null,
-    actionMessage: null,
-  });
-  const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearTestMenuHoldTimeout = useCallback(() => {
-    if (testMenuHoldTimeoutRef.current) {
-      clearTimeout(testMenuHoldTimeoutRef.current);
-      testMenuHoldTimeoutRef.current = null;
-    }
-  }, []);
-
-  const handleTestMenuHoldStart = useCallback(() => {
-    clearTestMenuHoldTimeout();
-    testMenuHoldTimeoutRef.current = setTimeout(() => {
-      testMenuHoldTimeoutRef.current = null;
-      setIsStationTestMenuOpen(true);
-    }, TEST_MENU_TRIGGER_HOLD_MS);
-  }, [clearTestMenuHoldTimeout]);
-
-  const handleTestMenuHoldEnd = useCallback(() => {
-    clearTestMenuHoldTimeout();
-  }, [clearTestMenuHoldTimeout]);
-
-  const showTransientPopup = useCallback((message: string, tone: "error" | "success") => {
-    const popupId = Date.now();
-    setTransientPopup({ id: popupId, message, tone });
-
-    if (popupTimeoutRef.current) {
-      clearTimeout(popupTimeoutRef.current);
-    }
-
-    const popupDurationMs = Math.max(
-      POPUP_MIN_DURATION_MS,
-      Math.min(POPUP_MAX_DURATION_MS, message.length * POPUP_MS_PER_CHAR),
-    );
-
-    popupTimeoutRef.current = setTimeout(() => {
-      setTransientPopup((current) => (current?.id === popupId ? null : current));
-    }, popupDurationMs);
-  }, []);
-
   const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation();
+  const { transientPopup } = useExpeditionStageTransientPopup({
+    errorMessage,
+    locationError,
+    actionError,
+    actionMessage,
+  });
   const mapPlayerLocation = useMemo(() => {
     return playerLocation ?? null;
   }, [playerLocation]);
@@ -861,79 +776,12 @@ export function ExpeditionStageScreen({
   }, [playerLocation, syncTeamLocation]);
 
   useEffect(() => {
-    return () => {
-      if (popupTimeoutRef.current) {
-        clearTimeout(popupTimeoutRef.current);
-      }
-      clearTestMenuHoldTimeout();
-    };
-  }, [clearTestMenuHoldTimeout]);
-
-  useEffect(() => {
     if (!isSessionInvalid) {
       return;
     }
 
     onSessionInvalid?.(sessionInvalidReason ?? undefined);
   }, [isSessionInvalid, onSessionInvalid, sessionInvalidReason]);
-
-  useEffect(() => {
-    if (!errorMessage) {
-      lastPopupSourceValuesRef.current.errorMessage = null;
-      return;
-    }
-
-    if (lastPopupSourceValuesRef.current.errorMessage === errorMessage) {
-      return;
-    }
-
-    lastPopupSourceValuesRef.current.errorMessage = errorMessage;
-    showTransientPopup(errorMessage, "error");
-  }, [errorMessage, showTransientPopup]);
-
-  useEffect(() => {
-    if (!locationError) {
-      lastPopupSourceValuesRef.current.locationError = null;
-      return;
-    }
-
-    if (lastPopupSourceValuesRef.current.locationError === locationError) {
-      return;
-    }
-
-    lastPopupSourceValuesRef.current.locationError = locationError;
-    showTransientPopup(locationError, "error");
-  }, [locationError, showTransientPopup]);
-
-  useEffect(() => {
-    if (!actionError) {
-      lastPopupSourceValuesRef.current.actionError = null;
-      return;
-    }
-
-    if (lastPopupSourceValuesRef.current.actionError === actionError) {
-      return;
-    }
-
-    lastPopupSourceValuesRef.current.actionError = actionError;
-    showTransientPopup(actionError, "error");
-  }, [actionError, showTransientPopup]);
-
-  useEffect(() => {
-    if (!actionMessage) {
-      lastPopupSourceValuesRef.current.actionMessage = null;
-      return;
-    }
-
-    if (lastPopupSourceValuesRef.current.actionMessage === actionMessage) {
-      return;
-    }
-
-    lastPopupSourceValuesRef.current.actionMessage = actionMessage;
-    showTransientPopup(actionMessage, "success");
-  }, [actionMessage, showTransientPopup]);
-
-
   const mappableStationIds = useMemo(
     () => stationIds.filter((stationId) => Boolean(realStationCoordinates[stationId])),
     [realStationCoordinates, stationIds],
@@ -1085,88 +933,6 @@ export function ExpeditionStageScreen({
     ],
   );
 
-  const activeStationTest = useMemo(
-    () => stationTestEntries.find((item) => item.stationId === activeStationTestId) ?? null,
-    [activeStationTestId, stationTestEntries],
-  );
-  const pendingQuizStartStation = useMemo(
-    () => stationTestEntries.find((item) => item.stationId === pendingQuizStartStationId) ?? null,
-    [pendingQuizStartStationId, stationTestEntries],
-  );
-  const pendingTimeStartStation = useMemo(
-    () => stationTestEntries.find((item) => item.stationId === pendingTimeStartStationId) ?? null,
-    [pendingTimeStartStationId, stationTestEntries],
-  );
-
-  useEffect(() => {
-    if (!activeStationTestId) {
-      return;
-    }
-
-    if (stationTestEntries.some((item) => item.stationId === activeStationTestId)) {
-      return;
-    }
-
-    setActiveStationTestId(null);
-  }, [activeStationTestId, stationTestEntries]);
-
-  useEffect(() => {
-    if (!pendingQuizStartStationId) {
-      return;
-    }
-
-    if (stationTestEntries.some((item) => item.stationId === pendingQuizStartStationId)) {
-      return;
-    }
-
-    setPendingQuizStartStationId(null);
-  }, [pendingQuizStartStationId, stationTestEntries]);
-
-  useEffect(() => {
-    if (!pendingTimeStartStationId) {
-      return;
-    }
-
-    if (stationTestEntries.some((item) => item.stationId === pendingTimeStartStationId)) {
-      return;
-    }
-
-    setPendingTimeStartStationId(null);
-  }, [pendingTimeStartStationId, stationTestEntries]);
-
-  useEffect(() => {
-    if (!pendingQuizStartStationId) {
-      setIsStartingPendingQuiz(false);
-    }
-  }, [pendingQuizStartStationId]);
-
-  useEffect(() => {
-    if (!pendingTimeStartStationId) {
-      setIsStartingPendingTime(false);
-    }
-  }, [pendingTimeStartStationId]);
-
-  useEffect(() => {
-    if (!activeStationTestId) {
-      return;
-    }
-
-    const activeTask = taskByStationId[activeStationTestId];
-    if (!activeTask?.startedAt) {
-      return;
-    }
-
-    setLocalStartedAtByStationId((current) => {
-      if (!current[activeStationTestId]) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[activeStationTestId];
-      return next;
-    });
-  }, [activeStationTestId, taskByStationId]);
-
   const teamColor = TEAM_COLORS.find((color) => color.key === sessionState.team.color) ?? null;
   const teamColorHex = teamColor?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
@@ -1256,29 +1022,82 @@ export function ExpeditionStageScreen({
     sessionState.endState.endedAt ??
     (localEndReason === "time-expired" ? localDeadlineAt : null);
 
-  useEffect(() => {
-    if (!isSessionEnded) {
-      return;
-    }
+  const overlayFlow = useExpeditionStageOverlayFlow({
+    isSessionEnded,
+    stationIds,
+    stationTestEntries,
+    taskByStationId,
+    text: {
+      realizationEndedCannotOpenStations: text.realizationEndedCannotOpenStations,
+      noStationsForPopupPreview: text.noStationsForPopupPreview,
+      successPopupPreview: text.successPopupPreview,
+      failedPopupPreview: text.failedPopupPreview,
+      realizationEndedCannotStartTasks: text.realizationEndedCannotStartTasks,
+      taskTimerStarted: text.taskTimerStarted,
+      taskAlreadyFailedAfterClose: text.taskAlreadyFailedAfterClose,
+      taskCompleted: text.taskCompleted,
+      taskTimeExpired: text.taskTimeExpired,
+      taskMarkedFailed: text.taskMarkedFailed,
+    },
+    startStationTask,
+    completeStationTask,
+    failStationTask,
+    setSelectedStationId,
+    setActionError,
+    setActionMessage,
+    isInteractiveQuizStationType,
+    isInvalidCompletionCodeError,
+  });
 
-    setIsFinishPreviewOpen(false);
-  }, [isSessionEnded]);
+  const qrFlow = useExpeditionStageQrFlow({
+    isSessionEnded,
+    isInteractiveQuizStationType,
+    text: {
+      realizationEndedScannerBlocked: text.realizationEndedScannerBlocked,
+      qrScannerReady: text.qrScannerReady,
+      openScannerFailed: text.openScannerFailed,
+      realizationEndedTasksBlocked: text.realizationEndedTasksBlocked,
+      qrTokenReadFailed: text.qrTokenReadFailed,
+      processQrFailed: text.processQrFailed,
+      scannedStation: text.scannedStation,
+      qrScanCanceled: text.qrScanCanceled,
+    },
+    playerLocation,
+    requestCurrentLocation,
+    syncTeamLocation,
+    resolveStationQrToken,
+    setActionError,
+    setActionMessage,
+    setSelectedStationId,
+    openStationByType: overlayFlow.openStationByType,
+    interpolate,
+    extractStationQrToken,
+  });
+
+  const sessionContextValue = useMemo(
+    () => ({
+      session,
+      sessionState,
+      isSessionEnded,
+      sessionEndReason,
+      sessionEndedAt,
+    }),
+    [isSessionEnded, session, sessionEndReason, sessionEndedAt, sessionState],
+  );
+  const overlayContextValue = useMemo(
+    () => ({
+      stationTestEntries,
+      overlayFlow,
+      qrFlow,
+    }),
+    [overlayFlow, qrFlow, stationTestEntries],
+  );
 
   useEffect(() => {
     if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
       setIsLanguagePickerOpen(false);
     }
   }, [hasMultipleLanguageOptions, isLanguagePickerOpen]);
-
-  useEffect(() => {
-    if (!timedCloseConfirmStation) {
-      return;
-    }
-
-    if (!activeStationTestId || activeStationTestId !== timedCloseConfirmStation.stationId) {
-      setTimedCloseConfirmStation(null);
-    }
-  }, [activeStationTestId, timedCloseConfirmStation]);
 
   useEffect(() => {
     uiChromeOpacity.stopAnimation();
@@ -1290,240 +1109,13 @@ export function ExpeditionStageScreen({
     }).start();
   }, [themeMode, uiChromeOpacity]);
 
-  async function handleOpenQrScanner() {
-    if (isSessionEnded) {
-      setActionError(text.realizationEndedScannerBlocked);
-      return;
-    }
-
-    setActionError(null);
-    setActionMessage(null);
-    setIsScannerOpening(true);
-
-    try {
-      const currentLocation = playerLocation ?? (await requestCurrentLocation().catch(() => null));
-
-      if (currentLocation) {
-        const syncError = await syncTeamLocation(currentLocation);
-
-        if (syncError) {
-          setActionError(syncError);
-        }
-      }
-      setIsQrScannerOpen(true);
-      setActionMessage(text.qrScannerReady);
-    } catch (error) {
-      setActionError(getApiErrorMessage(error, text.openScannerFailed));
-    } finally {
-      setIsScannerOpening(false);
-    }
-  }
-
-  const handleQrDetected = useCallback(
-    async (rawValue: string) => {
-      if (isSessionEnded) {
-        setActionError(text.realizationEndedTasksBlocked);
-        return;
-      }
-
-      if (isQrResolving) {
-        return;
-      }
-
-      setActionError(null);
-      setActionMessage(null);
-      setIsQrResolving(true);
-
-      try {
-        const token = extractStationQrToken(rawValue);
-        if (!token) {
-          setActionError(text.qrTokenReadFailed);
-          return;
-        }
-
-        const result = await resolveStationQrToken(token);
-        if (typeof result === "string") {
-          setActionError(result);
-          return;
-        }
-
-        const scannedStationId = result.station.id;
-        setSelectedStationId(scannedStationId);
-        if (isInteractiveQuizStationType(result.station.type)) {
-          setPendingQuizStartStationId(scannedStationId);
-          setPendingTimeStartStationId(null);
-          setActiveStationTestId(null);
-        } else if (result.station.type === "time") {
-          setPendingQuizStartStationId(null);
-          setPendingTimeStartStationId(scannedStationId);
-          setActiveStationTestId(null);
-        } else {
-          setPendingQuizStartStationId(null);
-          setPendingTimeStartStationId(null);
-          setActiveStationTestId(scannedStationId);
-        }
-        setIsQrScannerOpen(false);
-        setActionMessage(interpolate(text.scannedStation, { name: result.station.name }));
-      } catch (error) {
-        setActionError(getApiErrorMessage(error, text.processQrFailed));
-      } finally {
-        setIsQrResolving(false);
-      }
-    },
-    [isQrResolving, isSessionEnded, resolveStationQrToken, text],
-  );
-
   function handleSelectStationFromMap(stationId: string | null) {
     setSelectedStationId(stationId);
   }
 
-  function handleEnterStationTest(stationId: string) {
-    if (isSessionEnded) {
-      setActionError(text.realizationEndedCannotOpenStations);
-      setIsStationTestMenuOpen(false);
-      return;
-    }
-
-    const selectedStation = stationTestEntries.find((item) => item.stationId === stationId) ?? null;
-    if (stationIds.includes(stationId)) {
-      setSelectedStationId(stationId);
-    }
-    if (isInteractiveQuizStationType(selectedStation?.stationType)) {
-      setPendingQuizStartStationId(stationId);
-      setPendingTimeStartStationId(null);
-      setActiveStationTestId(null);
-    } else if (selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0) {
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(stationId);
-      setActiveStationTestId(null);
-    } else if (selectedStation?.stationType === "time") {
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(stationId);
-      setActiveStationTestId(null);
-    } else {
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(null);
-      setActiveStationTestId(stationId);
-    }
-    setIsStationTestMenuOpen(false);
-  }
-
-  const handlePreviewOutcomePopup = useCallback(
-    (variant: "success" | "failed") => {
-      const previewStationId = stationTestEntries[0]?.stationId ?? null;
-      if (!previewStationId) {
-        setActionError(text.noStationsForPopupPreview);
-        return;
-      }
-
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(null);
-      setSelectedStationId(previewStationId);
-      setActiveStationTestId(previewStationId);
-      setIsStationTestMenuOpen(false);
-      setDebugOutcomePreview({
-        id: Date.now(),
-        variant,
-        message:
-          variant === "success"
-            ? text.successPopupPreview
-            : text.failedPopupPreview,
-      });
-    },
-    [stationTestEntries, text.failedPopupPreview, text.noStationsForPopupPreview, text.successPopupPreview],
-  );
-
-  const handleStartStationTestTask = useCallback(
-    async (stationId: string) => {
-      if (isSessionEnded) {
-        return text.realizationEndedCannotStartTasks;
-      }
-
-      setActionError(null);
-      setActionMessage(null);
-      const startedAtIso = new Date().toISOString();
-
-      setLocalStartedAtByStationId((current) => ({
-        ...current,
-        [stationId]: startedAtIso,
-      }));
-
-      const result = await startStationTask(stationId, startedAtIso);
-      if (result) {
-        setLocalStartedAtByStationId((current) => {
-          if (!current[stationId]) {
-            return current;
-          }
-
-          const next = { ...current };
-          delete next[stationId];
-          return next;
-        });
-        setActionError(result);
-        return result;
-      }
-
-      setActionMessage(text.taskTimerStarted);
-      return null;
-    },
-    [isSessionEnded, startStationTask, text.realizationEndedCannotStartTasks, text.taskTimerStarted],
-  );
-
-  const handleCompleteStationTestTask = useCallback(
-    async (stationId: string, completionCode: string, startedAt?: string) => {
-      setActionError(null);
-      setActionMessage(null);
-
-      if (taskByStationId[stationId]?.status === "failed") {
-        return text.taskAlreadyFailedAfterClose;
-      }
-
-      const result = await completeStationTask(stationId, completionCode, startedAt);
-      if (result) {
-        if (!isInvalidCompletionCodeError(result)) {
-          setActionError(result);
-        }
-        return result;
-      }
-
-      setActionMessage(text.taskCompleted);
-      return null;
-    },
-    [completeStationTask, taskByStationId, text.taskAlreadyFailedAfterClose, text.taskCompleted],
-  );
-
-  const handleRequestCloseActiveStation = useCallback(() => {
-    if (!activeStationTest) {
-      setActiveStationTestId(null);
-      return;
-    }
-
-    const isAlreadyDone = activeStationTest.status === "done" || activeStationTest.status === "failed";
-    if (isAlreadyDone) {
-      setActiveStationTestId(null);
-      return;
-    }
-
-    const stationId = activeStationTest.stationId;
-    const startedAt = activeStationTest.startedAt ?? localStartedAtByStationId[stationId] ?? null;
-    setTimedCloseConfirmStation({ stationId, startedAt });
-  }, [activeStationTest, localStartedAtByStationId]);
-
-  const handleTimeStationExpired = useCallback(
-    (stationId: string) => {
-      const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
-      void failStationTask(stationId, "time_limit_expired", startedAt).then((error) => {
-        if (error) {
-          setActionError(error);
-          return;
-        }
-        setActionError(text.taskTimeExpired);
-      });
-    },
-    [failStationTask, localStartedAtByStationId, taskByStationId, text.taskTimeExpired],
-  );
-
   return (
+    <ExpeditionStageSessionProvider value={sessionContextValue}>
+      <ExpeditionStageOverlayProvider value={overlayContextValue}>
     <View className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       <View className="absolute inset-0">
         {isLoading ? (
@@ -1549,7 +1141,7 @@ export function ExpeditionStageScreen({
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
-        <Pressable onPressIn={handleTestMenuHoldStart} onPressOut={handleTestMenuHoldEnd}>
+        <Pressable onPressIn={overlayFlow.handleTestMenuHoldStart} onPressOut={overlayFlow.handleTestMenuHoldEnd}>
           <TopRealizationPanel
             companyName={
               sessionState.realization.companyName ||
@@ -1641,8 +1233,8 @@ export function ExpeditionStageScreen({
             remainingLabel={countdown.remainingLabel}
             isCompleted={countdown.isCompleted}
             progressLabel={`${completedTasks}/${taskTotal}`}
-            onOpenQrScanner={() => void handleOpenQrScanner()}
-            isScannerOpening={isScannerOpening}
+            onOpenQrScanner={() => void qrFlow.handleOpenQrScanner()}
+            isScannerOpening={qrFlow.isScannerOpening}
             isInteractionDisabled={isSessionEnded}
           />
         </View>
@@ -1671,238 +1263,16 @@ export function ExpeditionStageScreen({
         </View>
       ) : null}
 
-      <StationTestMenuOverlay
-        visible={isStationTestMenuOpen}
-        stations={stationTestEntries}
-        onClose={() => setIsStationTestMenuOpen(false)}
-        onEnterStation={handleEnterStationTest}
-        onOpenFinishScreen={() => {
-          setIsStationTestMenuOpen(false);
-          setIsFinishPreviewOpen(true);
-        }}
-        onPreviewSuccessPopup={() => handlePreviewOutcomePopup("success")}
-        onPreviewFailedPopup={() => handlePreviewOutcomePopup("failed")}
-        onOpenWelcomeScreen={() => {
-          setIsStationTestMenuOpen(false);
-          setIsWelcomePreviewOpen(true);
+      <ExpeditionStageOverlayLayer
+        adaptiveLayout={adaptiveLayout}
+        isLightTheme={isLightTheme}
+        text={{
+          timedTaskAlertTitle: text.timedTaskAlertTitle,
+          timedTaskAlertBody: text.timedTaskAlertBody,
+          timedTaskAlertBack: text.timedTaskAlertBack,
+          timedTaskAlertCloseAndFail: text.timedTaskAlertCloseAndFail,
         }}
       />
-
-      <WelcomePreviewOverlay
-        visible={isWelcomePreviewOpen}
-        introText={sessionState.realization.introText ?? session.realization?.introText}
-        onClose={() => setIsWelcomePreviewOpen(false)}
-      />
-
-      <RealizationFinishOverlay
-        visible={isSessionEnded || isFinishPreviewOpen}
-        reason={isSessionEnded ? sessionEndReason : "manual-preview"}
-        endedAt={isSessionEnded ? sessionEndedAt : null}
-        leaderboardEntries={sessionState.leaderboard.entries}
-        currentTeamId={sessionState.team.id}
-        showLeaderboard={sessionState.realization.showLeaderboard}
-        canClose={!isSessionEnded && isFinishPreviewOpen}
-        onClose={() => setIsFinishPreviewOpen(false)}
-      />
-
-      <StationPreviewOverlay
-        station={
-          activeStationTest
-            ? {
-                ...activeStationTest,
-                startedAt: activeStationTest.startedAt ?? localStartedAtByStationId[activeStationTest.stationId] ?? null,
-              }
-            : null
-        }
-        onClose={() => setActiveStationTestId(null)}
-        onRequestClose={handleRequestCloseActiveStation}
-        onCompleteTask={handleCompleteStationTestTask}
-        onQuizFailed={(stationId, reason) => {
-          const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
-          void failStationTask(stationId, reason ?? "quiz_incorrect_answer", startedAt).then((error) => {
-            if (error) {
-              setActionError(error);
-            }
-          });
-        }}
-        onTimeExpired={handleTimeStationExpired}
-        debugOutcomePreview={debugOutcomePreview}
-        onDebugOutcomePreviewConsumed={() => setDebugOutcomePreview(null)}
-      />
-
-      <QuizPrestartOverlay
-        visible={Boolean(pendingQuizStartStation)}
-        stationName={pendingQuizStartStation?.name ?? null}
-        stationType={pendingQuizStartStation?.stationType ?? "quiz"}
-        isStarting={isStartingPendingQuiz}
-        onClose={() => {
-          setPendingQuizStartStationId(null);
-          setIsStartingPendingQuiz(false);
-        }}
-        onStart={async () => {
-          if (!pendingQuizStartStationId) {
-            return;
-          }
-          const startedAtIso = new Date().toISOString();
-          setIsStartingPendingQuiz(true);
-          setLocalStartedAtByStationId((current) => ({
-            ...current,
-            [pendingQuizStartStationId]: startedAtIso,
-          }));
-          setActionError(null);
-          setActionMessage(null);
-
-          const startError = await startStationTask(pendingQuizStartStationId, startedAtIso);
-          if (startError) {
-            setActionError(startError);
-            setIsStartingPendingQuiz(false);
-            return;
-          }
-
-          setActiveStationTestId(pendingQuizStartStationId);
-          setPendingQuizStartStationId(null);
-          setIsStartingPendingQuiz(false);
-        }}
-      />
-
-      <QuizPrestartOverlay
-        visible={Boolean(pendingTimeStartStation)}
-        stationName={pendingTimeStartStation?.name ?? null}
-        stationType="time"
-        isStarting={isStartingPendingTime}
-        onClose={() => {
-          setPendingTimeStartStationId(null);
-          setIsStartingPendingTime(false);
-        }}
-        onStart={async () => {
-          if (!pendingTimeStartStationId) {
-            return;
-          }
-
-          setIsStartingPendingTime(true);
-          const startError = await handleStartStationTestTask(pendingTimeStartStationId);
-          if (startError) {
-            setIsStartingPendingTime(false);
-            return;
-          }
-
-          setActiveStationTestId(pendingTimeStartStationId);
-          setPendingTimeStartStationId(null);
-          setIsStartingPendingTime(false);
-        }}
-      />
-
-      <QrScannerOverlay
-        visible={isQrScannerOpen}
-        isResolving={isQrResolving}
-        onDetected={(value) => void handleQrDetected(value)}
-        onClose={() => {
-          setIsQrScannerOpen(false);
-          setActionMessage((current) => current || text.qrScanCanceled);
-        }}
-      />
-
-      <Modal
-        visible={Boolean(timedCloseConfirmStation)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setTimedCloseConfirmStation(null)}
-      >
-        <Pressable
-          className="flex-1 items-center justify-center"
-          style={{
-            backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)",
-            paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 36 : 24, 20, 44),
-          }}
-          onPress={() => setTimedCloseConfirmStation(null)}
-        >
-          <Pressable
-            className="w-full border"
-            style={{
-              maxWidth: adaptiveLayout.s(isTabletLayout ? 760 : 460, 420, 920),
-              borderRadius: adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 34),
-              paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 28 : 20, 16, 34),
-              paddingVertical: adaptiveLayout.s(isTabletLayout ? 26 : 20, 16, 34),
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: EXPEDITION_THEME.panel,
-            }}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <Text
-              className="font-semibold"
-              style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 28 : 18, 17, 32) }}
-            >
-              {text.timedTaskAlertTitle}
-            </Text>
-            <Text
-              className="mt-2"
-              style={{
-                color: EXPEDITION_THEME.textMuted,
-                fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23),
-                lineHeight: adaptiveLayout.s(isTabletLayout ? 30 : 24, 22, 36),
-              }}
-            >
-              {text.timedTaskAlertBody}
-            </Text>
-
-            <View className="mt-5 flex-row" style={{ columnGap: adaptiveLayout.s(isTabletLayout ? 14 : 8, 6, 18) }}>
-              <Pressable
-                className="flex-1 items-center justify-center border active:opacity-90"
-                style={{
-                  borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
-                  minHeight: adaptiveLayout.hit(isTabletLayout ? 62 : 48),
-                  borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelMuted,
-                }}
-                onPress={() => setTimedCloseConfirmStation(null)}
-              >
-                <Text
-                  className="font-semibold"
-                  style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23) }}
-                >
-                  {text.timedTaskAlertBack}
-                </Text>
-              </Pressable>
-              <Pressable
-                className="flex-1 items-center justify-center border active:opacity-90"
-                style={{
-                  borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
-                  minHeight: adaptiveLayout.hit(isTabletLayout ? 62 : 48),
-                  borderColor: "rgba(239, 68, 68, 0.7)",
-                  backgroundColor: "rgba(239, 68, 68, 0.2)",
-                }}
-                onPress={() => {
-                  const station = timedCloseConfirmStation;
-                  if (!station) {
-                    return;
-                  }
-
-                  setTimedCloseConfirmStation(null);
-                  void failStationTask(
-                    station.stationId,
-                    "task_closed_before_completion",
-                    station.startedAt ?? undefined,
-                  ).then((error) => {
-                    if (error) {
-                      setActionError(error);
-                    } else {
-                      setActionMessage(text.taskMarkedFailed);
-                    }
-                    setActiveStationTestId(null);
-                  });
-                }}
-              >
-                <Text
-                  className="font-semibold"
-                  style={{ color: EXPEDITION_THEME.danger, fontSize: adaptiveLayout.fs(isTabletLayout ? 19 : 14, 13, 23) }}
-                >
-                  {text.timedTaskAlertCloseAndFail}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal
         visible={isLanguagePickerOpen}
@@ -1977,5 +1347,7 @@ export function ExpeditionStageScreen({
       </Animated.View>
 
     </View>
+      </ExpeditionStageOverlayProvider>
+    </ExpeditionStageSessionProvider>
   );
 }

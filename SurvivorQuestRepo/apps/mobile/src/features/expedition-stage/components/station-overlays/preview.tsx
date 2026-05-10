@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from "expo-audio";
-import { Alert, Animated, Keyboard, Pressable, Text, View } from "react-native";
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { Animated, Keyboard, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
@@ -10,78 +10,25 @@ import { StationMediaPanel } from "./station-panels/station-media-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper } from "./station-panels/shared-ui";
-import {
-  backspaceBoggleInputController,
-  handleBoggleInputChange,
-  handleMastermindAddSymbol,
-  handleMastermindInputChange,
-  handleMiniSudokuChangeCellController,
-  handleSimonPressController,
-  sanitizeMastermindInput,
-  selectBoggleBoardCellController,
-  submitBoggleController,
-  submitMatchingPairController,
-  submitMastermindGuessController,
-  submitMiniSudokuController,
-  submitWordleGuessController,
-} from "./station-panels/station-controllers";
+import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
+import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
+import { createStationPreviewActions } from "./station-panels/use-station-preview-actions";
+import { useStationOverlayReset } from "./station-panels/use-station-overlay-reset";
+import { buildStationPreviewModel } from "./station-panels/use-station-preview-model";
+import { useStationTimeoutOutcome } from "./station-panels/use-station-timeout-outcome";
 import { buildQuizStationRendererByType, buildStationMediaRendererByType } from "./station-panels/station-renderers";
 import type { WordleAttempt } from "./station-panels/wordle-station-panel";
 import type {
   StationPreviewOverlayProps,
-  StationTestType,
   StationTestViewModel,
 } from "./types";
 
 import {
-  HANGMAN_MAX_MISSES,
-  MASTERMIND_MAX_ATTEMPTS,
-  MEMORY_MAX_MISTAKES,
-  TEXT_PUZZLE_MAX_ATTEMPTS,
-  WORDLE_MAX_ATTEMPTS,
   type MemoryCard,
-  type WordleCellState,
-  blendHexColors,
-  clamp01,
-  formatRemainingTimeLabel,
-  isGuessableHangmanCharacter,
-  isInvalidCompletionCodeErrorMessage,
-  normalizeHangmanSecret,
-  normalizePuzzleText,
-  normalizePuzzleWord,
   normalizeWordleSecret,
-  resolveBoggleBoard,
-  resolveBoggleTarget,
-  resolveCaesarSecret,
-  resolveCaesarShift,
-  resolveCorrectAnswerText,
-  resolveMatchingPairs,
-  resolveMastermindSecret,
-  resolveMemoryDeck,
-  resolveMiniSudokuPuzzle,
   resolvePuzzleSecret,
   resolveSimonSequence,
-  scrambleWord,
-  shuffleDeterministic,
 } from "./puzzle-helpers";
-
-function isQuizStationType(stationType: StationTestType) {
-  return (
-    stationType === "quiz" ||
-    stationType === "audio-quiz" ||
-    stationType === "wordle" ||
-    stationType === "hangman" ||
-    stationType === "mastermind" ||
-    stationType === "anagram" ||
-    stationType === "caesar-cipher" ||
-    stationType === "memory" ||
-    stationType === "simon" ||
-    stationType === "rebus" ||
-    stationType === "boggle" ||
-    stationType === "mini-sudoku" ||
-    stationType === "matching"
-  );
-}
 
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
@@ -104,69 +51,6 @@ const SIMON_TONE_ASSET_BY_BUTTON: Record<string, number> = {
   "9": require("./assets/simon-tones/9.wav"),
 };
 
-type MiniSudokuPuzzle = ReturnType<typeof resolveMiniSudokuPuzzle>;
-
-function resolveMiniSudokuGridMeta(solutionLength: number) {
-  const side = Math.round(Math.sqrt(solutionLength));
-  if (!Number.isInteger(side) || side < 2) {
-    return null;
-  }
-
-  const blockSide = side === 4 ? 2 : Math.max(1, Math.round(Math.sqrt(side)));
-  return { side, blockSide };
-}
-
-function resolveMiniSudokuAttemptedValues(puzzle: MiniSudokuPuzzle, values: string[]) {
-  return puzzle.given.map((givenValue, index) => givenValue ?? values[index] ?? "");
-}
-
-function hasMiniSudokuConflictAtIndex(
-  values: string[],
-  side: number,
-  blockSide: number,
-  index: number,
-) {
-  const value = values[index] ?? "";
-  if (!value) {
-    return false;
-  }
-
-  const row = Math.floor(index / side);
-  const col = index % side;
-
-  for (let currentCol = 0; currentCol < side; currentCol += 1) {
-    const candidateIndex = row * side + currentCol;
-    if (candidateIndex !== index && values[candidateIndex] === value) {
-      return true;
-    }
-  }
-
-  for (let currentRow = 0; currentRow < side; currentRow += 1) {
-    const candidateIndex = currentRow * side + col;
-    if (candidateIndex !== index && values[candidateIndex] === value) {
-      return true;
-    }
-  }
-
-  const blockStartRow = Math.floor(row / blockSide) * blockSide;
-  const blockStartCol = Math.floor(col / blockSide) * blockSide;
-  for (let rowOffset = 0; rowOffset < blockSide; rowOffset += 1) {
-    for (let colOffset = 0; colOffset < blockSide; colOffset += 1) {
-      const candidateIndex = (blockStartRow + rowOffset) * side + blockStartCol + colOffset;
-      if (candidateIndex !== index && values[candidateIndex] === value) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function collectMiniSudokuConflictIndexes(values: string[], side: number, blockSide: number) {
-  return values
-    .map((_, index) => (hasMiniSudokuConflictAtIndex(values, side, blockSide, index) ? index : -1))
-    .filter((index) => index >= 0);
-}
 
 type StationPreviewText = {
   fallbackQuizOptions: string[];
@@ -849,10 +733,6 @@ export function StationPreviewOverlay({
   const [verificationCode, setVerificationCode] = useState("");
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [quizSubmitError, setQuizSubmitError] = useState<string | null>(null);
-  const [audioLoadError, setAudioLoadError] = useState<string | null>(null);
-  const [isAudioLoading, setIsAudioLoading] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [hasAudioPlaybackStarted, setHasAudioPlaybackStarted] = useState(false);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const [quizIconLoadFailed, setQuizIconLoadFailed] = useState(false);
   const [isSubmittingQuizAnswer, setIsSubmittingQuizAnswer] = useState(false);
@@ -882,8 +762,6 @@ export function StationPreviewOverlay({
   const codeInputShakeAnimation = useRef(new Animated.Value(0)).current;
   const codeInputResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeInputSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioPlayerRef = useRef<AudioPlayer | null>(null);
-  const audioPlaybackSubscriptionRef = useRef<{ remove: () => void } | null>(null);
   const simonTonePlayerRef = useRef<AudioPlayer | null>(null);
   const simonTonePlayerSourceButtonRef = useRef<string | null>(null);
   const simonPlaybackRunRef = useRef(0);
@@ -892,7 +770,6 @@ export function StationPreviewOverlay({
   const memoryHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wordleRevealTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const timeoutPopupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutPopupShownRef = useRef(false);
   const quizOutcomeActionRef = useRef<(() => void) | null>(null);
   const quizOptions = useMemo(
     () =>
@@ -968,30 +845,23 @@ export function StationPreviewOverlay({
     setQuizOutcomePopup(null);
     onDismiss?.();
   }, [clearTimeoutPopupCountdown]);
-  const unloadAudioSound = useCallback(async () => {
-    const activePlayer = audioPlayerRef.current;
-    audioPlayerRef.current = null;
-    setIsAudioPlaying(false);
-    if (audioPlaybackSubscriptionRef.current) {
-      audioPlaybackSubscriptionRef.current.remove();
-      audioPlaybackSubscriptionRef.current = null;
-    }
-    if (!activePlayer) {
-      return;
-    }
-
-    try {
-      activePlayer.pause();
-    } catch {
-      // noop
-    }
-
-    try {
-      activePlayer.remove();
-    } catch {
-      // noop
-    }
-  }, []);
+  const {
+    audioLoadError,
+    isAudioLoading,
+    isAudioPlaying,
+    hasAudioPlaybackStarted,
+    resetAudioPlaybackState,
+    handlePlayAudio,
+    handleStopAudio,
+  } = useAudioQuizPlayback({
+    stationType: displayedStation?.stationType,
+    quizAudioUrl: displayedStation?.quizAudioUrl,
+    text: {
+      audioSourceMissing: text.audioSourceMissing,
+      audioLoadFailed: text.audioLoadFailed,
+      audioPlayFailed: text.audioPlayFailed,
+    },
+  });
   const stopSimonTonePlayback = useCallback(() => {
     const player = simonTonePlayerRef.current;
     if (!player) {
@@ -1147,95 +1017,6 @@ export function StationPreviewOverlay({
     },
     [playSimonTone, stopSimonPlayback],
   );
-  const loadAudioSound = useCallback(
-    async (audioUrl: string) => {
-      const normalizedAudioUrl = audioUrl.trim();
-      if (!normalizedAudioUrl) {
-        setAudioLoadError(text.audioSourceMissing);
-        setIsAudioLoading(false);
-        return null;
-      }
-
-      await unloadAudioSound();
-      setAudioLoadError(null);
-      setIsAudioLoading(true);
-      try {
-        const player = createAudioPlayer(
-          { uri: normalizedAudioUrl },
-          {
-            updateInterval: 250,
-          },
-        );
-        audioPlayerRef.current = player;
-        audioPlaybackSubscriptionRef.current = player.addListener(
-          "playbackStatusUpdate",
-          (status: AudioStatus) => {
-            if (!status.isLoaded) {
-              setIsAudioPlaying(false);
-              return;
-            }
-
-            setIsAudioLoading(false);
-            setIsAudioPlaying(status.playing);
-            if (status.didJustFinish) {
-              void audioPlayerRef.current?.seekTo(0).catch(() => undefined);
-              setIsAudioPlaying(false);
-            }
-          },
-        );
-        setIsAudioLoading(!player.isLoaded);
-        return player;
-      } catch {
-        setAudioLoadError(text.audioLoadFailed);
-        return null;
-      } finally {
-        if (!audioPlayerRef.current) {
-          setIsAudioLoading(false);
-        }
-      }
-    },
-    [text.audioLoadFailed, text.audioSourceMissing, unloadAudioSound],
-  );
-  const handlePlayAudio = useCallback(async () => {
-    if (!displayedStation || displayedStation.stationType !== "audio-quiz") {
-      return;
-    }
-
-    const audioUrl = displayedStation.quizAudioUrl?.trim() ?? "";
-    let activePlayer = audioPlayerRef.current;
-    if (!activePlayer) {
-      activePlayer = await loadAudioSound(audioUrl);
-    }
-
-    if (!activePlayer) {
-      return;
-    }
-
-    try {
-      await activePlayer.seekTo(0);
-      activePlayer.play();
-      setHasAudioPlaybackStarted(true);
-    } catch {
-      setAudioLoadError(text.audioPlayFailed);
-      setIsAudioPlaying(false);
-    }
-  }, [displayedStation, loadAudioSound, text.audioPlayFailed]);
-  const handleStopAudio = useCallback(async () => {
-    const activePlayer = audioPlayerRef.current;
-    if (!activePlayer) {
-      return;
-    }
-
-    try {
-      activePlayer.pause();
-      await activePlayer.seekTo(0);
-      setIsAudioPlaying(false);
-    } catch {
-      setAudioLoadError(text.audioPlayFailed);
-      setIsAudioPlaying(false);
-    }
-  }, [text.audioPlayFailed]);
-
   useEffect(() => {
     if (stationProp) {
       setDisplayedStation((current) => {
@@ -1285,166 +1066,85 @@ export function StationPreviewOverlay({
     stationProp?.timeLimitSeconds,
   ]);
 
-  useEffect(() => {
-    setSelectedQuizOption(null);
-    setQuizResult(null);
-    setWordleInput("");
-    setWordleAttempts([]);
-    setWordleResult(null);
-    setWordleRevealedCellCounts([]);
-    setIsWordleRevealAnimating(false);
-    setHangmanGuessedLetters([]);
-    setHangmanMisses([]);
-    setHangmanResult(null);
-    setMastermindInput("");
-    setMastermindAttempts([]);
-    setMastermindResult(null);
-    setAnagramInput("");
-    setAnagramAttempts(0);
-    setAnagramResult(null);
-    setCaesarInput("");
-    setCaesarAttempts(0);
-    setCaesarResult(null);
-    setMemoryDeck(displayedStation ? resolveMemoryDeck(displayedStation) : []);
-    setMemorySelection([]);
-    setMemoryResult(null);
-    setMemoryBusy(false);
-    setSimonInput([]);
-    setSimonTargetLength(SIMON_INITIAL_SEQUENCE_LENGTH);
-    setSimonMistakes(0);
-    setSimonActivePlaybackButtonId(null);
-    setIsSimonPlaybackActive(false);
-    setSimonResult(null);
-    setRebusInput("");
-    setRebusAttempts(0);
-    setRebusResult(null);
-    setBoggleInput("");
-    setBoggleSelectedCellPath([]);
-    setBoggleAttempts(0);
-    setBoggleResult(null);
-    setMiniSudokuValues(
-      displayedStation?.stationType === "mini-sudoku"
-        ? Array.from(
-            { length: resolveMiniSudokuPuzzle(displayedStation).given.length },
-            () => "",
-          )
-        : Array.from({ length: 81 }, () => ""),
-    );
-    setMiniSudokuAttempts(0);
-    setMiniSudokuResult(null);
-    setMatchingConnections({});
-    setMatchingAttempts(0);
-    setMatchingResult(null);
-    setVerificationCode("");
-    setCodeResult(null);
-    setQuizSubmitError(null);
-    setAudioLoadError(null);
-    setIsAudioLoading(false);
-    setIsAudioPlaying(false);
-    setHasAudioPlaybackStarted(false);
-    setImageLoadFailed(false);
-    setQuizIconLoadFailed(false);
-    setIsSubmittingQuizAnswer(false);
-    setIsSubmittingWordleGuess(false);
-    setIsSubmittingHangmanGuess(false);
-    setIsSubmittingMastermindGuess(false);
-    setIsSubmittingAnagram(false);
-    setIsSubmittingCaesar(false);
-    setIsSubmittingMemory(false);
-    setIsSubmittingSimon(false);
-    setIsSubmittingRebus(false);
-    setIsSubmittingBoggle(false);
-    setIsSubmittingMiniSudoku(false);
-    setIsSubmittingMatching(false);
-    setIsSubmittingCode(false);
-    setIsCodeInputInvalid(false);
-    setIsCodeInputSuccess(false);
-    stopSimonPlayback();
-    clearTimeoutPopupCountdown();
-    setQuizOutcomePopup(null);
-    setNowMs(Date.now());
-    quizFeedbackAnimation.setValue(0);
-    timerPulseAnimation.setValue(0);
-    codeInputShakeAnimation.setValue(0);
-    if (codeInputResetTimeoutRef.current) {
-      clearTimeout(codeInputResetTimeoutRef.current);
-      codeInputResetTimeoutRef.current = null;
-    }
-    if (codeInputSuccessTimeoutRef.current) {
-      clearTimeout(codeInputSuccessTimeoutRef.current);
-      codeInputSuccessTimeoutRef.current = null;
-    }
-    timerPulseLoopRef.current?.stop();
-    if (memoryHideTimeoutRef.current) {
-      clearTimeout(memoryHideTimeoutRef.current);
-      memoryHideTimeoutRef.current = null;
-    }
-    clearWordleRevealTimeouts();
-    timeoutPopupShownRef.current = false;
-    quizOutcomeActionRef.current = null;
-  }, [
+  useStationOverlayReset({
+    displayedStation,
     clearTimeoutPopupCountdown,
     clearWordleRevealTimeouts,
-    codeInputShakeAnimation,
-    displayedStation,
-    quizFeedbackAnimation,
+    resetAudioPlaybackState,
     stopSimonPlayback,
+    quizFeedbackAnimation,
     timerPulseAnimation,
-  ]);
-
-  useEffect(() => {
-    void setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-      interruptionMode: "duckOthers",
-      shouldRouteThroughEarpiece: false,
-      shouldPlayInBackground: false,
-    }).catch(() => undefined);
-
-    return () => {
-      void unloadAudioSound();
-      releaseSimonTonePlayers();
-    };
-  }, [releaseSimonTonePlayers, unloadAudioSound]);
-
-  useEffect(() => {
-    if (!displayedStation || displayedStation.stationType !== "audio-quiz") {
-      void unloadAudioSound();
-      return;
-    }
-
-    const audioUrl = displayedStation.quizAudioUrl?.trim() ?? "";
-    if (!audioUrl) {
-      void unloadAudioSound();
-      setAudioLoadError(text.audioSourceMissing);
-      return;
-    }
-
-    let cancelled = false;
-    void loadAudioSound(audioUrl).then((loadedSound) => {
-      if (!cancelled || !loadedSound) {
-        return;
-      }
-
-      try {
-        loadedSound.pause();
-      } catch {
-        // noop
-      }
-      try {
-        loadedSound.remove();
-      } catch {
-        // noop
-      }
-      if (audioPlayerRef.current === loadedSound) {
-        audioPlayerRef.current = null;
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [displayedStation, loadAudioSound, text.audioSourceMissing, unloadAudioSound]);
+    codeInputShakeAnimation,
+    codeInputResetTimeoutRef,
+    codeInputSuccessTimeoutRef,
+    timerPulseLoopRef,
+    memoryHideTimeoutRef,
+    quizOutcomeActionRef,
+    setSelectedQuizOption,
+    setQuizResult,
+    setWordleInput,
+    setWordleAttempts,
+    setWordleResult,
+    setWordleRevealedCellCounts,
+    setIsWordleRevealAnimating,
+    setHangmanGuessedLetters,
+    setHangmanMisses,
+    setHangmanResult,
+    setMastermindInput,
+    setMastermindAttempts,
+    setMastermindResult,
+    setAnagramInput,
+    setAnagramAttempts,
+    setAnagramResult,
+    setCaesarInput,
+    setCaesarAttempts,
+    setCaesarResult,
+    setMemoryDeck,
+    setMemorySelection,
+    setMemoryResult,
+    setMemoryBusy,
+    setSimonInput,
+    setSimonTargetLength,
+    setSimonMistakes,
+    setSimonActivePlaybackButtonId,
+    setIsSimonPlaybackActive,
+    setSimonResult,
+    setRebusInput,
+    setRebusAttempts,
+    setRebusResult,
+    setBoggleInput,
+    setBoggleSelectedCellPath,
+    setBoggleAttempts,
+    setBoggleResult,
+    setMiniSudokuValues,
+    setMiniSudokuAttempts,
+    setMiniSudokuResult,
+    setMatchingConnections,
+    setMatchingAttempts,
+    setMatchingResult,
+    setVerificationCode,
+    setCodeResult,
+    setQuizSubmitError,
+    setImageLoadFailed,
+    setQuizIconLoadFailed,
+    setIsSubmittingQuizAnswer,
+    setIsSubmittingWordleGuess,
+    setIsSubmittingHangmanGuess,
+    setIsSubmittingMastermindGuess,
+    setIsSubmittingAnagram,
+    setIsSubmittingCaesar,
+    setIsSubmittingMemory,
+    setIsSubmittingSimon,
+    setIsSubmittingRebus,
+    setIsSubmittingBoggle,
+    setIsSubmittingMiniSudoku,
+    setIsSubmittingMatching,
+    setIsSubmittingCode,
+    setIsCodeInputInvalid,
+    setIsCodeInputSuccess,
+    setNowMs,
+    setQuizOutcomePopup,
+  });
 
   useEffect(() => {
     if (!debugOutcomePreview || !displayedStation) {
@@ -1535,249 +1235,56 @@ export function StationPreviewOverlay({
       releaseSimonTonePlayers();
       clearWordleRevealTimeouts();
       clearTimeoutPopupCountdown();
-      void unloadAudioSound();
       quizOutcomeActionRef.current = null;
     };
-  }, [clearTimeoutPopupCountdown, clearWordleRevealTimeouts, releaseSimonTonePlayers, stopSimonPlayback, unloadAudioSound]);
+  }, [clearTimeoutPopupCountdown, clearWordleRevealTimeouts, releaseSimonTonePlayers, stopSimonPlayback]);
 
-  useEffect(() => {
-    if (
-      !displayedStation ||
-      !displayedStation.startedAt ||
-      displayedStation.timeLimitSeconds <= 0 ||
-      displayedStation.status === "done" ||
-      displayedStation.status === "failed"
-    ) {
-      return;
-    }
-
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    const tick = () => {
-      const now = Date.now();
-      setNowMs(now);
-      const msToNextSecond = 1000 - (now % 1000);
-      timeout = setTimeout(tick, Math.max(40, msToNextSecond + 12));
-    };
-
-    tick();
-
-    return () => {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    };
-  }, [displayedStation]);
-
-  const remainingTimeSeconds = (() => {
-    if (
-      !displayedStation ||
-      !displayedStation.startedAt ||
-      displayedStation.timeLimitSeconds <= 0
-    ) {
-      return null;
-    }
-
-    const startedMs = new Date(displayedStation.startedAt).getTime();
-    if (!Number.isFinite(startedMs)) {
-      return null;
-    }
-
-    const endsAtMs = startedMs + displayedStation.timeLimitSeconds * 1000;
-    const remainingMs = Math.max(0, endsAtMs - nowMs);
-    return Math.max(0, Math.ceil(remainingMs / 1000));
-  })();
-  const finalTenSecondsProgress =
-    remainingTimeSeconds !== null && remainingTimeSeconds <= 10 ? clamp01((10 - remainingTimeSeconds) / 10) : 0;
-  const isUrgentPulse = remainingTimeSeconds !== null && remainingTimeSeconds <= 10;
-  const hasCountdownForPulse = Boolean(
-    displayedStation?.startedAt &&
-      displayedStation.timeLimitSeconds > 0 &&
-      displayedStation.status !== "done" &&
-      displayedStation.status !== "failed",
-  );
-  const hasTimerStartedForPulse = Boolean(displayedStation?.startedAt);
-  const stationStatusForPulse = displayedStation?.status;
-
-  useEffect(() => {
-    timerPulseLoopRef.current?.stop();
-    timerPulseAnimation.setValue(0);
-
-    if (
-      !isOverlayMounted ||
-      !hasCountdownForPulse ||
-      !hasTimerStartedForPulse ||
-      stationStatusForPulse === "done" ||
-      stationStatusForPulse === "failed" ||
-      remainingTimeSeconds === null
-    ) {
-      return;
-    }
-
-    const pulseDuration = isUrgentPulse ? 220 : 620;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(timerPulseAnimation, {
-          toValue: 1,
-          duration: pulseDuration,
-          useNativeDriver: true,
-        }),
-        Animated.timing(timerPulseAnimation, {
-          toValue: 0,
-          duration: pulseDuration,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    timerPulseLoopRef.current = loop;
-    loop.start();
-
-    return () => {
-      loop.stop();
-    };
-  }, [
-    hasCountdownForPulse,
-    hasTimerStartedForPulse,
-    isUrgentPulse,
+  const { remainingTimeSeconds, finalTenSecondsProgress } = useStationCountdownPulse({
+    station: displayedStation,
     isOverlayMounted,
-    remainingTimeSeconds,
-    stationStatusForPulse,
+    nowMs,
+    setNowMs,
     timerPulseAnimation,
-  ]);
+    timerPulseLoopRef,
+  });
 
-  useEffect(() => {
-    if (!displayedStation || !isQuizStationType(displayedStation.stationType)) {
-      return;
-    }
-
-    if (
-      !displayedStation.startedAt ||
-      displayedStation.timeLimitSeconds <= 0 ||
-      displayedStation.status === "done" ||
-      displayedStation.status === "failed"
-    ) {
-      return;
-    }
-
-    if (remainingTimeSeconds === null || remainingTimeSeconds > 0) {
-      return;
-    }
-
-    const isQuizAnswerPending =
-      (displayedStation.stationType === "quiz" || displayedStation.stationType === "audio-quiz") &&
-      isSubmittingQuizAnswer;
-    const isWordlePending = displayedStation.stationType === "wordle" && isSubmittingWordleGuess;
-    const isHangmanPending = displayedStation.stationType === "hangman" && isSubmittingHangmanGuess;
-    const isMastermindPending = displayedStation.stationType === "mastermind" && isSubmittingMastermindGuess;
-    const isAnagramPending = displayedStation.stationType === "anagram" && isSubmittingAnagram;
-    const isCaesarPending = displayedStation.stationType === "caesar-cipher" && isSubmittingCaesar;
-    const isMemoryPending = displayedStation.stationType === "memory" && isSubmittingMemory;
-    const isSimonPending = displayedStation.stationType === "simon" && isSubmittingSimon;
-    const isRebusPending = displayedStation.stationType === "rebus" && isSubmittingRebus;
-    const isBogglePending = displayedStation.stationType === "boggle" && isSubmittingBoggle;
-    const isMiniSudokuPending = displayedStation.stationType === "mini-sudoku" && isSubmittingMiniSudoku;
-    const isMatchingPending = displayedStation.stationType === "matching" && isSubmittingMatching;
-    if (
-      isQuizAnswerPending ||
-      isWordlePending ||
-      isHangmanPending ||
-      isMastermindPending ||
-      isAnagramPending ||
-      isCaesarPending ||
-      isMemoryPending ||
-      isSimonPending ||
-      isRebusPending ||
-      isBogglePending ||
-      isMiniSudokuPending ||
-      isMatchingPending ||
-      timeoutPopupShownRef.current
-    ) {
-      return;
-    }
-
-    timeoutPopupShownRef.current = true;
-    onQuizFailed?.(displayedStation.stationId, "time_limit_expired");
-    const timeoutMessage =
-      displayedStation.stationType === "wordle"
-        ? text.timeoutWordle
-        : displayedStation.stationType === "hangman"
-          ? text.timeoutHangman
-          : displayedStation.stationType === "mastermind"
-            ? text.timeoutMastermind
-            : displayedStation.stationType === "anagram"
-              ? text.timeoutAnagram
-              : displayedStation.stationType === "caesar-cipher"
-                ? text.timeoutCaesar
-                : displayedStation.stationType === "memory"
-                  ? text.timeoutMemory
-                  : displayedStation.stationType === "simon"
-                    ? text.timeoutSimon
-                    : displayedStation.stationType === "rebus"
-                      ? text.timeoutRebus
-                      : displayedStation.stationType === "boggle"
-                        ? text.timeoutBoggle
-                        : displayedStation.stationType === "mini-sudoku"
-                          ? text.timeoutMiniSudoku
-                          : displayedStation.stationType === "matching"
-                            ? text.timeoutMatching
-                            : text.timeoutQuiz;
-    showQuizOutcomePopup("timeout", timeoutMessage);
-  }, [
-    displayedStation,
-    isSubmittingAnagram,
-    isSubmittingBoggle,
-    isSubmittingCaesar,
-    isSubmittingHangmanGuess,
-    isSubmittingMastermindGuess,
-    isSubmittingMatching,
-    isSubmittingMemory,
-    isSubmittingMiniSudoku,
-    isSubmittingQuizAnswer,
-    isSubmittingRebus,
-    isSubmittingSimon,
-    isSubmittingWordleGuess,
-    onQuizFailed,
+  useStationTimeoutOutcome({
+    station: displayedStation,
     remainingTimeSeconds,
-    showQuizOutcomePopup,
-    text,
-  ]);
-
-  useEffect(() => {
-    if (!displayedStation || isQuizStationType(displayedStation.stationType)) {
-      return;
-    }
-
-    if (
-      !displayedStation.startedAt ||
-      displayedStation.timeLimitSeconds <= 0 ||
-      displayedStation.status === "done" ||
-      displayedStation.status === "failed"
-    ) {
-      return;
-    }
-
-    if (remainingTimeSeconds === null || remainingTimeSeconds > 0) {
-      return;
-    }
-
-    if (isSubmittingCode || timeoutPopupShownRef.current) {
-      return;
-    }
-
-    timeoutPopupShownRef.current = true;
-    onTimeExpired?.(displayedStation.stationId);
-    showQuizOutcomePopup(
-      "timeout",
-      text.timeoutCodeTask,
-    );
-  }, [
-    displayedStation,
     isSubmittingCode,
+    pendingByType: {
+      quiz: isSubmittingQuizAnswer,
+      wordle: isSubmittingWordleGuess,
+      hangman: isSubmittingHangmanGuess,
+      mastermind: isSubmittingMastermindGuess,
+      anagram: isSubmittingAnagram,
+      caesar: isSubmittingCaesar,
+      memory: isSubmittingMemory,
+      simon: isSubmittingSimon,
+      rebus: isSubmittingRebus,
+      boggle: isSubmittingBoggle,
+      miniSudoku: isSubmittingMiniSudoku,
+      matching: isSubmittingMatching,
+    },
+    onQuizFailed,
     onTimeExpired,
-    remainingTimeSeconds,
     showQuizOutcomePopup,
-    text.timeoutCodeTask,
-  ]);
+    text: {
+      timeoutWordle: text.timeoutWordle,
+      timeoutHangman: text.timeoutHangman,
+      timeoutMastermind: text.timeoutMastermind,
+      timeoutAnagram: text.timeoutAnagram,
+      timeoutCaesar: text.timeoutCaesar,
+      timeoutMemory: text.timeoutMemory,
+      timeoutSimon: text.timeoutSimon,
+      timeoutRebus: text.timeoutRebus,
+      timeoutBoggle: text.timeoutBoggle,
+      timeoutMiniSudoku: text.timeoutMiniSudoku,
+      timeoutMatching: text.timeoutMatching,
+      timeoutQuiz: text.timeoutQuiz,
+      timeoutCodeTask: text.timeoutCodeTask,
+    },
+  });
 
   const wordleSecretForInputReset =
     displayedStation?.stationType === "wordle" ? resolvePuzzleSecret(displayedStation, "wordle") : "";
@@ -1813,949 +1320,428 @@ export function StationPreviewOverlay({
     return null;
   }
   const station = displayedStation;
-
-  const isClassicQuizStation = station.stationType === "quiz";
-  const isAudioQuizStation = station.stationType === "audio-quiz";
-  const isWordleStation = station.stationType === "wordle";
-  const isHangmanStation = station.stationType === "hangman";
-  const isMastermindStation = station.stationType === "mastermind";
-  const isAnagramStation = station.stationType === "anagram";
-  const isCaesarStation = station.stationType === "caesar-cipher";
-  const isMemoryStation = station.stationType === "memory";
-  const isSimonStation = station.stationType === "simon";
-  const isRebusStation = station.stationType === "rebus";
-  const isBoggleStation = station.stationType === "boggle";
-  const isMiniSudokuStation = station.stationType === "mini-sudoku";
-  const isMatchingStation = station.stationType === "matching";
-  const isQuizStation = isQuizStationType(station.stationType);
-  const requiresCode = station.stationType === "time" || station.stationType === "points";
-  const isNumericCodeStation =
-    requiresCode && station.completionCodeInputMode === "numeric";
-  const normalizedImageUrl = station.imageUrl?.trim() || "";
-  const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
-  const shouldShowQuizFallbackGraphic =
-    isQuizStation && (imageLoadFailed || !normalizedImageUrl || isDicebearFallback);
-  const stationImageUri = shouldShowQuizFallbackGraphic ? undefined : normalizedImageUrl || undefined;
-  const stationDescription = station.description.trim();
-  const stationMediaHeight = (() => {
-    if (isNumericCodeStation) {
-      return Math.max(104, Math.round(viewportHeight * 0.14));
-    }
-    if (requiresCode) {
-      return Math.max(128, Math.round(viewportHeight * 0.2));
-    }
-    if (isWordleStation) {
-      return Math.max(230, Math.round(viewportHeight * 0.4));
-    }
-    if (isAnagramStation) {
-      return Math.max(210, Math.round(viewportHeight * 0.34));
-    }
-    if (isSimonStation) {
-      return isTabletOverlay
-        ? Math.max(540, Math.round(viewportHeight * 0.72))
-        : Math.max(430, Math.round(viewportHeight * 0.64));
-    }
-    if (isMemoryStation) {
-      return Math.max(560, Math.round(viewportHeight * 0.8));
-    }
-    if (isMiniSudokuStation) {
-      return Math.max(560, Math.round(viewportHeight * 0.74));
-    }
-    if (isMastermindStation) {
-      return Math.max(340, Math.round(viewportHeight * 0.56));
-    }
-    if (isMatchingStation) {
-      return Math.max(430, Math.round(viewportHeight * 0.7));
-    }
-    if (isBoggleStation) {
-      return Math.max(400, Math.round(viewportHeight * 0.64));
-    }
-    return Math.max(190, Math.round(viewportHeight * 0.33));
-  })();
-  const hasTimerStarted = Boolean(station.startedAt);
-  const hasQuizAnswer = selectedQuizOption !== null;
-  const wordleSecret = isWordleStation ? resolvePuzzleSecret(station, "wordle") : "";
-  const wordleLength = Array.from(wordleSecret).length;
-  const wordleDisplayLength = Math.max(1, wordleLength || 5);
-  const normalizedWordleInput = normalizeWordleSecret(wordleInput).slice(0, wordleLength || 32);
-  const wordleInputCharacters = Array.from(normalizedWordleInput);
-  const normalizedWordleAttemptsCount = wordleAttempts.length;
-  const wordleSolved = wordleAttempts.some((attempt) => attempt.evaluation.every((cell) => cell === "correct"));
-  const wordleAttemptsLeft = Math.max(0, WORDLE_MAX_ATTEMPTS - normalizedWordleAttemptsCount);
-  const wordleKeyStateByLetter = (() => {
-    const statePriority: Record<WordleCellState, number> = {
-      absent: 1,
-      present: 2,
-      correct: 3,
-    };
-    const map = new Map<string, WordleCellState>();
-
-    wordleAttempts.forEach((attempt, attemptIndex) => {
-      const revealedCellCount = Math.max(
-        0,
-        Math.min(
-          wordleDisplayLength,
-          wordleRevealedCellCounts[attemptIndex] ?? wordleDisplayLength,
-        ),
-      );
-      const guessCharacters = Array.from(attempt.guess);
-      attempt.evaluation.forEach((state, index) => {
-        if (index >= revealedCellCount) {
-          return;
-        }
-        const letter = (guessCharacters[index] ?? "").toUpperCase();
-        if (!letter) {
-          return;
-        }
-        const current = map.get(letter);
-        if (!current || statePriority[state] > statePriority[current]) {
-          map.set(letter, state);
-        }
-      });
-    });
-
-    return map;
-  })();
-  const wordleKeyboardKeyGap = 2;
-  const wordleLayoutWidth =
-    wordleKeyboardContainerWidth > 0 ? wordleKeyboardContainerWidth : Math.max(260, viewportWidth - 72);
-  const wordleInputCellGap = wordleDisplayLength >= 12 ? 2 : wordleDisplayLength >= 8 ? 4 : 6;
-  const wordleInputActionGap = wordleDisplayLength >= 12 ? 4 : 6;
-  const wordleBoardCellSize = (() => {
-    const fitForMedia = Math.floor(
-      (wordleLayoutWidth - wordleInputCellGap * (wordleDisplayLength - 1)) / wordleDisplayLength,
-    );
-    const fitForInput = Math.floor(
-      (wordleLayoutWidth - wordleInputCellGap * wordleDisplayLength - wordleInputActionGap) /
-        (wordleDisplayLength + 1),
-    );
-    const minCellSize = adaptiveLayout.s(isTabletOverlay ? 10 : 8, 8, 13);
-    const maxCellSize = adaptiveLayout.s(isTabletOverlay ? 52 : 38, 36, 62);
-    const computed = Math.min(fitForMedia, fitForInput);
-    return Math.max(minCellSize, Math.min(maxCellSize, computed));
-  })();
-  const wordleKeyboardKeyWidth = Math.max(
-    24,
-    Math.floor((wordleLayoutWidth - 9 * wordleKeyboardKeyGap) / 10),
-  );
-  const guessedHangmanSet = new Set(hangmanGuessedLetters);
-  const hangmanSecret = isHangmanStation ? resolvePuzzleSecret(station, "hangman") : "";
-  const hangmanHasWon = isHangmanStation
-    ? Array.from(hangmanSecret).every((character) => !isGuessableHangmanCharacter(character) || guessedHangmanSet.has(character))
-    : false;
-  const hangmanAttemptsLeft = Math.max(0, HANGMAN_MAX_MISSES - hangmanMisses.length);
-  const puzzleSourceAnswer = resolveCorrectAnswerText(station);
-  const mastermindSecret = isMastermindStation ? resolveMastermindSecret(station) : "";
-  const normalizedMastermindInput = sanitizeMastermindInput(mastermindInput);
-  const mastermindSolved = mastermindAttempts.some((attempt) => attempt.exact === mastermindSecret.length);
-  const mastermindAttemptsLeft = Math.max(0, MASTERMIND_MAX_ATTEMPTS - mastermindAttempts.length);
-  const anagramTarget = isAnagramStation ? normalizePuzzleWord(puzzleSourceAnswer || station.name) : "";
-  const anagramHintSource = isAnagramStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "") : "";
-  const anagramSourceWords = isAnagramStation
-    ? anagramHintSource
-        .split(" ")
-        .map((part) => normalizeWordleSecret(part))
-        .filter((part) => part.length > 0)
-    : [];
-  const anagramHintWordLengths = anagramSourceWords.map((part) => Array.from(part).length);
-  const anagramHintWordCount = anagramHintWordLengths.length > 0 ? anagramHintWordLengths.length : anagramTarget.length > 0 ? 1 : 0;
-  const anagramHintLettersLayout =
-    anagramHintWordLengths.length > 0 ? anagramHintWordLengths.join("+") : `${Array.from(anagramTarget).length}`;
-  const anagramScrambledWords =
-    anagramSourceWords.length > 0
-      ? anagramSourceWords.map((word, index) => scrambleWord(word, `${station.stationId}-anagram-word-${index}`))
-      : [scrambleWord(anagramTarget || "SURVIVOR", `${station.stationId}-anagram-word-0`)];
-  const normalizedAnagramInput = normalizePuzzleWord(anagramInput);
-  const anagramAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - anagramAttempts);
-  const caesarShiftValue = isCaesarStation ? resolveCaesarShift(station) : 0;
-  const caesarDecoded = isCaesarStation ? resolveCaesarSecret(station) : "";
-  const caesarMaxLength = Math.max(1, Array.from(caesarDecoded).length || 32);
-  const normalizedCaesarInput = normalizePuzzleText(caesarInput);
-  const caesarAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - caesarAttempts);
-  const memoryMatchedCount = memoryDeck.filter((card) => card.matched).length;
-  const memoryAllMatched = isMemoryStation && memoryDeck.length > 0 && memoryMatchedCount === memoryDeck.length;
-  const simonSequence = isSimonStation ? resolveSimonSequence(station) : [];
-  const simonRoundLength = isSimonStation
-    ? Math.max(1, Math.min(simonTargetLength, simonSequence.length))
-    : 0;
-  const simonProgress = simonInput.length;
-  const rebusAnswer = isRebusStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "SURVIVOR") : "";
-  const normalizedRebusInput = normalizePuzzleText(rebusInput);
-  const rebusAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - rebusAttempts);
-  const boggleTargetWord = isBoggleStation ? resolveBoggleTarget(station) : "";
-  const boggleBoardLetters = isBoggleStation ? resolveBoggleBoard(station, boggleTargetWord || "TEAM") : [];
-  const boggleMaxInputLength = Math.max(3, Array.from(boggleTargetWord || "TEAM").length);
-  const boggleBoardSide = Math.sqrt(boggleBoardLetters.length);
-  const normalizedBoggleInput = normalizePuzzleWord(boggleInput);
-  const boggleAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - boggleAttempts);
-  const miniSudokuPuzzle = isMiniSudokuStation ? resolveMiniSudokuPuzzle(station) : null;
-  const normalizedMiniSudokuValues = miniSudokuValues;
-  const miniSudokuGridMeta = miniSudokuPuzzle
-    ? resolveMiniSudokuGridMeta(miniSudokuPuzzle.solution.length)
-    : null;
-  const miniSudokuAttemptedValues =
-    miniSudokuPuzzle && miniSudokuGridMeta
-      ? resolveMiniSudokuAttemptedValues(miniSudokuPuzzle, normalizedMiniSudokuValues)
-      : [];
-  const miniSudokuConflictIndexes =
-    miniSudokuGridMeta && miniSudokuAttemptedValues.length > 0
-      ? collectMiniSudokuConflictIndexes(
-          miniSudokuAttemptedValues,
-          miniSudokuGridMeta.side,
-          miniSudokuGridMeta.blockSide,
-        )
-      : [];
-  const miniSudokuHasConflicts = miniSudokuConflictIndexes.length > 0;
-  const miniSudokuDisplayResult = miniSudokuHasConflicts ? text.miniSudokuIncorrect : miniSudokuResult;
-  const miniSudokuAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - miniSudokuAttempts);
-  const matchingPairs = isMatchingStation ? resolveMatchingPairs(station, uiLanguage) : [];
-  const matchingAllRightOptions = isMatchingStation
-    ? shuffleDeterministic(
-        matchingPairs.map((pair) => pair.right),
-        `${station.stationId}-matching-right`,
-      )
-    : [];
-  const matchingMatchedCount = Object.keys(matchingConnections).length;
-  const matchingAllMatched = isMatchingStation && matchingMatchedCount === matchingPairs.length && matchingPairs.length > 0;
-  const matchingAttemptsLeft = Math.max(0, MEMORY_MAX_MISTAKES - matchingAttempts);
-  const matchingMatchedRightSet = new Set(
-    Object.values(matchingConnections).filter((value) => value.length > 0),
-  );
-  const matchingLeftOptions = matchingPairs.map((pair) => pair.left);
-  const matchingRightOptions = matchingAllRightOptions;
-  const feedbackTone =
-    hasQuizAnswer && station.quizCorrectAnswerIndex === selectedQuizOption ? "success" : hasQuizAnswer ? "error" : null;
-  const remainingTimeLabel = remainingTimeSeconds !== null ? formatRemainingTimeLabel(remainingTimeSeconds) : null;
-  const timerScalePeak = 1.04 + finalTenSecondsProgress * 0.14;
-  const timerMinOpacity = 0.94 - finalTenSecondsProgress * 0.18;
-  const timerTextColor =
-    hasTimerStarted && station.timeLimitSeconds > 0
-      ? blendHexColors(EXPEDITION_THEME.textPrimary, EXPEDITION_THEME.danger, finalTenSecondsProgress)
-      : EXPEDITION_THEME.textPrimary;
-  const timerPulseStyle =
-    hasTimerStarted && station.timeLimitSeconds > 0 && remainingTimeSeconds !== null
-      ? ({
-          opacity: timerPulseAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [timerMinOpacity, 1],
-          }),
-          transform: [
-            {
-              scale: timerPulseAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, timerScalePeak],
-              }),
-            },
-          ],
-        } as const)
-      : undefined;
-  const executionTimeLabel = remainingTimeLabel ?? station.timeLimitLabel;
-  const shouldShowExecutionTimer = executionTimeLabel.trim().length > 0;
-  const hasTimedLimit = station.timeLimitSeconds > 0;
-  const isTimeExpired =
-    hasTimedLimit &&
-    hasTimerStarted &&
-    remainingTimeSeconds !== null &&
-    remainingTimeSeconds <= 0;
-  const isWordleInteractiveDisabled =
-    station.status === "done" ||
-    station.status === "failed" ||
-    isSubmittingWordleGuess ||
-    isWordleRevealAnimating ||
-    (hasTimedLimit && !hasTimerStarted) ||
-    isTimeExpired ||
-    wordleAttemptsLeft <= 0 ||
-    wordleSolved;
-  const hasAudioSource = Boolean(station.quizAudioUrl?.trim());
-  const isAudioOverlayControlDisabled =
-    station.status === "done" ||
-    station.status === "failed" ||
-    isSubmittingQuizAnswer ||
-    isAudioLoading ||
-    (hasTimedLimit && !hasTimerStarted) ||
-    isTimeExpired ||
-    !hasAudioSource;
-  const isAudioStopDisabled =
-    isAudioOverlayControlDisabled || !hasAudioPlaybackStarted || !isAudioPlaying;
-  const isCodeActionDisabled =
-    station.status === "done" ||
-    station.status === "failed" ||
-    isSubmittingCode ||
-    isCodeInputSuccess ||
-    (hasTimedLimit && !hasTimerStarted) ||
-    isTimeExpired;
-  const isInteractiveLocked =
-    station.status === "done" ||
-    station.status === "failed" ||
-    (hasTimedLimit && !hasTimerStarted) ||
-    isTimeExpired;
-  const handleQuizSubmitError = (error: string) => {
-    Alert.alert(text.alertErrorTitle, error);
-  };
-  const triggerInvalidCodeFeedback = () => {
-    setIsCodeInputInvalid(true);
-    codeInputShakeAnimation.stopAnimation();
-    codeInputShakeAnimation.setValue(0);
-    Animated.sequence([
-      Animated.timing(codeInputShakeAnimation, { toValue: -10, duration: 45, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: 10, duration: 45, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: -8, duration: 40, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: 8, duration: 40, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: -4, duration: 35, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: 4, duration: 35, useNativeDriver: true }),
-      Animated.timing(codeInputShakeAnimation, { toValue: 0, duration: 35, useNativeDriver: true }),
-    ]).start();
-
-    if (codeInputResetTimeoutRef.current) {
-      clearTimeout(codeInputResetTimeoutRef.current);
-    }
-    codeInputResetTimeoutRef.current = setTimeout(() => {
-      setIsCodeInputInvalid(false);
-      codeInputResetTimeoutRef.current = null;
-    }, 1000);
-  };
-  const submitVerificationCode = async () => {
-    if (!verificationCode.trim()) {
-      setCodeResult(text.codeEnter);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      setIsCodeInputInvalid(false);
-      setIsCodeInputSuccess(true);
-      setCodeResult(text.codeApproved);
-      showQuizOutcomePopup("success", text.codeApproved, onClose);
-      return;
-    }
-
-    setIsSubmittingCode(true);
-    const error = await onCompleteTask(station.stationId, verificationCode, station.startedAt ?? undefined);
-    setIsSubmittingCode(false);
-
-    if (error) {
-      if (isInvalidCompletionCodeErrorMessage(error)) {
-        setCodeResult(null);
-        triggerInvalidCodeFeedback();
-        return;
-      }
-      setCodeResult(error);
-      return;
-    }
-
-    setIsCodeInputInvalid(false);
-    setIsCodeInputSuccess(true);
-    setCodeResult(text.codeApproved);
-    showQuizOutcomePopup("success", text.codeApproved, onClose);
-  };
-  const submitWordleGuess = async () => {
-    await submitWordleGuessController({
-      isWordleStation,
-      normalizedWordleInput,
-      wordleLength,
-      stationStatus: station.status,
-      isSubmittingWordleGuess,
-      isWordleRevealAnimating,
-      hasTimedLimit,
-      hasTimerStarted,
-      isTimeExpired,
-      wordleAttempts,
-      wordleSecret,
-      wordleDisplayLength,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      runWordleRevealSequence,
-      setWordleAttempts,
-      setWordleRevealedCellCounts,
-      setWordleInput,
-      setQuizSubmitError,
-      setWordleResult,
-      setIsSubmittingWordleGuess,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        wordleEnterGuess: text.wordleEnterGuess,
-        wordleLengthExact: text.wordleLengthExact,
-        wordleAttemptsExhausted: text.wordleAttemptsExhausted,
-        wordleTryAgain: text.wordleTryAgain,
-        wordleNoAttempts: text.wordleNoAttempts,
-        wordleFailedPopup: text.wordleFailedPopup,
-        wordleSolved: text.wordleSolved,
-        wordleSolvedPopup: text.wordleSolvedPopup,
-      },
-    });
-  };
-  const submitQuizAnswer = async (index: number) => {
-    if (!isClassicQuizStation && !isAudioQuizStation) {
-      return;
-    }
-
-    if (
-      selectedQuizOption !== null ||
-      isSubmittingQuizAnswer ||
-      station.status === "done" ||
-      station.status === "failed" ||
-      (hasTimedLimit && !hasTimerStarted) ||
-      isTimeExpired
-    ) {
-      return;
-    }
-
-    setSelectedQuizOption(index);
-    setQuizSubmitError(null);
-    const correct = station.quizCorrectAnswerIndex === index;
-    setQuizResult(correct ? text.quizCorrect : text.quizIncorrect);
-    quizFeedbackAnimation.setValue(0);
-    Animated.timing(quizFeedbackAnimation, {
-      toValue: 1,
-      duration: 260,
-      useNativeDriver: true,
-    }).start();
-
-    if (!correct) {
-      onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", text.quizWrongPopup);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", text.quizSuccessPopup);
-      return;
-    }
-
-    setIsSubmittingQuizAnswer(true);
-    const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-    setIsSubmittingQuizAnswer(false);
-
-    if (error) {
-      setQuizSubmitError(error);
-      Alert.alert(text.alertErrorTitle, error);
-      return;
-    }
-
-    onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", text.quizSuccessPopup);
-  };
-  const submitHangmanGuess = async (letterCandidate: string) => {
-    if (!isHangmanStation) {
-      return;
-    }
-
-    const candidate = letterCandidate.trim();
-    const letter = normalizeHangmanSecret(candidate).replace(/[^A-ZĄĆĘŁŃÓŚŹŻ0-9]/g, "").slice(0, 1);
-
-    if (!letter) {
-      setHangmanResult(text.hangmanEnterLetter);
-      return;
-    }
-
-    if (
-      station.status === "done" ||
-      station.status === "failed" ||
-      isSubmittingHangmanGuess ||
-      (hasTimedLimit && !hasTimerStarted) ||
-      isTimeExpired
-    ) {
-      return;
-    }
-
-    if (guessedHangmanSet.has(letter) || hangmanMisses.includes(letter)) {
-      setHangmanResult(text.hangmanLetterAlreadyChecked);
-      return;
-    }
-
-    const isHit = hangmanSecret.includes(letter);
-    const nextGuessedLetters = isHit ? [...hangmanGuessedLetters, letter] : hangmanGuessedLetters;
-    const nextMisses = isHit ? hangmanMisses : [...hangmanMisses, letter];
-    setHangmanResult(null);
-    setQuizSubmitError(null);
-
-    if (isHit) {
-      setHangmanGuessedLetters(nextGuessedLetters);
-    } else {
-      setHangmanMisses(nextMisses);
-    }
-
-    const solvedNow = Array.from(hangmanSecret).every(
-      (character) =>
-        !isGuessableHangmanCharacter(character) || nextGuessedLetters.includes(character),
-    );
-
-    if (!solvedNow) {
-      if (!isHit && nextMisses.length >= HANGMAN_MAX_MISSES) {
-        setHangmanResult(text.hangmanNoAttempts(hangmanSecret));
-        onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", text.hangmanFailedPopup);
-        return;
-      }
-
-      setHangmanResult(isHit ? text.hangmanGoodLetter : text.hangmanMiss);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      setHangmanResult(text.hangmanSolved);
-      onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", text.hangmanSolvedPopup);
-      return;
-    }
-
-    setIsSubmittingHangmanGuess(true);
-    const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-    setIsSubmittingHangmanGuess(false);
-    if (error) {
-      setQuizSubmitError(error);
-      Alert.alert(text.alertErrorTitle, error);
-      return;
-    }
-
-    setHangmanResult(text.hangmanSolved);
-    onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", text.hangmanSolvedPopup);
-  };
-  const submitMastermindGuess = async () => {
-    await submitMastermindGuessController({
-      isMastermindStation,
-      normalizedMastermindInput,
-      mastermindSecret,
-      isInteractiveLocked,
-      isSubmittingMastermindGuess,
-      mastermindSolved,
-      mastermindAttemptsLeft,
-      mastermindAttempts,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      setMastermindAttempts,
-      setMastermindInput,
-      setQuizSubmitError,
-      setMastermindResult,
-      setIsSubmittingMastermindGuess,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        mastermindInvalidCode: text.mastermindInvalidCode,
-        mastermindNoAttempts: text.mastermindNoAttempts,
-        mastermindFailedPopup: text.mastermindFailedPopup,
-        mastermindFeedback: text.mastermindFeedback,
-        mastermindSolved: text.mastermindSolved,
-        mastermindSolvedPopup: text.mastermindSolvedPopup,
-      },
-    });
-  };
-  const submitAnagram = async () => {
-    if (!isAnagramStation) {
-      return;
-    }
-
-    if (!normalizedAnagramInput) {
-      setAnagramResult(text.anagramEnter);
-      return;
-    }
-
-    if (isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0) {
-      return;
-    }
-
-    setQuizSubmitError(null);
-    const isCorrect = normalizedAnagramInput === anagramTarget;
-    if (!isCorrect) {
-      const nextAttempts = anagramAttempts + 1;
-      setAnagramAttempts(nextAttempts);
-      if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setAnagramResult(text.anagramNoAttempts);
-        onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", text.anagramFailedPopup);
-        return;
-      }
-
-      setAnagramResult(text.anagramIncorrect);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      setAnagramResult(text.anagramSolved);
-      onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", text.anagramSolvedPopup);
-      return;
-    }
-
-    setIsSubmittingAnagram(true);
-    const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-    setIsSubmittingAnagram(false);
-    if (error) {
-      setQuizSubmitError(error);
-      Alert.alert(text.alertErrorTitle, error);
-      return;
-    }
-
-    setAnagramResult(text.anagramSolved);
-    onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", text.anagramSolvedPopup);
-  };
-  const submitCaesar = async () => {
-    if (!isCaesarStation) {
-      return;
-    }
-
-    if (!normalizedCaesarInput) {
-      setCaesarResult(text.caesarEnter);
-      return;
-    }
-
-    if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
-      return;
-    }
-
-    setQuizSubmitError(null);
-    const isCorrect = normalizedCaesarInput === caesarDecoded;
-    if (!isCorrect) {
-      const nextAttempts = caesarAttempts + 1;
-      setCaesarAttempts(nextAttempts);
-      if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setCaesarResult(text.caesarNoAttempts(caesarDecoded));
-        onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", text.caesarFailedPopup);
-        return;
-      }
-
-      setCaesarResult(text.caesarIncorrect);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      setCaesarResult(text.caesarSolved);
-      onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", text.caesarSolvedPopup);
-      return;
-    }
-
-    setIsSubmittingCaesar(true);
-    const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-    setIsSubmittingCaesar(false);
-    if (error) {
-      setQuizSubmitError(error);
-      Alert.alert(text.alertErrorTitle, error);
-      return;
-    }
-
-    setCaesarResult(text.caesarSolved);
-    onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", text.caesarSolvedPopup);
-  };
-  const handleMemoryCardPress = async (cardId: string) => {
-    if (!isMemoryStation || isInteractiveLocked || memoryBusy || isSubmittingMemory || memoryAllMatched) {
-      return;
-    }
-
-    const card = memoryDeck.find((entry) => entry.id === cardId);
-    if (!card || card.matched || card.revealed || memorySelection.length >= 2) {
-      return;
-    }
-
-    const nextDeck = memoryDeck.map((entry) => (entry.id === cardId ? { ...entry, revealed: true } : entry));
-    const nextSelection = [...memorySelection, cardId];
-    setMemoryDeck(nextDeck);
-    setMemorySelection(nextSelection);
-    setQuizSubmitError(null);
-
-    if (nextSelection.length < 2) {
-      return;
-    }
-
-    const [firstId, secondId] = nextSelection;
-    const firstCard = nextDeck.find((entry) => entry.id === firstId);
-    const secondCard = nextDeck.find((entry) => entry.id === secondId);
-    if (!firstCard || !secondCard) {
-      setMemorySelection([]);
-      return;
-    }
-
-    if (firstCard.symbol === secondCard.symbol) {
-      const matchedDeck = nextDeck.map((entry) =>
-        entry.id === firstId || entry.id === secondId ? { ...entry, matched: true } : entry,
-      );
-      setMemoryDeck(matchedDeck);
-      setMemorySelection([]);
-      if (matchedDeck.every((entry) => entry.matched)) {
-        if (!onCompleteTask) {
-          setMemoryResult(text.memorySolved);
-          onQuizPassed?.(station.stationId);
-          showQuizOutcomePopup("success", text.memorySolvedPopup);
-          return;
-        }
-
-        setIsSubmittingMemory(true);
-        const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-        setIsSubmittingMemory(false);
-        if (error) {
-          setQuizSubmitError(error);
-          Alert.alert(text.alertErrorTitle, error);
-          return;
-        }
-        setMemoryResult(text.memorySolved);
-        onQuizPassed?.(station.stationId);
-        showQuizOutcomePopup("success", text.memorySolvedPopup);
-      } else {
-        setMemoryResult(text.memoryPairFound);
-      }
-      return;
-    }
-
-    setMemoryBusy(true);
-    setMemoryResult(text.memoryMiss);
-    if (memoryHideTimeoutRef.current) {
-      clearTimeout(memoryHideTimeoutRef.current);
-    }
-    memoryHideTimeoutRef.current = setTimeout(() => {
-      setMemoryDeck((current) =>
-        current.map((entry) =>
-          nextSelection.includes(entry.id) && !entry.matched ? { ...entry, revealed: false } : entry,
-        ),
-      );
-      setMemorySelection([]);
-      setMemoryBusy(false);
-      memoryHideTimeoutRef.current = null;
-    }, 650);
-  };
-  const handleSimonPress = async (buttonId: string) => {
-    await handleSimonPressController({
-      buttonId,
-      isSimonStation,
-      isInteractiveLocked,
-      isSubmittingSimon,
-      isSimonPlaybackActive,
-      simonInput,
-      simonRoundLength,
-      simonSequence,
-      simonMistakes,
-      simonMaxMistakes: SIMON_MAX_MISTAKES,
-      simonInputHighlightMs: SIMON_INPUT_HIGHLIGHT_MS,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      setSimonInput,
-      setSimonMistakes,
-      setSimonResult,
-      setQuizSubmitError,
-      setSimonTargetLength,
-      setIsSubmittingSimon,
-      clearSimonInputHighlight,
-      setSimonActiveInputButtonId,
-      simonInputHighlightTimeoutRef,
-      playSimonTone,
-      playSimonSequence,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        simonWrong: text.simonWrong,
-        simonFailedPopup: text.simonFailedPopup,
-        simonProgress: text.simonProgress,
-        simonSolved: text.simonSolved,
-        simonSolvedPopup: text.simonSolvedPopup,
-      },
-    });
-  };
-  const submitRebus = async () => {
-    if (!isRebusStation) {
-      return;
-    }
-
-    if (!normalizedRebusInput) {
-      setRebusResult(text.rebusEnter);
-      return;
-    }
-
-    if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
-      return;
-    }
-
-    setQuizSubmitError(null);
-    const isCorrect = normalizedRebusInput === rebusAnswer;
-    if (!isCorrect) {
-      const nextAttempts = rebusAttempts + 1;
-      setRebusAttempts(nextAttempts);
-      if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-        setRebusResult(text.rebusNoAttempts(rebusAnswer));
-        onQuizFailed?.(station.stationId, "quiz_incorrect_answer");
-        showQuizOutcomePopup("failed", text.rebusFailedPopup);
-        return;
-      }
-
-      setRebusResult(text.rebusIncorrect);
-      return;
-    }
-
-    if (!onCompleteTask) {
-      setRebusResult(text.rebusSolved);
-      onQuizPassed?.(station.stationId);
-      showQuizOutcomePopup("success", text.rebusSolvedPopup);
-      return;
-    }
-
-    setIsSubmittingRebus(true);
-    const error = await onCompleteTask(station.stationId, "QUIZ", station.startedAt ?? undefined);
-    setIsSubmittingRebus(false);
-    if (error) {
-      setQuizSubmitError(error);
-      Alert.alert(text.alertErrorTitle, error);
-      return;
-    }
-
-    setRebusResult(text.rebusSolved);
-    onQuizPassed?.(station.stationId);
-    showQuizOutcomePopup("success", text.rebusSolvedPopup);
-  };
-  const submitBoggle = async () => {
-    await submitBoggleController({
-      isBoggleStation,
-      normalizedBoggleInput,
-      boggleMaxInputLength,
-      isInteractiveLocked,
-      isSubmittingBoggle,
-      boggleAttemptsLeft,
-      boggleBoardLetters,
-      boggleTargetWord,
-      boggleAttempts,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      setQuizSubmitError,
-      setBoggleAttempts,
-      setBoggleResult,
-      setIsSubmittingBoggle,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        boggleEnterMin: text.boggleEnterMin,
-        boggleMaxLength: text.boggleMaxLength,
-        boggleNoAttempts: text.boggleNoAttempts,
-        boggleFailedPopup: text.boggleFailedPopup,
-        boggleIncorrect: text.boggleIncorrect,
-        boggleSolved: text.boggleSolved,
-        boggleSolvedPopup: text.boggleSolvedPopup,
-      },
-    });
-  };
-  const selectBoggleBoardCell = (cellIndex: number) => {
-    selectBoggleBoardCellController({
-      cellIndex,
-      isBoggleStation,
-      isInteractiveLocked,
-      isSubmittingBoggle,
-      boggleAttemptsLeft,
-      boggleBoardLetters,
-      boggleSelectedCellPath,
-      boggleMaxInputLength,
-      boggleBoardSide,
-      setBoggleSelectedCellPath,
-      setBoggleInput,
-      setBoggleResult,
-      setQuizSubmitError,
-      text: {
-        boggleAdjacentOnly: text.boggleAdjacentOnly,
-      },
-    });
-  };
-  const backspaceBoggleInput = () => {
-    backspaceBoggleInputController({
-      isInteractiveLocked,
-      isSubmittingBoggle,
-      boggleAttemptsLeft,
-      setBoggleSelectedCellPath,
-      setBoggleInput,
-      setBoggleResult,
-      setQuizSubmitError,
-    });
-  };
-  const submitMiniSudoku = async () => {
-    await submitMiniSudokuController({
-      isMiniSudokuStation,
-      hasMiniSudokuPuzzle: Boolean(miniSudokuPuzzle),
-      miniSudokuGridMeta,
-      isInteractiveLocked,
-      isSubmittingMiniSudoku,
-      miniSudokuAttemptsLeft,
-      miniSudokuAttemptedValues,
-      miniSudokuHasConflicts,
-      miniSudokuAttempts,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      setMiniSudokuAttempts,
-      setMiniSudokuResult,
-      setQuizSubmitError,
-      setIsSubmittingMiniSudoku,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        miniSudokuIncorrect: text.miniSudokuIncorrect,
-        miniSudokuFillAll: text.miniSudokuFillAll,
-        miniSudokuNoAttempts: text.miniSudokuNoAttempts,
-        miniSudokuFailedPopup: text.miniSudokuFailedPopup,
-        miniSudokuSolved: text.miniSudokuSolved,
-        miniSudokuSolvedPopup: text.miniSudokuSolvedPopup,
-      },
-    });
-  };
-  const handleMiniSudokuChangeCell = (index: number, nextValue: string) => {
-    handleMiniSudokuChangeCellController({
-      index,
-      nextValue,
-      setMiniSudokuValues,
-      setMiniSudokuResult,
-      setQuizSubmitError,
-    });
-  };
-  const handleMiniSudokuSubmit = () => {
-    void submitMiniSudoku();
-  };
-  const submitMatchingPair = async (left: string, right: string) => {
-    await submitMatchingPairController({
-      left,
-      right,
-      isMatchingStation,
-      isInteractiveLocked,
-      isSubmittingMatching,
-      matchingAllMatched,
-      matchingAttemptsLeft,
-      matchingConnections,
-      matchingMatchedRightSet,
-      matchingPairs,
-      matchingAttempts,
-      stationId: station.stationId,
-      startedAt: station.startedAt,
-      onCompleteTask,
-      onQuizFailed,
-      onQuizPassed,
-      showQuizOutcomePopup,
-      setQuizSubmitError,
-      setMatchingConnections,
-      setMatchingResult,
-      setIsSubmittingMatching,
-      setMatchingAttempts,
-      onSubmitError: handleQuizSubmitError,
-      text: {
-        matchingPairGood: text.matchingPairGood,
-        matchingSolved: text.matchingSolved,
-        matchingSolvedPopup: text.matchingSolvedPopup,
-        matchingNoAttempts: text.matchingNoAttempts,
-        matchingFailedPopup: text.matchingFailedPopup,
-        matchingWrongPair: text.matchingWrongPair,
-      },
-    });
-  };
+  const {
+    isClassicQuizStation,
+    isAudioQuizStation,
+    isWordleStation,
+    isHangmanStation,
+    isMastermindStation,
+    isAnagramStation,
+    isCaesarStation,
+    isMemoryStation,
+    isSimonStation,
+    isRebusStation,
+    isBoggleStation,
+    isMiniSudokuStation,
+    isMatchingStation,
+    isQuizStation,
+    requiresCode,
+    isNumericCodeStation,
+    shouldShowQuizFallbackGraphic,
+    stationImageUri,
+    stationDescription,
+    stationMediaHeight,
+    hasTimerStarted,
+    wordleSecret,
+    wordleLength,
+    wordleDisplayLength,
+    normalizedWordleInput,
+    wordleInputCharacters,
+    wordleKeyStateByLetter,
+    wordleKeyboardKeyGap,
+    wordleInputCellGap,
+    wordleInputActionGap,
+    wordleBoardCellSize,
+    wordleKeyboardKeyWidth,
+    guessedHangmanSet,
+    hangmanSecret,
+    hangmanHasWon,
+    hangmanAttemptsLeft,
+    mastermindSecret,
+    normalizedMastermindInput,
+    mastermindSolved,
+    mastermindAttemptsLeft,
+    anagramTarget,
+    anagramHintWordCount,
+    anagramHintLettersLayout,
+    anagramScrambledWords,
+    normalizedAnagramInput,
+    anagramAttemptsLeft,
+    caesarShiftValue,
+    caesarDecoded,
+    caesarMaxLength,
+    normalizedCaesarInput,
+    caesarAttemptsLeft,
+    memoryMatchedCount,
+    memoryAllMatched,
+    simonSequence,
+    simonRoundLength,
+    simonProgress,
+    rebusAnswer,
+    normalizedRebusInput,
+    rebusAttemptsLeft,
+    boggleTargetWord,
+    boggleBoardLetters,
+    boggleMaxInputLength,
+    boggleBoardSide,
+    normalizedBoggleInput,
+    boggleAttemptsLeft,
+    miniSudokuPuzzle,
+    normalizedMiniSudokuValues,
+    miniSudokuGridMeta,
+    miniSudokuAttemptedValues,
+    miniSudokuConflictIndexes,
+    miniSudokuHasConflicts,
+    miniSudokuDisplayResult,
+    miniSudokuAttemptsLeft,
+    matchingPairs,
+    matchingMatchedCount,
+    matchingAllMatched,
+    matchingAttemptsLeft,
+    matchingMatchedRightSet,
+    matchingLeftOptions,
+    matchingRightOptions,
+    feedbackTone,
+    executionTimeLabel,
+    shouldShowExecutionTimer,
+    hasTimedLimit,
+    isTimeExpired,
+    isWordleInteractiveDisabled,
+    isAudioOverlayControlDisabled,
+    isAudioStopDisabled,
+    isCodeActionDisabled,
+    isInteractiveLocked,
+    timerTextColor,
+    timerPulseStyle,
+  } = buildStationPreviewModel({
+    station,
+    uiLanguage,
+    viewportHeight,
+    viewportWidth,
+    isTabletOverlay,
+    adaptiveScale: adaptiveLayout.s,
+    imageLoadFailed,
+    selectedQuizOption,
+    wordleInput,
+    wordleAttempts,
+    wordleRevealedCellCounts,
+    wordleKeyboardContainerWidth,
+    isWordleRevealAnimating,
+    hangmanGuessedLetters,
+    hangmanMisses,
+    mastermindInput,
+    mastermindAttempts,
+    anagramInput,
+    anagramAttempts,
+    caesarInput,
+    caesarAttempts,
+    memoryDeck,
+    simonTargetLength,
+    simonInput,
+    rebusInput,
+    rebusAttempts,
+    boggleInput,
+    boggleAttempts,
+    miniSudokuValues,
+    miniSudokuAttempts,
+    miniSudokuResult,
+    matchingConnections,
+    matchingAttempts,
+    remainingTimeSeconds,
+    finalTenSecondsProgress,
+    timerPulseAnimation,
+    isSubmittingQuizAnswer,
+    isSubmittingWordleGuess,
+    isSubmittingHangmanGuess,
+    isSubmittingMastermindGuess,
+    isSubmittingAnagram,
+    isSubmittingCaesar,
+    isSubmittingMemory,
+    isSubmittingSimon,
+    isSubmittingRebus,
+    isSubmittingBoggle,
+    isSubmittingMiniSudoku,
+    isSubmittingMatching,
+    isSubmittingCode,
+    isCodeInputSuccess,
+    isAudioLoading,
+    isAudioPlaying,
+    hasAudioPlaybackStarted,
+    text: {
+      miniSudokuIncorrect: text.miniSudokuIncorrect,
+    },
+  });
+  const {
+    submitVerificationCode,
+    submitWordleGuess,
+    submitQuizAnswer,
+    submitHangmanGuess,
+    submitMastermindGuess,
+    submitAnagram,
+    submitCaesar,
+    handleMemoryCardPress,
+    handleSimonPress,
+    submitRebus,
+    submitBoggle,
+    selectBoggleBoardCell,
+    backspaceBoggleInput,
+    handleMiniSudokuChangeCell,
+    handleMiniSudokuSubmit,
+    submitMatchingPair,
+    handleAnagramInputChange,
+    handleCaesarInputChange,
+    appendCaesarCharacter,
+    backspaceCaesarInput,
+    handleRebusInputChange,
+    handleBoggleInput,
+    handleMastermindInput,
+    addMastermindSymbol,
+  } = createStationPreviewActions({
+    stationId: station.stationId,
+    stationStatus: station.status,
+    startedAt: station.startedAt,
+    onCompleteTask,
+    onQuizFailed,
+    onQuizPassed,
+    onClose,
+    showQuizOutcomePopup,
+    isClassicQuizStation,
+    isAudioQuizStation,
+    isWordleStation,
+    isHangmanStation,
+    isMastermindStation,
+    isAnagramStation,
+    isCaesarStation,
+    isMemoryStation,
+    isSimonStation,
+    isRebusStation,
+    isBoggleStation,
+    isMiniSudokuStation,
+    isMatchingStation,
+    isInteractiveLocked,
+    hasTimedLimit,
+    hasTimerStarted,
+    isTimeExpired,
+    verificationCode,
+    selectedQuizOption,
+    isSubmittingQuizAnswer,
+    quizCorrectAnswerIndex: station.quizCorrectAnswerIndex,
+    quizFeedbackAnimation,
+    wordleLength,
+    wordleSecret,
+    wordleDisplayLength,
+    normalizedWordleInput,
+    wordleAttempts,
+    isSubmittingWordleGuess,
+    isWordleRevealAnimating,
+    guessedHangmanSet,
+    hangmanMisses,
+    hangmanGuessedLetters,
+    hangmanSecret,
+    isSubmittingHangmanGuess,
+    normalizedMastermindInput,
+    mastermindSecret,
+    mastermindSolved,
+    mastermindAttemptsLeft,
+    mastermindAttempts,
+    isSubmittingMastermindGuess,
+    normalizedAnagramInput,
+    anagramTarget,
+    anagramAttemptsLeft,
+    anagramAttempts,
+    isSubmittingAnagram,
+    normalizedCaesarInput,
+    caesarDecoded,
+    caesarAttemptsLeft,
+    caesarAttempts,
+    caesarMaxLength,
+    isSubmittingCaesar,
+    memoryBusy,
+    memoryAllMatched,
+    memoryDeck,
+    memorySelection,
+    isSubmittingMemory,
+    simonInput,
+    simonRoundLength,
+    simonSequence,
+    simonMistakes,
+    simonMaxMistakes: SIMON_MAX_MISTAKES,
+    simonInputHighlightMs: SIMON_INPUT_HIGHLIGHT_MS,
+    isSubmittingSimon,
+    isSimonPlaybackActive,
+    normalizedRebusInput,
+    rebusAnswer,
+    rebusAttemptsLeft,
+    rebusAttempts,
+    isSubmittingRebus,
+    normalizedBoggleInput,
+    boggleInput,
+    boggleMaxInputLength,
+    boggleAttemptsLeft,
+    boggleBoardLetters,
+    boggleTargetWord,
+    boggleAttempts,
+    boggleBoardSide,
+    boggleSelectedCellPath,
+    isSubmittingBoggle,
+    hasMiniSudokuPuzzle: Boolean(miniSudokuPuzzle),
+    miniSudokuGridMeta,
+    miniSudokuAttemptsLeft,
+    miniSudokuAttemptedValues,
+    miniSudokuHasConflicts,
+    miniSudokuAttempts,
+    isSubmittingMiniSudoku,
+    matchingAllMatched,
+    matchingAttemptsLeft,
+    matchingConnections,
+    matchingMatchedRightSet,
+    matchingPairs,
+    matchingAttempts,
+    isSubmittingMatching,
+    codeInputShakeAnimation,
+    codeInputResetTimeoutRef,
+    memoryHideTimeoutRef,
+    simonInputHighlightTimeoutRef,
+    clearSimonInputHighlight,
+    playSimonTone,
+    playSimonSequence,
+    runWordleRevealSequence,
+    setIsCodeInputInvalid,
+    setIsCodeInputSuccess,
+    setCodeResult,
+    setIsSubmittingCode,
+    setSelectedQuizOption,
+    setQuizResult,
+    setQuizSubmitError,
+    setIsSubmittingQuizAnswer,
+    setWordleAttempts,
+    setWordleRevealedCellCounts,
+    setWordleInput,
+    setWordleResult,
+    setIsSubmittingWordleGuess,
+    setHangmanResult,
+    setHangmanGuessedLetters,
+    setHangmanMisses,
+    setIsSubmittingHangmanGuess,
+    setMastermindAttempts,
+    setMastermindInput,
+    setMastermindResult,
+    setIsSubmittingMastermindGuess,
+    setAnagramInput,
+    setAnagramAttempts,
+    setAnagramResult,
+    setIsSubmittingAnagram,
+    setCaesarInput,
+    setCaesarAttempts,
+    setCaesarResult,
+    setIsSubmittingCaesar,
+    setMemoryDeck,
+    setMemorySelection,
+    setMemoryResult,
+    setIsSubmittingMemory,
+    setMemoryBusy,
+    setSimonInput,
+    setSimonMistakes,
+    setSimonResult,
+    setSimonTargetLength,
+    setIsSubmittingSimon,
+    setSimonActiveInputButtonId,
+    setRebusInput,
+    setRebusAttempts,
+    setRebusResult,
+    setIsSubmittingRebus,
+    setBoggleInput,
+    setBoggleSelectedCellPath,
+    setBoggleAttempts,
+    setBoggleResult,
+    setIsSubmittingBoggle,
+    setMiniSudokuAttempts,
+    setMiniSudokuResult,
+    setMiniSudokuValues,
+    setIsSubmittingMiniSudoku,
+    setMatchingConnections,
+    setMatchingResult,
+    setIsSubmittingMatching,
+    setMatchingAttempts,
+    text: {
+      alertErrorTitle: text.alertErrorTitle,
+      codeEnter: text.codeEnter,
+      codeApproved: text.codeApproved,
+      wordleEnterGuess: text.wordleEnterGuess,
+      wordleLengthExact: text.wordleLengthExact,
+      wordleAttemptsExhausted: text.wordleAttemptsExhausted,
+      wordleTryAgain: text.wordleTryAgain,
+      wordleNoAttempts: text.wordleNoAttempts,
+      wordleFailedPopup: text.wordleFailedPopup,
+      wordleSolved: text.wordleSolved,
+      wordleSolvedPopup: text.wordleSolvedPopup,
+      quizCorrect: text.quizCorrect,
+      quizIncorrect: text.quizIncorrect,
+      quizWrongPopup: text.quizWrongPopup,
+      quizSuccessPopup: text.quizSuccessPopup,
+      hangmanEnterLetter: text.hangmanEnterLetter,
+      hangmanLetterAlreadyChecked: text.hangmanLetterAlreadyChecked,
+      hangmanNoAttempts: text.hangmanNoAttempts,
+      hangmanFailedPopup: text.hangmanFailedPopup,
+      hangmanGoodLetter: text.hangmanGoodLetter,
+      hangmanMiss: text.hangmanMiss,
+      hangmanSolved: text.hangmanSolved,
+      hangmanSolvedPopup: text.hangmanSolvedPopup,
+      mastermindInvalidCode: text.mastermindInvalidCode,
+      mastermindNoAttempts: text.mastermindNoAttempts,
+      mastermindFailedPopup: text.mastermindFailedPopup,
+      mastermindFeedback: text.mastermindFeedback,
+      mastermindSolved: text.mastermindSolved,
+      mastermindSolvedPopup: text.mastermindSolvedPopup,
+      anagramEnter: text.anagramEnter,
+      anagramNoAttempts: text.anagramNoAttempts,
+      anagramFailedPopup: text.anagramFailedPopup,
+      anagramIncorrect: text.anagramIncorrect,
+      anagramSolved: text.anagramSolved,
+      anagramSolvedPopup: text.anagramSolvedPopup,
+      caesarEnter: text.caesarEnter,
+      caesarNoAttempts: text.caesarNoAttempts,
+      caesarFailedPopup: text.caesarFailedPopup,
+      caesarIncorrect: text.caesarIncorrect,
+      caesarSolved: text.caesarSolved,
+      caesarSolvedPopup: text.caesarSolvedPopup,
+      memorySolved: text.memorySolved,
+      memorySolvedPopup: text.memorySolvedPopup,
+      memoryPairFound: text.memoryPairFound,
+      memoryMiss: text.memoryMiss,
+      simonWrong: text.simonWrong,
+      simonFailedPopup: text.simonFailedPopup,
+      simonProgress: text.simonProgress,
+      simonSolved: text.simonSolved,
+      simonSolvedPopup: text.simonSolvedPopup,
+      rebusEnter: text.rebusEnter,
+      rebusNoAttempts: text.rebusNoAttempts,
+      rebusFailedPopup: text.rebusFailedPopup,
+      rebusIncorrect: text.rebusIncorrect,
+      rebusSolved: text.rebusSolved,
+      rebusSolvedPopup: text.rebusSolvedPopup,
+      boggleEnterMin: text.boggleEnterMin,
+      boggleMaxLength: text.boggleMaxLength,
+      boggleNoAttempts: text.boggleNoAttempts,
+      boggleFailedPopup: text.boggleFailedPopup,
+      boggleIncorrect: text.boggleIncorrect,
+      boggleSolved: text.boggleSolved,
+      boggleSolvedPopup: text.boggleSolvedPopup,
+      boggleAdjacentOnly: text.boggleAdjacentOnly,
+      miniSudokuIncorrect: text.miniSudokuIncorrect,
+      miniSudokuFillAll: text.miniSudokuFillAll,
+      miniSudokuNoAttempts: text.miniSudokuNoAttempts,
+      miniSudokuFailedPopup: text.miniSudokuFailedPopup,
+      miniSudokuSolved: text.miniSudokuSolved,
+      miniSudokuSolvedPopup: text.miniSudokuSolvedPopup,
+      matchingPairGood: text.matchingPairGood,
+      matchingSolved: text.matchingSolved,
+      matchingSolvedPopup: text.matchingSolvedPopup,
+      matchingNoAttempts: text.matchingNoAttempts,
+      matchingFailedPopup: text.matchingFailedPopup,
+      matchingWrongPair: text.matchingWrongPair,
+    },
+  });
   const overlayBackdropStyle = {
     opacity: overlaySlideAnimation.interpolate({
       inputRange: [0, 1],
@@ -2819,26 +1805,13 @@ export function StationPreviewOverlay({
       isTabletOverlay,
       quizSubmitError,
       onChangeInput: (value) => {
-        handleMastermindInputChange({
-          value,
-          setMastermindInput,
-          setMastermindResult,
-          setQuizSubmitError,
-        });
+        handleMastermindInput(value);
       },
       onSubmitGuess: () => {
         void submitMastermindGuess();
       },
       onAddSymbol: (symbol) => {
-        handleMastermindAddSymbol({
-          symbol,
-          isInteractiveLocked,
-          isSubmittingMastermindGuess,
-          mastermindSolved,
-          mastermindAttemptsLeft,
-          setMastermindInput,
-          setMastermindResult,
-        });
+        addMastermindSymbol(symbol);
       },
     },
     memoryMediaSectionProps: {
@@ -2899,14 +1872,7 @@ export function StationPreviewOverlay({
       isActionDisabled: isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0,
       isSubmittingBoggle,
       onChangeInput: (value) => {
-        handleBoggleInputChange({
-          value,
-          boggleMaxInputLength,
-          setBoggleInput,
-          setBoggleSelectedCellPath,
-          setBoggleResult,
-          setQuizSubmitError,
-        });
+        handleBoggleInput(value);
       },
       onPressBoardCell: selectBoggleBoardCell,
       onBackspaceInput: backspaceBoggleInput,
@@ -3001,100 +1967,61 @@ export function StationPreviewOverlay({
       isSymbolDisabled: isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0,
       isSubmittingMastermindGuess,
       onChangeInput: (value) => {
-        handleMastermindInputChange({
-          value,
-          setMastermindInput,
-          setMastermindResult,
-          setQuizSubmitError,
-        });
+        handleMastermindInput(value);
       },
       onSubmitGuess: () => {
         void submitMastermindGuess();
       },
       onAddSymbol: (symbol) => {
-        handleMastermindAddSymbol({
-          symbol,
-          isInteractiveLocked,
-          isSubmittingMastermindGuess,
-          mastermindSolved,
-          mastermindAttemptsLeft,
-          setMastermindInput,
-          setMastermindResult,
-        });
+        addMastermindSymbol(symbol);
       },
     },
-    anagramStationPanelProps: {
-      anagramAttemptsLeft,
-      anagramInput,
-      anagramResult,
-      isActionDisabled: isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0,
-      isSubmittingAnagram,
-      onChangeInput: (value) => {
-        setAnagramInput(value);
-        setAnagramResult(null);
-        setQuizSubmitError(null);
+      anagramStationPanelProps: {
+        anagramAttemptsLeft,
+        anagramInput,
+        anagramResult,
+        isActionDisabled: isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0,
+        isSubmittingAnagram,
+        onChangeInput: (value) => {
+          handleAnagramInputChange(value);
+        },
+        onSubmit: () => {
+          void submitAnagram();
+        },
       },
-      onSubmit: () => {
-        void submitAnagram();
-      },
-    },
     caesarStationPanelProps: {
       caesarInput,
       caesarMaxLength,
-      caesarResult,
-      isActionDisabled: isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0,
-      isSubmittingCaesar,
-      onChangeInput: (value) => {
-        setCaesarInput(value.slice(0, caesarMaxLength));
-        setCaesarResult(null);
-        setQuizSubmitError(null);
+        caesarResult,
+        isActionDisabled: isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0,
+        isSubmittingCaesar,
+        onChangeInput: (value) => {
+          handleCaesarInputChange(value);
+        },
+        onAppendCharacter: (character) => {
+          appendCaesarCharacter(character);
+        },
+        onBackspace: () => {
+          backspaceCaesarInput();
+        },
+        onSubmit: () => {
+          void submitCaesar();
+        },
       },
-      onAppendCharacter: (character) => {
-        if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
-          return;
-        }
-
-        setCaesarInput((current) => {
-          if (current.length >= caesarMaxLength) {
-            return current;
-          }
-          if (character === " " && (current.length === 0 || current.endsWith(" "))) {
-            return current;
-          }
-          return `${current}${character}`.slice(0, caesarMaxLength);
-        });
-        setCaesarResult(null);
-        setQuizSubmitError(null);
-      },
-      onBackspace: () => {
-        if (isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0) {
-          return;
-        }
-
-        setCaesarInput((current) => current.slice(0, -1));
-        setCaesarResult(null);
-        setQuizSubmitError(null);
-      },
-      onSubmit: () => {
-        void submitCaesar();
-      },
-    },
     rebusStationPanelProps: {
       rebusQuestion: station.quizQuestion?.trim() || "🏕️ + QUEST = ?",
       rebusAttemptsLeft,
       rebusInput,
-      rebusResult,
-      isActionDisabled: isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0,
-      isSubmittingRebus,
-      onChangeInput: (value) => {
-        setRebusInput(value);
-        setRebusResult(null);
-        setQuizSubmitError(null);
+        rebusResult,
+        isActionDisabled: isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0,
+        isSubmittingRebus,
+        onChangeInput: (value) => {
+          handleRebusInputChange(value);
+        },
+        onSubmit: () => {
+          void submitRebus();
+        },
       },
-      onSubmit: () => {
-        void submitRebus();
-      },
-    },
   });
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
   const stationHeaderLabel = isCaesarStation
