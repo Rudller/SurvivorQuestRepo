@@ -8,19 +8,22 @@ export const BENEFITS = [
   {
     title: "Panel admina do pełnej konfiguracji realizacji",
     description:
-      "Tworzysz scenariusze, konfigurujesz stacje i ustawiasz przebieg eventu bez przełączania narzędzi.",
-    points: ["Edycja scenariuszy oraz kolejności stacji", "Szybka konfiguracja zespołów, instruktorów i harmonogramu"],
+      "Tworzysz scenariusze, konfigurujesz stanowiska i ustawiasz kolejność przebiegu imprezy integracyjnej w jednym miejscu.",
+    points: ["Edycja scenariuszy, stanowisk i kolejności etapów", "Szybka konfiguracja zespołów, instruktorów i harmonogramu"],
   },
   {
-    title: "Aplikacja mobilna dla uczestników wydarzenia",
+    title: "Aplikacja mobilna dla uczestników i instruktorów",
     description:
-      "Zespoły realizują zadania na telefonie, a wyniki natychmiast trafiają do panelu koordynatora.",
-    points: ["Obsługa quizów, zadań czasowych i punktowych", "Czytelny status zadania i nawigacja po etapach gry"],
+      "Aplikacja obsługuje dwa modele pracy: drużyna działa samodzielnie z urządzeniem albo instruktor prowadzi grupę przez kolejne stanowiska.",
+    points: [
+      "Docelowo przygotowana pod tablety dostarczane przez organizatora",
+      "Opcjonalnie uczestnik lub instruktor może korzystać z aplikacji na telefonie",
+    ],
   },
   {
     title: "Monitoring i podsumowanie realizacji",
     description:
-      "Koordynator widzi postęp drużyn na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
+      "Koordynator widzi postęp drużyn i pracę instruktorów na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
     points: ["Podgląd aktywności, punktów i logów zdarzeń", "Kompletny obraz przebiegu wydarzenia po zakończeniu"],
   },
 ] as const;
@@ -80,26 +83,36 @@ export const CASE_STUDIES = [
 
 export const FAQ_ITEMS = [
   {
-    question: "Czy SurvivorQuest ma osobny panel dla organizatora i aplikację dla uczestników?",
+    question: "Czy aplikacja jest prosta w obsłudze dla uczestników?",
     answer:
-      "Tak. Organizator pracuje w panelu admina, a uczestnicy korzystają z aplikacji mobilnej połączonej z tym samym scenariuszem.",
+      "Tak. Interfejs jest prosty i prowadzi uczestników krok po kroku przez zadania. W praktyce wystarcza krótkie wprowadzenie od instruktora lub organizatora przed startem.",
   },
   {
-    question: "Jakie typy zadań obsługuje aplikacja mobilna?",
+    question: "Na jakich urządzeniach działa aplikacja mobilna?",
     answer:
-      "System obsługuje m.in. quizy, zadania czasowe i punktowe oraz kolejne etapy stacji dopasowane do scenariusza realizacji.",
+      "Aplikacja jest projektowana przede wszystkim pod tablety dostarczane przez organizatora wydarzenia, ale w razie potrzeby można ją również uruchomić na telefonie.",
   },
   {
-    question: "Czy mogę edytować scenariusz pod konkretną realizację?",
+    question: "Kto korzysta z aplikacji podczas eventu?",
     answer:
-      "Tak. W panelu możesz przygotować i modyfikować scenariusz dla danej realizacji bez utraty danych historycznych.",
+      "Z aplikacji korzystają uczestnicy i instruktorzy obsługujący wydarzenie. Obie role pracują na tym samym scenariuszu i harmonogramie przygotowanym przez organizatora.",
+  },
+  {
+    question: "Czy jest leaderboard i kiedy pojawia się podczas gry?",
+    answer:
+      "Tak, w aplikacji można pokazywać leaderboard drużyn. Ranking pojawia się w trakcie realizacji po uruchomieniu punktacji, dzięki czemu uczestnicy widzą aktualną kolejność na żywo. Jest możliwość wyłączenia tej opcji.",
+  },
+  {
+    question: "Czy mogę modyfikować przebieg pod konkretną realizację?",
+    answer:
+      "Tak. W panelu ustawiasz scenariusz, stanowiska i kolejność etapów dla danej realizacji bez utraty danych historycznych.",
   },
 ] as const;
 
-export const TRUST_LOGO_SLOTS = [
-  "Miejsce na logo klienta",
-  "Miejsce na logo klienta",
-  "Miejsce na logo klienta",
-  "Miejsce na logo klienta",
-  "Miejsce na logo klienta",
+export const TRUST_CLIENTS = [
+  {
+    name: "Hard-Team",
+    logoSrc: "/hard-team-logo.png",
+    logoAlt: "Logo firmy Hard-Team",
+  },
 ] as const;

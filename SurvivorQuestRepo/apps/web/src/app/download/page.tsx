@@ -20,14 +20,18 @@ function DownloadButton({
   href,
   label,
   disabledLabel,
+  className,
 }: {
   href?: string;
   label: string;
   disabledLabel: string;
+  className?: string;
 }) {
   if (!href) {
     return (
-      <span className="inline-flex cursor-not-allowed items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-2.5 text-sm font-medium text-zinc-500">
+      <span
+        className={`inline-flex cursor-not-allowed items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900/70 px-4 py-2.5 text-sm font-medium text-zinc-500 ${className ?? ""}`}
+      >
         {disabledLabel}
       </span>
     );
@@ -38,7 +42,7 @@ function DownloadButton({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-4 py-2.5 text-sm font-semibold text-[#13231b] transition hover:bg-[#ffd98d]"
+      className={`inline-flex items-center justify-center rounded-xl bg-[#f0c977] px-4 py-2.5 text-sm font-semibold text-[#13231b] transition hover:bg-[#ffd98d] ${className ?? ""}`}
     >
       {label}
     </Link>
@@ -98,38 +102,36 @@ export default function DownloadPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <article className="relative overflow-hidden rounded-2xl border border-[#446251]/70 bg-[#12221b]/85 p-5">
           <AndroidWatermark />
-          <div className="relative z-10">
+          <section className="relative z-10">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#98ad9c]">Android</p>
             <h2 className="mt-2 text-xl font-semibold text-[#f3f5ef]">Pobierz na Androida</h2>
             <p className="mt-3 text-sm text-[#bdcdbf]">
               Zainstaluj aplikację i dołącz do gry w kilka chwil.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <DownloadButton
-                href={androidDownloadUrl}
-                label="Pobierz na Androida"
-                disabledLabel="Wersja na Androida wkrótce"
-              />
-            </div>
-          </div>
+            <DownloadButton
+              href={androidDownloadUrl}
+              label="Pobierz na Androida"
+              disabledLabel="Wersja na Androida wkrótce"
+              className="mt-5"
+            />
+          </section>
         </article>
 
         <article className="relative overflow-hidden rounded-2xl border border-[#446251]/70 bg-[#12221b]/85 p-5">
           <AppleWatermark />
-          <div className="relative z-10">
+          <section className="relative z-10">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#98ad9c]">iOS</p>
             <h2 className="mt-2 text-xl font-semibold text-[#f3f5ef]">Pobierz na iOS</h2>
             <p className="mt-3 text-sm text-[#bdcdbf]">
               Pobierz aplikację na iPhone&apos;a lub iPada i rozpocznij zabawę.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <DownloadButton
-                href={iosDownloadUrl}
-                label="Pobierz na iOS"
-                disabledLabel="Wersja na iOS wkrótce"
-              />
-            </div>
-          </div>
+            <DownloadButton
+              href={iosDownloadUrl}
+              label="Pobierz na iOS"
+              disabledLabel="Wersja na iOS wkrótce"
+              className="mt-5"
+            />
+          </section>
         </article>
       </section>
 

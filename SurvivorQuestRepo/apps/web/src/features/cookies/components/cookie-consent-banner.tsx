@@ -49,14 +49,14 @@ export function CookieConsentBanner() {
   return (
     <aside className="fixed inset-x-0 bottom-0 z-50 border-t border-[#365546]/60 bg-[#e8ba63]/82 shadow-[0_-20px_40px_-26px_rgba(0,0,0,0.55)] backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-        <div>
-          <div className="flex items-start gap-3">
+        <section>
+          <header className="flex items-start gap-3">
             <CookieBadgeIcon />
-            <div>
+            <section>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#173227]">Cookies</p>
               <p className="mt-1 text-sm font-semibold text-[#13231b]">Dbamy o Twoją prywatność</p>
-            </div>
-          </div>
+            </section>
+          </header>
           <p className="mt-2 text-xs leading-relaxed text-[#1e352a] sm:text-sm">
             Używamy plików cookie niezbędnych do działania serwisu oraz opcjonalnych cookie analitycznych. Wybierz, na
             co się zgadzasz.
@@ -72,7 +72,7 @@ export function CookieConsentBanner() {
             </Link>
             .
           </p>
-        </div>
+        </section>
         <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
           <button
             type="button"

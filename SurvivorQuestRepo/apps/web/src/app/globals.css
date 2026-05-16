@@ -18,34 +18,35 @@ html {
 
 body {
   background:
-    radial-gradient(circle at 8% 0%, rgba(240, 201, 119, 0.22) 0%, rgba(240, 201, 119, 0) 34%),
-    radial-gradient(circle at 90% 10%, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0) 38%),
-    linear-gradient(180deg, #14231b 0%, #0f1914 45%, #0c1511 100%);
+    radial-gradient(circle at 8% 0%, rgba(240, 201, 119, 0.14) 0%, rgba(240, 201, 119, 0) 38%),
+    radial-gradient(circle at 90% 10%, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 42%),
+    linear-gradient(180deg, #111d17 0%, #0f1914 52%, #0d1612 100%);
   color: var(--foreground);
   font-family: var(--font-inter), Arial, Helvetica, sans-serif;
   min-height: 100vh;
 }
 
 .sq-section {
-  animation: sq-fade-up 420ms ease-out both;
+  animation: sq-fade-up 340ms ease-out both;
 }
 
 .sq-card-lift {
   transition:
-    transform 220ms ease,
-    border-color 220ms ease,
-    box-shadow 220ms ease;
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .sq-card-lift:hover {
-  transform: translateY(-3px);
-  border-color: rgba(240, 201, 119, 0.45);
+  transform: translateY(-1px);
+  border-color: rgba(240, 201, 119, 0.32);
+  box-shadow: 0 18px 36px -30px rgba(0, 0, 0, 0.95);
 }
 
 @keyframes sq-fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
