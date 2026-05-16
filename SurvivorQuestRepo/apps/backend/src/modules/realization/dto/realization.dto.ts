@@ -54,6 +54,8 @@ export type CreateRealizationDto = {
   status?: RealizationStatus;
   scheduledAt?: string;
   showLeaderboard?: boolean;
+  showLeaderboardDuringGame?: boolean;
+  showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
@@ -121,6 +123,8 @@ export function validateRealizationPayload(
   const durationMinutes = Math.round(Number(payload.durationMinutes));
   const scenarioId = payload.scenarioId?.trim() || '';
   const showLeaderboard = payload.showLeaderboard;
+  const showLeaderboardDuringGame = payload.showLeaderboardDuringGame;
+  const showLeaderboardOnFinish = payload.showLeaderboardOnFinish;
   const teamStationNumberingEnabled = payload.teamStationNumberingEnabled;
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
@@ -155,6 +159,18 @@ export function validateRealizationPayload(
     throw new BadRequestException('Invalid payload');
   }
   if (
+    typeof showLeaderboardDuringGame !== 'undefined' &&
+    typeof showLeaderboardDuringGame !== 'boolean'
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+  if (
+    typeof showLeaderboardOnFinish !== 'undefined' &&
+    typeof showLeaderboardOnFinish !== 'boolean'
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+  if (
     typeof teamStationNumberingEnabled !== 'undefined' &&
     typeof teamStationNumberingEnabled !== 'boolean'
   ) {
@@ -176,6 +192,19 @@ export function validateRealizationPayload(
     );
   }
 
+  const resolvedShowLeaderboardDuringGame =
+    typeof payload.showLeaderboardDuringGame === 'boolean'
+      ? payload.showLeaderboardDuringGame
+      : typeof payload.showLeaderboard === 'boolean'
+        ? payload.showLeaderboard
+        : true;
+  const resolvedShowLeaderboardOnFinish =
+    typeof payload.showLeaderboardOnFinish === 'boolean'
+      ? payload.showLeaderboardOnFinish
+      : typeof payload.showLeaderboard === 'boolean'
+        ? payload.showLeaderboard
+        : true;
+
   return {
     companyName,
     location: location || undefined,
@@ -196,7 +225,9 @@ export function validateRealizationPayload(
     peopleCount,
     positionsCount,
     durationMinutes,
-    showLeaderboard: payload.showLeaderboard ?? true,
+    showLeaderboard: resolvedShowLeaderboardDuringGame || resolvedShowLeaderboardOnFinish,
+    showLeaderboardDuringGame: resolvedShowLeaderboardDuringGame,
+    showLeaderboardOnFinish: resolvedShowLeaderboardOnFinish,
     teamStationNumberingEnabled: payload.teamStationNumberingEnabled ?? true,
     status: payload.status,
     scheduledAt,

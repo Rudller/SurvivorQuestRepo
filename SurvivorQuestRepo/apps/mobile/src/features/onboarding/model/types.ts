@@ -140,6 +140,8 @@ export type OnboardingRealizationSummary = {
   stationIds: string[];
   locationRequired: boolean;
   showLeaderboard: boolean;
+  showLeaderboardDuringGame?: boolean;
+  showLeaderboardOnFinish?: boolean;
   introText?: string;
   gameRules?: string;
 };

@@ -85,6 +85,8 @@ type RealizationDto = {
   durationMinutes?: number;
   locationRequired?: boolean;
   showLeaderboard?: boolean;
+  showLeaderboardDuringGame?: boolean;
+  showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -114,6 +116,8 @@ type CreateRealizationPayload = {
   positionsCount: number;
   durationMinutes: number;
   showLeaderboard: boolean;
+  showLeaderboardDuringGame: boolean;
+  showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -143,6 +147,8 @@ type UpdateRealizationPayload = {
   positionsCount: number;
   durationMinutes: number;
   showLeaderboard: boolean;
+  showLeaderboardDuringGame: boolean;
+  showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
@@ -275,6 +281,18 @@ function normalizeRealization(dto: RealizationDto): Realization {
         : 120,
     locationRequired: typeof dto.locationRequired === "boolean" ? dto.locationRequired : false,
     showLeaderboard: typeof dto.showLeaderboard === "boolean" ? dto.showLeaderboard : true,
+    showLeaderboardDuringGame:
+      typeof dto.showLeaderboardDuringGame === "boolean"
+        ? dto.showLeaderboardDuringGame
+        : typeof dto.showLeaderboard === "boolean"
+          ? dto.showLeaderboard
+          : true,
+    showLeaderboardOnFinish:
+      typeof dto.showLeaderboardOnFinish === "boolean"
+        ? dto.showLeaderboardOnFinish
+        : typeof dto.showLeaderboard === "boolean"
+          ? dto.showLeaderboard
+          : true,
     teamStationNumberingEnabled:
       typeof dto.teamStationNumberingEnabled === "boolean" ? dto.teamStationNumberingEnabled : true,
     status: dto.status,

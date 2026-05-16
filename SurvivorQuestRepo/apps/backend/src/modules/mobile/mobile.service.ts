@@ -111,6 +111,8 @@ export class MobileService {
           joinCode: realization.joinCode,
           locationRequired: realization.locationRequired,
           showLeaderboard: realization.showLeaderboard,
+          showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
+          showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
           teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
           teamCount: realization.teamCount,
           stationIds: realization.stationIds,
@@ -376,6 +378,8 @@ export class MobileService {
         status: normalizedRealizationStatus,
         locationRequired: realization.locationRequired,
         showLeaderboard: realization.showLeaderboard,
+        showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
+        showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
@@ -1552,6 +1556,8 @@ export class MobileService {
         durationMinutes: realization.durationMinutes,
         locationRequired: realization.locationRequired,
         showLeaderboard: realization.showLeaderboard,
+        showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
+        showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
@@ -2110,6 +2116,8 @@ export class MobileService {
         id: true,
         locationRequired: true,
         showLeaderboard: true,
+        showLeaderboardDuringGame: true,
+        showLeaderboardOnFinish: true,
         teamStationNumberingEnabled: true,
       },
     });
@@ -2133,6 +2141,16 @@ export class MobileService {
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
       showLeaderboard: rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
+      showLeaderboardDuringGame:
+        rowById.get(item.id)?.showLeaderboardDuringGame ??
+        item.showLeaderboardDuringGame ??
+        rowById.get(item.id)?.showLeaderboard ??
+        item.showLeaderboard,
+      showLeaderboardOnFinish:
+        rowById.get(item.id)?.showLeaderboardOnFinish ??
+        item.showLeaderboardOnFinish ??
+        rowById.get(item.id)?.showLeaderboard ??
+        item.showLeaderboard,
       teamStationNumberingEnabled:
         rowById.get(item.id)?.teamStationNumberingEnabled ??
         item.teamStationNumberingEnabled ??

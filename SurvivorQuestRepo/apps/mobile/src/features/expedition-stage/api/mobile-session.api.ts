@@ -371,6 +371,20 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       finishedAt: null,
     };
   });
+  const showLeaderboardDuringGame = asBoolean(
+    realization.showLeaderboardDuringGame ??
+      realization.show_leaderboard_during_game ??
+      realization.showLeaderboard ??
+      realization.show_leaderboard,
+    true,
+  );
+  const showLeaderboardOnFinish = asBoolean(
+    realization.showLeaderboardOnFinish ??
+      realization.show_leaderboard_on_finish ??
+      realization.showLeaderboard ??
+      realization.show_leaderboard,
+    true,
+  );
 
   return {
     realization: {
@@ -396,7 +410,9 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         .filter((value) => value.trim().length > 0),
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
-      showLeaderboard: asBoolean(realization.showLeaderboard ?? realization.show_leaderboard, true),
+      showLeaderboard: showLeaderboardDuringGame || showLeaderboardOnFinish,
+      showLeaderboardDuringGame,
+      showLeaderboardOnFinish,
       teamStationNumberingEnabled: asBoolean(
         realization.teamStationNumberingEnabled ?? realization.team_station_numbering_enabled,
         true,

@@ -48,6 +48,8 @@ type MobileBootstrapRealization = {
   joinCode: string;
   locationRequired: boolean;
   showLeaderboard?: boolean;
+  showLeaderboardDuringGame?: boolean;
+  showLeaderboardOnFinish?: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -1532,6 +1534,12 @@ export function RealizationOnboardingScreen({
             stationIds: activeRealization.stationIds,
             locationRequired: activeRealization.locationRequired,
             showLeaderboard: activeRealization.showLeaderboard !== false,
+            showLeaderboardDuringGame:
+              activeRealization.showLeaderboardDuringGame ??
+              activeRealization.showLeaderboard !== false,
+            showLeaderboardOnFinish:
+              activeRealization.showLeaderboardOnFinish ??
+              activeRealization.showLeaderboard !== false,
             introText: activeRealization.introText?.trim() || undefined,
             gameRules: activeRealization.gameRules?.trim() || undefined,
           }
@@ -1726,6 +1734,12 @@ export function RealizationOnboardingScreen({
         gameRules: realization.gameRules?.trim() || undefined,
         durationMinutes: normalizeDurationMinutes(realization.durationMinutes),
         showLeaderboard: realization.showLeaderboard !== false,
+        showLeaderboardDuringGame:
+          realization.showLeaderboardDuringGame ??
+          realization.showLeaderboard !== false,
+        showLeaderboardOnFinish:
+          realization.showLeaderboardOnFinish ??
+          realization.showLeaderboard !== false,
       };
 
       setApiBaseUrl(resolvedBaseUrl);

@@ -109,7 +109,10 @@ export function EditRealizationPanel({
     teamCount: realization.teamCount,
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
-    showLeaderboard: realization.showLeaderboard,
+    showLeaderboardDuringGame:
+      realization.showLeaderboardDuringGame ?? realization.showLeaderboard,
+    showLeaderboardOnFinish:
+      realization.showLeaderboardOnFinish ?? realization.showLeaderboard,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
@@ -418,7 +421,11 @@ export function EditRealizationPanel({
                   peopleCount: normalizedPeopleCount,
                   positionsCount: positionsCountForSubmit,
                   durationMinutes: normalizedDurationMinutes,
-                  showLeaderboard: editValues.showLeaderboard,
+                  showLeaderboard:
+                    editValues.showLeaderboardDuringGame ||
+                    editValues.showLeaderboardOnFinish,
+                  showLeaderboardDuringGame: editValues.showLeaderboardDuringGame,
+                  showLeaderboardOnFinish: editValues.showLeaderboardOnFinish,
                   teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
                   status: editValues.status,
                   scheduledAt: normalizedScheduledAt,
@@ -728,11 +735,26 @@ export function EditRealizationPanel({
                   <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
                     <input
                       type="checkbox"
-                      checked={editValues.showLeaderboard}
+                      checked={editValues.showLeaderboardDuringGame}
                       onChange={(event) =>
                         setEditValues((prev) => ({
                           ...prev,
-                          showLeaderboard: event.target.checked,
+                          showLeaderboardDuringGame: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż leaderboard w trakcie gry (mobile, pod top barem)
+                  </label>
+
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.showLeaderboardOnFinish}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          showLeaderboardOnFinish: event.target.checked,
                         }))
                       }
                       className="h-4 w-4 accent-amber-400"
@@ -950,8 +972,12 @@ export function EditRealizationPanel({
                 <span className="text-zinc-500">Zasady gry:</span> {editValues.gameRules.trim() ? "Tak" : "Nie"}
               </p>
               <p>
+                <span className="text-zinc-500">Leaderboard w trakcie gry:</span>{" "}
+                {editValues.showLeaderboardDuringGame ? "Tak" : "Nie"}
+              </p>
+              <p>
                 <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span>{" "}
-                {editValues.showLeaderboard ? "Tak" : "Nie"}
+                {editValues.showLeaderboardOnFinish ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span>{" "}

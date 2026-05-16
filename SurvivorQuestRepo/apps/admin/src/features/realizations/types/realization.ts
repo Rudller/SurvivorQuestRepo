@@ -211,6 +211,8 @@ export type Realization = {
   durationMinutes: number;
   locationRequired: boolean;
   showLeaderboard: boolean;
+  showLeaderboardDuringGame: boolean;
+  showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;

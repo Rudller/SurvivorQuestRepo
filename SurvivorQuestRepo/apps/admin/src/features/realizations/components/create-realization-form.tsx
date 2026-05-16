@@ -91,7 +91,8 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [teamCount, setTeamCount] = useState(2);
   const [peopleCount, setPeopleCount] = useState(10);
   const [durationMinutes, setDurationMinutes] = useState(120);
-  const [showLeaderboard, setShowLeaderboard] = useState(true);
+  const [showLeaderboardDuringGame, setShowLeaderboardDuringGame] = useState(true);
+  const [showLeaderboardOnFinish, setShowLeaderboardOnFinish] = useState(true);
   const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
@@ -342,7 +343,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             peopleCount: normalizedPeopleCount,
             positionsCount: positionsCountForSubmit,
             durationMinutes: normalizedDurationMinutes,
-            showLeaderboard,
+            showLeaderboard: showLeaderboardDuringGame || showLeaderboardOnFinish,
+            showLeaderboardDuringGame,
+            showLeaderboardOnFinish,
             teamStationNumberingEnabled,
             status,
             scheduledAt: normalizedScheduledAt,
@@ -366,7 +369,8 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           setSelectedScenarioId("");
           setTeamCount(2);
           setDurationMinutes(120);
-          setShowLeaderboard(true);
+          setShowLeaderboardDuringGame(true);
+          setShowLeaderboardOnFinish(true);
           setTeamStationNumberingEnabled(true);
           setLogoFile(null);
           setOfferPdfFile(null);
@@ -601,8 +605,18 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 md:col-span-2">
               <input
                 type="checkbox"
-                checked={showLeaderboard}
-                onChange={(event) => setShowLeaderboard(event.target.checked)}
+                checked={showLeaderboardDuringGame}
+                onChange={(event) => setShowLeaderboardDuringGame(event.target.checked)}
+                className="h-4 w-4 accent-amber-400"
+              />
+              Pokaż leaderboard w trakcie gry (mobile)
+            </label>
+
+            <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={showLeaderboardOnFinish}
+                onChange={(event) => setShowLeaderboardOnFinish(event.target.checked)}
                 className="h-4 w-4 accent-amber-400"
               />
               Pokaż leaderboard na ekranie końcowym (mobile)
@@ -881,7 +895,10 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
           </p>
           <p>
-            <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboard ? "Tak" : "Nie"}
+            <span className="text-zinc-500">Leaderboard w trakcie gry:</span> {showLeaderboardDuringGame ? "Tak" : "Nie"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboardOnFinish ? "Tak" : "Nie"}
           </p>
           <p>
             <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span> {teamStationNumberingEnabled ? "Tak" : "Nie"}

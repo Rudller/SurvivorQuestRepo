@@ -127,6 +127,8 @@ export class RealizationService {
         scheduledAt: new Date(validated.scheduledAt),
         locationRequired: true,
         showLeaderboard: validated.showLeaderboard,
+        showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
+        showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
@@ -236,6 +238,8 @@ export class RealizationService {
         positionsCount: finalStations.length,
         durationMinutes: validated.durationMinutes,
         showLeaderboard: validated.showLeaderboard,
+        showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
+        showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         status: toPrismaRealizationStatus(
           resolveRealizationStatus(

@@ -12,6 +12,8 @@ function createSessionState(): ExpeditionSessionState {
       status: "in-progress",
       locationRequired: false,
       showLeaderboard: true,
+      showLeaderboardDuringGame: true,
+      showLeaderboardOnFinish: true,
       teamStationNumberingEnabled: true,
       scheduledAt: "2026-05-10T00:00:00.000Z",
       durationMinutes: 120,

@@ -61,6 +61,8 @@ export type ExpeditionSessionState = {
     status: "planned" | "in-progress" | "done";
     locationRequired: boolean;
     showLeaderboard: boolean;
+    showLeaderboardDuringGame: boolean;
+    showLeaderboardOnFinish: boolean;
     teamStationNumberingEnabled: boolean;
     scheduledAt: string;
     durationMinutes: number;
@@ -249,6 +251,14 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       status: session.realization?.status ?? "in-progress",
       locationRequired: session.realization?.locationRequired ?? false,
       showLeaderboard: session.realization?.showLeaderboard ?? true,
+      showLeaderboardDuringGame:
+        session.realization?.showLeaderboardDuringGame ??
+        session.realization?.showLeaderboard ??
+        true,
+      showLeaderboardOnFinish:
+        session.realization?.showLeaderboardOnFinish ??
+        session.realization?.showLeaderboard ??
+        true,
       teamStationNumberingEnabled: true,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:

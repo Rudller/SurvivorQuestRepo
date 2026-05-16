@@ -70,7 +70,7 @@ export function ExpeditionStageOverlayLayer({
         endedAt={isSessionEnded ? sessionEndedAt : null}
         leaderboardEntries={sessionState.leaderboard.entries}
         currentTeamId={sessionState.team.id}
-        showLeaderboard={sessionState.realization.showLeaderboard}
+        showLeaderboard={sessionState.realization.showLeaderboardOnFinish}
         canClose={!isSessionEnded && overlayFlow.isFinishPreviewOpen}
         onClose={() => overlayFlow.setIsFinishPreviewOpen(false)}
       />

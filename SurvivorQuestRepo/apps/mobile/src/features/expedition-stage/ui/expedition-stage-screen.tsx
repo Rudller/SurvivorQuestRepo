@@ -22,6 +22,7 @@ import {
   type StationTestViewModel,
 } from "../components/station-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
+import { TopLeaderboardStrip } from "../components/top-leaderboard-strip";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import {
@@ -1102,6 +1103,9 @@ export function ExpeditionStageScreen({
     }),
     [overlayFlow, qrFlow, stationTestEntries],
   );
+  const shouldShowTopLeaderboard =
+    sessionState.realization.showLeaderboardDuringGame &&
+    sessionState.leaderboard.entries.length > 0;
 
   useEffect(() => {
     if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
@@ -1173,10 +1177,23 @@ export function ExpeditionStageScreen({
           />
         </Pressable>
 
-        <View className="mt-2 items-end">
+        <View className="mt-2 w-full flex-row items-start justify-end gap-2">
+          {shouldShowTopLeaderboard ? (
+            <View style={{ width: "40%" }}>
+              <TopLeaderboardStrip
+                entries={sessionState.leaderboard.entries}
+                currentTeamId={sessionState.team.id}
+              />
+            </View>
+          ) : null}
+
           <View
-            className="w-56 rounded-2xl border px-3 py-2"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+            className="rounded-2xl border px-3 py-2"
+            style={{
+              width: adaptiveLayout.s(164, 146, 196),
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
           >
             <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
               {text.tasks}
