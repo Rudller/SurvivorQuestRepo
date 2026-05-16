@@ -593,6 +593,15 @@ function isInvalidCompletionCodeError(value: string | null) {
   return normalized.includes("invalid completion code") || normalized.includes("http 400");
 }
 
+function isTaskAlreadyCompletedError(value: string | null) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.includes("task already completed") || normalized.includes("http 409");
+}
+
 function extractStationQrToken(rawValue: string) {
   const normalized = rawValue.trim();
   if (!normalized) {
@@ -1047,6 +1056,7 @@ export function ExpeditionStageScreen({
     setActionMessage,
     isInteractiveQuizStationType,
     isInvalidCompletionCodeError,
+    isTaskAlreadyCompletedError,
   });
 
   const qrFlow = useExpeditionStageQrFlow({

@@ -1,15 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Animated } from "react-native";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 
 import type { StationTestViewModel } from "../types";
 import { resolveMemoryDeck, resolveMiniSudokuPuzzle, type MemoryCard } from "../puzzle-helpers";
 import type { MastermindAttempt } from "./mastermind-station-panel";
-import type { QuizOutcomePopup } from "./quiz-outcome-popup-panel";
 import type { WordleAttempt } from "./wordle-station-panel";
 
 type UseStationOverlayResetArgs = {
   displayedStation: StationTestViewModel | null;
+  stationResetKey: string | null;
   clearTimeoutPopupCountdown: () => void;
   clearWordleRevealTimeouts: () => void;
   resetAudioPlaybackState: () => void;
@@ -21,7 +21,6 @@ type UseStationOverlayResetArgs = {
   codeInputSuccessTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   timerPulseLoopRef: MutableRefObject<Animated.CompositeAnimation | null>;
   memoryHideTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  quizOutcomeActionRef: MutableRefObject<(() => void) | null>;
   setSelectedQuizOption: Dispatch<SetStateAction<number | null>>;
   setQuizResult: Dispatch<SetStateAction<string | null>>;
   setWordleInput: Dispatch<SetStateAction<string>>;
@@ -59,7 +58,6 @@ type UseStationOverlayResetArgs = {
   setBoggleAttempts: Dispatch<SetStateAction<number>>;
   setBoggleResult: Dispatch<SetStateAction<string | null>>;
   setMiniSudokuValues: Dispatch<SetStateAction<string[]>>;
-  setMiniSudokuAttempts: Dispatch<SetStateAction<number>>;
   setMiniSudokuResult: Dispatch<SetStateAction<string | null>>;
   setMatchingConnections: Dispatch<SetStateAction<Record<string, string>>>;
   setMatchingAttempts: Dispatch<SetStateAction<number>>;
@@ -85,11 +83,11 @@ type UseStationOverlayResetArgs = {
   setIsCodeInputInvalid: Dispatch<SetStateAction<boolean>>;
   setIsCodeInputSuccess: Dispatch<SetStateAction<boolean>>;
   setNowMs: Dispatch<SetStateAction<number>>;
-  setQuizOutcomePopup: Dispatch<SetStateAction<QuizOutcomePopup | null>>;
 };
 
 export function useStationOverlayReset({
   displayedStation,
+  stationResetKey,
   clearTimeoutPopupCountdown,
   clearWordleRevealTimeouts,
   resetAudioPlaybackState,
@@ -101,7 +99,6 @@ export function useStationOverlayReset({
   codeInputSuccessTimeoutRef,
   timerPulseLoopRef,
   memoryHideTimeoutRef,
-  quizOutcomeActionRef,
   setSelectedQuizOption,
   setQuizResult,
   setWordleInput,
@@ -139,7 +136,6 @@ export function useStationOverlayReset({
   setBoggleAttempts,
   setBoggleResult,
   setMiniSudokuValues,
-  setMiniSudokuAttempts,
   setMiniSudokuResult,
   setMatchingConnections,
   setMatchingAttempts,
@@ -165,9 +161,15 @@ export function useStationOverlayReset({
   setIsCodeInputInvalid,
   setIsCodeInputSuccess,
   setNowMs,
-  setQuizOutcomePopup,
 }: UseStationOverlayResetArgs) {
+  const previousStationResetKeyRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
+    if (previousStationResetKeyRef.current === stationResetKey) {
+      return;
+    }
+    previousStationResetKeyRef.current = stationResetKey;
+
     setSelectedQuizOption(null);
     setQuizResult(null);
     setWordleInput("");
@@ -209,7 +211,6 @@ export function useStationOverlayReset({
         ? Array.from({ length: resolveMiniSudokuPuzzle(displayedStation).given.length }, () => "")
         : Array.from({ length: 81 }, () => ""),
     );
-    setMiniSudokuAttempts(0);
     setMiniSudokuResult(null);
     setMatchingConnections({});
     setMatchingAttempts(0);
@@ -237,7 +238,6 @@ export function useStationOverlayReset({
     setIsCodeInputSuccess(false);
     stopSimonPlayback();
     clearTimeoutPopupCountdown();
-    setQuizOutcomePopup(null);
     setNowMs(Date.now());
     quizFeedbackAnimation.setValue(0);
     timerPulseAnimation.setValue(0);
@@ -256,14 +256,13 @@ export function useStationOverlayReset({
       memoryHideTimeoutRef.current = null;
     }
     clearWordleRevealTimeouts();
-    quizOutcomeActionRef.current = null;
-  // Dependencies intentionally mirror the original reset trigger behavior: reset only when station snapshot changes.
+  // Reset only when overlay target station changes (or closes), not on status updates of the same station.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    stationResetKey,
     clearTimeoutPopupCountdown,
     clearWordleRevealTimeouts,
     codeInputShakeAnimation,
-    displayedStation,
     quizFeedbackAnimation,
     resetAudioPlaybackState,
     stopSimonPlayback,

@@ -37,6 +37,7 @@ type UseExpeditionStageOverlayFlowArgs = {
   setActionMessage: Dispatch<SetStateAction<string | null>>;
   isInteractiveQuizStationType: (stationType?: ExpeditionStationType) => boolean;
   isInvalidCompletionCodeError: (value: string | null) => boolean;
+  isTaskAlreadyCompletedError: (value: string | null) => boolean;
 };
 
 export function useExpeditionStageOverlayFlow({
@@ -53,11 +54,13 @@ export function useExpeditionStageOverlayFlow({
   setActionMessage,
   isInteractiveQuizStationType,
   isInvalidCompletionCodeError,
+  isTaskAlreadyCompletedError,
 }: UseExpeditionStageOverlayFlowArgs) {
   const [isStationTestMenuOpen, setIsStationTestMenuOpen] = useState(false);
   const [isWelcomePreviewOpen, setIsWelcomePreviewOpen] = useState(false);
   const [isFinishPreviewOpen, setIsFinishPreviewOpen] = useState(false);
   const [activeStationTestId, setActiveStationTestId] = useState<string | null>(null);
+  const [activeStationSnapshot, setActiveStationSnapshot] = useState<StationTestViewModel | null>(null);
   const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
   const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
@@ -103,27 +106,34 @@ export function useExpeditionStageOverlayFlow({
   );
 
   const activeStationPreview = useMemo(() => {
-    if (!activeStationTest) {
+    const fallbackStation =
+      activeStationSnapshot && activeStationSnapshot.stationId === activeStationTestId
+        ? activeStationSnapshot
+        : null;
+    const previewStation = activeStationTest ?? fallbackStation;
+    if (!previewStation) {
       return null;
     }
 
+    const stationId = previewStation.stationId;
+    const activeTask = taskByStationId[stationId];
     return {
-      ...activeStationTest,
-      startedAt: activeStationTest.startedAt ?? localStartedAtByStationId[activeStationTest.stationId] ?? null,
+      ...previewStation,
+      startedAt: activeTask?.startedAt ?? previewStation.startedAt ?? localStartedAtByStationId[stationId] ?? null,
     };
-  }, [activeStationTest, localStartedAtByStationId]);
+  }, [activeStationSnapshot, activeStationTest, activeStationTestId, localStartedAtByStationId, taskByStationId]);
 
   useEffect(() => {
     if (!activeStationTestId) {
+      setActiveStationSnapshot(null);
       return;
     }
 
-    if (stationTestEntries.some((item) => item.stationId === activeStationTestId)) {
+    if (activeStationTest && activeStationTest.stationId === activeStationTestId) {
+      setActiveStationSnapshot(activeStationTest);
       return;
     }
-
-    setActiveStationTestId(null);
-  }, [activeStationTestId, stationTestEntries]);
+  }, [activeStationTest, activeStationTestId]);
 
   useEffect(() => {
     if (!pendingQuizStartStationId) {
@@ -347,6 +357,10 @@ export function useExpeditionStageOverlayFlow({
 
       const result = await completeStationTask(stationId, completionCode, startedAt);
       if (result) {
+        if (isTaskAlreadyCompletedError(result)) {
+          setActionMessage(text.taskCompleted);
+          return null;
+        }
         if (!isInvalidCompletionCodeError(result)) {
           setActionError(result);
         }
@@ -358,6 +372,7 @@ export function useExpeditionStageOverlayFlow({
     },
     [
       completeStationTask,
+      isTaskAlreadyCompletedError,
       isInvalidCompletionCodeError,
       setActionError,
       setActionMessage,

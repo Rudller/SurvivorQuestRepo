@@ -1632,17 +1632,13 @@ type SubmitMiniSudokuControllerArgs = {
   miniSudokuGridMeta: { side: number; blockSide: number } | null;
   isInteractiveLocked: boolean;
   isSubmittingMiniSudoku: boolean;
-  miniSudokuAttemptsLeft: number;
   miniSudokuAttemptedValues: string[];
   miniSudokuHasConflicts: boolean;
-  miniSudokuAttempts: number;
   stationId: string;
   startedAt: string | null;
   onCompleteTask?: CompleteTaskHandler;
-  onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;
   showQuizOutcomePopup: ShowQuizOutcomePopup;
-  setMiniSudokuAttempts: Dispatch<SetStateAction<number>>;
   setMiniSudokuResult: NullableStringStateSetter;
   setQuizSubmitError: NullableStringStateSetter;
   setIsSubmittingMiniSudoku: Dispatch<SetStateAction<boolean>>;
@@ -1650,8 +1646,6 @@ type SubmitMiniSudokuControllerArgs = {
   text: {
     miniSudokuIncorrect: string;
     miniSudokuFillAll: string;
-    miniSudokuNoAttempts: () => string;
-    miniSudokuFailedPopup: string;
     miniSudokuSolved: string;
     miniSudokuSolvedPopup: string;
   };
@@ -1663,17 +1657,13 @@ export async function submitMiniSudokuController({
   miniSudokuGridMeta,
   isInteractiveLocked,
   isSubmittingMiniSudoku,
-  miniSudokuAttemptsLeft,
   miniSudokuAttemptedValues,
   miniSudokuHasConflicts,
-  miniSudokuAttempts,
   stationId,
   startedAt,
   onCompleteTask,
-  onQuizFailed,
   onQuizPassed,
   showQuizOutcomePopup,
-  setMiniSudokuAttempts,
   setMiniSudokuResult,
   setQuizSubmitError,
   setIsSubmittingMiniSudoku,
@@ -1684,7 +1674,7 @@ export async function submitMiniSudokuController({
     return;
   }
 
-  if (isInteractiveLocked || isSubmittingMiniSudoku || miniSudokuAttemptsLeft <= 0) {
+  if (isInteractiveLocked || isSubmittingMiniSudoku) {
     return;
   }
 
@@ -1704,15 +1694,6 @@ export async function submitMiniSudokuController({
   setQuizSubmitError(null);
 
   if (miniSudokuHasConflicts) {
-    const nextAttempts = miniSudokuAttempts + 1;
-    setMiniSudokuAttempts(nextAttempts);
-    if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
-      setMiniSudokuResult(text.miniSudokuNoAttempts());
-      onQuizFailed?.(stationId, "quiz_incorrect_answer");
-      showQuizOutcomePopup("failed", text.miniSudokuFailedPopup);
-      return;
-    }
-
     setMiniSudokuResult(text.miniSudokuIncorrect);
     return;
   }

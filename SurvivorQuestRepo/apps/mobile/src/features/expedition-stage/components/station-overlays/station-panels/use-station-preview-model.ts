@@ -145,7 +145,6 @@ type UseStationPreviewModelArgs = {
   boggleInput: string;
   boggleAttempts: number;
   miniSudokuValues: string[];
-  miniSudokuAttempts: number;
   miniSudokuResult: string | null;
   matchingConnections: Record<string, string>;
   matchingAttempts: number;
@@ -204,7 +203,6 @@ export function buildStationPreviewModel({
   boggleInput,
   boggleAttempts,
   miniSudokuValues,
-  miniSudokuAttempts,
   miniSudokuResult,
   matchingConnections,
   matchingAttempts,
@@ -419,7 +417,6 @@ export function buildStationPreviewModel({
       : [];
   const miniSudokuHasConflicts = miniSudokuConflictIndexes.length > 0;
   const miniSudokuDisplayResult = miniSudokuHasConflicts ? text.miniSudokuIncorrect : miniSudokuResult;
-  const miniSudokuAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - miniSudokuAttempts);
   const matchingPairs = isMatchingStation ? resolveMatchingPairs(station, uiLanguage) : [];
   const matchingAllRightOptions = isMatchingStation
     ? shuffleDeterministic(
@@ -581,7 +578,6 @@ export function buildStationPreviewModel({
     miniSudokuConflictIndexes,
     miniSudokuHasConflicts,
     miniSudokuDisplayResult,
-    miniSudokuAttemptsLeft,
     matchingPairs,
     matchingMatchedCount,
     matchingAllMatched,

@@ -23,7 +23,12 @@ export default function HomePage() {
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { data: stations } = useGetStationsQuery(undefined, { skip: !meData });
-  const { data: realizations, isLoading: isRealizationsLoading } = useGetRealizationsQuery(undefined, {
+  const {
+    data: realizations,
+    isLoading: isRealizationsLoading,
+    isError: isRealizationsError,
+    refetch: refetchRealizations,
+  } = useGetRealizationsQuery(undefined, {
     skip: !meData,
   });
   const taskCounts = getTaskCounts();
@@ -172,7 +177,12 @@ export default function HomePage() {
         )}
       </div>
 
-      <DashboardCalendar />
+      <DashboardCalendar
+        realizations={realizations}
+        isLoading={isRealizationsLoading}
+        isError={isRealizationsError}
+        onRetry={refetchRealizations}
+      />
     </AdminShell>
   );
 }

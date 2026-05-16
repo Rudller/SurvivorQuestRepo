@@ -51,6 +51,46 @@ const SIMON_TONE_ASSET_BY_BUTTON: Record<string, number> = {
   "9": require("./assets/simon-tones/9.wav"),
 };
 
+function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
+  if (station.stationType === "wordle") {
+    return text.wordleSolvedPopup;
+  }
+  if (station.stationType === "hangman") {
+    return text.hangmanSolvedPopup;
+  }
+  if (station.stationType === "mastermind") {
+    return text.mastermindSolvedPopup;
+  }
+  if (station.stationType === "anagram") {
+    return text.anagramSolvedPopup;
+  }
+  if (station.stationType === "caesar-cipher") {
+    return text.caesarSolvedPopup;
+  }
+  if (station.stationType === "memory") {
+    return text.memorySolvedPopup;
+  }
+  if (station.stationType === "simon") {
+    return text.simonSolvedPopup;
+  }
+  if (station.stationType === "rebus") {
+    return text.rebusSolvedPopup;
+  }
+  if (station.stationType === "boggle") {
+    return text.boggleSolvedPopup;
+  }
+  if (station.stationType === "mini-sudoku") {
+    return text.miniSudokuSolvedPopup;
+  }
+  if (station.stationType === "matching") {
+    return text.matchingSolvedPopup;
+  }
+  if (station.stationType === "time" || station.stationType === "points") {
+    return text.codeApproved;
+  }
+  return text.quizSuccessPopup;
+}
+
 
 type StationPreviewText = {
   fallbackQuizOptions: string[];
@@ -725,7 +765,6 @@ export function StationPreviewOverlay({
   const [miniSudokuValues, setMiniSudokuValues] = useState<string[]>(
     Array.from({ length: 81 }, () => ""),
   );
-  const [miniSudokuAttempts, setMiniSudokuAttempts] = useState(0);
   const [miniSudokuResult, setMiniSudokuResult] = useState<string | null>(null);
   const [matchingConnections, setMatchingConnections] = useState<Record<string, string>>({});
   const [matchingAttempts, setMatchingAttempts] = useState(0);
@@ -771,6 +810,7 @@ export function StationPreviewOverlay({
   const wordleRevealTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const timeoutPopupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const quizOutcomeActionRef = useRef<(() => void) | null>(null);
+  const previousStatusByStationIdRef = useRef<Record<string, StationTestViewModel["status"]>>({});
   const quizOptions = useMemo(
     () =>
       displayedStation?.quizAnswers ?? text.fallbackQuizOptions,
@@ -839,12 +879,35 @@ export function StationPreviewOverlay({
     [clearTimeoutPopupCountdown, onClose],
   );
   const closeQuizOutcomePopup = useCallback(() => {
-    const onDismiss = quizOutcomeActionRef.current;
+    const onDismiss = quizOutcomeActionRef.current ?? onClose;
     quizOutcomeActionRef.current = null;
     clearTimeoutPopupCountdown();
     setQuizOutcomePopup(null);
     onDismiss?.();
-  }, [clearTimeoutPopupCountdown]);
+  }, [clearTimeoutPopupCountdown, onClose]);
+
+  useEffect(() => {
+    const stationId = displayedStation?.stationId;
+    if (!stationId) {
+      return;
+    }
+
+    const currentStatus = displayedStation.status;
+    const previousStatus = previousStatusByStationIdRef.current[stationId];
+    previousStatusByStationIdRef.current[stationId] = currentStatus;
+
+    const stationSeenBefore = previousStatus !== undefined;
+    const transitionedToDone = stationSeenBefore && previousStatus !== "done" && currentStatus === "done";
+    if (!transitionedToDone) {
+      return;
+    }
+
+    if (quizOutcomePopup?.variant === "success") {
+      return;
+    }
+
+    showQuizOutcomePopup("success", resolveSuccessOutcomeMessage(displayedStation, text));
+  }, [displayedStation, quizOutcomePopup?.variant, showQuizOutcomePopup, text]);
   const {
     audioLoadError,
     isAudioLoading,
@@ -1068,6 +1131,7 @@ export function StationPreviewOverlay({
 
   useStationOverlayReset({
     displayedStation,
+    stationResetKey: displayedStation?.stationId ?? null,
     clearTimeoutPopupCountdown,
     clearWordleRevealTimeouts,
     resetAudioPlaybackState,
@@ -1079,7 +1143,6 @@ export function StationPreviewOverlay({
     codeInputSuccessTimeoutRef,
     timerPulseLoopRef,
     memoryHideTimeoutRef,
-    quizOutcomeActionRef,
     setSelectedQuizOption,
     setQuizResult,
     setWordleInput,
@@ -1117,7 +1180,6 @@ export function StationPreviewOverlay({
     setBoggleAttempts,
     setBoggleResult,
     setMiniSudokuValues,
-    setMiniSudokuAttempts,
     setMiniSudokuResult,
     setMatchingConnections,
     setMatchingAttempts,
@@ -1143,7 +1205,6 @@ export function StationPreviewOverlay({
     setIsCodeInputInvalid,
     setIsCodeInputSuccess,
     setNowMs,
-    setQuizOutcomePopup,
   });
 
   useEffect(() => {
@@ -1393,7 +1454,6 @@ export function StationPreviewOverlay({
     miniSudokuConflictIndexes,
     miniSudokuHasConflicts,
     miniSudokuDisplayResult,
-    miniSudokuAttemptsLeft,
     matchingPairs,
     matchingMatchedCount,
     matchingAllMatched,
@@ -1443,7 +1503,6 @@ export function StationPreviewOverlay({
     boggleInput,
     boggleAttempts,
     miniSudokuValues,
-    miniSudokuAttempts,
     miniSudokuResult,
     matchingConnections,
     matchingAttempts,
@@ -1586,10 +1645,8 @@ export function StationPreviewOverlay({
     isSubmittingBoggle,
     hasMiniSudokuPuzzle: Boolean(miniSudokuPuzzle),
     miniSudokuGridMeta,
-    miniSudokuAttemptsLeft,
     miniSudokuAttemptedValues,
     miniSudokuHasConflicts,
-    miniSudokuAttempts,
     isSubmittingMiniSudoku,
     matchingAllMatched,
     matchingAttemptsLeft,
@@ -1655,7 +1712,6 @@ export function StationPreviewOverlay({
     setBoggleAttempts,
     setBoggleResult,
     setIsSubmittingBoggle,
-    setMiniSudokuAttempts,
     setMiniSudokuResult,
     setMiniSudokuValues,
     setIsSubmittingMiniSudoku,
@@ -1730,8 +1786,6 @@ export function StationPreviewOverlay({
       boggleAdjacentOnly: text.boggleAdjacentOnly,
       miniSudokuIncorrect: text.miniSudokuIncorrect,
       miniSudokuFillAll: text.miniSudokuFillAll,
-      miniSudokuNoAttempts: text.miniSudokuNoAttempts,
-      miniSudokuFailedPopup: text.miniSudokuFailedPopup,
       miniSudokuSolved: text.miniSudokuSolved,
       miniSudokuSolvedPopup: text.miniSudokuSolvedPopup,
       matchingPairGood: text.matchingPairGood,
@@ -1831,10 +1885,9 @@ export function StationPreviewOverlay({
       stationId: station.stationId,
       miniSudokuPuzzle,
       normalizedMiniSudokuValues,
-      miniSudokuAttemptsLeft,
       miniSudokuResult: miniSudokuDisplayResult,
       conflictCellIndexes: miniSudokuConflictIndexes,
-      isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku || miniSudokuAttemptsLeft <= 0,
+      isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku,
       isSubmittingMiniSudoku,
       onChangeCell: handleMiniSudokuChangeCell,
       onSubmit: handleMiniSudokuSubmit,

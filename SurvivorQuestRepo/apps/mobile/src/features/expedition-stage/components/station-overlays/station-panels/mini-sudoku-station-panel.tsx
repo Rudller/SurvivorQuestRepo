@@ -6,10 +6,8 @@ import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import {
   NUMERIC_PINPAD_SUBLABELS,
-  TEXT_PUZZLE_MAX_ATTEMPTS,
 } from "../puzzle-helpers";
 import {
-  AttemptsIndicator,
   resolveActionLabelColor,
   useStationPanelLayout,
 } from "./shared-ui";
@@ -21,7 +19,6 @@ type MiniSudokuStationPanelProps = {
     solution: string[];
   } | null;
   normalizedMiniSudokuValues: string[];
-  miniSudokuAttemptsLeft: number;
   miniSudokuResult: string | null;
   conflictCellIndexes: number[];
   isActionDisabled: boolean;
@@ -211,7 +208,6 @@ function MiniSudokuStationPanelComponent({
   stationId,
   miniSudokuPuzzle,
   normalizedMiniSudokuValues,
-  miniSudokuAttemptsLeft,
   miniSudokuResult,
   conflictCellIndexes,
   isActionDisabled,
@@ -255,15 +251,6 @@ function MiniSudokuStationPanelComponent({
 
   return (
     <View className="mt-2">
-      <View className="mt-1">
-        <AttemptsIndicator
-          label={text.attemptsLeft}
-          attemptsLeft={miniSudokuAttemptsLeft}
-          maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
-          align="center"
-        />
-      </View>
-
       <View className="mt-3 self-center" style={{ width: boardWidthPercent }}>
         <View
           style={{
@@ -462,7 +449,6 @@ export const MiniSudokuStationPanel = memo(
     return (
       previousProps.stationId === nextProps.stationId &&
       previousProps.miniSudokuPuzzle === nextProps.miniSudokuPuzzle &&
-      previousProps.miniSudokuAttemptsLeft === nextProps.miniSudokuAttemptsLeft &&
       previousProps.miniSudokuResult === nextProps.miniSudokuResult &&
       previousProps.isActionDisabled === nextProps.isActionDisabled &&
       previousProps.isSubmittingMiniSudoku === nextProps.isSubmittingMiniSudoku &&

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
+import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
 import { DashboardCalendar } from "@/features/dashboard/components/dashboard-calendar";
 import { AdminShell } from "@/shared/components/admin-shell";
 
@@ -18,6 +19,14 @@ export default function CalendarPage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const {
+    data: realizations,
+    isLoading: isRealizationsLoading,
+    isError: isRealizationsError,
+    refetch: refetchRealizations,
+  } = useGetRealizationsQuery(undefined, {
+    skip: !meData,
+  });
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -44,7 +53,12 @@ export default function CalendarPage() {
       contentClassName="space-y-6 p-4 sm:p-6 lg:p-8"
     >
       <h1 className="text-xl font-semibold tracking-tight">Kalendarz realizacji</h1>
-      <DashboardCalendar />
+      <DashboardCalendar
+        realizations={realizations}
+        isLoading={isRealizationsLoading}
+        isError={isRealizationsError}
+        onRetry={refetchRealizations}
+      />
     </AdminShell>
   );
 }

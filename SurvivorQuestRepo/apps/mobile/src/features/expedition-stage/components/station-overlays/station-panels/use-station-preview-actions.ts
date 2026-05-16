@@ -132,10 +132,8 @@ type UseStationPreviewActionsArgs = {
   isSubmittingBoggle: boolean;
   hasMiniSudokuPuzzle: boolean;
   miniSudokuGridMeta: { side: number; blockSide: number } | null;
-  miniSudokuAttemptsLeft: number;
   miniSudokuAttemptedValues: string[];
   miniSudokuHasConflicts: boolean;
-  miniSudokuAttempts: number;
   isSubmittingMiniSudoku: boolean;
   matchingAllMatched: boolean;
   matchingAttemptsLeft: number;
@@ -201,7 +199,6 @@ type UseStationPreviewActionsArgs = {
   setBoggleAttempts: Dispatch<SetStateAction<number>>;
   setBoggleResult: Dispatch<SetStateAction<string | null>>;
   setIsSubmittingBoggle: Dispatch<SetStateAction<boolean>>;
-  setMiniSudokuAttempts: Dispatch<SetStateAction<number>>;
   setMiniSudokuResult: Dispatch<SetStateAction<string | null>>;
   setMiniSudokuValues: Dispatch<SetStateAction<string[]>>;
   setIsSubmittingMiniSudoku: Dispatch<SetStateAction<boolean>>;
@@ -276,8 +273,6 @@ type UseStationPreviewActionsArgs = {
     boggleAdjacentOnly: string;
     miniSudokuIncorrect: string;
     miniSudokuFillAll: string;
-    miniSudokuNoAttempts: () => string;
-    miniSudokuFailedPopup: string;
     miniSudokuSolved: string;
     miniSudokuSolvedPopup: string;
     matchingPairGood: string;
@@ -707,17 +702,13 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
       miniSudokuGridMeta: args.miniSudokuGridMeta,
       isInteractiveLocked: args.isInteractiveLocked,
       isSubmittingMiniSudoku: args.isSubmittingMiniSudoku,
-      miniSudokuAttemptsLeft: args.miniSudokuAttemptsLeft,
       miniSudokuAttemptedValues: args.miniSudokuAttemptedValues,
       miniSudokuHasConflicts: args.miniSudokuHasConflicts,
-      miniSudokuAttempts: args.miniSudokuAttempts,
       stationId: args.stationId,
       startedAt: args.startedAt,
       onCompleteTask: args.onCompleteTask,
-      onQuizFailed: args.onQuizFailed,
       onQuizPassed: args.onQuizPassed,
       showQuizOutcomePopup: args.showQuizOutcomePopup,
-      setMiniSudokuAttempts: args.setMiniSudokuAttempts,
       setMiniSudokuResult: args.setMiniSudokuResult,
       setQuizSubmitError: args.setQuizSubmitError,
       setIsSubmittingMiniSudoku: args.setIsSubmittingMiniSudoku,
@@ -725,8 +716,6 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
       text: {
         miniSudokuIncorrect: args.text.miniSudokuIncorrect,
         miniSudokuFillAll: args.text.miniSudokuFillAll,
-        miniSudokuNoAttempts: args.text.miniSudokuNoAttempts,
-        miniSudokuFailedPopup: args.text.miniSudokuFailedPopup,
         miniSudokuSolved: args.text.miniSudokuSolved,
         miniSudokuSolvedPopup: args.text.miniSudokuSolvedPopup,
       },
