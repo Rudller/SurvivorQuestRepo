@@ -135,7 +135,7 @@ export type OnboardingRealizationSummary = {
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
   durationMinutes: number;
-  joinCode: string;
+  joinCode?: string;
   teamCount: number;
   stationIds: string[];
   locationRequired: boolean;

@@ -260,6 +260,71 @@ describe('MobileService join session', () => {
   });
 });
 
+describe('MobileService bootstrap', () => {
+  function createService() {
+    const prisma = {
+      realization: {
+        findMany: jest.fn(),
+      },
+    };
+    const realizationService = {
+      listRealizations: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      realizationService as never,
+      {} as never,
+    );
+
+    return { service, prisma, realizationService };
+  }
+
+  it('does not expose realization join codes publicly', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        language: 'polish',
+        customLanguage: null,
+        selectedLanguage: 'polish',
+        availableLanguages: [{ value: 'polish', label: 'Polski' }],
+        introText: null,
+        gameRules: null,
+        status: 'planned',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        joinCode: 'SECRET01',
+        locationRequired: true,
+        showLeaderboard: true,
+        showLeaderboardDuringGame: true,
+        showLeaderboardOnFinish: true,
+        teamStationNumberingEnabled: true,
+        teamCount: 2,
+        stationIds: ['station-1'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      {
+        id: 'realization-1',
+        locationRequired: true,
+        showLeaderboard: true,
+        showLeaderboardDuringGame: true,
+        showLeaderboardOnFinish: true,
+        teamStationNumberingEnabled: true,
+      },
+    ]);
+
+    const result = await service.getMobileBootstrap();
+
+    expect(result.realizations[0]).not.toHaveProperty('joinCode');
+  });
+});
+
 describe('MobileService failed task snapshots', () => {
   function createService() {
     const prisma = {

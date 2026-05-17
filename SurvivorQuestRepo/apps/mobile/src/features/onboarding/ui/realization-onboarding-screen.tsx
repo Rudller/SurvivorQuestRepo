@@ -47,7 +47,6 @@ type MobileBootstrapRealization = {
   status: "planned" | "in-progress" | "done";
   scheduledAt: string;
   durationMinutes: number;
-  joinCode: string;
   locationRequired: boolean;
   showLeaderboard?: boolean;
   showLeaderboardDuringGame?: boolean;
@@ -1533,7 +1532,7 @@ export function RealizationOnboardingScreen({
             status: normalizedStatus,
             scheduledAt: activeRealization.scheduledAt,
             durationMinutes: normalizeDurationMinutes(activeRealization.durationMinutes),
-            joinCode: activeRealization.joinCode,
+            joinCode: realizationCode,
             teamCount: activeRealization.teamCount,
             stationIds: activeRealization.stationIds,
             locationRequired: activeRealization.locationRequired,
@@ -1700,9 +1699,7 @@ export function RealizationOnboardingScreen({
         }),
       });
 
-      const realization =
-        bootstrap.realizations.find((item) => item.id === join.realizationId) ??
-        bootstrap.realizations.find((item) => item.joinCode.trim().toUpperCase() === normalizedCode);
+      const realization = bootstrap.realizations.find((item) => item.id === join.realizationId);
 
       if (!realization) {
         throw new Error(text.realizationNotFound);

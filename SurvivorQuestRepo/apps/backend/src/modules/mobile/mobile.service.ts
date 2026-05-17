@@ -108,7 +108,6 @@ export class MobileService {
           ),
           scheduledAt: realization.scheduledAt,
           durationMinutes: realization.durationMinutes,
-          joinCode: realization.joinCode,
           locationRequired: realization.locationRequired,
           showLeaderboard: realization.showLeaderboard,
           showLeaderboardDuringGame: realization.showLeaderboardDuringGame,

@@ -12,7 +12,9 @@ const LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: 'other', label: 'Inne' },
 ];
 
-const REALIZATION_LANGUAGE_ORDER = LANGUAGE_OPTIONS.map((option) => option.value);
+const REALIZATION_LANGUAGE_ORDER = LANGUAGE_OPTIONS.map(
+  (option) => option.value,
+);
 const LANGUAGE_LABEL_BY_VALUE = new Map(
   LANGUAGE_OPTIONS.map((option) => [option.value, option.label]),
 );
@@ -115,11 +117,7 @@ function buildFallbackChain(input: {
   selectedLanguage: RealizationLanguage;
   baseLanguage: RealizationLanguage;
 }) {
-  const chain = [
-    input.selectedLanguage,
-    input.baseLanguage,
-    'polish' as const,
-  ];
+  const chain = [input.selectedLanguage, input.baseLanguage, 'polish' as const];
   return [...new Set(chain)];
 }
 
@@ -166,10 +164,7 @@ export function resolveRealizationLanguageContext(input: {
   };
 }
 
-function pickFirstString(
-  values: Array<string | undefined>,
-  fallback: string,
-) {
+function pickFirstString(values: Array<string | undefined>, fallback: string) {
   for (const value of values) {
     if (typeof value === 'string' && value.trim().length > 0) {
       return value.trim();

@@ -362,7 +362,9 @@ export class MobileController {
     );
   }
 
-  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/reset')
+  @Post(
+    'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/reset',
+  )
   @UseGuards(AdminSessionGuard)
   async resetMobileAdminTeamTask(
     @Param('realizationId') realizationId: string,
@@ -376,7 +378,9 @@ export class MobileController {
     });
   }
 
-  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/complete')
+  @Post(
+    'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/complete',
+  )
   @UseGuards(AdminSessionGuard)
   async completeMobileAdminTeamTask(
     @Param('realizationId') realizationId: string,

@@ -155,7 +155,10 @@ export function validateRealizationPayload(
     throw new BadRequestException('Invalid payload');
   }
 
-  if (typeof showLeaderboard !== 'undefined' && typeof showLeaderboard !== 'boolean') {
+  if (
+    typeof showLeaderboard !== 'undefined' &&
+    typeof showLeaderboard !== 'boolean'
+  ) {
     throw new BadRequestException('Invalid payload');
   }
   if (
@@ -225,7 +228,8 @@ export function validateRealizationPayload(
     peopleCount,
     positionsCount,
     durationMinutes,
-    showLeaderboard: resolvedShowLeaderboardDuringGame || resolvedShowLeaderboardOnFinish,
+    showLeaderboard:
+      resolvedShowLeaderboardDuringGame || resolvedShowLeaderboardOnFinish,
     showLeaderboardDuringGame: resolvedShowLeaderboardDuringGame,
     showLeaderboardOnFinish: resolvedShowLeaderboardOnFinish,
     teamStationNumberingEnabled: payload.teamStationNumberingEnabled ?? true,

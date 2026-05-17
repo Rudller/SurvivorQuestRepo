@@ -65,7 +65,10 @@ export function isCorsOriginAllowed(origin: string | undefined) {
     return true;
   }
 
-  if (process.env.NODE_ENV !== 'production' && isDevLocalNetworkOrigin(origin)) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    isDevLocalNetworkOrigin(origin)
+  ) {
     return true;
   }
 

@@ -50,11 +50,7 @@ describe('AuthController (e2e)', () => {
     const prismaMock = {
       user: {
         findFirst: jest.fn(
-          ({
-            where,
-          }: {
-            where: { email: string; status?: UserStatus };
-          }) => {
+          ({ where }: { where: { email: string; status?: UserStatus } }) => {
             return (
               users.find(
                 (user) =>
