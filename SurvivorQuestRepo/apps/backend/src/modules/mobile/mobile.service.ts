@@ -66,6 +66,35 @@ const LOCATION_MAX_SPEED_MPS = 120;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
 
+function isUniqueConstraintError(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
+}
+
+function throwTeamCustomizationConflict(error: unknown): never {
+  if (!isUniqueConstraintError(error)) {
+    throw error;
+  }
+
+  const target = Array.isArray(error.meta?.target)
+    ? error.meta.target.join(',')
+    : String(error.meta?.target ?? '');
+
+  if (target.includes('color')) {
+    throw new ConflictException('Team color already taken');
+  }
+
+  if (target.includes('badgeKey')) {
+    throw new ConflictException('Team icon already taken');
+  }
+
+  throw new ConflictException('Team customization already taken');
+}
+
 type MobileSessionEndReason =
   | 'time-expired'
   | 'all-tasks-completed'
@@ -469,16 +498,20 @@ export class MobileService {
       changedFields.push('badge');
     }
 
-    await this.prisma.team.update({
-      where: { id: team.id },
-      data: {
-        name: teamName,
-        color,
-        badgeKey: nextBadgeKey,
-        badgeImageUrl: nextBadgeImageUrl,
-        status: TeamStatus.ACTIVE,
-      },
-    });
+    try {
+      await this.prisma.team.update({
+        where: { id: team.id },
+        data: {
+          name: teamName,
+          color,
+          badgeKey: nextBadgeKey,
+          badgeImageUrl: nextBadgeImageUrl,
+          status: TeamStatus.ACTIVE,
+        },
+      });
+    } catch (error) {
+      throwTeamCustomizationConflict(error);
+    }
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -556,14 +589,18 @@ export class MobileService {
     if (currentColor !== nextColor) changedFields.push('color');
     if (currentBadgeKey !== nextBadgeKey) changedFields.push('badge');
 
-    await this.prisma.team.update({
-      where: { id: team.id },
-      data: {
-        color: nextColor,
-        badgeKey: nextBadgeKey,
-        status: TeamStatus.ACTIVE,
-      },
-    });
+    try {
+      await this.prisma.team.update({
+        where: { id: team.id },
+        data: {
+          color: nextColor,
+          badgeKey: nextBadgeKey,
+          status: TeamStatus.ACTIVE,
+        },
+      });
+    } catch (error) {
+      throwTeamCustomizationConflict(error);
+    }
 
     if (changedFields.length > 0) {
       await this.emitEvent({
@@ -722,15 +759,19 @@ export class MobileService {
       availableColors[0] ||
       TEAM_COLORS[(Math.max(1, team.slotNumber) - 1) % TEAM_COLORS.length];
 
-    await this.prisma.team.update({
-      where: { id: team.id },
-      data: {
-        name: randomName,
-        color,
-        badgeKey: randomBadgeKey,
-        status: TeamStatus.ACTIVE,
-      },
-    });
+    try {
+      await this.prisma.team.update({
+        where: { id: team.id },
+        data: {
+          name: randomName,
+          color,
+          badgeKey: randomBadgeKey,
+          status: TeamStatus.ACTIVE,
+        },
+      });
+    } catch (error) {
+      throwTeamCustomizationConflict(error);
+    }
 
     await this.emitEvent({
       realizationId: realization.id,

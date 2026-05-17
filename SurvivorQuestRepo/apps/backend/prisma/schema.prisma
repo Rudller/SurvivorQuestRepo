@@ -223,6 +223,8 @@ model Team {
   eventLogs          EventLog[]
 
   @@unique([realizationId, slotNumber])
+  @@unique([realizationId, color])
+  @@unique([realizationId, badgeKey])
 }
 
 model TeamAssignment {

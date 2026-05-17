@@ -1,6 +1,6 @@
-import { TaskStatus, TeamStatus } from '@prisma/client';
+import { Prisma, TaskStatus, TeamStatus } from '@prisma/client';
 import { MobileService } from './mobile.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { resolveRealizationLanguageContext } from './domain/mobile-language.helpers';
 import type { StationEntity } from '../station/station.service';
 
@@ -125,6 +125,62 @@ describe('MobileService team selection', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.team.findMany).not.toHaveBeenCalled();
     expect(prisma.team.update).not.toHaveBeenCalled();
+    expect(prisma.eventLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('MobileService team customization conflicts', () => {
+  function createService() {
+    const prisma = {
+      team: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      eventLog: {
+        create: jest.fn(),
+      },
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma };
+  }
+
+  it('maps unique color constraint races to a conflict response', async () => {
+    const { service, prisma } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: {
+        id: 'assignment-1',
+        deviceId: 'device-1',
+      },
+      team: {
+        id: 'team-1',
+        color: 'amber',
+        badgeKey: '🦊',
+      },
+      realization: {
+        id: 'realization-1',
+      },
+    });
+    prisma.team.findMany.mockResolvedValue([]);
+    prisma.team.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['realizationId', 'color'] },
+      }),
+    );
+
+    await expect(
+      service.updateMobileTeamCustomization({
+        sessionToken: 'token',
+        color: 'green',
+      }),
+    ).rejects.toThrow(new ConflictException('Team color already taken'));
     expect(prisma.eventLog.create).not.toHaveBeenCalled();
   });
 });
