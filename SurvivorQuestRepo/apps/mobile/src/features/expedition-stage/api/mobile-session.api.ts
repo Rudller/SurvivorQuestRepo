@@ -15,6 +15,7 @@ import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
 
 type UnknownRecord = Record<string, unknown>;
 type MobileApiError = { message?: string };
+type MobileApiRequestOptions = { signal?: AbortSignal };
 
 const MOBILE_SESSION_API_TEXT: Record<
   UiLanguage,
@@ -532,6 +533,7 @@ export async function fetchMobileSessionState(
   apiBaseUrl: string,
   sessionToken: string,
   selectedLanguage?: RealizationLanguage,
+  options?: MobileApiRequestOptions,
 ) {
   const safeLanguage =
     selectedLanguage && isRealizationLanguage(selectedLanguage)
@@ -552,6 +554,7 @@ export async function fetchMobileSessionState(
         sessionToken: trimmedToken,
         selectedLanguage: safeLanguage,
       }),
+      signal: options?.signal,
     },
   );
   return normalizeSessionState(result, safeLanguage);
@@ -568,6 +571,7 @@ export async function postMobileTeamLocation(
     heading?: number;
     at?: string;
   },
+  options?: MobileApiRequestOptions,
 ) {
   const result = await requestMobileApi<{
     ok: boolean;
@@ -585,6 +589,7 @@ export async function postMobileTeamLocation(
       heading: payload.heading,
       at: payload.at,
     }),
+    signal: options?.signal,
   });
 
   return {
@@ -604,6 +609,7 @@ export async function postMobileCompleteTask(
     startedAt?: string;
     finishedAt?: string;
   },
+  options?: MobileApiRequestOptions,
 ) {
   return requestMobileApi<{ teamId: string; stationId: string; pointsTotal: number; pointsAwarded: number; taskStatus: "done" }>(
     apiBaseUrl,
@@ -617,6 +623,7 @@ export async function postMobileCompleteTask(
         startedAt: payload.startedAt,
         finishedAt: payload.finishedAt,
       }),
+      signal: options?.signal,
     },
   );
 }
@@ -630,6 +637,7 @@ export async function postMobileFailTask(
     startedAt?: string;
     finishedAt?: string;
   },
+  options?: MobileApiRequestOptions,
 ) {
   return requestMobileApi<{
     teamId: string;
@@ -646,12 +654,14 @@ export async function postMobileFailTask(
       startedAt: payload.startedAt,
       finishedAt: payload.finishedAt,
     }),
+    signal: options?.signal,
   });
 }
 
 export async function postMobileStartTask(
   apiBaseUrl: string,
   payload: { sessionToken: string; stationId: string; startedAt?: string },
+  options?: MobileApiRequestOptions,
 ) {
   return requestMobileApi<{ teamId: string; stationId: string; taskStatus: "in-progress"; startedAt: string }>(
     apiBaseUrl,
@@ -663,6 +673,7 @@ export async function postMobileStartTask(
         stationId: payload.stationId,
         startedAt: payload.startedAt,
       }),
+      signal: options?.signal,
     },
   );
 }
@@ -674,6 +685,7 @@ export async function postMobileResolveStationQr(
     token: string;
     selectedLanguage?: RealizationLanguage;
   },
+  options?: MobileApiRequestOptions,
 ) {
   return requestMobileApi<{
     realizationId: string;
@@ -729,5 +741,6 @@ export async function postMobileResolveStationQr(
       token: payload.token,
       selectedLanguage: payload.selectedLanguage,
     }),
+    signal: options?.signal,
   });
 }

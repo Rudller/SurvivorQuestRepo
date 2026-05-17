@@ -21,6 +21,7 @@ import {
 const SESSION_POLLING_INTERVAL_MS = 15_000;
 const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
 const TASK_REQUEST_RETRY_DELAYS_MS = [350, 900];
+const UNSAFE_MUTATION_RETRY_DELAYS_MS: readonly number[] = [];
 const MOBILE_REQUEST_TIMEOUT_MS = 12_000;
 
 const EXPEDITION_SESSION_TEXT = {
@@ -116,18 +117,34 @@ export function isRetriableNetworkError(error: unknown) {
   );
 }
 
-function withRequestTimeout<T>(request: () => Promise<T>, timeoutMs: number, timeoutMessage: string) {
+function withRequestTimeout<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+) {
   return new Promise<T>((resolve, reject) => {
+    const abortController = new AbortController();
+    let isSettled = false;
     const timeoutId = setTimeout(() => {
+      isSettled = true;
+      abortController.abort();
       reject(new Error(timeoutMessage));
     }, timeoutMs);
 
-    request().then(
+    Promise.resolve().then(() => request(abortController.signal)).then(
       (result) => {
+        if (isSettled) {
+          return;
+        }
+        isSettled = true;
         clearTimeout(timeoutId);
         resolve(result);
       },
       (error: unknown) => {
+        if (isSettled) {
+          return;
+        }
+        isSettled = true;
         clearTimeout(timeoutId);
         reject(error);
       },
@@ -136,7 +153,7 @@ function withRequestTimeout<T>(request: () => Promise<T>, timeoutMs: number, tim
 }
 
 type RunRequestWithRetryArgs<T> = {
-  request: () => Promise<T>;
+  request: (signal: AbortSignal) => Promise<T>;
   timeoutMs: number;
   timeoutMessage: string;
   retryDelaysMs: readonly number[];
@@ -327,7 +344,7 @@ export function useExpeditionSession(session: OnboardingSession) {
 
     try {
       const nextState = await runRequestWithRetry({
-        request: () => fetchMobileSessionState(apiBaseUrl, session.sessionToken, selectedLanguage),
+        request: (signal) => fetchMobileSessionState(apiBaseUrl, session.sessionToken, selectedLanguage, { signal }),
         timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
         timeoutMessage: text.requestTimedOut,
         retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
@@ -408,15 +425,15 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       try {
         await runRequestWithRetry({
-          request: () =>
+          request: (signal) =>
             postMobileStartTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
               stationId: normalizedStationId,
               startedAt: startedAtIso,
-            }),
+            }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
-          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
+          retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
         });
       } catch (error) {
         return getApiErrorMessage(error, text.startTaskFailed);
@@ -480,17 +497,17 @@ export function useExpeditionSession(session: OnboardingSession) {
       try {
         const finishedAt = new Date().toISOString();
         await runRequestWithRetry({
-          request: () =>
+          request: (signal) =>
             postMobileCompleteTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
               stationId: normalizedStationId,
               completionCode: normalizedCode,
               startedAt,
               finishedAt,
-            }),
+            }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
-          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
+          retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
         });
 
         setSessionState((current) => {
@@ -543,7 +560,7 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       try {
         const result = await runRequestWithRetry({
-          request: () =>
+          request: (signal) =>
             postMobileTeamLocation(apiBaseUrl, {
               sessionToken: session.sessionToken,
               latitude: location.latitude,
@@ -552,7 +569,7 @@ export function useExpeditionSession(session: OnboardingSession) {
               speed: location.speed,
               heading: location.heading,
               at: locationAt,
-            }),
+            }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
           retryDelaysMs: LOCATION_SYNC_RETRY_DELAYS_MS,
@@ -628,17 +645,17 @@ export function useExpeditionSession(session: OnboardingSession) {
       try {
         const finishedAt = new Date().toISOString();
         await runRequestWithRetry({
-          request: () =>
+          request: (signal) =>
             postMobileFailTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
               stationId: normalizedStationId,
               reason,
               startedAt,
               finishedAt,
-            }),
+            }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
-          retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
+          retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
         });
 
         setSessionState((current) => {
@@ -700,12 +717,12 @@ export function useExpeditionSession(session: OnboardingSession) {
 
       try {
         const response = await runRequestWithRetry({
-          request: () =>
+          request: (signal) =>
             postMobileResolveStationQr(apiBaseUrl, {
               sessionToken: session.sessionToken,
               token: normalizedToken,
               selectedLanguage,
-            }),
+            }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
           retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,

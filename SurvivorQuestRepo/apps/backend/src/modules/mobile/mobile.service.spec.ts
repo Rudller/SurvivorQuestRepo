@@ -1,4 +1,4 @@
-import { EventActorType, TeamStatus } from '@prisma/client';
+import { TaskStatus, TeamStatus } from '@prisma/client';
 import { MobileService } from './mobile.service';
 import { BadRequestException } from '@nestjs/common';
 import { resolveRealizationLanguageContext } from './domain/mobile-language.helpers';
@@ -322,6 +322,109 @@ describe('MobileService bootstrap', () => {
     const result = await service.getMobileBootstrap();
 
     expect(result.realizations[0]).not.toHaveProperty('joinCode');
+  });
+});
+
+describe('MobileService task scoring', () => {
+  function createService() {
+    const prisma = {
+      teamTaskProgress: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      team: {
+        update: jest.fn(),
+      },
+      eventLog: {
+        create: jest.fn(),
+      },
+    };
+    const stationService = {
+      findStationById: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      stationService as never,
+    );
+
+    return { service, prisma, stationService };
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('scores timed tasks using server-side timestamps instead of client payload timestamps', async () => {
+    const { service, prisma, stationService } = createService();
+    const serverFinishedAt = new Date('2026-05-10T10:01:00.000Z');
+
+    jest.useFakeTimers();
+    jest.setSystemTime(serverFinishedAt);
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: {
+        deviceId: 'device-1',
+      },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(40);
+
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'time',
+      completionCode: 'DONE1',
+      points: 100,
+      timeLimitSeconds: 100,
+    });
+    prisma.teamTaskProgress.findUnique.mockResolvedValue({
+      id: 'progress-1',
+      status: TaskStatus.IN_PROGRESS,
+      startedAt: new Date('2026-05-10T10:00:00.000Z'),
+    });
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+      completionCode: 'DONE1',
+      startedAt: '2026-05-10T10:00:59.000Z',
+      finishedAt: '2026-05-10T10:01:00.000Z',
+    });
+
+    expect(result.pointsAwarded).toBe(40);
+    expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
+      where: { id: 'progress-1' },
+      data: expect.objectContaining({
+        pointsAwarded: 40,
+        finishedAt: serverFinishedAt,
+      }),
+    });
+    expect(prisma.eventLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payload: expect.objectContaining({
+          startedAt: '2026-05-10T10:00:00.000Z',
+          finishedAt: '2026-05-10T10:01:00.000Z',
+          scoring: expect.objectContaining({ elapsedSeconds: 60 }),
+        }),
+      }),
+    });
   });
 });
 

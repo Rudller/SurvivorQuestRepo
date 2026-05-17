@@ -98,7 +98,7 @@ describe("applyCompletedTaskState", () => {
 describe("network retry helpers", () => {
   it("retries once after transient network error", async () => {
     const request = jest
-      .fn<Promise<string>, []>()
+      .fn<Promise<string>, [AbortSignal]>()
       .mockRejectedValueOnce(new Error("Network request failed"))
       .mockResolvedValue("ok");
 
@@ -114,7 +114,7 @@ describe("network retry helpers", () => {
   });
 
   it("does not retry non-retriable API errors", async () => {
-    const request = jest.fn<Promise<string>, []>().mockRejectedValue(new Error("HTTP 400"));
+    const request = jest.fn<Promise<string>, [AbortSignal]>().mockRejectedValue(new Error("HTTP 400"));
 
     await expect(
       runRequestWithRetry({
@@ -129,7 +129,7 @@ describe("network retry helpers", () => {
   });
 
   it("treats timeout as retriable and succeeds on next attempt", async () => {
-    const request = jest.fn<Promise<string>, []>(() => {
+    const request = jest.fn<Promise<string>, [AbortSignal]>(() => {
       if (request.mock.calls.length === 1) {
         return new Promise<string>((resolve) => {
           setTimeout(() => {
@@ -149,6 +149,44 @@ describe("network retry helpers", () => {
 
     expect(result).toBe("ok");
     expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts a timed out attempt before retrying", async () => {
+    const request = jest.fn<Promise<string>, [AbortSignal]>((signal) => {
+      if (request.mock.calls.length === 1) {
+        return new Promise<string>((resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("aborted")));
+        });
+      }
+
+      return Promise.resolve("ok");
+    });
+
+    const result = await runRequestWithRetry({
+      request,
+      timeoutMs: 5,
+      timeoutMessage: "timed out",
+      retryDelaysMs: [1],
+    });
+
+    expect(result).toBe("ok");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[0].aborted).toBe(true);
+  });
+
+  it("does not retry when retry delays are empty", async () => {
+    const request = jest.fn<Promise<string>, [AbortSignal]>().mockRejectedValue(new Error("timed out"));
+
+    await expect(
+      runRequestWithRetry({
+        request,
+        timeoutMs: 100,
+        timeoutMessage: "timed out",
+        retryDelaysMs: [],
+      }),
+    ).rejects.toThrow("timed out");
+
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("detects retriable network messages", () => {

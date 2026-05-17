@@ -873,10 +873,7 @@ export class MobileService {
       throw new NotFoundException('Station not found');
     }
 
-    const startedAt = parseIsoOrNow(input.startedAt);
-    if (!startedAt) {
-      throw new BadRequestException('Invalid payload');
-    }
+    const startedAt = new Date();
 
     const existingProgress = await this.prisma.teamTaskProgress.findUnique({
       where: {
@@ -894,14 +891,14 @@ export class MobileService {
 
     const startedAtIso =
       existingProgress?.startedAt?.toISOString() ||
-      new Date(startedAt).toISOString();
+      startedAt.toISOString();
 
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
         where: { id: existingProgress.id },
         data: {
           status: TaskStatus.IN_PROGRESS,
-          startedAt: existingProgress.startedAt || new Date(startedAt),
+          startedAt: existingProgress.startedAt || startedAt,
         },
       });
     } else {
@@ -911,7 +908,7 @@ export class MobileService {
           teamId: team.id,
           stationId: input.stationId,
           status: TaskStatus.IN_PROGRESS,
-          startedAt: new Date(startedAt),
+          startedAt,
         },
       });
     }
@@ -968,10 +965,8 @@ export class MobileService {
       );
     }
 
-    const finishedAt = parseIsoOrNow(input.finishedAt);
-    if (!finishedAt) {
-      throw new BadRequestException('Invalid payload');
-    }
+    const finishedAt = new Date();
+    const finishedAtIso = finishedAt.toISOString();
 
     const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
@@ -1001,13 +996,8 @@ export class MobileService {
       }
     }
 
-    const startedAtIso = parseIsoOrNow(input.startedAt);
-    if (input.startedAt && !startedAtIso) {
-      throw new BadRequestException('Invalid payload');
-    }
-
     const startedAtSource =
-      existingProgress?.startedAt?.toISOString() || startedAtIso || null;
+      existingProgress?.startedAt?.toISOString() || null;
 
     if (isTimedStartRequiredStationType(station.type) && !startedAtSource) {
       throw new BadRequestException('Task timer not started');
@@ -1017,8 +1007,8 @@ export class MobileService {
       ? this.computeLinearTimePoints({
           basePoints: station.points,
           timeLimitSeconds: station.timeLimitSeconds,
-          startedAtIso: startedAtSource || finishedAt,
-          finishedAtIso: finishedAt,
+          startedAtIso: startedAtSource || finishedAtIso,
+          finishedAtIso,
         })
       : Math.max(0, Math.round(station.points));
 
@@ -1033,7 +1023,7 @@ export class MobileService {
             : startedAtSource
               ? new Date(startedAtSource)
               : null,
-          finishedAt: new Date(finishedAt),
+          finishedAt,
         },
       });
     } else {
@@ -1045,7 +1035,7 @@ export class MobileService {
           status: TaskStatus.DONE,
           pointsAwarded: awardedPoints,
           startedAt: startedAtSource ? new Date(startedAtSource) : null,
-          finishedAt: new Date(finishedAt),
+          finishedAt,
         },
       });
     }
@@ -1058,8 +1048,8 @@ export class MobileService {
           elapsedSeconds: Math.max(
             0,
             Math.round(
-              (new Date(finishedAt).getTime() -
-                new Date(startedAtSource || finishedAt).getTime()) /
+              (finishedAt.getTime() -
+                new Date(startedAtSource || finishedAtIso).getTime()) /
                 1000,
             ),
           ),
@@ -1080,7 +1070,7 @@ export class MobileService {
         stationType: station.type,
         pointsAwarded: awardedPoints,
         startedAt: startedAtSource,
-        finishedAt,
+        finishedAt: finishedAtIso,
         scoring: scoringMeta,
       },
     });
@@ -1124,10 +1114,8 @@ export class MobileService {
       );
     }
 
-    const finishedAt = parseIsoOrNow(input.finishedAt);
-    if (!finishedAt) {
-      throw new BadRequestException('Invalid payload');
-    }
+    const finishedAt = new Date();
+    const finishedAtIso = finishedAt.toISOString();
 
     const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
@@ -1161,13 +1149,8 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const startedAtIso = parseIsoOrNow(input.startedAt);
-    if (input.startedAt && !startedAtIso) {
-      throw new BadRequestException('Invalid payload');
-    }
-
     const startedAtSource =
-      existingProgress?.startedAt?.toISOString() || startedAtIso || null;
+      existingProgress?.startedAt?.toISOString() || null;
     const failureReason = this.resolveTaskFailureReason(input.reason);
 
     if (existingProgress) {
@@ -1181,7 +1164,7 @@ export class MobileService {
             : startedAtSource
               ? new Date(startedAtSource)
               : null,
-          finishedAt: new Date(finishedAt),
+          finishedAt,
         },
       });
     } else {
@@ -1193,7 +1176,7 @@ export class MobileService {
           status: TaskStatus.DONE,
           pointsAwarded: 0,
           startedAt: startedAtSource ? new Date(startedAtSource) : null,
-          finishedAt: new Date(finishedAt),
+          finishedAt,
         },
       });
     }
@@ -1211,7 +1194,7 @@ export class MobileService {
         reasonLabel: failureReason.label,
         reasonRaw: failureReason.raw,
         startedAt: startedAtSource,
-        finishedAt,
+        finishedAt: finishedAtIso,
       },
     });
 
