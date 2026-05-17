@@ -139,9 +139,9 @@ export function LandingPage({ adminPanelHref, demoHref, quoteHref, contactEmail,
               className="relative z-10 mt-4 h-[38vh] min-h-[220px] w-full rounded-2xl border border-[#4b6658]/55 object-cover brightness-[0.98] shadow-[0_22px_40px_-28px_rgba(0,0,0,0.95)] lg:hidden"
             />
             <p className="mt-5 max-w-2xl text-sm leading-relaxed text-[#c3d2c7] sm:text-base lg:text-lg">
-              SurvivorQuest łączy panel admina i aplikację mobilną w jeden system operacyjny dla eventów. Tworzysz
-              scenariusze, zarządzasz stacjami, śledzisz postęp zespołów i masz pełny podgląd punktacji bez przełączania
-              narzędzi.
+              SurvivorQuest (Survivor Quest) łączy panel admina i aplikację mobilną w jeden system operacyjny dla
+              eventów. Tworzysz scenariusze, zarządzasz stacjami, śledzisz postęp zespołów i masz pełny podgląd
+              punktacji bez przełączania narzędzi.
             </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">

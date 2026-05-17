@@ -2,14 +2,24 @@ import type { Metadata } from "next";
 import { LandingPage } from "@/features/landing/components/landing-page";
 
 export const metadata: Metadata = {
-  title: "SurvivorQuest | Gry terenowe i realizacje eventowe",
+  title: "SurvivorQuest (Survivor Quest) | Gry terenowe i realizacje eventowe",
   description:
-    "SurvivorQuest to platforma do organizacji gier terenowych i eventów firmowych: panel admina, aplikacja mobilna i monitoring realizacji na żywo.",
+    "SurvivorQuest (Survivor Quest) to platforma do organizacji gier terenowych i eventów firmowych: panel admina, aplikacja mobilna i monitoring realizacji na żywo.",
+  keywords: [
+    "survivor quest",
+    "survivorquest",
+    "aplikacja do gier terenowych",
+    "platforma do eventów firmowych",
+    "aplikacja do eventów integracyjnych",
+    "monitoring gry terenowej na żywo",
+    "zarządzanie zespołami podczas eventu",
+    "ranking drużyn na żywo",
+  ],
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "SurvivorQuest | Gry terenowe i realizacje eventowe",
+    title: "SurvivorQuest (Survivor Quest) | Gry terenowe i realizacje eventowe",
     description:
       "Panel admina + aplikacja mobilna do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji.",
     url: "/",

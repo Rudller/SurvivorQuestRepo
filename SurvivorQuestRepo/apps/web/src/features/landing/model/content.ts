@@ -8,13 +8,16 @@ export const BENEFITS = [
   {
     title: "Panel admina do pełnej konfiguracji realizacji",
     description:
-      "Tworzysz scenariusze, konfigurujesz stanowiska i ustawiasz kolejność przebiegu imprezy integracyjnej w jednym miejscu.",
-    points: ["Edycja scenariuszy, stanowisk i kolejności etapów", "Szybka konfiguracja zespołów, instruktorów i harmonogramu"],
+      "To platforma do eventów firmowych i system do gier terenowych: tworzysz scenariusze, konfigurujesz stanowiska i ustawiasz przebieg imprezy integracyjnej w jednym miejscu.",
+    points: [
+      "Edycja scenariuszy, stanowisk i kolejności etapów",
+      "Zarządzanie zespołami podczas eventu, instruktorami i harmonogramem",
+    ],
   },
   {
     title: "Aplikacja mobilna dla uczestników i instruktorów",
     description:
-      "Aplikacja obsługuje dwa modele pracy: drużyna działa samodzielnie z urządzeniem albo instruktor prowadzi grupę przez kolejne stanowiska.",
+      "Aplikacja do gier terenowych i aplikacja do eventów integracyjnych obsługuje dwa modele pracy: drużyna działa samodzielnie z urządzeniem albo instruktor prowadzi grupę przez kolejne stanowiska.",
     points: [
       "Docelowo przygotowana pod tablety dostarczane przez organizatora",
       "Opcjonalnie uczestnik lub instruktor może korzystać z aplikacji na telefonie",
@@ -23,30 +26,30 @@ export const BENEFITS = [
   {
     title: "Monitoring i podsumowanie realizacji",
     description:
-      "Koordynator widzi postęp drużyn i pracę instruktorów na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
-    points: ["Podgląd aktywności, punktów i logów zdarzeń", "Kompletny obraz przebiegu wydarzenia po zakończeniu"],
+      "Koordynator widzi monitoring gry terenowej na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
+    points: ["Podgląd aktywności, punktów, logów zdarzeń i ranking drużyn na żywo", "Kompletny obraz przebiegu wydarzenia po zakończeniu"],
   },
 ] as const;
 
 export const REALIZATION_PHOTO_SPOTS = [
   {
     title: "Gry terenowe miejskie",
-    description: "Dynamiczne kadry z punktów gry i zadań zespołowych.",
+    description: "Dynamiczne kadry z punktów gry i zadań zespołowych pokazujące, jak działa aplikacja do gry terenowej dla firm.",
     badge: "Miejsce na zdjęcie 16:10",
   },
   {
     title: "Realizacje hotelowe",
-    description: "Sceny integracyjne w przestrzeniach konferencyjnych i premium.",
+    description: "Sceny integracyjne w przestrzeniach konferencyjnych i premium z przykładem, jak działa aplikacja przy grach hotelowych.",
     badge: "Miejsce na zdjęcie 16:10",
   },
   {
     title: "Warsztaty i aktywacje",
-    description: "Ujęcia prowadzących, materiałów i efektów pracy zespołów.",
+    description: "Ujęcia prowadzących, materiałów i efektów pracy zespołów podczas warsztatów firmowych prowadzonych w aplikacji.",
     badge: "Miejsce na zdjęcie 16:10",
   },
   {
     title: "Atrakcje wieczorne",
-    description: "Atmosfera finału wydarzenia z akcentem na energię uczestników.",
+    description: "Atmosfera finału wydarzenia z akcentem na energię uczestników i sprawną organizację atrakcji wieczornych.",
     badge: "Miejsce na zdjęcie 16:10",
   },
 ] as const;
@@ -83,6 +86,11 @@ export const CASE_STUDIES = [
 
 export const FAQ_ITEMS = [
   {
+    question: "Czy SurvivorQuest to aplikacja do gier terenowych dla firm?",
+    answer:
+      "Tak. SurvivorQuest to aplikacja do gier terenowych dla firm i platforma do eventów firmowych, która łączy panel admina z aplikacją mobilną.",
+  },
+  {
     question: "Czy aplikacja jest prosta w obsłudze dla uczestników?",
     answer:
       "Tak. Interfejs jest prosty i prowadzi uczestników krok po kroku przez zadania. W praktyce wystarcza krótkie wprowadzenie od instruktora lub organizatora przed startem.",
@@ -100,12 +108,17 @@ export const FAQ_ITEMS = [
   {
     question: "Czy jest leaderboard i kiedy pojawia się podczas gry?",
     answer:
-      "Tak, w aplikacji można pokazywać leaderboard drużyn. Ranking pojawia się w trakcie realizacji po uruchomieniu punktacji, dzięki czemu uczestnicy widzą aktualną kolejność na żywo. Jest możliwość wyłączenia tej opcji.",
+      "Tak, w aplikacji można pokazywać leaderboard drużyn i ranking drużyn na żywo. Ranking pojawia się w trakcie realizacji po uruchomieniu punktacji, a opcję można wyłączyć.",
   },
   {
     question: "Czy mogę modyfikować przebieg pod konkretną realizację?",
     answer:
       "Tak. W panelu ustawiasz scenariusz, stanowiska i kolejność etapów dla danej realizacji bez utraty danych historycznych.",
+  },
+  {
+    question: "Czy system obsługuje gry hotelowe, warsztaty firmowe i atrakcje wieczorne?",
+    answer:
+      "Tak. W jednym środowisku możesz przygotować gry hotelowe, warsztaty firmowe i atrakcje wieczorne, a potem monitorować realizację na żywo.",
   },
 ] as const;
 
