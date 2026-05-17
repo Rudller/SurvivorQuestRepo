@@ -2,6 +2,8 @@ import { Image, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/model/constants";
+import type { ExpeditionLeaderboardEntry } from "../model/types";
+import { TopLeaderboardStrip } from "./top-leaderboard-strip";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -17,6 +19,9 @@ type TopRealizationPanelProps = {
   onOpenLanguagePicker?: () => void;
   themeMode: ExpeditionThemeMode;
   onToggleTheme: () => void;
+  leaderboardEntries?: ExpeditionLeaderboardEntry[];
+  leaderboardCurrentTeamId?: string;
+  showLeaderboardDuringGame?: boolean;
 };
 
 const TOP_REALIZATION_PANEL_TEXT: Record<
@@ -109,12 +114,19 @@ export function TopRealizationPanel({
   onOpenLanguagePicker,
   themeMode,
   onToggleTheme,
+  leaderboardEntries,
+  leaderboardCurrentTeamId,
+  showLeaderboardDuringGame = false,
 }: TopRealizationPanelProps) {
   const uiLanguage = useUiLanguage();
   const text = TOP_REALIZATION_PANEL_TEXT[uiLanguage];
   const cardTextColor = resolveCardTextColor(teamColorHex);
   const cardMutedTextColor = cardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
   const iconBackground = cardTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
+  const resolvedLeaderboardEntries = leaderboardEntries ?? [];
+  const resolvedLeaderboardCurrentTeamId = leaderboardCurrentTeamId?.trim() ?? "";
+  const shouldShowTopbarLeaderboard =
+    showLeaderboardDuringGame && resolvedLeaderboardEntries.length > 0 && resolvedLeaderboardCurrentTeamId.length > 0;
 
   return (
     <View
@@ -148,6 +160,15 @@ export function TopRealizationPanel({
               >
                 {companyName}
               </Text>
+              {shouldShowTopbarLeaderboard ? (
+                <View style={{ minWidth: 176, maxWidth: 320 }}>
+                  <TopLeaderboardStrip
+                    entries={resolvedLeaderboardEntries}
+                    currentTeamId={resolvedLeaderboardCurrentTeamId}
+                    compact
+                  />
+                </View>
+              ) : null}
               <View className="flex-row items-center gap-2">
                 {showLanguageButton && languageFlag && onOpenLanguagePicker ? (
                   <Pressable

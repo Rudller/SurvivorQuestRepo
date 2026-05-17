@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { MOBILE_UX_TOKENS } from "../../../../../shared/ui/ux-tokens";
 import { SIMON_BUTTONS } from "../puzzle-helpers";
 import { useStationPanelLayout } from "./shared-ui";
 
@@ -22,22 +23,52 @@ type SimonStationPanelProps = {
 
 type SimonStationText = {
   progress: string;
+  status: string;
+  statusPlayback: string;
+  statusReady: string;
+  statusChecking: string;
+  statusLocked: string;
+  button: string;
 };
 
 const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
   progress: "Progress",
+  status: "Status",
+  statusPlayback: "Playback",
+  statusReady: "Ready",
+  statusChecking: "Checking",
+  statusLocked: "Locked",
+  button: "Button",
 };
 
 const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
   polish: {
     progress: "Postęp",
+    status: "Status",
+    statusPlayback: "Odtwarzanie",
+    statusReady: "Gotowe",
+    statusChecking: "Sprawdzanie",
+    statusLocked: "Zablokowane",
+    button: "Przycisk",
   },
   english: SIMON_STATION_TEXT_ENGLISH,
   ukrainian: {
     progress: "Прогрес",
+    status: "Статус",
+    statusPlayback: "Відтворення",
+    statusReady: "Готово",
+    statusChecking: "Перевірка",
+    statusLocked: "Заблоковано",
+    button: "Кнопка",
   },
   russian: {
     progress: "Прогресс",
+    status: "Статус",
+    statusPlayback: "Воспроизведение",
+    statusReady: "Готово",
+    statusChecking: "Проверка",
+    statusLocked: "Заблокировано",
+    button: "Кнопка",
   },
 };
 
@@ -65,6 +96,32 @@ export function SimonStationPanel({
       ((gridWidth > 0 ? gridWidth : defaultGridWidth) - simonButtonGap * 2) / 3,
     );
   const safeSequenceLength = Math.max(1, Math.min(simonTargetLength, simonSequence.length));
+  const isSimonLocked = isInteractiveLocked;
+  const isSimonChecking = isSubmittingSimon;
+  const simonStatusLabel = isSimonChecking
+    ? text.statusChecking
+    : isSimonPlaybackActive
+      ? text.statusPlayback
+      : isSimonLocked
+        ? text.statusLocked
+        : text.statusReady;
+  const simonStatusTone = isSimonChecking || isSimonPlaybackActive
+    ? {
+        borderColor: "rgba(245, 158, 11, 0.7)",
+        backgroundColor: "rgba(245, 158, 11, 0.18)",
+        textColor: EXPEDITION_THEME.textPrimary,
+      }
+    : isSimonLocked
+      ? {
+          borderColor: EXPEDITION_THEME.border,
+          backgroundColor: EXPEDITION_THEME.panelStrong,
+          textColor: EXPEDITION_THEME.textMuted,
+        }
+      : {
+          borderColor: "rgba(16, 185, 129, 0.65)",
+          backgroundColor: "rgba(16, 185, 129, 0.16)",
+          textColor: EXPEDITION_THEME.textPrimary,
+        };
 
   return (
     <View className="mt-3">
@@ -85,6 +142,17 @@ export function SimonStationPanel({
       <Text className="mt-1 text-center" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
         {text.progress}: {simonProgress}/{safeSequenceLength}
       </Text>
+      <View
+        className="mt-2 self-center rounded-full border px-3 py-1"
+        style={{
+          borderColor: simonStatusTone.borderColor,
+          backgroundColor: simonStatusTone.backgroundColor,
+        }}
+      >
+        <Text className="text-xs font-semibold" style={{ color: simonStatusTone.textColor }}>
+          {text.status}: {simonStatusLabel}
+        </Text>
+      </View>
       <View
         className="mt-2 flex-row flex-wrap self-center"
         style={{
@@ -112,26 +180,39 @@ export function SimonStationPanel({
             return (
           <Pressable
             key={`${stationId}-simon-${button.id}`}
-            className="items-center justify-center rounded-full border active:opacity-90"
+            className={`items-center justify-center rounded-full border ${MOBILE_UX_TOKENS.activePressClass}`}
             style={{
               width: simonButtonSize,
               height: simonButtonSize,
+              minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+              minHeight: MOBILE_UX_TOKENS.minTouchTarget,
               borderRadius: simonButtonSize / 2,
-               borderWidth: isPlaybackTarget ? 3 : 1,
-               borderColor: isPlaybackTarget ? "rgba(255, 255, 255, 0.95)" : EXPEDITION_THEME.border,
-               backgroundColor: button.color,
-               opacity: isPlaybackTarget ? 0.86 : 0.55,
-               transform: [{ scale: isPlaybackTarget ? 1.08 : 1 }],
-               shadowColor: "#ffffff",
-               shadowOpacity: isPlaybackTarget ? 0.5 : 0,
-               shadowRadius: isPlaybackTarget ? 10 : 0,
-              shadowOffset: { width: 0, height: 0 },
+                borderWidth: isPlaybackTarget ? 3 : 1,
+                borderColor: isPlaybackTarget ? "rgba(255, 255, 255, 0.95)" : EXPEDITION_THEME.border,
+                backgroundColor: button.color,
+                opacity: isButtonDisabled
+                  ? MOBILE_UX_TOKENS.disabledOpacity
+                  : isPlaybackTarget
+                    ? 0.92
+                    : 0.72,
+                transform: [{ scale: isPlaybackTarget ? 1.08 : 1 }],
+                shadowColor: "#ffffff",
+                shadowOpacity: isPlaybackTarget ? 0.5 : 0,
+                shadowRadius: isPlaybackTarget ? 10 : 0,
+               shadowOffset: { width: 0, height: 0 },
             }}
             onPress={() => {
               onPressButton(button.id);
             }}
             disabled={isButtonDisabled}
             hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={`${text.button} ${button.id}`}
+            accessibilityState={{
+              disabled: isButtonDisabled,
+              selected: isPlaybackTarget,
+              busy: isSubmittingSimon || isSimonPlaybackActive,
+            }}
           />
             );
           })()

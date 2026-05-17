@@ -28,6 +28,8 @@ import {
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
+import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -1189,6 +1191,8 @@ export function RealizationOnboardingScreen({
   const [apiBaseUrlOverride, setApiBaseUrlOverride] = useState<string | null>(null);
   const [apiServerPreset, setApiServerPreset] = useState<ApiServerPreset>("local");
   const [apiBaseUrlDraft, setApiBaseUrlDraft] = useState("");
+  const [isApiBaseUrlFocused, setIsApiBaseUrlFocused] = useState(false);
+  const [isRealizationCodeFocused, setIsRealizationCodeFocused] = useState(false);
   const [apiConfigMessage, setApiConfigMessage] = useState<string | null>(null);
   const [apiConfigMessageTone, setApiConfigMessageTone] = useState<"info" | "error" | null>(null);
   const [isApiConfigOpen, setIsApiConfigOpen] = useState(false);
@@ -2271,7 +2275,7 @@ export function RealizationOnboardingScreen({
                     {text.apiConnectionLabel}
                   </Text>
                   <Pressable
-                    className={`border active:opacity-80 ${isTabletLayout ? "rounded-2xl px-4 py-2" : "rounded-xl px-2.5 py-1"}`}
+                    className={`border active:opacity-85 ${isTabletLayout ? "rounded-2xl px-4 py-2" : "rounded-xl px-2.5 py-1"}`}
                     style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
                     onPress={() => {
                       setIsApiConfigOpen((current) => {
@@ -2323,7 +2327,7 @@ export function RealizationOnboardingScreen({
                     </Text>
                     <View className="flex-row gap-2">
                       <Pressable
-                        className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
+                        className={`flex-1 border active:opacity-85 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
                         style={{
                           borderColor: apiServerPreset === "local" ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
                           backgroundColor: apiServerPreset === "local" ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
@@ -2335,7 +2339,7 @@ export function RealizationOnboardingScreen({
                         </Text>
                       </Pressable>
                       <Pressable
-                        className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
+                        className={`flex-1 border active:opacity-85 ${isTabletLayout ? "rounded-2xl px-3 py-2.5" : "rounded-xl px-3 py-2"}`}
                         style={{
                           borderColor: apiServerPreset === "production" ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
                           backgroundColor: apiServerPreset === "production" ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panel,
@@ -2351,7 +2355,7 @@ export function RealizationOnboardingScreen({
                     <TextInput
                       className="rounded-xl border px-3 py-2 text-sm"
                       style={{
-                        borderColor: EXPEDITION_THEME.border,
+                        borderColor: isApiBaseUrlFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                         backgroundColor: EXPEDITION_THEME.panel,
                         color: EXPEDITION_THEME.textPrimary,
                       }}
@@ -2364,11 +2368,13 @@ export function RealizationOnboardingScreen({
                       placeholderTextColor={EXPEDITION_THEME.textSubtle}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      onFocus={() => setIsApiBaseUrlFocused(true)}
+                      onBlur={() => setIsApiBaseUrlFocused(false)}
                     />
 
                     <View className="flex-row gap-2">
                       <Pressable
-                        className={`flex-1 active:opacity-90 ${isTabletLayout ? "rounded-2xl px-4 py-3" : "rounded-xl px-3 py-2"}`}
+                        className={`flex-1 active:opacity-85 ${isTabletLayout ? "rounded-2xl px-4 py-3" : "rounded-xl px-3 py-2"}`}
                         style={{ backgroundColor: EXPEDITION_THEME.accent }}
                         onPress={() => void saveApiServerOverride()}
                       >
@@ -2380,7 +2386,7 @@ export function RealizationOnboardingScreen({
                         </Text>
                       </Pressable>
                       <Pressable
-                        className={`flex-1 border active:opacity-90 ${isTabletLayout ? "rounded-2xl px-4 py-3" : "rounded-xl px-3 py-2"}`}
+                        className={`flex-1 border active:opacity-85 ${isTabletLayout ? "rounded-2xl px-4 py-3" : "rounded-xl px-3 py-2"}`}
                         style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
                         onPress={() => void resetApiServerOverride()}
                       >
@@ -2396,7 +2402,7 @@ export function RealizationOnboardingScreen({
 
               <View className="mt-4 flex-row gap-2">
                 <Pressable
-                  className="flex-1 rounded-2xl border px-3 py-3 active:opacity-90"
+                  className="flex-1 rounded-2xl border px-3 py-3 active:opacity-85"
                   style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
                   onPress={triggerApiProbe}
                 >
@@ -2405,10 +2411,10 @@ export function RealizationOnboardingScreen({
                   </Text>
                 </Pressable>
                 <Pressable
-                  className="flex-1 rounded-2xl px-3 py-3 active:opacity-90"
+                  className="flex-1 rounded-2xl px-3 py-3 active:opacity-85"
                   style={{
                     backgroundColor: EXPEDITION_THEME.accent,
-                    opacity: apiConnectionStatus === "connected" ? 1 : 0.6,
+                    opacity: apiConnectionStatus === "connected" ? 1 : MOBILE_UX_TOKENS.disabledOpacity,
                   }}
                   onPress={() => setScreen("code")}
                   disabled={apiConnectionStatus !== "connected"}
@@ -2445,7 +2451,7 @@ export function RealizationOnboardingScreen({
               <TextInput
                 className="mt-3 rounded-2xl border px-4 py-3 text-base font-semibold tracking-widest"
                 style={{
-                  borderColor: EXPEDITION_THEME.border,
+                  borderColor: isRealizationCodeFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
                   color: EXPEDITION_THEME.textPrimary,
                 }}
@@ -2455,10 +2461,12 @@ export function RealizationOnboardingScreen({
                 placeholderTextColor={EXPEDITION_THEME.textSubtle}
                 autoCapitalize="characters"
                 maxLength={12}
+                onFocus={() => setIsRealizationCodeFocused(true)}
+                onBlur={() => setIsRealizationCodeFocused(false)}
               />
 
               <Pressable
-                className="mt-4 rounded-2xl px-4 py-3 active:opacity-90"
+                className="mt-4 rounded-2xl px-4 py-3 active:opacity-85"
                 style={{ backgroundColor: EXPEDITION_THEME.accent }}
                 onPress={() => void onSubmitCode()}
               >
@@ -2468,7 +2476,7 @@ export function RealizationOnboardingScreen({
               </Pressable>
 
               <Pressable
-                className="mt-2 rounded-2xl border px-4 py-3 active:opacity-90"
+                className="mt-2 rounded-2xl border px-4 py-3 active:opacity-85"
                 style={{
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
@@ -2496,14 +2504,7 @@ export function RealizationOnboardingScreen({
               )}
 
               {setupState === "error" && (
-                <View
-                  className="mt-4 rounded-2xl border px-4 py-4"
-                  style={{ borderColor: EXPEDITION_THEME.danger, backgroundColor: "rgba(239, 111, 108, 0.12)" }}
-                >
-                  <Text className="text-sm" style={{ color: EXPEDITION_THEME.danger }}>
-                    {setupMessage ?? text.setupLoadFailed}
-                  </Text>
-                </View>
+                <MobileFeedbackBanner message={setupMessage ?? text.setupLoadFailed} tone="error" style={{ marginTop: 16 }} />
               )}
             </View>
           )}
@@ -2559,7 +2560,7 @@ export function RealizationOnboardingScreen({
               {hasMultipleLanguageOptions && (
                 <View className="mt-3 items-end">
                   <Pressable
-                    className="h-11 w-11 items-center justify-center rounded-full border active:opacity-90"
+                    className="h-11 w-11 items-center justify-center rounded-full border active:opacity-85"
                     style={{
                       borderColor: EXPEDITION_THEME.border,
                       backgroundColor: EXPEDITION_THEME.panelMuted,
@@ -2572,11 +2573,11 @@ export function RealizationOnboardingScreen({
               )}
 
               <Pressable
-                className="mt-3 rounded-2xl border px-3 py-3 active:opacity-90"
+                className="mt-3 rounded-2xl border px-3 py-3 active:opacity-85"
                 style={{
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelStrong,
-                  opacity: availableTeamSlots.length > 0 ? 1 : 0.6,
+                  opacity: availableTeamSlots.length > 0 ? 1 : MOBILE_UX_TOKENS.disabledOpacity,
                 }}
                 onPress={openTeamPicker}
                 disabled={availableTeamSlots.length === 0}
@@ -2588,7 +2589,7 @@ export function RealizationOnboardingScreen({
 
               <View className="mt-4 flex-row gap-2">
                 <Pressable
-                  className="flex-1 rounded-2xl border px-3 py-3 active:opacity-90"
+                  className="flex-1 rounded-2xl border px-3 py-3 active:opacity-85"
                   style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
                   onPress={() => setScreen("code")}
                 >
@@ -2597,8 +2598,11 @@ export function RealizationOnboardingScreen({
                   </Text>
                 </Pressable>
                 <Pressable
-                  className="flex-1 rounded-2xl px-3 py-3 active:opacity-90"
-                  style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: selectedTeam ? 1 : 0.6 }}
+                  className="flex-1 rounded-2xl px-3 py-3 active:opacity-85"
+                  style={{
+                    backgroundColor: EXPEDITION_THEME.accent,
+                    opacity: selectedTeam ? 1 : MOBILE_UX_TOKENS.disabledOpacity,
+                  }}
                   onPress={() => setScreen("customization")}
                   disabled={!selectedTeam}
                 >
@@ -2679,7 +2683,7 @@ export function RealizationOnboardingScreen({
                 return (
                   <Pressable
                     key={`language-option-${option.value}`}
-                    className="rounded-2xl border px-3 py-3 active:opacity-90"
+                    className="rounded-2xl border px-3 py-3 active:opacity-85"
                     style={{
                       borderColor: isActive ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                       backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
@@ -2708,7 +2712,7 @@ export function RealizationOnboardingScreen({
             </View>
 
             <Pressable
-              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-90"
+              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-85"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsLanguagePickerOpen(false)}
             >
@@ -2751,14 +2755,14 @@ export function RealizationOnboardingScreen({
                     return (
                       <Pressable
                         key={slotNumber}
-                        className="rounded-2xl border px-3 py-3 active:opacity-90"
-                        style={{
-                          borderColor: isCurrent ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-                          backgroundColor: isCurrent ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                          minHeight: isTabletLayout ? 76 : 64,
-                          justifyContent: "center",
-                          opacity: isSwitchingTeam ? 0.65 : 1,
-                        }}
+                        className="rounded-2xl border px-3 py-3 active:opacity-85"
+                style={{
+                  borderColor: isCurrent ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                  backgroundColor: isCurrent ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
+                  minHeight: isTabletLayout ? 76 : 64,
+                  justifyContent: "center",
+                  opacity: isSwitchingTeam ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                }}
                         onPress={() => void onSelectTeamFromPopup(slotNumber)}
                         disabled={isSwitchingTeam}
                       >
@@ -2785,13 +2789,11 @@ export function RealizationOnboardingScreen({
             )}
 
             {teamPickerError && (
-              <Text className="mt-3 text-xs" style={{ color: EXPEDITION_THEME.danger }}>
-                {teamPickerError}
-              </Text>
+              <MobileFeedbackBanner message={teamPickerError} tone="error" style={{ marginTop: 12 }} />
             )}
 
             <Pressable
-              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-90"
+              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-85"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsTeamPickerOpen(false)}
             >
@@ -2805,3 +2807,4 @@ export function RealizationOnboardingScreen({
     </View>
   );
 }
+

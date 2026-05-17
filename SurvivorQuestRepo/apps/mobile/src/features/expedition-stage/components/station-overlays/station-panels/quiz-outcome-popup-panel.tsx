@@ -57,6 +57,10 @@ export function QuizOutcomePopupPanel({
   const quizOutcomeButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
   const horizontalInset = adaptiveLayout.s(isTabletLayout ? 44 : 24, 18, 56);
   const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 760 : 460, 340, 840);
+  const panelRadius = adaptiveLayout.s(isTabletLayout ? 32 : 24, 18, 40);
+  const panelPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 28 : 20, 16, 34);
+  const panelPaddingVertical = adaptiveLayout.s(isTabletLayout ? 30 : 22, 18, 36);
+  const actionMinHeight = adaptiveLayout.hit(isTabletLayout ? 64 : 50);
 
   return (
     <View
@@ -71,9 +75,9 @@ export function QuizOutcomePopupPanel({
         className="relative w-full border"
         style={{
           maxWidth: panelMaxWidth,
-          borderRadius: adaptiveLayout.s(isTabletLayout ? 34 : 24, 18, 40),
-          paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 28 : 20, 16, 34),
-          paddingVertical: adaptiveLayout.s(isTabletLayout ? 30 : 22, 18, 36),
+          borderRadius: panelRadius,
+          paddingHorizontal: panelPaddingHorizontal,
+          paddingVertical: panelPaddingVertical,
           borderColor: quizOutcomeAccent.border,
           backgroundColor: EXPEDITION_THEME.panel,
         }}
@@ -123,9 +127,10 @@ export function QuizOutcomePopupPanel({
           {quizOutcomeTitle}
         </Text>
         <Text
-          className="mt-3 text-center"
+          className="mt-3 self-center text-center"
           style={{
             color: EXPEDITION_THEME.textMuted,
+            maxWidth: adaptiveLayout.s(isTabletLayout ? 620 : 400, 280, 700),
             fontSize: adaptiveLayout.fs(isTabletLayout ? 21 : 16, 14, 25),
             lineHeight: adaptiveLayout.s(isTabletLayout ? 34 : 28, 24, 40),
           }}
@@ -133,10 +138,11 @@ export function QuizOutcomePopupPanel({
           {popup.message}
         </Text>
         <Pressable
-          className="mt-6 w-full items-center justify-center active:opacity-90"
+          className="w-full items-center justify-center active:opacity-90"
           style={{
-            borderRadius: adaptiveLayout.s(isTabletLayout ? 18 : 12, 10, 22),
-            minHeight: adaptiveLayout.hit(isTabletLayout ? 70 : 48),
+            marginTop: adaptiveLayout.s(isTabletLayout ? 28 : 24, 18, 34),
+            borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
+            minHeight: actionMinHeight,
             paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
             paddingVertical: adaptiveLayout.s(isTabletLayout ? 14 : 10, 8, 18),
             backgroundColor:

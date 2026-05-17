@@ -99,6 +99,10 @@ type StationPreviewText = {
   audioPlayFailed: string;
   audioOverlayPlay: string;
   audioOverlayStop: string;
+  audioOverlayReplay: string;
+  audioOverlayStatusReady: string;
+  audioOverlayStatusPlaying: string;
+  audioOverlayStatusDisabled: string;
   timeoutWordle: string;
   timeoutHangman: string;
   timeoutMastermind: string;
@@ -220,6 +224,10 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   audioPlayFailed: "Failed to play audio recording.",
   audioOverlayPlay: "Play",
   audioOverlayStop: "Stop",
+  audioOverlayReplay: "Replay",
+  audioOverlayStatusReady: "Ready",
+  audioOverlayStatusPlaying: "Playing",
+  audioOverlayStatusDisabled: "Disabled",
   timeoutWordle: "Time for Wordle has expired. Task was not passed.",
   timeoutHangman: "Time for Hangman has expired. Task was not passed.",
   timeoutMastermind: "Time for Mastermind has expired. Task was not passed.",
@@ -342,6 +350,10 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   audioPlayFailed: "Не вдалося відтворити аудіозапис.",
   audioOverlayPlay: "Відтворити",
   audioOverlayStop: "Стоп",
+  audioOverlayReplay: "Повтор",
+  audioOverlayStatusReady: "Готово",
+  audioOverlayStatusPlaying: "Відтворення",
+  audioOverlayStatusDisabled: "Недоступно",
   timeoutWordle: "Час для Wordle вичерпано. Завдання не зараховано.",
   timeoutHangman: "Час для Шибениці вичерпано. Завдання не зараховано.",
   timeoutMastermind: "Час для Mastermind вичерпано. Завдання не зараховано.",
@@ -466,6 +478,10 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   audioPlayFailed: "Не удалось воспроизвести аудиозапись.",
   audioOverlayPlay: "Воспроизвести",
   audioOverlayStop: "Стоп",
+  audioOverlayReplay: "Повтор",
+  audioOverlayStatusReady: "Готово",
+  audioOverlayStatusPlaying: "Воспроизведение",
+  audioOverlayStatusDisabled: "Недоступно",
   timeoutWordle: "Время для Wordle истекло. Задание не зачтено.",
   timeoutHangman: "Время для Виселицы истекло. Задание не зачтено.",
   timeoutMastermind: "Время для Mastermind истекло. Задание не зачтено.",
@@ -591,6 +607,10 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     audioPlayFailed: "Nie udało się odtworzyć nagrania audio.",
     audioOverlayPlay: "Odtwórz",
     audioOverlayStop: "Stop",
+    audioOverlayReplay: "Powtórz",
+    audioOverlayStatusReady: "Gotowe",
+    audioOverlayStatusPlaying: "Odtwarzanie",
+    audioOverlayStatusDisabled: "Niedostępne",
     timeoutWordle: "Czas na Wordle minął. Zadanie nie zostało zaliczone.",
     timeoutHangman: "Czas na Wisielca minął. Zadanie nie zostało zaliczone.",
     timeoutMastermind: "Czas na Mastermind minął. Zadanie nie zostało zaliczone.",
@@ -2155,13 +2175,20 @@ export function StationPreviewOverlay({
                   }}
                   audioOverlay={
                     isAudioQuizStation
-                      ? {
-                          hasPlaybackStarted: hasAudioPlaybackStarted,
-                          isPlayDisabled: isAudioOverlayControlDisabled,
-                          isStopDisabled: isAudioStopDisabled,
-                          onPlay: () => {
-                            void handlePlayAudio();
-                          },
+                        ? {
+                            hasPlaybackStarted: hasAudioPlaybackStarted,
+                            isPlayDisabled: isAudioOverlayControlDisabled,
+                            isStopDisabled: isAudioStopDisabled,
+                            isPlaying: isAudioPlaying,
+                            playLabel: text.audioOverlayPlay,
+                            replayLabel: text.audioOverlayReplay,
+                            stopLabel: text.audioOverlayStop,
+                            statusReadyLabel: text.audioOverlayStatusReady,
+                            statusPlayingLabel: text.audioOverlayStatusPlaying,
+                            statusDisabledLabel: text.audioOverlayStatusDisabled,
+                            onPlay: () => {
+                              void handlePlayAudio();
+                            },
                           onStop: () => {
                             void handleStopAudio();
                           },

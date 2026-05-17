@@ -4,6 +4,7 @@ import { SvgUri } from "react-native-svg";
 
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
+import { MOBILE_UX_TOKENS } from "../../../../../shared/ui/ux-tokens";
 import {
   QUIZ_BRAIN_ICON_URI,
   TEXT_PUZZLE_MAX_ATTEMPTS,
@@ -48,6 +49,13 @@ type StationMediaPanelProps = {
     hasPlaybackStarted: boolean;
     isPlayDisabled: boolean;
     isStopDisabled: boolean;
+    isPlaying: boolean;
+    playLabel: string;
+    replayLabel: string;
+    stopLabel: string;
+    statusReadyLabel: string;
+    statusPlayingLabel: string;
+    statusDisabledLabel: string;
     onPlay: () => void;
     onStop: () => void;
   };
@@ -93,7 +101,6 @@ export function StationMediaPanel({
     64,
     106,
   );
-
   return (
     <View
       className={`${isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden rounded-2xl border`}
@@ -206,18 +213,24 @@ export function StationMediaPanel({
         </View>
       )}
       {isAudioQuizStation && audioOverlay ? (
-        <View className="absolute inset-0 items-center justify-center">
+        <View className="absolute inset-0 items-center justify-center px-3">
           <View className="flex-row items-center" style={{ gap: adaptiveLayout.s(16, 10, 24) }}>
             <Pressable
-              className="items-center justify-center active:opacity-90"
+              className={`items-center justify-center rounded-2xl px-2 py-2 ${MOBILE_UX_TOKENS.activePressClass}`}
               style={{
                 width: audioOverlayControlHitSize,
                 height: audioOverlayControlHitSize,
-                opacity: audioOverlay.isPlayDisabled ? 0.32 : 0.78,
+                minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+                minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                backgroundColor: "rgba(9, 12, 18, 0.62)",
+                opacity: audioOverlay.isPlayDisabled ? MOBILE_UX_TOKENS.disabledOpacity : 1,
               }}
               onPress={audioOverlay.onPlay}
               disabled={audioOverlay.isPlayDisabled}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={audioOverlay.hasPlaybackStarted ? audioOverlay.replayLabel : audioOverlay.playLabel}
+              accessibilityState={{ disabled: audioOverlay.isPlayDisabled, busy: audioOverlay.isPlaying }}
             >
               <SvgUri
                 uri={audioOverlay.hasPlaybackStarted ? AUDIO_REPLAY_ICON_SVG_URI : AUDIO_PLAY_ICON_SVG_URI}
@@ -227,18 +240,27 @@ export function StationMediaPanel({
                 fill="#ffffff"
                 stroke="#ffffff"
               />
+              <Text className="mt-1 text-center text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                {audioOverlay.hasPlaybackStarted ? audioOverlay.replayLabel : audioOverlay.playLabel}
+              </Text>
             </Pressable>
             {audioOverlay.hasPlaybackStarted ? (
               <Pressable
-                className="items-center justify-center active:opacity-90"
+                className={`items-center justify-center rounded-2xl px-2 py-2 ${MOBILE_UX_TOKENS.activePressClass}`}
                 style={{
                   width: audioOverlayControlHitSize,
                   height: audioOverlayControlHitSize,
-                  opacity: audioOverlay.isStopDisabled ? 0.26 : 0.78,
+                  minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+                  minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                  backgroundColor: "rgba(9, 12, 18, 0.62)",
+                  opacity: audioOverlay.isStopDisabled ? MOBILE_UX_TOKENS.disabledOpacity : 1,
                 }}
                 onPress={audioOverlay.onStop}
                 disabled={audioOverlay.isStopDisabled}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={audioOverlay.stopLabel}
+                accessibilityState={{ disabled: audioOverlay.isStopDisabled, busy: false }}
               >
                 <SvgUri
                   uri={AUDIO_STOP_ICON_SVG_URI}
@@ -248,6 +270,9 @@ export function StationMediaPanel({
                   fill="#ffffff"
                   stroke="#ffffff"
                 />
+                <Text className="mt-1 text-center text-[11px] font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  {audioOverlay.stopLabel}
+                </Text>
               </Pressable>
             ) : null}
           </View>

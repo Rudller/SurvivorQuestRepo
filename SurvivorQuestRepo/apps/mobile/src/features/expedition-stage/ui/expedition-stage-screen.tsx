@@ -22,7 +22,6 @@ import {
   type StationTestViewModel,
 } from "../components/station-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
-import { TopLeaderboardStrip } from "../components/top-leaderboard-strip";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import {
@@ -1174,19 +1173,13 @@ export function ExpeditionStageScreen({
             onOpenLanguagePicker={() => setIsLanguagePickerOpen(true)}
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
+            leaderboardEntries={sessionState.leaderboard.entries}
+            leaderboardCurrentTeamId={sessionState.team.id}
+            showLeaderboardDuringGame={shouldShowTopLeaderboard}
           />
         </Pressable>
 
-        <View className="mt-2 w-full flex-row items-start justify-end gap-2">
-          {shouldShowTopLeaderboard ? (
-            <View style={{ width: "40%" }}>
-              <TopLeaderboardStrip
-                entries={sessionState.leaderboard.entries}
-                currentTeamId={sessionState.team.id}
-              />
-            </View>
-          ) : null}
-
+        <View className="mt-2 w-full flex-row items-start justify-end">
           <View
             className="rounded-2xl border px-3 py-2"
             style={{

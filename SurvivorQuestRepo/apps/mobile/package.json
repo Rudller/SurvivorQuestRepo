@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "jest --ci --runInBand",
+    "test:smoke": "jest --ci --runInBand --testPathPattern=smoke",
     "build:smoke": "cross-env EXPO_NO_DOCTOR=1 expo export --platform web --output-dir .expo-test-bundle-ci --clear"
   },
   "dependencies": {

@@ -255,7 +255,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
       />
       <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
         <form
-          className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
+          className="sq-form space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
           onSubmit={async (event) => {
         event.preventDefault();
         setFormError(null);
@@ -830,7 +830,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             />
           </fieldset>
 
-        {formError && <p className="text-sm text-red-300">{formError}</p>}
+        {formError && <p className="sq-error-banner">{formError}</p>}
 
         <div className="flex items-center justify-end gap-2">
           <button
@@ -843,7 +843,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           <button
             type="submit"
             disabled={isBusy}
-            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+            className="sq-button rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
           >
             {isCreating
               ? "Dodawanie..."

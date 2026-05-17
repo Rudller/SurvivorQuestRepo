@@ -35,6 +35,35 @@ type StringStateSetter = Dispatch<SetStateAction<string>>;
 type NullableStringStateSetter = Dispatch<SetStateAction<string | null>>;
 type ShowCodeOutcomePopup = (variant: "success" | "failed" | "timeout", message: string, onDismiss?: () => void) => void;
 
+type PuzzleSubmitLockScope =
+  | "wordle"
+  | "quiz"
+  | "hangman"
+  | "anagram"
+  | "caesar"
+  | "rebus"
+  | "memory"
+  | "mastermind"
+  | "simon"
+  | "boggle"
+  | "mini-sudoku"
+  | "matching";
+
+const activePuzzleSubmitLocks = new Set<string>();
+
+function tryAcquirePuzzleSubmitLock(scope: PuzzleSubmitLockScope, stationId: string) {
+  const key = `${scope}:${stationId}`;
+  if (activePuzzleSubmitLocks.has(key)) {
+    return null;
+  }
+  activePuzzleSubmitLocks.add(key);
+  return key;
+}
+
+function releasePuzzleSubmitLock(key: string) {
+  activePuzzleSubmitLocks.delete(key);
+}
+
 export function sanitizeMastermindInput(value: string) {
   return value
     .toUpperCase()
@@ -319,9 +348,19 @@ export async function submitWordleGuessController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("wordle", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingWordleGuess(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingWordleGuess(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingWordleGuess(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -427,9 +466,19 @@ export async function submitQuizAnswerController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("quiz", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingQuizAnswer(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingQuizAnswer(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingQuizAnswer(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
 
   if (error) {
     setQuizSubmitError(error);
@@ -566,9 +615,19 @@ export async function submitHangmanGuessController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("hangman", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingHangmanGuess(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingHangmanGuess(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingHangmanGuess(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -666,9 +725,19 @@ export async function submitAnagramController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("anagram", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingAnagram(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingAnagram(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingAnagram(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -784,9 +853,19 @@ export async function submitCaesarController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("caesar", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingCaesar(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingCaesar(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingCaesar(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -968,9 +1047,19 @@ export async function submitRebusController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("rebus", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingRebus(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingRebus(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingRebus(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -1094,9 +1183,19 @@ export async function handleMemoryCardPressController({
         return;
       }
 
+      const submitLockKey = tryAcquirePuzzleSubmitLock("memory", stationId);
+      if (!submitLockKey) {
+        return;
+      }
+
       setIsSubmittingMemory(true);
-      const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-      setIsSubmittingMemory(false);
+      let error: string | null;
+      try {
+        error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+      } finally {
+        setIsSubmittingMemory(false);
+        releasePuzzleSubmitLock(submitLockKey);
+      }
       if (error) {
         setQuizSubmitError(error);
         onSubmitError(error);
@@ -1219,9 +1318,19 @@ export async function submitMastermindGuessController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("mastermind", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingMastermindGuess(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingMastermindGuess(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingMastermindGuess(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -1363,9 +1472,19 @@ export async function handleSimonPressController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("simon", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingSimon(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingSimon(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingSimon(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -1474,9 +1593,19 @@ export async function submitBoggleController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("boggle", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingBoggle(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingBoggle(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingBoggle(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -1705,9 +1834,19 @@ export async function submitMiniSudokuController({
     return;
   }
 
+  const submitLockKey = tryAcquirePuzzleSubmitLock("mini-sudoku", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
   setIsSubmittingMiniSudoku(true);
-  const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-  setIsSubmittingMiniSudoku(false);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingMiniSudoku(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
   if (error) {
     setQuizSubmitError(error);
     onSubmitError(error);
@@ -1839,9 +1978,19 @@ export async function submitMatchingPairController({
       return;
     }
 
+    const submitLockKey = tryAcquirePuzzleSubmitLock("matching", stationId);
+    if (!submitLockKey) {
+      return;
+    }
+
     setIsSubmittingMatching(true);
-    const error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
-    setIsSubmittingMatching(false);
+    let error: string | null;
+    try {
+      error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+    } finally {
+      setIsSubmittingMatching(false);
+      releasePuzzleSubmitLock(submitLockKey);
+    }
     if (error) {
       setQuizSubmitError(error);
       onSubmitError(error);

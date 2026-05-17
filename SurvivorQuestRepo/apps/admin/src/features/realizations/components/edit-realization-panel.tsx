@@ -439,7 +439,7 @@ export function EditRealizationPanel({
                 setEditError("Nie udało się zapisać zmian realizacji.");
               }
             }}
-            className="min-w-0 space-y-4 overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+            className="sq-form min-w-0 space-y-4 overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
           >
               <section className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 sm:grid-cols-2">
                 <div className="space-y-1">
@@ -996,7 +996,7 @@ export function EditRealizationPanel({
               </p>
             </div>
 
-            {editError && <p className="text-sm text-red-300">{editError}</p>}
+            {editError && <p className="sq-error-banner">{editError}</p>}
 
             <div className="flex items-center justify-end gap-2">
               <button
@@ -1009,7 +1009,7 @@ export function EditRealizationPanel({
               <button
                 type="submit"
                 disabled={isBusy}
-                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+                className="sq-button rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
               >
                 {isUpdating
                   ? "Zapisywanie..."

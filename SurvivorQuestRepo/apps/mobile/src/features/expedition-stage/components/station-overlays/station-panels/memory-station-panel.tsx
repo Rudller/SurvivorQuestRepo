@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import type { MemoryCard } from "../puzzle-helpers";
 import { StationQuizTaskWrapper, useStationPanelLayout } from "./shared-ui";
 
@@ -86,8 +88,23 @@ export function MemoryStationPanel({
   const uiLanguage = useUiLanguage();
   const text = MEMORY_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
+  const [memoryGridWidth, setMemoryGridWidth] = useState(0);
   const totalPairs = memoryDeck.length / 2;
   const matchedPairs = memoryMatchedCount / 2;
+  const memoryGridColumns = layout.isTablet ? 6 : 4;
+  const memoryGridGap = adaptiveLayout.s(layout.isTablet ? 10 : 7, 6, 14);
+  const fallbackCardWidth = layout.isTablet ? "16%" : "24%";
+  const baseCardHeight = adaptiveLayout.s(layout.isTablet ? 110 : 84, 76, 128);
+  const computedCardWidth =
+    memoryGridWidth > 0
+      ? (memoryGridWidth - memoryGridGap * Math.max(0, memoryGridColumns - 1)) / memoryGridColumns
+      : null;
+  const resolvedCardWidth = computedCardWidth && computedCardWidth > 0 ? computedCardWidth : fallbackCardWidth;
+  const resolvedCardHeight =
+    computedCardWidth && computedCardWidth > 0
+      ? Math.max(baseCardHeight, Math.round(computedCardWidth * (layout.isTablet ? 1.02 : 1.1)))
+      : baseCardHeight;
 
   return (
     <View className="mt-3">
@@ -99,13 +116,24 @@ export function MemoryStationPanel({
           fillColor="#34d399"
         />
       </View>
-      <View className="mt-3 w-[96%] flex-row flex-wrap justify-between self-center gap-y-1.5">
+      <View
+        className="mt-3 w-full flex-row flex-wrap self-center"
+        style={{ columnGap: memoryGridGap, rowGap: memoryGridGap }}
+        onLayout={({ nativeEvent }) => {
+          const nextWidth = nativeEvent.layout.width;
+          setMemoryGridWidth((currentWidth) =>
+            Math.abs(currentWidth - nextWidth) < 0.5 ? currentWidth : nextWidth,
+          );
+        }}
+      >
         {memoryDeck.map((card) => (
           <Pressable
             key={card.id}
-            className="w-[15.6%] items-center justify-center rounded-lg border active:opacity-90"
+            className="items-center justify-center rounded-lg border active:opacity-90"
             style={{
-              height: layout.isTablet ? 104 : 84,
+              width: resolvedCardWidth,
+              height: resolvedCardHeight,
+              minHeight: adaptiveLayout.hit(layout.isTablet ? 72 : 56),
               borderColor: card.matched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
               backgroundColor: card.matched
                 ? "rgba(34, 197, 94, 0.2)"

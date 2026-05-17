@@ -68,7 +68,7 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
     <UserSidePanel title="Utwórz użytkownika" description="Dodaj nowego użytkownika panelu." onClose={onClose}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+        className="sq-form space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
       >
         <label className="block space-y-1.5">
           <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa użytkownika</span>
@@ -165,7 +165,7 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
               type="button"
               onClick={() => setIsPasswordVisible((prev) => !prev)}
               disabled={isLoading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-medium transition hover:bg-zinc-800 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="sq-button absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs font-medium transition hover:bg-zinc-800 hover:text-amber-200"
               aria-label={isPasswordVisible ? "Ukryj hasło" : "Pokaż hasło"}
               aria-pressed={isPasswordVisible}
             >
@@ -192,7 +192,7 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
         )}
 
         {form.formState.errors.root?.message && (
-          <p className="text-sm text-red-300">{form.formState.errors.root.message}</p>
+          <p className="sq-error-banner">{form.formState.errors.root.message}</p>
         )}
 
         <div className="flex items-center justify-end gap-2">
@@ -206,7 +206,7 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+            className="sq-button rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
           >
             {isLoading ? "Tworzenie..." : "Utwórz użytkownika"}
           </button>

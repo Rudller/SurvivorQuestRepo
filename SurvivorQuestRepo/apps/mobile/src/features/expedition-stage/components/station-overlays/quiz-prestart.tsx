@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import type { QuizPrestartOverlayProps } from "./types";
 
 const QUIZ_PRESTART_TEXT: Record<
@@ -140,6 +141,8 @@ export function QuizPrestartOverlay({
   const uiLanguage = useUiLanguage();
   const text = QUIZ_PRESTART_TEXT[uiLanguage];
   const isLightTheme = getExpeditionThemeMode() === "light";
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isTablet;
   const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
   const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
@@ -239,49 +242,98 @@ export function QuizPrestartOverlay({
           ? text.descriptionHangman
           : isLogicChallenge
             ? text.descriptionLogicChallenge
-          : text.descriptionQuiz;
+           : text.descriptionQuiz;
+  const horizontalInset = adaptiveLayout.s(isTabletLayout ? 44 : 24, 18, 56);
+  const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 760 : 460, 340, 840);
+  const panelRadius = adaptiveLayout.s(isTabletLayout ? 32 : 24, 18, 40);
+  const panelPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 28 : 20, 16, 34);
+  const panelPaddingVertical = adaptiveLayout.s(isTabletLayout ? 30 : 22, 18, 36);
+  const badgeFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 11, 10, 16);
+  const titleFontSize = adaptiveLayout.fs(isTabletLayout ? 34 : 24, 20, 40);
+  const descriptionFontSize = adaptiveLayout.fs(isTabletLayout ? 20 : 14, 13, 24);
+  const descriptionLineHeight = adaptiveLayout.s(isTabletLayout ? 30 : 22, 20, 36);
+  const actionsGap = adaptiveLayout.s(isTabletLayout ? 14 : 8, 6, 18);
+  const actionMinHeight = adaptiveLayout.hit(isTabletLayout ? 64 : 50);
+  const actionFontSize = adaptiveLayout.fs(isTabletLayout ? 22 : 16, 14, 26);
 
   return (
     <Animated.View
-      className="absolute inset-0 z-50 items-center justify-center px-3"
+      className="absolute inset-0 z-50 items-center justify-center"
       style={[
-        { backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.88)" },
+        {
+          paddingHorizontal: horizontalInset,
+          backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.88)",
+        },
         backdropStyle,
       ]}
     >
       <Animated.View
-        className="w-full max-w-[560px] rounded-3xl border px-4 py-4"
-        style={[{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }, panelStyle]}
+        className="w-full border"
+        style={[
+          {
+            maxWidth: panelMaxWidth,
+            borderRadius: panelRadius,
+            paddingHorizontal: panelPaddingHorizontal,
+            paddingVertical: panelPaddingVertical,
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panel,
+          },
+          panelStyle,
+        ]}
       >
-        <Text className="text-center text-[11px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+        <Text
+          className="text-center uppercase tracking-widest"
+          style={{ color: EXPEDITION_THEME.textSubtle, fontSize: badgeFontSize }}
+        >
           {prestartBadge}
         </Text>
-        <Text className="mt-2 text-center text-lg font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+        <Text
+          className="text-center font-bold"
+          style={{ marginTop: adaptiveLayout.s(12, 8, 16), color: EXPEDITION_THEME.textPrimary, fontSize: titleFontSize }}
+        >
           {prestartTitle}
         </Text>
-        <Text className="mt-2 text-center text-sm leading-5" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text
+          className="text-center"
+          style={{
+            marginTop: adaptiveLayout.s(10, 8, 14),
+            color: EXPEDITION_THEME.textMuted,
+            fontSize: descriptionFontSize,
+            lineHeight: descriptionLineHeight,
+          }}
+        >
           {prestartDescription}
           {displayStationName ? ` ${text.stationPrefix}: ${displayStationName}.` : ""}
         </Text>
 
-        <View className="mt-4 flex-row gap-2">
+        <View className="mt-4 flex-row" style={{ columnGap: actionsGap }}>
           <Pressable
-            className="flex-1 items-center rounded-xl border px-3 py-2.5 active:opacity-90"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+            className="flex-1 items-center justify-center border active:opacity-90"
+            style={{
+              minHeight: actionMinHeight,
+              borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panelMuted,
+            }}
             onPress={onClose}
             disabled={isStarting}
           >
-            <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textMuted }}>
+            <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textMuted, fontSize: actionFontSize }}>
               {text.close}
             </Text>
           </Pressable>
           <Pressable
-            className="flex-1 items-center rounded-xl px-3 py-2.5 active:opacity-90"
-            style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: isStarting ? 0.7 : 1 }}
+            className="flex-1 items-center justify-center active:opacity-90"
+            style={{
+              minHeight: actionMinHeight,
+              borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
+              backgroundColor: EXPEDITION_THEME.accent,
+              opacity: isStarting ? 0.7 : 1,
+            }}
             onPress={onStart}
             disabled={isStarting}
           >
-            <Text className="text-sm font-semibold" style={{ color: accentButtonTextColor }}>
+            <Text className="font-semibold" style={{ color: accentButtonTextColor, fontSize: actionFontSize }}>
               {isStarting ? text.starting : text.start}
             </Text>
           </Pressable>

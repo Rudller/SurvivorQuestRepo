@@ -1,7 +1,9 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { EXPEDITION_THEME, TEAM_ICONS } from "../model/constants";
 import type { TeamColor, TeamColorOption } from "../model/types";
+import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
+import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 
 export type TeamCustomizationStepText = {
   editorTitle: string;
@@ -80,8 +82,12 @@ const ColorOptionButton = memo(function ColorOptionButton({
 
   return (
     <Pressable
-      className="h-12 w-12 items-center justify-center rounded-full border active:opacity-90"
-      style={containerStyle}
+      className={`h-12 w-12 items-center justify-center rounded-full border ${MOBILE_UX_TOKENS.activePressClass}`}
+      style={{
+        ...containerStyle,
+        minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+        minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+      }}
       onPress={() => onSelect(colorOption.key)}
     >
       <View className="h-7 w-7 rounded-full" style={{ backgroundColor: colorOption.hex }} />
@@ -134,8 +140,12 @@ const IconOptionButton = memo(function IconOptionButton({
 
   return (
     <Pressable
-      className="h-14 w-14 items-center justify-center rounded-2xl border active:opacity-90"
-      style={containerStyle}
+      className={`h-14 w-14 items-center justify-center rounded-2xl border ${MOBILE_UX_TOKENS.activePressClass}`}
+      style={{
+        ...containerStyle,
+        minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+        minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+      }}
       onPress={() => onSelect(iconOption)}
     >
       <Text className="text-2xl">{iconOption}</Text>
@@ -175,6 +185,8 @@ export function TeamCustomizationStep({
   onTeamIconChange,
   onSave,
 }: TeamCustomizationStepProps) {
+  const [isTeamNameFocused, setIsTeamNameFocused] = useState(false);
+
   return (
     <View
       className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
@@ -255,12 +267,14 @@ export function TeamCustomizationStep({
         <TextInput
           className="mt-2 rounded-2xl border px-4 py-3 text-sm font-semibold"
           style={{
-            borderColor: EXPEDITION_THEME.border,
+            borderColor: isTeamNameFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panel,
             color: EXPEDITION_THEME.textPrimary,
           }}
           value={teamName}
           onChangeText={onTeamNameChange}
+          onFocus={() => setIsTeamNameFocused(true)}
+          onBlur={() => setIsTeamNameFocused(false)}
           placeholder={text.teamNamePlaceholder}
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
           maxLength={40}
@@ -301,8 +315,12 @@ export function TeamCustomizationStep({
 
       <View className="mt-4">
         <Pressable
-          className="rounded-2xl px-3 py-3 active:opacity-90"
-          style={{ backgroundColor: EXPEDITION_THEME.accent, opacity: canSave ? 1 : 0.6 }}
+          className={`rounded-2xl px-3 py-3 ${MOBILE_UX_TOKENS.activePressClass}`}
+          style={{
+            minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+            backgroundColor: EXPEDITION_THEME.accent,
+            opacity: canSave ? 1 : MOBILE_UX_TOKENS.disabledOpacity,
+          }}
           onPress={() => void onSave()}
           disabled={!canSave}
         >
@@ -313,34 +331,15 @@ export function TeamCustomizationStep({
       </View>
 
       {saveMessage && (
-        <View
-          className="mt-3 rounded-2xl border px-3 py-2"
-          style={{
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panelStrong,
-          }}
-        >
-          <Text
-            className="text-sm"
-            style={{ color: saveMessageTone === "error" ? EXPEDITION_THEME.danger : EXPEDITION_THEME.accentStrong }}
-          >
-            {saveMessage}
-          </Text>
-        </View>
+        <MobileFeedbackBanner
+          message={saveMessage}
+          tone={saveMessageTone === "error" ? "error" : "success"}
+          style={{ marginTop: 12 }}
+        />
       )}
 
       {blockMessage && (
-        <View
-          className="mt-3 rounded-2xl border px-3 py-2"
-          style={{
-            borderColor: EXPEDITION_THEME.danger,
-            backgroundColor: "rgba(239, 111, 108, 0.12)",
-          }}
-        >
-          <Text className="text-sm" style={{ color: EXPEDITION_THEME.danger }}>
-            {blockMessage}
-          </Text>
-        </View>
+        <MobileFeedbackBanner message={blockMessage} tone="error" style={{ marginTop: 12 }} />
       )}
     </View>
   );
