@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -15,81 +16,64 @@ import {
 } from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
 
-type JoinSessionPayload = {
-  joinCode?: string;
-  deviceId?: string;
-  memberName?: string;
-};
-
-type ClaimTeamPayload = {
-  sessionToken?: string;
-  name?: string;
-  color?: string;
-  badgeKey?: string;
-  badgeImageUrl?: string;
-};
-
-type SelectTeamPayload = {
-  sessionToken?: string;
-  slotNumber?: number;
-};
-
-type RandomizeTeamPayload = {
-  sessionToken?: string;
-};
-
-type UpdateTeamCustomizationPayload = {
-  sessionToken?: string;
-  color?: string;
-  badgeKey?: string;
-};
-
-type LocationPayload = {
-  sessionToken?: string;
-  lat?: number;
-  lng?: number;
-  accuracy?: number;
-  speed?: number;
-  heading?: number;
-  at?: string;
-};
-
-type CompleteTaskPayload = {
-  sessionToken?: string;
-  stationId?: string;
-  completionCode?: string;
-  startedAt?: string;
-  finishedAt?: string;
-};
-
-type FailTaskPayload = {
-  sessionToken?: string;
-  stationId?: string;
-  reason?: string;
-  startedAt?: string;
-  finishedAt?: string;
-};
-
-type StartTaskPayload = {
-  sessionToken?: string;
-  stationId?: string;
-  startedAt?: string;
-};
-
 type AdminFailTaskPayload = {
   reason?: string;
 };
 
-type ResolveStationQrPayload = {
-  sessionToken?: string;
-  token?: string;
-  selectedLanguage?: string;
-};
+type MobilePayload = Record<string, unknown>;
 
-type SessionStatePayload = {
-  sessionToken?: string;
-  selectedLanguage?: string;
-};
+function requirePayload(value: unknown): MobilePayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value as MobilePayload;
+}
+
+function requireString(payload: MobilePayload, key: string) {
+  const value = payload[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value.trim();
+}
+
+function optionalString(payload: MobilePayload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function requireFiniteNumber(payload: MobilePayload, key: string) {
+  const value = payload[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value;
+}
+
+function optionalFiniteNumber(payload: MobilePayload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value;
+}
 
 @Controller(['mobile', 'api/mobile'])
 export class MobileController {
@@ -102,110 +86,121 @@ export class MobileController {
 
   @Post('session/join')
   @Throttle(MOBILE_JOIN_THROTTLE)
-  async joinMobileSession(@Body() payload: JoinSessionPayload) {
+  async joinMobileSession(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.joinMobileSession({
-      joinCode: payload.joinCode || '',
-      deviceId: payload.deviceId || '',
-      memberName: payload.memberName,
+      joinCode: requireString(payload, 'joinCode'),
+      deviceId: requireString(payload, 'deviceId'),
+      memberName: optionalString(payload, 'memberName'),
     });
   }
 
   @Post('session/state')
-  async getMobileSessionState(@Body() payload: SessionStatePayload) {
+  async getMobileSessionState(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.getMobileSessionState(
-      payload.sessionToken || '',
-      payload.selectedLanguage,
+      requireString(payload, 'sessionToken'),
+      optionalString(payload, 'selectedLanguage'),
     );
   }
 
   @Post('team/claim')
-  async claimMobileTeam(@Body() payload: ClaimTeamPayload) {
+  async claimMobileTeam(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.claimMobileTeam({
-      sessionToken: payload.sessionToken || '',
-      name: payload.name || '',
-      color: payload.color || '',
-      badgeKey: payload.badgeKey,
-      badgeImageUrl: payload.badgeImageUrl,
+      sessionToken: requireString(payload, 'sessionToken'),
+      name: requireString(payload, 'name'),
+      color: requireString(payload, 'color'),
+      badgeKey: optionalString(payload, 'badgeKey'),
+      badgeImageUrl: optionalString(payload, 'badgeImageUrl'),
     });
   }
 
   @Post('team/select')
-  async selectMobileTeam(@Body() payload: SelectTeamPayload) {
+  async selectMobileTeam(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.selectMobileTeam({
-      sessionToken: payload.sessionToken || '',
-      slotNumber: Number(payload.slotNumber),
+      sessionToken: requireString(payload, 'sessionToken'),
+      slotNumber: requireFiniteNumber(payload, 'slotNumber'),
     });
   }
 
   @Post('team/randomize')
-  async randomizeMobileTeam(@Body() payload: RandomizeTeamPayload) {
+  async randomizeMobileTeam(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.randomizeMobileTeam({
-      sessionToken: payload.sessionToken || '',
+      sessionToken: requireString(payload, 'sessionToken'),
     });
   }
 
   @Post('team/customization')
   async updateMobileTeamCustomization(
-    @Body() payload: UpdateTeamCustomizationPayload,
+    @Body() rawPayload: unknown,
   ) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.updateMobileTeamCustomization({
-      sessionToken: payload.sessionToken || '',
-      color: payload.color,
-      badgeKey: payload.badgeKey,
+      sessionToken: requireString(payload, 'sessionToken'),
+      color: optionalString(payload, 'color'),
+      badgeKey: optionalString(payload, 'badgeKey'),
     });
   }
 
   @Post('team/location')
-  async updateMobileTeamLocation(@Body() payload: LocationPayload) {
+  async updateMobileTeamLocation(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.updateMobileTeamLocation({
-      sessionToken: payload.sessionToken || '',
-      lat: Number(payload.lat),
-      lng: Number(payload.lng),
-      accuracy: payload.accuracy,
-      speed: payload.speed,
-      heading: payload.heading,
-      at: payload.at,
+      sessionToken: requireString(payload, 'sessionToken'),
+      lat: requireFiniteNumber(payload, 'lat'),
+      lng: requireFiniteNumber(payload, 'lng'),
+      accuracy: optionalFiniteNumber(payload, 'accuracy'),
+      speed: optionalFiniteNumber(payload, 'speed'),
+      heading: optionalFiniteNumber(payload, 'heading'),
+      at: optionalString(payload, 'at'),
     });
   }
 
   @Post('task/complete')
-  async completeMobileTask(@Body() payload: CompleteTaskPayload) {
+  async completeMobileTask(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.completeMobileTask({
-      sessionToken: payload.sessionToken || '',
-      stationId: payload.stationId || '',
-      completionCode: payload.completionCode,
-      startedAt: payload.startedAt,
-      finishedAt: payload.finishedAt,
+      sessionToken: requireString(payload, 'sessionToken'),
+      stationId: requireString(payload, 'stationId'),
+      completionCode: optionalString(payload, 'completionCode'),
+      startedAt: optionalString(payload, 'startedAt'),
+      finishedAt: optionalString(payload, 'finishedAt'),
     });
   }
 
   @Post('task/fail')
-  async failMobileTask(@Body() payload: FailTaskPayload) {
+  async failMobileTask(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.failMobileTask({
-      sessionToken: payload.sessionToken || '',
-      stationId: payload.stationId || '',
-      reason: payload.reason,
-      startedAt: payload.startedAt,
-      finishedAt: payload.finishedAt,
+      sessionToken: requireString(payload, 'sessionToken'),
+      stationId: requireString(payload, 'stationId'),
+      reason: optionalString(payload, 'reason'),
+      startedAt: optionalString(payload, 'startedAt'),
+      finishedAt: optionalString(payload, 'finishedAt'),
     });
   }
 
   @Post('task/start')
-  async startMobileTask(@Body() payload: StartTaskPayload) {
+  async startMobileTask(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.startMobileTask({
-      sessionToken: payload.sessionToken || '',
-      stationId: payload.stationId || '',
-      startedAt: payload.startedAt,
+      sessionToken: requireString(payload, 'sessionToken'),
+      stationId: requireString(payload, 'stationId'),
+      startedAt: optionalString(payload, 'startedAt'),
     });
   }
 
   @Post('station/resolve-qr')
   @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
-  async resolveMobileStationQr(@Body() payload: ResolveStationQrPayload) {
+  async resolveMobileStationQr(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
     return this.mobileService.resolveMobileStationQr({
-      sessionToken: payload.sessionToken || '',
-      token: payload.token || '',
-      selectedLanguage: payload.selectedLanguage,
+      sessionToken: requireString(payload, 'sessionToken'),
+      token: requireString(payload, 'token'),
+      selectedLanguage: optionalString(payload, 'selectedLanguage'),
     });
   }
 
