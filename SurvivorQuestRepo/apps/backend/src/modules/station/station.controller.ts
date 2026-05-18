@@ -13,7 +13,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import {
   parseCreateStationDto,
@@ -47,7 +49,8 @@ const ALLOWED_AUDIO_MIME_TYPES = new Set([
 ]);
 
 @Controller(['station', 'api/station'])
-@UseGuards(AdminSessionGuard)
+@AdminOnly()
+@UseGuards(AuthenticatedSessionGuard, RolesGuard)
 export class StationController {
   constructor(
     private readonly stationService: StationService,

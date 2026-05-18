@@ -7,7 +7,9 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   parseCreateUserDto,
   parseDeleteUserDto,
@@ -16,7 +18,8 @@ import {
 import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(AdminSessionGuard)
+@AdminOnly()
+@UseGuards(AuthenticatedSessionGuard, RolesGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

@@ -2,9 +2,11 @@
 
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { AdminSidebar } from "@/shared/components/admin-sidebar";
+import type { AuthRole } from "@/features/auth/types/auth";
 
 type AdminShellProps = {
   userEmail?: string;
+  userRole?: AuthRole;
   isLoggingOut: boolean;
   onLogout: () => Promise<void> | void;
   contentClassName?: string;
@@ -13,6 +15,7 @@ type AdminShellProps = {
 
 export function AdminShell({
   userEmail,
+  userRole,
   isLoggingOut,
   onLogout,
   contentClassName = "space-y-4 p-4 sm:p-6 lg:p-8",
@@ -71,7 +74,7 @@ export function AdminShell({
       </header>
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 bg-zinc-900/95 lg:block">
-        <AdminSidebar userEmail={userEmail} isLoggingOut={isLoggingOut} onLogout={onLogout} />
+        <AdminSidebar userEmail={userEmail} userRole={userRole} isLoggingOut={isLoggingOut} onLogout={onLogout} />
       </aside>
 
       {isMobileNavOpen ? (
@@ -88,6 +91,7 @@ export function AdminShell({
           >
             <AdminSidebar
               userEmail={userEmail}
+              userRole={userRole}
               isLoggingOut={isLoggingOut}
               onLogout={onLogout}
               onNavigate={() => setIsMobileNavOpen(false)}

@@ -11,10 +11,12 @@ type QrFlowText = {
   processQrFailed: string;
   scannedStation: string;
   qrScanCanceled: string;
+  locationRequired: string;
 };
 
 type UseExpeditionStageQrFlowArgs = {
   isSessionEnded: boolean;
+  locationRequired: boolean;
   isInteractiveQuizStationType: (stationType?: ExpeditionStationType) => boolean;
   text: QrFlowText;
   playerLocation: PlayerLocation | null;
@@ -42,6 +44,7 @@ type UseExpeditionStageQrFlowArgs = {
 
 export function useExpeditionStageQrFlow({
   isSessionEnded,
+  locationRequired,
   isInteractiveQuizStationType,
   text,
   playerLocation,
@@ -72,6 +75,11 @@ export function useExpeditionStageQrFlow({
     try {
       const currentLocation = playerLocation ?? (await requestCurrentLocation().catch(() => null));
 
+      if (locationRequired && !currentLocation) {
+        setActionError(text.locationRequired);
+        return;
+      }
+
       if (currentLocation) {
         const syncError = await syncTeamLocation(currentLocation);
         if (syncError) {
@@ -87,12 +95,14 @@ export function useExpeditionStageQrFlow({
     }
   }, [
     isSessionEnded,
+    locationRequired,
     playerLocation,
     requestCurrentLocation,
     setActionError,
     setActionMessage,
     syncTeamLocation,
     text.openScannerFailed,
+    text.locationRequired,
     text.qrScannerReady,
     text.realizationEndedScannerBlocked,
   ]);
@@ -105,6 +115,11 @@ export function useExpeditionStageQrFlow({
       }
 
       if (isQrResolving) {
+        return;
+      }
+
+      if (locationRequired && !playerLocation) {
+        setActionError(text.locationRequired);
         return;
       }
 
@@ -148,12 +163,15 @@ export function useExpeditionStageQrFlow({
       isInteractiveQuizStationType,
       isQrResolving,
       isSessionEnded,
+      locationRequired,
       openStationByType,
+      playerLocation,
       resolveStationQrToken,
       setActionError,
       setActionMessage,
       setSelectedStationId,
       text.processQrFailed,
+      text.locationRequired,
       text.qrTokenReadFailed,
       text.realizationEndedTasksBlocked,
       text.scannedStation,

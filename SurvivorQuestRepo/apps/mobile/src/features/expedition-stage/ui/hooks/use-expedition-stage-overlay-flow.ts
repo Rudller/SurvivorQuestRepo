@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { ExpeditionStationType, ExpeditionTask } from "../../model/types";
+import type { ExpeditionStationType, ExpeditionTask, PlayerLocation } from "../../model/types";
 import type { StationTestViewModel } from "../../components/station-overlays";
 
 const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
@@ -21,10 +21,15 @@ type OverlayFlowText = {
   taskCompleted: string;
   taskTimeExpired: string;
   taskMarkedFailed: string;
+  locationRequired: string;
 };
 
 type UseExpeditionStageOverlayFlowArgs = {
   isSessionEnded: boolean;
+  locationRequired: boolean;
+  playerLocation: PlayerLocation | null;
+  requestCurrentLocation: () => Promise<PlayerLocation>;
+  syncTeamLocation: (location: PlayerLocation) => Promise<string | null>;
   stationIds: string[];
   stationTestEntries: StationTestViewModel[];
   taskByStationId: Record<string, ExpeditionTask>;
@@ -42,6 +47,10 @@ type UseExpeditionStageOverlayFlowArgs = {
 
 export function useExpeditionStageOverlayFlow({
   isSessionEnded,
+  locationRequired,
+  playerLocation,
+  requestCurrentLocation,
+  syncTeamLocation,
   stationIds,
   stationTestEntries,
   taskByStationId,
@@ -79,6 +88,19 @@ export function useExpeditionStageOverlayFlow({
       testMenuHoldTimeoutRef.current = null;
     }
   }, []);
+
+  const ensureLocationRequirement = useCallback(async () => {
+    if (!locationRequired) {
+      return null;
+    }
+
+    const currentLocation = playerLocation ?? (await requestCurrentLocation().catch(() => null));
+    if (!currentLocation) {
+      return text.locationRequired;
+    }
+
+    return syncTeamLocation(currentLocation);
+  }, [locationRequired, playerLocation, requestCurrentLocation, syncTeamLocation, text.locationRequired]);
 
   const handleTestMenuHoldStart = useCallback(() => {
     clearTestMenuHoldTimeout();
@@ -311,6 +333,12 @@ export function useExpeditionStageOverlayFlow({
 
       setActionError(null);
       setActionMessage(null);
+      const locationError = await ensureLocationRequirement();
+      if (locationError) {
+        setActionError(locationError);
+        return locationError;
+      }
+
       const startedAtIso = new Date().toISOString();
 
       setLocalStartedAtByStationId((current) => ({
@@ -338,6 +366,7 @@ export function useExpeditionStageOverlayFlow({
     },
     [
       isSessionEnded,
+      ensureLocationRequirement,
       setActionError,
       setActionMessage,
       startStationTask,
@@ -350,6 +379,12 @@ export function useExpeditionStageOverlayFlow({
     async (stationId: string, completionCode: string, startedAt?: string) => {
       setActionError(null);
       setActionMessage(null);
+
+      const locationError = await ensureLocationRequirement();
+      if (locationError) {
+        setActionError(locationError);
+        return locationError;
+      }
 
       if (taskByStationId[stationId]?.status === "failed") {
         return text.taskAlreadyFailedAfterClose;
@@ -372,6 +407,7 @@ export function useExpeditionStageOverlayFlow({
     },
     [
       completeStationTask,
+      ensureLocationRequirement,
       isTaskAlreadyCompletedError,
       isInvalidCompletionCodeError,
       setActionError,
@@ -402,7 +438,13 @@ export function useExpeditionStageOverlayFlow({
   const handleTimeStationExpired = useCallback(
     (stationId: string) => {
       const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
-      void failStationTask(stationId, "time_limit_expired", startedAt).then((error) => {
+      void ensureLocationRequirement().then((locationError) => {
+        if (locationError) {
+          setActionError(locationError);
+          return null;
+        }
+        return failStationTask(stationId, "time_limit_expired", startedAt);
+      }).then((error) => {
         if (error) {
           setActionError(error);
           return;
@@ -410,19 +452,25 @@ export function useExpeditionStageOverlayFlow({
         setActionError(text.taskTimeExpired);
       });
     },
-    [failStationTask, localStartedAtByStationId, setActionError, taskByStationId, text.taskTimeExpired],
+    [ensureLocationRequirement, failStationTask, localStartedAtByStationId, setActionError, taskByStationId, text.taskTimeExpired],
   );
 
   const handleQuizFailed = useCallback(
     (stationId: string, reason?: string) => {
       const startedAt = taskByStationId[stationId]?.startedAt ?? localStartedAtByStationId[stationId];
-      void failStationTask(stationId, reason ?? "quiz_incorrect_answer", startedAt).then((error) => {
+      void ensureLocationRequirement().then((locationError) => {
+        if (locationError) {
+          setActionError(locationError);
+          return null;
+        }
+        return failStationTask(stationId, reason ?? "quiz_incorrect_answer", startedAt);
+      }).then((error) => {
         if (error) {
           setActionError(error);
         }
       });
     },
-    [failStationTask, localStartedAtByStationId, setActionError, taskByStationId],
+    [ensureLocationRequirement, failStationTask, localStartedAtByStationId, setActionError, taskByStationId],
   );
 
   const handleStartPendingQuiz = useCallback(async () => {
@@ -438,6 +486,13 @@ export function useExpeditionStageOverlayFlow({
     setActionError(null);
     setActionMessage(null);
 
+    const locationError = await ensureLocationRequirement();
+    if (locationError) {
+      setActionError(locationError);
+      setIsStartingPendingQuiz(false);
+      return;
+    }
+
     const startError = await startStationTask(pendingQuizStartStationId, startedAtIso);
     if (startError) {
       setActionError(startError);
@@ -448,7 +503,7 @@ export function useExpeditionStageOverlayFlow({
     setActiveStationTestId(pendingQuizStartStationId);
     setPendingQuizStartStationId(null);
     setIsStartingPendingQuiz(false);
-  }, [pendingQuizStartStationId, setActionError, setActionMessage, startStationTask]);
+  }, [ensureLocationRequirement, pendingQuizStartStationId, setActionError, setActionMessage, startStationTask]);
 
   const handleStartPendingTime = useCallback(async () => {
     if (!pendingTimeStartStationId) {
@@ -474,7 +529,13 @@ export function useExpeditionStageOverlayFlow({
     }
 
     setTimedCloseConfirmStation(null);
-    void failStationTask(station.stationId, "task_closed_before_completion", station.startedAt ?? undefined).then((error) => {
+    void ensureLocationRequirement().then((locationError) => {
+      if (locationError) {
+        setActionError(locationError);
+        return null;
+      }
+      return failStationTask(station.stationId, "task_closed_before_completion", station.startedAt ?? undefined);
+    }).then((error) => {
       if (error) {
         setActionError(error);
       } else {
@@ -482,7 +543,7 @@ export function useExpeditionStageOverlayFlow({
       }
       setActiveStationTestId(null);
     });
-  }, [failStationTask, setActionError, setActionMessage, text.taskMarkedFailed, timedCloseConfirmStation]);
+  }, [ensureLocationRequirement, failStationTask, setActionError, setActionMessage, text.taskMarkedFailed, timedCloseConfirmStation]);
 
   return {
     isStationTestMenuOpen,

@@ -44,6 +44,7 @@ export default function ChatPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();

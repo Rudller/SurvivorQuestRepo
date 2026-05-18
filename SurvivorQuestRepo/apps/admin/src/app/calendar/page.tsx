@@ -45,6 +45,7 @@ export default function CalendarPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();

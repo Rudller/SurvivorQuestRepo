@@ -22,7 +22,8 @@ export default function HomePage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
-  const { data: stations } = useGetStationsQuery(undefined, { skip: !meData });
+  const canManageAdminTasks = meData?.user.role === "admin";
+  const { data: stations } = useGetStationsQuery(undefined, { skip: !canManageAdminTasks });
   const {
     data: realizations,
     isLoading: isRealizationsLoading,
@@ -87,6 +88,7 @@ export default function HomePage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();
@@ -94,32 +96,74 @@ export default function HomePage() {
       }}
       contentClassName="space-y-6 p-4 sm:p-6 lg:p-8"
     >
-      <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">Podgląd listy zadań</h1>
-          <Link
-            href="/tasks"
-            className="text-sm font-medium text-amber-300 transition hover:text-amber-200"
-          >
-            Otwórz tablicę →
-          </Link>
-        </div>
+      {canManageAdminTasks ? (
+        <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">Podgląd listy zadań</h1>
+            <Link
+              href="/tasks"
+              className="text-sm font-medium text-amber-300 transition hover:text-amber-200"
+            >
+              Otwórz tablicę →
+            </Link>
+          </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-500">Do zrobienia</p>
-            <p className="mt-2 text-2xl font-semibold text-amber-300">{taskCounts.todo}</p>
-          </div>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-500">W trakcie</p>
-            <p className="mt-2 text-2xl font-semibold text-sky-300">{taskCounts["in-progress"]}</p>
-          </div>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-500">Zrobione</p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-300">{taskCounts.done}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-xs uppercase tracking-wider text-zinc-500">Do zrobienia</p>
+              <p className="mt-2 text-2xl font-semibold text-amber-300">{taskCounts.todo}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-xs uppercase tracking-wider text-zinc-500">W trakcie</p>
+              <p className="mt-2 text-2xl font-semibold text-sky-300">{taskCounts["in-progress"]}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-xs uppercase tracking-wider text-zinc-500">Zrobione</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-300">{taskCounts.done}</p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
+          <div className="mb-4">
+            <h1 className="text-xl font-semibold tracking-tight">Panel instruktora</h1>
+            <p className="mt-1 text-sm text-zinc-400">
+              Szybki dostęp do realizacji, drużyn, kalendarza i czatu bez sekcji administracyjnych.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Link
+              href="/current-realization"
+              className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 transition hover:border-amber-300/60 hover:bg-amber-500/15"
+            >
+              <p className="text-sm font-semibold text-amber-200">Aktualna realizacja</p>
+              <p className="mt-1 text-xs text-zinc-400">Drużyny, mapa, zadania i QR.</p>
+            </Link>
+            <Link
+              href="/realizations"
+              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
+            >
+              <p className="text-sm font-semibold text-zinc-100">Realizacje</p>
+              <p className="mt-1 text-xs text-zinc-400">Lista i kody QR wybranych eventów.</p>
+            </Link>
+            <Link
+              href="/calendar"
+              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
+            >
+              <p className="text-sm font-semibold text-zinc-100">Kalendarz</p>
+              <p className="mt-1 text-xs text-zinc-400">Terminy zaplanowanych realizacji.</p>
+            </Link>
+            <Link
+              href="/chat"
+              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
+            >
+              <p className="text-sm font-semibold text-zinc-100">Czat</p>
+              <p className="mt-1 text-xs text-zinc-400">Komunikacja zespołu.</p>
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

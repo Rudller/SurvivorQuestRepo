@@ -482,6 +482,39 @@ describe('MobileService task scoring', () => {
       }),
     });
   });
+
+  it('requires a location update before starting tasks when realization requires location', async () => {
+    const { service, prisma } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: {
+        deviceId: 'device-1',
+      },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: null,
+      },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: true,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+
+    await expect(
+      service.startMobileTask({
+        sessionToken: 'session-token',
+        stationId: 'station-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.teamTaskProgress.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe('MobileService failed task snapshots', () => {

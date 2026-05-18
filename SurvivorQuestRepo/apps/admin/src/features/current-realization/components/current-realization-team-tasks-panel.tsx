@@ -12,6 +12,7 @@ type CurrentRealizationTeamTasksPanelProps = {
   realization: CurrentRealizationOverview["realization"];
   team: CurrentRealizationOverview["teams"][number];
   selectedRealizationId?: string;
+  canManageTasks?: boolean;
   onClose: () => void;
 };
 
@@ -48,6 +49,7 @@ export function CurrentRealizationTeamTasksPanel({
   realization,
   team,
   selectedRealizationId,
+  canManageTasks = false,
   onClose,
 }: CurrentRealizationTeamTasksPanelProps) {
   const [resetTask, { isLoading: isResetting }] = useResetCurrentRealizationTeamTaskMutation();
@@ -74,6 +76,10 @@ export function CurrentRealizationTeamTasksPanel({
   }, [realization.stations, team.tasks]);
 
   async function handleTaskAction(stationId: string, action: TaskAction) {
+    if (!canManageTasks) {
+      return;
+    }
+
     const stationLabel =
       stationsWithTaskState.find((item) => item.stationId === stationId)?.stationName || stationId;
     const confirmationMessage =
@@ -123,7 +129,9 @@ export function CurrentRealizationTeamTasksPanel({
         <div className="space-y-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-semibold text-zinc-100">Edycja zadań drużyny</h2>
+              <h2 className="text-xl font-semibold text-zinc-100">
+                {canManageTasks ? "Edycja zadań drużyny" : "Zadania drużyny"}
+              </h2>
               <p className="mt-1 text-sm text-zinc-300">
                 {title} • Slot #{team.slotNumber}
               </p>
@@ -156,7 +164,9 @@ export function CurrentRealizationTeamTasksPanel({
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Domyślne pkt</th>
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ukończono</th>
-                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
+                    {canManageTasks ? (
+                      <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -177,34 +187,36 @@ export function CurrentRealizationTeamTasksPanel({
                         <td className="px-3 py-2 text-zinc-400">
                           {task.finishedAt ? new Date(task.finishedAt).toLocaleString("pl-PL") : "-"}
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void handleTaskAction(task.stationId, "reset")}
-                              disabled={isMutating}
-                              className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              {isPendingForRow && pendingAction?.action === "reset" ? "Reset..." : "Reset"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleTaskAction(task.stationId, "complete")}
-                              disabled={isMutating}
-                              className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              {isPendingForRow && pendingAction?.action === "complete" ? "Zapisywanie..." : "Zalicz"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleTaskAction(task.stationId, "fail")}
-                              disabled={isMutating}
-                              className="rounded-md border border-rose-400/40 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              {isPendingForRow && pendingAction?.action === "fail" ? "Zapisywanie..." : "Niezalicz"}
-                            </button>
-                          </div>
-                        </td>
+                        {canManageTasks ? (
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleTaskAction(task.stationId, "reset")}
+                                disabled={isMutating}
+                                className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-55"
+                              >
+                                {isPendingForRow && pendingAction?.action === "reset" ? "Reset..." : "Reset"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleTaskAction(task.stationId, "complete")}
+                                disabled={isMutating}
+                                className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-55"
+                              >
+                                {isPendingForRow && pendingAction?.action === "complete" ? "Zapisywanie..." : "Zalicz"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleTaskAction(task.stationId, "fail")}
+                                disabled={isMutating}
+                                className="rounded-md border border-rose-400/40 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-55"
+                              >
+                                {isPendingForRow && pendingAction?.action === "fail" ? "Zapisywanie..." : "Niezalicz"}
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}

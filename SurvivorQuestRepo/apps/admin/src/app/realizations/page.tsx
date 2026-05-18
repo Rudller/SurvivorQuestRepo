@@ -21,10 +21,11 @@ export default function RealizationsPage() {
 
   const { data: meData, isLoading: isMeLoading, isError: isMeError, error: meError } = useMeQuery();
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const canManageRealizations = meData?.user.role === "admin";
 
-  const { data: stations } = useGetStationsQuery(undefined, { skip: !meData });
+  const { data: stations } = useGetStationsQuery(undefined, { skip: !canManageRealizations });
   const { data: realizations, isLoading, isError, error, refetch } = useGetRealizationsQuery(undefined, { skip: !meData });
-  const { data: scenarios } = useGetScenariosQuery(undefined, { skip: !meData });
+  const { data: scenarios } = useGetScenariosQuery(undefined, { skip: !canManageRealizations });
 
   const [sortField, setSortField] = useState<RealizationSortField>("scheduledAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -49,77 +50,90 @@ export default function RealizationsPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();
         router.replace("/login");
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-zinc-100">Realizacje</h1>
-        <button
-          type="button"
-          onClick={() => setIsCreatePanelOpen(true)}
-          className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
-        >
-          Nowa realizacja
-        </button>
-      </div>
-
-      {isLoading && <p className="text-zinc-400">Ładowanie realizacji...</p>}
-
-      {isError && (
-        <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-          <p>Nie udało się pobrać realizacji.</p>
-          <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(error, null, 2)}</pre>
-          <button onClick={() => refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
-            Spróbuj ponownie
-          </button>
+      <>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-100">
+              {canManageRealizations ? "Realizacje" : "Podgląd realizacji"}
+            </h1>
+            {!canManageRealizations ? (
+              <p className="mt-1 text-sm text-zinc-400">
+                Masz dostęp do listy realizacji i kodów QR. Edycja jest dostępna tylko dla administratorów.
+              </p>
+            ) : null}
+          </div>
+          {canManageRealizations ? (
+            <button
+              type="button"
+              onClick={() => setIsCreatePanelOpen(true)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+            >
+              Nowa realizacja
+            </button>
+          ) : null}
         </div>
-      )}
 
-      {!isLoading && !isError && (
-        <RealizationsTable
-          realizations={realizations ?? []}
-          scenarios={scenarios ?? []}
-          stations={stations ?? []}
-          hideCompleted={hideCompleted}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          onHideCompletedChange={setHideCompleted}
-          onSortFieldChange={setSortField}
-          onSortDirectionChange={setSortDirection}
-          onEdit={setEditingRealization}
-          onShowStationQrs={setQrRealization}
-        />
-      )}
+        {isLoading && <p className="text-zinc-400">Ładowanie realizacji...</p>}
 
-      {isCreatePanelOpen && (
-        <CreateRealizationForm
-          scenarios={scenarios ?? []}
-          stations={stations ?? []}
-          userEmail={meData?.user.email}
-          onSaved={(savedRealization) => setEditingRealization(savedRealization)}
-          onClose={() => setIsCreatePanelOpen(false)}
-        />
-      )}
-      {editingRealization && (
-        <EditRealizationPanel
-          realization={editingRealization}
-          scenarios={scenarios ?? []}
-          stations={stations ?? []}
-          userEmail={meData?.user.email}
-          onSaved={setEditingRealization}
-          onClose={() => setEditingRealization(null)}
-        />
-      )}
-      {qrRealization && (
-        <RealizationStationQrPanel
-          realization={qrRealization}
-          onClose={() => setQrRealization(null)}
-        />
-      )}
+        {isError && (
+          <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+            <p>Nie udało się pobrać realizacji.</p>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(error, null, 2)}</pre>
+            <button onClick={() => refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
+              Spróbuj ponownie
+            </button>
+          </div>
+        )}
 
+        {!isLoading && !isError && (
+          <RealizationsTable
+            realizations={realizations ?? []}
+            scenarios={scenarios ?? []}
+            stations={stations ?? []}
+            hideCompleted={hideCompleted}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onHideCompletedChange={setHideCompleted}
+            onSortFieldChange={setSortField}
+            onSortDirectionChange={setSortDirection}
+            onEdit={canManageRealizations ? setEditingRealization : undefined}
+            onShowStationQrs={setQrRealization}
+          />
+        )}
+
+        {canManageRealizations && isCreatePanelOpen && (
+          <CreateRealizationForm
+            scenarios={scenarios ?? []}
+            stations={stations ?? []}
+            userEmail={meData?.user.email}
+            onSaved={(savedRealization) => setEditingRealization(savedRealization)}
+            onClose={() => setIsCreatePanelOpen(false)}
+          />
+        )}
+        {canManageRealizations && editingRealization && (
+          <EditRealizationPanel
+            realization={editingRealization}
+            scenarios={scenarios ?? []}
+            stations={stations ?? []}
+            userEmail={meData?.user.email}
+            onSaved={setEditingRealization}
+            onClose={() => setEditingRealization(null)}
+          />
+        )}
+        {qrRealization && (
+          <RealizationStationQrPanel
+            realization={qrRealization}
+            onClose={() => setQrRealization(null)}
+          />
+        )}
+      </>
     </AdminShell>
   );
 }

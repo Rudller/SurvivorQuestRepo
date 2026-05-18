@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   buildApiPath,
+  canEditConfiguredApiUrl,
   getConfiguredApiUrl,
   resetConfiguredApiUrl,
   setConfiguredApiUrl,
@@ -21,6 +22,7 @@ export function ApiConnectionStatusBadge({
   inline = false,
   allowServerEdit = true,
 }: ApiConnectionStatusBadgeProps) {
+  const canEditServer = allowServerEdit && canEditConfiguredApiUrl();
   const [apiUrl, setApiUrl] = useState(() => getConfiguredApiUrl());
   const [apiUrlDraft, setApiUrlDraft] = useState(() => getConfiguredApiUrl());
   const [apiUrlEditError, setApiUrlEditError] = useState<string | null>(null);
@@ -102,7 +104,7 @@ export function ApiConnectionStatusBadge({
         <p className="min-w-0 truncate">
           <span className="text-zinc-400">Serwer:</span> {apiUrl}
         </p>
-        {allowServerEdit && (
+        {canEditServer && (
           <button
             type="button"
             onClick={() => {
@@ -125,7 +127,7 @@ export function ApiConnectionStatusBadge({
         <span className="font-medium">{status}</span>
       </p>
 
-      {allowServerEdit && isEditorOpen && (
+      {canEditServer && isEditorOpen && (
         <div className="mt-2 space-y-2 border-t border-zinc-800 pt-2">
           <label className="block space-y-1">
             <span className="text-[11px] uppercase tracking-wider text-zinc-500">Zmień serwer API</span>

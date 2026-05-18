@@ -25,14 +25,15 @@ export default function ScenarioPage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
-  const { data: stations = [], isLoading: isStationsLoading } = useGetStationsQuery();
+  const canManageScenarios = meData?.user.role === "admin";
+  const { data: stations = [], isLoading: isStationsLoading } = useGetStationsQuery(undefined, { skip: !canManageScenarios });
   const {
     data: scenarios = [],
     isLoading: isScenariosLoading,
     isError: isScenariosError,
     error: scenariosError,
     refetch,
-  } = useGetScenariosQuery(undefined, { skip: !meData });
+  } = useGetScenariosQuery(undefined, { skip: !canManageScenarios });
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -55,56 +56,68 @@ export default function ScenarioPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();
         router.replace("/login");
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-zinc-100">Scenariusze</h1>
-        <button
-          type="button"
-          onClick={() => setIsCreatePanelOpen(true)}
-          className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
-        >
-          Nowy scenariusz
-        </button>
-      </div>
-
-      {!isScenariosError && (
-        <ScenariosTable
-          scenarios={scenarios}
-          stations={stations}
-          isLoading={isScenariosLoading}
-          onEdit={setEditingScenario}
-          onRefetch={() => void refetch()}
-        />
-      )}
-
-      {isScenariosError && !isUnauthorizedError(scenariosError) && (
-        <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-          <p>Nie udało się pobrać scenariuszy.</p>
-          <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(scenariosError, null, 2)}</pre>
-          <button onClick={() => void refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
-            Spróbuj ponownie
-          </button>
+      {!canManageScenarios ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-6">
+          <h1 className="text-xl font-semibold text-zinc-100">Brak dostępu</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Zarządzanie scenariuszami jest dostępne tylko dla administratorów.
+          </p>
         </div>
-      )}
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-semibold text-zinc-100">Scenariusze</h1>
+            <button
+              type="button"
+              onClick={() => setIsCreatePanelOpen(true)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+            >
+              Nowy scenariusz
+            </button>
+          </div>
 
-      {isCreatePanelOpen && (
-        <CreateScenarioForm
-          stations={stations}
-          isStationsLoading={isStationsLoading}
-          onClose={() => setIsCreatePanelOpen(false)}
-        />
-      )}
-      {editingScenario && (
-        <EditScenarioModal
-          scenario={editingScenario}
-          stations={stations}
-          onClose={() => setEditingScenario(null)}
-        />
+          {!isScenariosError && (
+            <ScenariosTable
+              scenarios={scenarios}
+              stations={stations}
+              isLoading={isScenariosLoading}
+              onEdit={setEditingScenario}
+              onRefetch={() => void refetch()}
+            />
+          )}
+
+          {isScenariosError && !isUnauthorizedError(scenariosError) && (
+            <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              <p>Nie udało się pobrać scenariuszy.</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(scenariosError, null, 2)}</pre>
+              <button onClick={() => void refetch()} className="mt-2 rounded bg-amber-400 px-3 py-1.5 text-zinc-950">
+                Spróbuj ponownie
+              </button>
+            </div>
+          )}
+
+          {isCreatePanelOpen && (
+            <CreateScenarioForm
+              stations={stations}
+              isStationsLoading={isStationsLoading}
+              onClose={() => setIsCreatePanelOpen(false)}
+            />
+          )}
+          {editingScenario && (
+            <EditScenarioModal
+              scenario={editingScenario}
+              stations={stations}
+              onClose={() => setEditingScenario(null)}
+            />
+          )}
+        </>
       )}
     </AdminShell>
   );

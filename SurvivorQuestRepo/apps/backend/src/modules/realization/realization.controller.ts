@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { StationStorageService } from '../station/station-storage.service';
 import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import type {
@@ -30,7 +32,8 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
 ]);
 
 @Controller('realizations')
-@UseGuards(AdminSessionGuard)
+@AdminOrInstructor()
+@UseGuards(AuthenticatedSessionGuard, RolesGuard)
 export class RealizationController {
   constructor(
     private readonly realizationService: RealizationService,
@@ -43,16 +46,19 @@ export class RealizationController {
   }
 
   @Post()
+  @AdminOnly()
   async createRealization(@Body() payload: CreateRealizationDto) {
     return this.realizationService.createRealization(payload);
   }
 
   @Post('translate-station')
+  @AdminOnly()
   translateStation(@Body() payload: TranslateRealizationStationDto) {
     return this.realizationService.translateStation(payload);
   }
 
   @Post('upload-logo')
+  @AdminOnly()
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_LOGO_UPLOAD_SIZE_BYTES },
@@ -81,6 +87,7 @@ export class RealizationController {
   }
 
   @Post('upload-offer')
+  @AdminOnly()
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_OFFER_UPLOAD_SIZE_BYTES },
@@ -109,6 +116,7 @@ export class RealizationController {
   }
 
   @Put()
+  @AdminOnly()
   async updateRealization(@Body() payload: UpdateRealizationDto) {
     return this.realizationService.updateRealization(payload);
   }

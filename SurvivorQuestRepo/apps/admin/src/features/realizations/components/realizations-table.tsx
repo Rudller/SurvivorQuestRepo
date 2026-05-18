@@ -24,7 +24,7 @@ interface RealizationsTableProps {
   onHideCompletedChange: (value: boolean) => void;
   onSortFieldChange: (field: RealizationSortField) => void;
   onSortDirectionChange: (direction: SortDirection) => void;
-  onEdit: (realization: Realization) => void;
+  onEdit?: (realization: Realization) => void;
   onShowStationQrs: (realization: Realization) => void;
 }
 
@@ -222,13 +222,15 @@ export function RealizationsTable({
                           >
                             Kody QR
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => onEdit(realization)}
-                            className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                          >
-                            Edytuj
-                          </button>
+                          {onEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => onEdit(realization)}
+                              className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                            >
+                              Edytuj
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

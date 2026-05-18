@@ -1,4 +1,10 @@
 import type { ExpeditionSessionState } from "../model/types";
+import {
+  getMobileApiErrorCode,
+  getMobileApiErrorStatusCode,
+  isSessionTokenInvalidError,
+  MobileApiHttpError,
+} from "../api/mobile-session.api";
 import { applyCompletedTaskState, isRetriableNetworkError, runRequestWithRetry } from "./use-expedition-session";
 
 function createSessionState(): ExpeditionSessionState {
@@ -193,5 +199,32 @@ describe("network retry helpers", () => {
     expect(isRetriableNetworkError(new Error("Failed to fetch"))).toBe(true);
     expect(isRetriableNetworkError(new Error("HTTP 503"))).toBe(true);
     expect(isRetriableNetworkError(new Error("HTTP 400"))).toBe(false);
+  });
+
+  it("treats HTTP 403 as an invalid mobile session", () => {
+    expect(isSessionTokenInvalidError(new Error("HTTP 403"))).toBe(true);
+  });
+
+  it("reads structured mobile API error status and code", () => {
+    const error = new MobileApiHttpError({
+      statusCode: 409,
+      code: "TASK_ALREADY_COMPLETED",
+      message: "Task already completed",
+      responseBody: { statusCode: 409 },
+    });
+
+    expect(getMobileApiErrorStatusCode(error)).toBe(409);
+    expect(getMobileApiErrorCode(error)).toBe("TASK_ALREADY_COMPLETED");
+  });
+
+  it("treats structured 403 errors as invalid mobile sessions", () => {
+    const error = new MobileApiHttpError({
+      statusCode: 403,
+      code: "FORBIDDEN",
+      message: "Forbidden",
+      responseBody: { statusCode: 403 },
+    });
+
+    expect(isSessionTokenInvalidError(error)).toBe(true);
   });
 });

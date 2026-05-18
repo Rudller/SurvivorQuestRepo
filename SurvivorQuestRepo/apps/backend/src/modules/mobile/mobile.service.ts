@@ -909,6 +909,8 @@ export class MobileService {
       );
     }
 
+    this.assertLocationRequirementSatisfied(realization, team);
+
     const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
       throw new NotFoundException('Station not found');
@@ -1000,11 +1002,7 @@ export class MobileService {
       );
     }
 
-    if (realization.locationRequired && !team.lastLocationAt) {
-      throw new BadRequestException(
-        'Location update is required for this realization',
-      );
-    }
+    this.assertLocationRequirementSatisfied(realization, team);
 
     const finishedAt = new Date();
     const finishedAtIso = finishedAt.toISOString();
@@ -1154,6 +1152,8 @@ export class MobileService {
         'Station not available in this realization',
       );
     }
+
+    this.assertLocationRequirementSatisfied(realization, team);
 
     const finishedAt = new Date();
     const finishedAtIso = finishedAt.toISOString();
@@ -1319,6 +1319,8 @@ export class MobileService {
     if (!normalizedToken) {
       throw new BadRequestException('Invalid payload');
     }
+
+    this.assertLocationRequirementSatisfied(realization, team);
 
     const verified = verifyStationQrToken(
       normalizedToken,
@@ -2580,6 +2582,17 @@ export class MobileService {
     }
 
     throw new ConflictException('Realization has been finished');
+  }
+
+  private assertLocationRequirementSatisfied(
+    realization: { locationRequired: boolean },
+    team: { lastLocationAt?: Date | null },
+  ) {
+    if (realization.locationRequired && !team.lastLocationAt) {
+      throw new BadRequestException(
+        'Location update is required for this realization',
+      );
+    }
   }
 
   private async resolveSessionEndState(input: {

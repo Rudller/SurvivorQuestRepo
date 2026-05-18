@@ -241,6 +241,7 @@ export default function CurrentRealizationPage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const canManageCurrentRealization = meData?.user.role === "admin";
   const [resetCompletedTasks, { isLoading: isResettingTasks }] = useResetCurrentRealizationCompletedTasksMutation();
   const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
@@ -257,11 +258,11 @@ export default function CurrentRealizationPage() {
   const {
     data: scenarios,
     isLoading: isScenariosLoading,
-  } = useGetScenariosQuery(undefined, { skip: !meData });
+  } = useGetScenariosQuery(undefined, { skip: !canManageCurrentRealization });
   const {
     data: stations,
     isLoading: isStationsLoading,
-  } = useGetStationsQuery(undefined, { skip: !meData });
+  } = useGetStationsQuery(undefined, { skip: !canManageCurrentRealization });
   const realizationOptions = useMemo(
     () =>
       [...(realizations ?? [])].sort(
@@ -383,6 +384,7 @@ export default function CurrentRealizationPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();
@@ -453,76 +455,80 @@ export default function CurrentRealizationPage() {
 
         {overview && (
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/55 p-4">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
-                Akcje główne
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Uruchomić aplikację globalnie dla tej realizacji?")) {
-                      return;
-                    }
+            {canManageCurrentRealization ? (
+              <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/55 p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
+                  Akcje główne
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Uruchomić aplikację globalnie dla tej realizacji?")) {
+                        return;
+                      }
 
-                    try {
-                      await startCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isStartingRealization || overview.realization.status === "in-progress"}
-                  className={`${actionButtonBaseClassName} ${actionButtonEmeraldClassName}`}
-                >
-                  {isStartingRealization
-                    ? "Uruchamianie..."
-                    : overview.realization.status === "in-progress"
-                      ? "Aplikacja uruchomiona"
-                      : "Start aplikacji"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Zakończyć realizację?")) {
-                      return;
-                    }
+                      try {
+                        await startCurrentRealization(selectedRealizationArg).unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isStartingRealization || overview.realization.status === "in-progress"}
+                    className={`${actionButtonBaseClassName} ${actionButtonEmeraldClassName}`}
+                  >
+                    {isStartingRealization
+                      ? "Uruchamianie..."
+                      : overview.realization.status === "in-progress"
+                        ? "Aplikacja uruchomiona"
+                        : "Start aplikacji"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Zakończyć realizację?")) {
+                        return;
+                      }
 
-                    try {
-                      await finishCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isFinishingRealization || overview.realization.status === "done"}
-                  className={`${actionButtonBaseClassName} ${actionButtonNeutralClassName}`}
-                >
-                  {isFinishingRealization
-                    ? "Zamykanie..."
-                    : overview.realization.status === "done"
-                      ? "Realizacja zakończona"
-                      : "Zakończ realizację"}
-                </button>
+                      try {
+                        await finishCurrentRealization(selectedRealizationArg).unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isFinishingRealization || overview.realization.status === "done"}
+                    className={`${actionButtonBaseClassName} ${actionButtonNeutralClassName}`}
+                  >
+                    {isFinishingRealization
+                      ? "Zamykanie..."
+                      : overview.realization.status === "done"
+                        ? "Realizacja zakończona"
+                        : "Zakończ realizację"}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/55 p-4">
               <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
                 Akcje dodatkowe
               </p>
               <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!selectedOverviewRealization) {
-                      return;
-                    }
-                    setEditingRealization(selectedOverviewRealization);
-                  }}
-                  disabled={isEditActionDisabled}
-                  className={`${actionButtonBaseClassName} ${actionButtonAmberClassName}`}
-                >
-                  {isScenariosLoading || isStationsLoading ? "Ładowanie edytora..." : "Edytuj realizację"}
-                </button>
+                {canManageCurrentRealization ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!selectedOverviewRealization) {
+                        return;
+                      }
+                      setEditingRealization(selectedOverviewRealization);
+                    }}
+                    disabled={isEditActionDisabled}
+                    className={`${actionButtonBaseClassName} ${actionButtonAmberClassName}`}
+                  >
+                    {isScenariosLoading || isStationsLoading ? "Ładowanie edytora..." : "Edytuj realizację"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -535,53 +541,55 @@ export default function CurrentRealizationPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-red-200/90">
-                Akcje krytyczne
-              </p>
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!window.confirm("Czy na pewno chcesz zresetować wszystkie ukończone zadania?")) {
-                      return;
-                    }
+            {canManageCurrentRealization ? (
+              <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-red-200/90">
+                  Akcje krytyczne
+                </p>
+                <div className="grid gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm("Czy na pewno chcesz zresetować wszystkie ukończone zadania?")) {
+                        return;
+                      }
 
-                    try {
-                      await resetCompletedTasks(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isResettingTasks}
-                  className={`${actionButtonBaseClassName} ${actionButtonRedClassName}`}
-                >
-                  {isResettingTasks ? "Resetowanie..." : "Resetuj ukończone zadania"}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        "Zresetować realizację? Usunie to podłączenia urządzeń i postęp zadań, ustawi status na planned oraz datę rozpoczęcia na teraz.",
-                      )
-                    ) {
-                      return;
-                    }
+                      try {
+                        await resetCompletedTasks(selectedRealizationArg).unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isResettingTasks}
+                    className={`${actionButtonBaseClassName} ${actionButtonRedClassName}`}
+                  >
+                    {isResettingTasks ? "Resetowanie..." : "Resetuj ukończone zadania"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          "Zresetować realizację? Usunie to podłączenia urządzeń i postęp zadań, ustawi status na planned oraz datę rozpoczęcia na teraz.",
+                        )
+                      ) {
+                        return;
+                      }
 
-                    try {
-                      await resetCurrentRealization(selectedRealizationArg).unwrap();
-                    } catch {
-                      // handled by query error rendering/refetch path
-                    }
-                  }}
-                  disabled={isResettingRealization}
-                  className={`${actionButtonBaseClassName} ${actionButtonOrangeClassName}`}
-                >
-                  {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
-                </button>
+                      try {
+                        await resetCurrentRealization(selectedRealizationArg).unwrap();
+                      } catch {
+                        // handled by query error rendering/refetch path
+                      }
+                    }}
+                    disabled={isResettingRealization}
+                    className={`${actionButtonBaseClassName} ${actionButtonOrangeClassName}`}
+                  >
+                    {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         )}
 
@@ -671,7 +679,7 @@ export default function CurrentRealizationPage() {
                           onClick={() => setEditingTeamId(team.id)}
                           className="w-full rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20"
                         >
-                          Edytuj zadania
+                          {canManageCurrentRealization ? "Edytuj zadania" : "Zobacz zadania"}
                         </button>
                       </article>
                     ))}
@@ -713,7 +721,7 @@ export default function CurrentRealizationPage() {
                                 onClick={() => setEditingTeamId(team.id)}
                                 className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20"
                               >
-                                Edytuj zadania
+                                {canManageCurrentRealization ? "Edytuj zadania" : "Zobacz zadania"}
                               </button>
                             </td>
                           </tr>
@@ -820,6 +828,7 @@ export default function CurrentRealizationPage() {
           realization={overview.realization}
           team={editingTeam}
           selectedRealizationId={selectedRealizationId === "current" ? undefined : selectedRealizationId}
+          canManageTasks={canManageCurrentRealization}
           onClose={() => setEditingTeamId(null)}
         />
       ) : null}

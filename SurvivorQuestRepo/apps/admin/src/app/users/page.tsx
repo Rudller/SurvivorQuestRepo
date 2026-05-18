@@ -23,6 +23,8 @@ export default function UsersPage() {
     error: meError,
   } = useMeQuery();
 
+  const canManageUsers = meData?.user.role === "admin";
+
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
 
   const {
@@ -32,7 +34,7 @@ export default function UsersPage() {
     error: usersError,
     refetch,
   } = useGetUsersQuery(undefined, {
-    skip: !meData,
+    skip: !canManageUsers,
   });
 
   useEffect(() => {
@@ -52,50 +54,62 @@ export default function UsersPage() {
   return (
     <AdminShell
       userEmail={meData?.user.email}
+      userRole={meData?.user.role}
       isLoggingOut={isLoggingOut}
       onLogout={async () => {
         await logout().unwrap();
         router.replace("/login");
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-zinc-100">Użytkownicy</h1>
-        <button
-          type="button"
-          onClick={() => setIsCreatePanelOpen(true)}
-          className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
-        >
-          Utwórz użytkownika
-        </button>
-      </div>
-
-      {isUsersLoading && <p className="mt-4 text-zinc-400">Ładowanie użytkowników...</p>}
-
-      {isUsersError && (
-        <div className="mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-          <p>Nie udało się pobrać użytkowników.</p>
-          <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">
-            {JSON.stringify(usersError, null, 2)}
-          </pre>
-          <button
-            onClick={() => refetch()}
-            className="mt-3 rounded bg-amber-400 px-3 py-1.5 text-zinc-950"
-          >
-            Spróbuj ponownie
-          </button>
+      {!canManageUsers ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-6">
+          <h1 className="text-xl font-semibold text-zinc-100">Brak dostępu</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Zarządzanie użytkownikami jest dostępne tylko dla administratorów.
+          </p>
         </div>
-      )}
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-semibold text-zinc-100">Użytkownicy</h1>
+            <button
+              type="button"
+              onClick={() => setIsCreatePanelOpen(true)}
+              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+            >
+              Utwórz użytkownika
+            </button>
+          </div>
 
-      {!isUsersLoading && !isUsersError && (
-        <UsersTable
-          data={users ?? []}
-          onEdit={setEditingUser}
-        />
-      )}
+          {isUsersLoading && <p className="mt-4 text-zinc-400">Ładowanie użytkowników...</p>}
 
-      {isCreatePanelOpen && <CreateUserForm onClose={() => setIsCreatePanelOpen(false)} />}
-      {editingUser && (
-        <EditUserForm key={editingUser.id} user={editingUser} onClose={() => setEditingUser(null)} />
+          {isUsersError && (
+            <div className="mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              <p>Nie udało się pobrać użytkowników.</p>
+              <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">
+                {JSON.stringify(usersError, null, 2)}
+              </pre>
+              <button
+                onClick={() => refetch()}
+                className="mt-3 rounded bg-amber-400 px-3 py-1.5 text-zinc-950"
+              >
+                Spróbuj ponownie
+              </button>
+            </div>
+          )}
+
+          {!isUsersLoading && !isUsersError && (
+            <UsersTable
+              data={users ?? []}
+              onEdit={setEditingUser}
+            />
+          )}
+
+          {isCreatePanelOpen && <CreateUserForm onClose={() => setIsCreatePanelOpen(false)} />}
+          {editingUser && (
+            <EditUserForm key={editingUser.id} user={editingUser} onClose={() => setEditingUser(null)} />
+          )}
+        </>
       )}
     </AdminShell>
   );

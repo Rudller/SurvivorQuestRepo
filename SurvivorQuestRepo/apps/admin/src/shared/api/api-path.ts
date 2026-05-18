@@ -2,6 +2,8 @@ const DEFAULT_BACKEND_API_URL = "http://localhost:3001";
 const DEFAULT_BACKEND_API_PORT = "3001";
 const API_URL_STORAGE_KEY = "survivorquest.admin.api-url";
 const API_URL_CHANGE_EVENT = "survivorquest:api-url-changed";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const ALLOW_API_URL_OVERRIDE = process.env.NEXT_PUBLIC_ALLOW_API_URL_OVERRIDE === "true";
 
 function isLocalHostname(hostname: string) {
   const normalizedHostname = hostname.trim().toLowerCase();
@@ -77,6 +79,10 @@ function normalizeApiUrl(value: string) {
 }
 
 function readStoredApiUrl() {
+  if (!canEditConfiguredApiUrl()) {
+    return null;
+  }
+
   if (typeof window === "undefined") {
     return null;
   }
@@ -104,7 +110,31 @@ export function getConfiguredApiUrl() {
   return readStoredApiUrl() || normalizeApiUrl(getDefaultApiUrl()) || DEFAULT_BACKEND_API_URL;
 }
 
+export function canEditConfiguredApiUrl() {
+  return !IS_PRODUCTION || ALLOW_API_URL_OVERRIDE;
+}
+
+function isApiUrlAllowed(normalizedUrl: string) {
+  if (!IS_PRODUCTION) {
+    return true;
+  }
+
+  const parsedUrl = new URL(normalizedUrl);
+  if (parsedUrl.protocol !== "https:") {
+    return isLocalHostname(parsedUrl.hostname);
+  }
+
+  return true;
+}
+
 export function setConfiguredApiUrl(value: string) {
+  if (!canEditConfiguredApiUrl()) {
+    return {
+      ok: false as const,
+      message: "Zmiana serwera API jest zablokowana w tej instalacji.",
+    };
+  }
+
   if (typeof window === "undefined") {
     return { ok: false as const, message: "Zmiana serwera jest dostępna tylko w przeglądarce." };
   }
@@ -112,6 +142,13 @@ export function setConfiguredApiUrl(value: string) {
   const normalized = normalizeApiUrl(value);
   if (!normalized) {
     return { ok: false as const, message: "Podaj poprawny adres serwera (np. http://localhost:3001)." };
+  }
+
+  if (!isApiUrlAllowed(normalized)) {
+    return {
+      ok: false as const,
+      message: "W produkcji użyj adresu HTTPS albo lokalnego adresu developerskiego.",
+    };
   }
 
   window.localStorage.setItem(API_URL_STORAGE_KEY, normalized);

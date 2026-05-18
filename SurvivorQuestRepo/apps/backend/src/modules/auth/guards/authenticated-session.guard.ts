@@ -11,23 +11,27 @@ import {
   resolveOriginFromHeaders,
 } from '../../../common/security/cors-origin';
 import { readSessionToken } from '../auth.cookies';
-import { AuthService } from '../auth.service';
+import { AuthService, type AuthUser } from '../auth.service';
 
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+export type AuthenticatedRequest = Request & { user?: AuthUser };
+
 @Injectable()
-export class AdminSessionGuard implements CanActivate {
+export class AuthenticatedSessionGuard implements CanActivate {
   constructor(private readonly authService: AuthService) {}
 
   async canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest<Request>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = await this.authService.getUserBySession(
       readSessionToken(request),
     );
 
-    if (!user || user.role !== 'admin') {
+    if (!user) {
       throw new UnauthorizedException('Unauthorized');
     }
+
+    request.user = user;
 
     const method = request.method.toUpperCase();
     if (!SAFE_HTTP_METHODS.has(method)) {

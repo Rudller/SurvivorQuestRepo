@@ -6,7 +6,9 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOrInstructor } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { ChatService } from './chat.service';
 
 type CreateChatMessagePayload = {
@@ -15,7 +17,8 @@ type CreateChatMessagePayload = {
 };
 
 @Controller('chat/messages')
-@UseGuards(AdminSessionGuard)
+@AdminOrInstructor()
+@UseGuards(AuthenticatedSessionGuard, RolesGuard)
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 

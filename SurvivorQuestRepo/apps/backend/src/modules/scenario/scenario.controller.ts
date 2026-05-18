@@ -10,7 +10,9 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { StationService } from '../station/station.service';
 import {
   parseCloneScenarioDto,
@@ -23,7 +25,8 @@ import {
 import { ScenarioService } from './scenario.service';
 
 @Controller('scenario')
-@UseGuards(AdminSessionGuard)
+@AdminOnly()
+@UseGuards(AuthenticatedSessionGuard, RolesGuard)
 export class ScenarioController {
   constructor(
     private readonly scenarioService: ScenarioService,

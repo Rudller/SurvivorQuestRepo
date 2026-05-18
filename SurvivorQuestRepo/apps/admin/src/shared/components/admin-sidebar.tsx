@@ -3,23 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ApiConnectionStatusBadge } from "@/features/auth/components/api-connection-status";
+import type { AuthRole } from "@/features/auth/types/auth";
 
 type AdminSidebarProps = {
   userEmail?: string;
+  userRole?: AuthRole;
   isLoggingOut: boolean;
   onLogout: () => Promise<void> | void;
   onNavigate?: () => void;
 };
 
-const navItems = [
+type AdminNavItem = {
+  href: string;
+  label: string;
+  roles?: AuthRole[];
+};
+
+const navItems: AdminNavItem[] = [
   { href: "/", label: "Panel główny" },
   { href: "/calendar", label: "Kalendarz" },
-  { href: "/tasks", label: "Lista zadań" },
+  { href: "/tasks", label: "Lista zadań", roles: ["admin"] },
   { href: "/current-realization", label: "Aktualna realizacja" },
-  { href: "/users", label: "Użytkownicy" },
+  { href: "/users", label: "Użytkownicy", roles: ["admin"] },
   { href: "/realizations", label: "Realizacje" },
-  { href: "/station", label: "Stanowisko" },
-  { href: "/scenario", label: "Scenariusz" },
+  { href: "/station", label: "Stanowisko", roles: ["admin"] },
+  { href: "/scenario", label: "Scenariusz", roles: ["admin"] },
   { href: "/chat", label: "Czat" },
 ];
 
@@ -39,9 +47,10 @@ function normalizeAdminPath(pathname: string | null) {
   return pathname;
 }
 
-export function AdminSidebar({ userEmail, isLoggingOut, onLogout, onNavigate }: AdminSidebarProps) {
+export function AdminSidebar({ userEmail, userRole, isLoggingOut, onLogout, onNavigate }: AdminSidebarProps) {
   const pathname = usePathname();
   const normalizedPathname = normalizeAdminPath(pathname);
+  const visibleNavItems = navItems.filter((item) => !item.roles || (userRole && item.roles.includes(userRole)));
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -49,7 +58,7 @@ export function AdminSidebar({ userEmail, isLoggingOut, onLogout, onNavigate }: 
       <h2 className="mt-2 text-lg font-semibold text-zinc-100">Admin Panel</h2>
 
       <nav className="mt-6 space-y-0.5 border-l border-zinc-800/80">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = normalizedPathname === item.href;
 
           return (
@@ -72,6 +81,7 @@ export function AdminSidebar({ userEmail, isLoggingOut, onLogout, onNavigate }: 
       <div className="mt-auto space-y-3 border-t border-zinc-800 pt-4">
         <p className="text-xs text-zinc-400">Zalogowany</p>
         <p className="truncate text-sm text-zinc-200">{userEmail ?? "-"}</p>
+        <p className="text-xs text-zinc-500">Rola: {userRole ?? "-"}</p>
         <ApiConnectionStatusBadge inline allowServerEdit={false} />
         <button
           onClick={() => void onLogout()}

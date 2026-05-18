@@ -14,8 +14,34 @@ import {
 import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
 
 type UnknownRecord = Record<string, unknown>;
-type MobileApiError = { message?: string };
+type MobileApiError = { message?: string | string[]; statusCode?: number; code?: string; error?: string };
 type MobileApiRequestOptions = { signal?: AbortSignal };
+
+export type MobileApiErrorCode =
+  | "INVALID_COMPLETION_CODE"
+  | "TASK_ALREADY_COMPLETED"
+  | "LOCATION_REQUIRED"
+  | "SESSION_MISSING"
+  | "SESSION_INVALID"
+  | "SESSION_EXPIRED"
+  | "FORBIDDEN"
+  | "BAD_REQUEST"
+  | "CONFLICT"
+  | "HTTP_ERROR";
+
+export class MobileApiHttpError extends Error {
+  readonly statusCode: number;
+  readonly code: MobileApiErrorCode;
+  readonly responseBody: unknown;
+
+  constructor(input: { statusCode: number; code: MobileApiErrorCode; message: string; responseBody: unknown }) {
+    super(input.message);
+    this.name = "MobileApiHttpError";
+    this.statusCode = input.statusCode;
+    this.code = input.code;
+    this.responseBody = input.responseBody;
+  }
+}
 
 const MOBILE_SESSION_API_TEXT: Record<
   UiLanguage,
@@ -88,6 +114,70 @@ function asArray(value: unknown) {
 
 function normalizeTaskStatus(value: unknown): ExpeditionTaskStatus {
   return value === "done" || value === "in-progress" || value === "failed" ? value : "todo";
+}
+
+function normalizeErrorMessage(value: unknown, fallback: string) {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .join(". ");
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return fallback;
+}
+
+function resolveMobileApiErrorCode(statusCode: number, message: string, rawCode?: string): MobileApiErrorCode {
+  const normalizedCode = rawCode?.trim().toUpperCase();
+  if (normalizedCode) {
+    return normalizedCode as MobileApiErrorCode;
+  }
+
+  const normalizedMessage = message.toLowerCase();
+  if (normalizedMessage.includes("invalid completion code")) {
+    return "INVALID_COMPLETION_CODE";
+  }
+  if (normalizedMessage.includes("task already completed")) {
+    return "TASK_ALREADY_COMPLETED";
+  }
+  if (normalizedMessage.includes("location update is required")) {
+    return "LOCATION_REQUIRED";
+  }
+  if (normalizedMessage.includes("missing session token")) {
+    return "SESSION_MISSING";
+  }
+  if (normalizedMessage.includes("invalid session token")) {
+    return "SESSION_INVALID";
+  }
+  if (normalizedMessage.includes("session expired")) {
+    return "SESSION_EXPIRED";
+  }
+  if (statusCode === 403) {
+    return "FORBIDDEN";
+  }
+  if (statusCode === 400) {
+    return "BAD_REQUEST";
+  }
+  if (statusCode === 409) {
+    return "CONFLICT";
+  }
+
+  return "HTTP_ERROR";
+}
+
+export function getMobileApiErrorStatusCode(error: unknown) {
+  return error instanceof MobileApiHttpError ? error.statusCode : null;
+}
+
+export function getMobileApiErrorCode(error: unknown) {
+  return error instanceof MobileApiHttpError ? error.code : null;
 }
 
 function normalizeStationType(value: unknown): ExpeditionStationType {
@@ -501,7 +591,13 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 
   if (!response.ok) {
-    throw new Error(typeof data.message === "string" ? data.message : `HTTP ${response.status}`);
+    const message = normalizeErrorMessage(data.message, `HTTP ${response.status}`);
+    throw new MobileApiHttpError({
+      statusCode: typeof data.statusCode === "number" ? data.statusCode : response.status,
+      code: resolveMobileApiErrorCode(response.status, message, data.code),
+      message,
+      responseBody: data,
+    });
   }
 
   return data as T;
@@ -516,6 +612,16 @@ export function getApiErrorMessage(error: unknown, fallback?: string, language?:
 }
 
 export function isSessionTokenInvalidError(error: unknown) {
+  const statusCode = getMobileApiErrorStatusCode(error);
+  if (statusCode === 401 || statusCode === 403) {
+    return true;
+  }
+
+  const code = getMobileApiErrorCode(error);
+  if (code === "SESSION_MISSING" || code === "SESSION_INVALID" || code === "SESSION_EXPIRED" || code === "FORBIDDEN") {
+    return true;
+  }
+
   if (!(error instanceof Error)) {
     return false;
   }
@@ -523,6 +629,7 @@ export function isSessionTokenInvalidError(error: unknown) {
   const message = error.message.toLowerCase();
   return (
     message.includes("http 401") ||
+    message.includes("http 403") ||
     message.includes("invalid session token") ||
     message.includes("session expired") ||
     message.includes("missing session token")

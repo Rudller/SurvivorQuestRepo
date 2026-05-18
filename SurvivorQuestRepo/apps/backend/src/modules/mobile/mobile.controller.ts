@@ -9,7 +9,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { AdminSessionGuard } from '../auth/guards/admin-session.guard';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   MOBILE_JOIN_THROTTLE,
   MOBILE_QR_RESOLVE_THROTTLE,
@@ -205,43 +207,50 @@ export class MobileController {
   }
 
   @Get('admin/realizations/current')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminCurrentRealizationOverview() {
     return this.mobileService.getMobileAdminRealizationOverview('current');
   }
 
   @Post('admin/realizations/current/reset-completed-tasks')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminCurrentRealizationCompletedTasks() {
     return this.mobileService.resetMobileAdminCompletedTasks('current');
   }
 
   @Post('admin/realizations/current/start')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async startMobileAdminCurrentRealization() {
     return this.mobileService.startMobileAdminRealization('current');
   }
 
   @Post('admin/realizations/current/finish')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async finishMobileAdminCurrentRealization() {
     return this.mobileService.finishMobileAdminRealization('current');
   }
 
   @Post('admin/realizations/current/reset')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminCurrentRealization() {
     return this.mobileService.resetMobileAdminRealization('current');
   }
 
   @Get('admin/realizations/current/locations')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminCurrentRealizationLocations() {
     return this.mobileService.getMobileAdminRealizationLocations('current');
   }
 
   @Get('admin/realizations/current/station-qr')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminCurrentRealizationStationQrs(
     @Query('ttlSeconds') ttlSeconds?: string,
   ) {
@@ -253,7 +262,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/reset')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminCurrentTeamTask(
     @Param('teamId') teamId: string,
     @Param('stationId') stationId: string,
@@ -266,7 +276,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/complete')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async completeMobileAdminCurrentTeamTask(
     @Param('teamId') teamId: string,
     @Param('stationId') stationId: string,
@@ -279,7 +290,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/fail')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async failMobileAdminCurrentTeamTask(
     @Param('teamId') teamId: string,
     @Param('stationId') stationId: string,
@@ -294,7 +306,8 @@ export class MobileController {
   }
 
   @Get('admin/realizations/:realizationId')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminRealizationOverview(
     @Param('realizationId') realizationId: string,
   ) {
@@ -302,7 +315,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/:realizationId/reset-completed-tasks')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminRealizationCompletedTasks(
     @Param('realizationId') realizationId: string,
   ) {
@@ -310,7 +324,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/:realizationId/start')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async startMobileAdminRealization(
     @Param('realizationId') realizationId: string,
   ) {
@@ -318,7 +333,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/:realizationId/finish')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async finishMobileAdminRealization(
     @Param('realizationId') realizationId: string,
   ) {
@@ -326,7 +342,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/:realizationId/reset')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminRealization(
     @Param('realizationId') realizationId: string,
   ) {
@@ -334,7 +351,8 @@ export class MobileController {
   }
 
   @Get('admin/realizations/:realizationId/locations')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminRealizationLocations(
     @Param('realizationId') realizationId: string,
   ) {
@@ -342,7 +360,8 @@ export class MobileController {
   }
 
   @Get('admin/realizations/:realizationId/station-qr')
-  @UseGuards(AdminSessionGuard)
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminRealizationStationQrs(
     @Param('realizationId') realizationId: string,
     @Query('ttlSeconds') ttlSeconds?: string,
@@ -360,7 +379,8 @@ export class MobileController {
   @Post(
     'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/reset',
   )
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async resetMobileAdminTeamTask(
     @Param('realizationId') realizationId: string,
     @Param('teamId') teamId: string,
@@ -376,7 +396,8 @@ export class MobileController {
   @Post(
     'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/complete',
   )
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async completeMobileAdminTeamTask(
     @Param('realizationId') realizationId: string,
     @Param('teamId') teamId: string,
@@ -390,7 +411,8 @@ export class MobileController {
   }
 
   @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/fail')
-  @UseGuards(AdminSessionGuard)
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async failMobileAdminTeamTask(
     @Param('realizationId') realizationId: string,
     @Param('teamId') teamId: string,

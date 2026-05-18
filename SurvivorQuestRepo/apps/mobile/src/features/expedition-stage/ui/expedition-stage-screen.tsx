@@ -38,6 +38,7 @@ import { ExpeditionStageOverlayProvider, ExpeditionStageSessionProvider } from "
 import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
 import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
 import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
+import { getMobileApiErrorCode, getMobileApiErrorStatusCode } from "../api/mobile-session.api";
 
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
@@ -90,6 +91,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     chooseContentLanguage: string;
     contentLanguageSet: string;
     close: string;
+    locationRequired: string;
   }
 > = {
   polish: {
@@ -131,6 +133,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     chooseContentLanguage: "Wybierz język treści",
     contentLanguageSet: "Język treści: {label}",
     close: "Zamknij",
+    locationRequired: "Ta realizacja wymaga lokalizacji. Włącz GPS i zezwól na lokalizację, aby kontynuować.",
   },
   english: {
     stationLabelPrefix: "Station",
@@ -171,6 +174,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     chooseContentLanguage: "Choose content language",
     contentLanguageSet: "Content language: {label}",
     close: "Close",
+    locationRequired: "This realization requires location. Enable GPS and allow location access to continue.",
   },
   ukrainian: {
     stationLabelPrefix: "Станція",
@@ -211,6 +215,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     chooseContentLanguage: "Оберіть мову вмісту",
     contentLanguageSet: "Мова вмісту: {label}",
     close: "Закрити",
+    locationRequired: "Для цієї реалізації потрібна геолокація. Увімкніть GPS і дозвольте доступ до локації, щоб продовжити.",
   },
   russian: {
     stationLabelPrefix: "Станция",
@@ -251,6 +256,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     chooseContentLanguage: "Выберите язык контента",
     contentLanguageSet: "Язык контента: {label}",
     close: "Закрыть",
+    locationRequired: "Для этой реализации нужна геолокация. Включите GPS и разрешите доступ к локации, чтобы продолжить.",
   },
 };
 
@@ -584,8 +590,12 @@ function resolveRealizationDeadlineIso(scheduledAt: string, durationMinutes: num
   return new Date(scheduledAtMs + safeDurationMinutes * 60_000).toISOString();
 }
 
-function isInvalidCompletionCodeError(value: string | null) {
-  const normalized = value?.trim().toLowerCase() ?? "";
+function isInvalidCompletionCodeError(value: string | Error | null) {
+  if (getMobileApiErrorCode(value) === "INVALID_COMPLETION_CODE") {
+    return true;
+  }
+
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : value?.message.trim().toLowerCase() ?? "";
   if (!normalized) {
     return false;
   }
@@ -593,8 +603,12 @@ function isInvalidCompletionCodeError(value: string | null) {
   return normalized.includes("invalid completion code") || normalized.includes("http 400");
 }
 
-function isTaskAlreadyCompletedError(value: string | null) {
-  const normalized = value?.trim().toLowerCase() ?? "";
+function isTaskAlreadyCompletedError(value: string | Error | null) {
+  if (getMobileApiErrorCode(value) === "TASK_ALREADY_COMPLETED" || getMobileApiErrorStatusCode(value) === 409) {
+    return true;
+  }
+
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : value?.message.trim().toLowerCase() ?? "";
   if (!normalized) {
     return false;
   }
@@ -1033,6 +1047,10 @@ export function ExpeditionStageScreen({
 
   const overlayFlow = useExpeditionStageOverlayFlow({
     isSessionEnded,
+    locationRequired: sessionState.realization.locationRequired,
+    playerLocation,
+    requestCurrentLocation,
+    syncTeamLocation,
     stationIds,
     stationTestEntries,
     taskByStationId,
@@ -1047,6 +1065,7 @@ export function ExpeditionStageScreen({
       taskCompleted: text.taskCompleted,
       taskTimeExpired: text.taskTimeExpired,
       taskMarkedFailed: text.taskMarkedFailed,
+      locationRequired: text.locationRequired,
     },
     startStationTask,
     completeStationTask,
@@ -1061,6 +1080,7 @@ export function ExpeditionStageScreen({
 
   const qrFlow = useExpeditionStageQrFlow({
     isSessionEnded,
+    locationRequired: sessionState.realization.locationRequired,
     isInteractiveQuizStationType,
     text: {
       realizationEndedScannerBlocked: text.realizationEndedScannerBlocked,
@@ -1071,6 +1091,7 @@ export function ExpeditionStageScreen({
       processQrFailed: text.processQrFailed,
       scannedStation: text.scannedStation,
       qrScanCanceled: text.qrScanCanceled,
+      locationRequired: text.locationRequired,
     },
     playerLocation,
     requestCurrentLocation,
