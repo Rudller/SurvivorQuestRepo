@@ -45,6 +45,7 @@ export type CurrentRealizationOverview = {
     }>;
     tasks: Array<{
       stationId: string;
+      stationNumber?: number;
       status: CurrentTeamTaskStatus;
       pointsAwarded: number;
       finishedAt: string | null;

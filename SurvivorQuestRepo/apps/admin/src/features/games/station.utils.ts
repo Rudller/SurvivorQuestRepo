@@ -1,5 +1,5 @@
 import type { ClipboardEvent } from "react";
-import type { StationQuiz, StationType } from "./types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, StationQuiz, StationType } from "./types/station";
 import { stationTypeOptions } from "./types/station";
 
 export type ImageInputMode = "upload" | "paste" | "url";
@@ -13,6 +13,16 @@ export const MINI_SUDOKU_SYSTEM_STATION_PROMPT =
   "to jest placeholder, treść tego inputu nie zmieni zadania bo jest generowane po stronie mobilki a musi coś być w tym inpucie w celu walidacji :)";
 export const MATCHING_SYSTEM_STATION_PROMPT =
   "Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.";
+export const STRONG_PASSWORD_SYSTEM_STATION_PROMPT = "Ułóż mocne hasło spełniające dzienne reguły.";
+export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
+  { value: "admin", label: "Admin ustala" },
+  { value: "player", label: "Gracz wybiera" },
+];
+export const challengeDifficultyOptions: { value: ChallengeDifficulty; label: string; description: string }[] = [
+  { value: "easy", label: "Łatwy", description: "Prostsza wersja zadania, 50% punktów" },
+  { value: "medium", label: "Średni", description: "Standardowa wersja zadania, 100% punktów" },
+  { value: "hard", label: "Trudny", description: "Trudniejsza wersja zadania, 150% punktów" },
+];
 const COMPLETION_CODE_DIGITS_ONLY_REGEX = /^\d{3,32}$/;
 const COMPLETION_CODE_LETTERS_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const COMPLETION_CODE_DIGITS_ALPHABET = "0123456789";
@@ -166,7 +176,8 @@ export function isQuizStationType(stationType: StationType) {
     stationType === "rebus" ||
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
-    stationType === "matching"
+    stationType === "matching" ||
+    stationType === "strong-password"
   );
 }
 
@@ -181,8 +192,13 @@ export function isWordPuzzleStationType(stationType: StationType) {
     stationType === "boggle" ||
     stationType === "memory" ||
     stationType === "simon" ||
-    stationType === "mini-sudoku"
+    stationType === "mini-sudoku" ||
+    stationType === "strong-password"
   );
+}
+
+export function supportsChallengeDifficulty(stationType: StationType) {
+  return stationType === "strong-password" || stationType === "mastermind";
 }
 
 export function isMatchingStationType(stationType: StationType) {
@@ -199,7 +215,8 @@ export function isImageSupportedStationType(stationType: StationType) {
     stationType !== "memory" &&
     stationType !== "simon" &&
     stationType !== "mini-sudoku" &&
-    stationType !== "matching"
+    stationType !== "matching" &&
+    stationType !== "strong-password"
   );
 }
 
@@ -220,6 +237,14 @@ export function getQuizLikeStationCopy(stationType: StationType) {
         questionPlaceholder: "Wpisz hasło dla stacji Wisielec",
         answersHint: "Wisielec używa wyłącznie hasła jako rozwiązania.",
         validationMessage: "Wisielec wymaga hasła.",
+      };
+    case "strong-password":
+      return {
+        sectionTitle: "Konfiguracja Mocnego hasła",
+        questionLabel: "Opis / seed gry",
+        questionPlaceholder: STRONG_PASSWORD_SYSTEM_STATION_PROMPT,
+        answersHint: "Reguły hasła są generowane automatycznie na dany dzień i poziom trudności.",
+        validationMessage: "Mocne hasło wymaga krótkiego opisu lub nazwy wyzwania.",
       };
     case "audio-quiz":
       return {
@@ -433,9 +458,11 @@ export function normalizeStationQuizForType(stationType: StationType, input: Sta
   }
 
   if (isWordPuzzleStationType(stationType)) {
+    const nextQuestion = stationType === "strong-password" ? input.question.trim() || STRONG_PASSWORD_SYSTEM_STATION_PROMPT : input.question;
     return normalizeStationQuiz({
       ...input,
-      answers: [input.question, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      question: nextQuestion,
+      answers: [nextQuestion, ...QUIZ_SECRET_FALLBACK_ANSWERS],
       correctAnswerIndex: 0,
     });
   }
@@ -512,7 +539,7 @@ export function generateSimonSequence(length = SIMON_SEQUENCE_LENGTH) {
   );
 }
 
-export function generateSampleCompletionCode(length = 8, mode: CompletionCodeGeneratorMode = "letters") {
+export function generateSampleCompletionCode(length = 4, mode: CompletionCodeGeneratorMode = "letters") {
   const normalizedLength = Math.min(32, Math.max(3, Math.round(length)));
   return generateCompletionCodeSuffix(normalizedLength, mode);
 }

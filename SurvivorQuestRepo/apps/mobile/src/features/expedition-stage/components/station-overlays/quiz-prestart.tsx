@@ -3,7 +3,14 @@ import { Animated, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
-import type { QuizPrestartOverlayProps } from "./types";
+import type { ChallengeDifficulty, QuizPrestartOverlayProps } from "./types";
+
+function formatTimeLimit(timeLimitSeconds: number) {
+  const safeSeconds = Math.max(0, Math.round(timeLimitSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 const QUIZ_PRESTART_TEXT: Record<
   UiLanguage,
@@ -26,6 +33,21 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: string;
     descriptionLogicChallenge: string;
     descriptionQuiz: string;
+    pointsDecayWarning: (timeLimit: string, points: number) => string;
+    chooseDifficulty: string;
+    selectedDifficulty: (difficulty: string) => string;
+    difficultyEasy: string;
+    difficultyMedium: string;
+    difficultyHard: string;
+    difficultyEasyDescription: string;
+    difficultyMediumDescription: string;
+    difficultyHardDescription: string;
+    mastermindEasyDescription: string;
+    mastermindMediumDescription: string;
+    mastermindHardDescription: string;
+    strongPasswordEasyDescription: string;
+    strongPasswordMediumDescription: string;
+    strongPasswordHardDescription: string;
     stationPrefix: string;
     close: string;
     start: string;
@@ -51,6 +73,22 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: "Przygotuj się na odgadnięcie hasła.",
     descriptionLogicChallenge: "Przygotuj się na krótkie zadanie interaktywne.",
     descriptionQuiz: "Przygotuj się na odpowiedzenie na pytania.",
+    pointsDecayWarning: (timeLimit, points) =>
+      `Macie ${timeLimit} na wykonanie zadania. Każda sekunda odejmuje punkty z puli ${points}. Koniec czasu oznacza niezaliczone zadanie.`,
+    chooseDifficulty: "Wybierz poziom trudności przed startem.",
+    selectedDifficulty: (difficulty) => `Poziom trudności: ${difficulty}.`,
+    difficultyEasy: "Łatwy",
+    difficultyMedium: "Średni",
+    difficultyHard: "Trudny",
+    difficultyEasyDescription: "Prostsza wersja zadania",
+    difficultyMediumDescription: "Standardowa wersja zadania",
+    difficultyHardDescription: "Trudniejsza wersja zadania",
+    mastermindEasyDescription: "4 znaki z A-D, bez powtórzeń, 10 prób, 50% punktów",
+    mastermindMediumDescription: "4 znaki z A-F, powtórzenia możliwe, 8 prób, 100% punktów",
+    mastermindHardDescription: "5 znaków z A-F, powtórzenia możliwe, 6 prób, 150% punktów",
+    strongPasswordEasyDescription: "10 reguł hasła, 50% punktów",
+    strongPasswordMediumDescription: "20 reguł hasła, 100% punktów",
+    strongPasswordHardDescription: "30 reguł hasła, 150% punktów",
     stationPrefix: "Stanowisko",
     close: "Zamknij",
     start: "Start",
@@ -75,6 +113,22 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: "Get ready to guess the phrase.",
     descriptionLogicChallenge: "Get ready for a short interactive task.",
     descriptionQuiz: "Get ready to answer the questions.",
+    pointsDecayWarning: (timeLimit, points) =>
+      `You have ${timeLimit} to complete the task. Every second reduces the available ${points} points. Time running out means the task is failed.`,
+    chooseDifficulty: "Choose difficulty before starting.",
+    selectedDifficulty: (difficulty) => `Difficulty: ${difficulty}.`,
+    difficultyEasy: "Easy",
+    difficultyMedium: "Medium",
+    difficultyHard: "Hard",
+    difficultyEasyDescription: "Simpler task version",
+    difficultyMediumDescription: "Standard task version",
+    difficultyHardDescription: "Harder task version",
+    mastermindEasyDescription: "4 symbols from A-D, no repeats, 10 attempts, 50% points",
+    mastermindMediumDescription: "4 symbols from A-F, repeats allowed, 8 attempts, 100% points",
+    mastermindHardDescription: "5 symbols from A-F, repeats allowed, 6 attempts, 150% points",
+    strongPasswordEasyDescription: "10 password rules, 50% points",
+    strongPasswordMediumDescription: "20 password rules, 100% points",
+    strongPasswordHardDescription: "30 password rules, 150% points",
     stationPrefix: "Station",
     close: "Close",
     start: "Start",
@@ -99,6 +153,22 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: "Підготуйтеся відгадати фразу.",
     descriptionLogicChallenge: "Підготуйтеся до короткого інтерактивного завдання.",
     descriptionQuiz: "Підготуйтеся відповісти на запитання.",
+    pointsDecayWarning: (timeLimit, points) =>
+      `У вас є ${timeLimit} на виконання завдання. Кожна секунда зменшує пул у ${points} балів. Завершення часу означає незараховане завдання.`,
+    chooseDifficulty: "Оберіть складність перед стартом.",
+    selectedDifficulty: (difficulty) => `Складність: ${difficulty}.`,
+    difficultyEasy: "Легко",
+    difficultyMedium: "Середньо",
+    difficultyHard: "Складно",
+    difficultyEasyDescription: "Простіша версія завдання",
+    difficultyMediumDescription: "Стандартна версія завдання",
+    difficultyHardDescription: "Складніша версія завдання",
+    mastermindEasyDescription: "4 символи з A-D, без повторів, 10 спроб, 50% балів",
+    mastermindMediumDescription: "4 символи з A-F, повтори дозволені, 8 спроб, 100% балів",
+    mastermindHardDescription: "5 символів з A-F, повтори дозволені, 6 спроб, 150% балів",
+    strongPasswordEasyDescription: "10 правил пароля, 50% балів",
+    strongPasswordMediumDescription: "20 правил пароля, 100% балів",
+    strongPasswordHardDescription: "30 правил пароля, 150% балів",
     stationPrefix: "Станція",
     close: "Закрити",
     start: "Старт",
@@ -123,6 +193,22 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: "Подготовьтесь отгадать фразу.",
     descriptionLogicChallenge: "Подготовьтесь к короткому интерактивному заданию.",
     descriptionQuiz: "Подготовьтесь ответить на вопросы.",
+    pointsDecayWarning: (timeLimit, points) =>
+      `У вас есть ${timeLimit} на выполнение задания. Каждая секунда уменьшает пул в ${points} баллов. Истечение времени означает незачтенное задание.`,
+    chooseDifficulty: "Выберите сложность перед стартом.",
+    selectedDifficulty: (difficulty) => `Сложность: ${difficulty}.`,
+    difficultyEasy: "Легко",
+    difficultyMedium: "Средне",
+    difficultyHard: "Сложно",
+    difficultyEasyDescription: "Более простая версия задания",
+    difficultyMediumDescription: "Стандартная версия задания",
+    difficultyHardDescription: "Более сложная версия задания",
+    mastermindEasyDescription: "4 символа из A-D, без повторов, 10 попыток, 50% баллов",
+    mastermindMediumDescription: "4 символа из A-F, повторы разрешены, 8 попыток, 100% баллов",
+    mastermindHardDescription: "5 символов из A-F, повторы разрешены, 6 попыток, 150% баллов",
+    strongPasswordEasyDescription: "10 правил пароля, 50% баллов",
+    strongPasswordMediumDescription: "20 правил пароля, 100% баллов",
+    strongPasswordHardDescription: "30 правил пароля, 150% баллов",
     stationPrefix: "Станция",
     close: "Закрыть",
     start: "Старт",
@@ -134,6 +220,11 @@ export function QuizPrestartOverlay({
   visible,
   stationName,
   stationType = "quiz",
+  timeLimitSeconds = 0,
+  points = 0,
+  timedStationPointsDecayEnabled = false,
+  challengeDifficultyMode = "admin",
+  challengeDifficulty = "medium",
   isStarting = false,
   onStart,
   onClose,
@@ -147,10 +238,14 @@ export function QuizPrestartOverlay({
   const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const [displayStationName, setDisplayStationName] = useState(stationName);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<ChallengeDifficulty | null>(
+    challengeDifficultyMode === "player" ? null : challengeDifficulty,
+  );
 
   useEffect(() => {
     if (visible) {
       setDisplayStationName(stationName);
+      setSelectedDifficulty(challengeDifficultyMode === "player" ? null : challengeDifficulty);
       setIsMounted(true);
       slideAnimation.stopAnimation();
       Animated.timing(slideAnimation, {
@@ -171,7 +266,7 @@ export function QuizPrestartOverlay({
         setIsMounted(false);
       }
     });
-  }, [slideAnimation, stationName, visible]);
+  }, [challengeDifficulty, challengeDifficultyMode, slideAnimation, stationName, visible]);
 
   if (!isMounted) {
     return null;
@@ -243,6 +338,14 @@ export function QuizPrestartOverlay({
           : isLogicChallenge
             ? text.descriptionLogicChallenge
            : text.descriptionQuiz;
+  const safePoints = Math.max(0, Math.round(points));
+  const pointsDecayWarning =
+    timedStationPointsDecayEnabled && timeLimitSeconds > 0 && safePoints > 0
+      ? text.pointsDecayWarning(formatTimeLimit(timeLimitSeconds), safePoints)
+      : null;
+  const pointsDecayWarningColor = isLightTheme ? "#92400e" : "#fde68a";
+  const pointsDecayWarningBorderColor = isLightTheme ? "rgba(146, 64, 14, 0.38)" : "rgba(251, 191, 36, 0.35)";
+  const pointsDecayWarningBackgroundColor = isLightTheme ? "rgba(146, 64, 14, 0.12)" : "rgba(251, 191, 36, 0.1)";
   const horizontalInset = adaptiveLayout.s(isTabletLayout ? 44 : 24, 18, 56);
   const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 760 : 460, 340, 840);
   const panelRadius = adaptiveLayout.s(isTabletLayout ? 32 : 24, 18, 40);
@@ -255,6 +358,45 @@ export function QuizPrestartOverlay({
   const actionsGap = adaptiveLayout.s(isTabletLayout ? 14 : 8, 6, 18);
   const actionMinHeight = adaptiveLayout.hit(isTabletLayout ? 64 : 50);
   const actionFontSize = adaptiveLayout.fs(isTabletLayout ? 22 : 16, 14, 26);
+  const supportsDifficulty = stationType === "mastermind" || stationType === "strong-password";
+  const shouldChooseDifficulty = supportsDifficulty && challengeDifficultyMode === "player";
+  const resolveDifficultyDescription = (difficulty: ChallengeDifficulty) => {
+    if (stationType === "mastermind") {
+      if (difficulty === "easy") {
+        return text.mastermindEasyDescription;
+      }
+      if (difficulty === "hard") {
+        return text.mastermindHardDescription;
+      }
+      return text.mastermindMediumDescription;
+    }
+    if (stationType === "strong-password") {
+      if (difficulty === "easy") {
+        return text.strongPasswordEasyDescription;
+      }
+      if (difficulty === "hard") {
+        return text.strongPasswordHardDescription;
+      }
+      return text.strongPasswordMediumDescription;
+    }
+    if (difficulty === "easy") {
+      return text.difficultyEasyDescription;
+    }
+    if (difficulty === "hard") {
+      return text.difficultyHardDescription;
+    }
+    return text.difficultyMediumDescription;
+  };
+  const effectiveDifficulty = selectedDifficulty ?? challengeDifficulty;
+  const difficultyLabel =
+    effectiveDifficulty === "easy"
+      ? text.difficultyEasy
+      : effectiveDifficulty === "hard"
+        ? text.difficultyHard
+        : text.difficultyMedium;
+  const difficultyDescription = resolveDifficultyDescription(effectiveDifficulty);
+  const difficultyOptions: ChallengeDifficulty[] = ["easy", "medium", "hard"];
+  const canStart = !isStarting && (!shouldChooseDifficulty || Boolean(selectedDifficulty));
 
   return (
     <Animated.View
@@ -305,6 +447,104 @@ export function QuizPrestartOverlay({
           {prestartDescription}
           {displayStationName ? ` ${text.stationPrefix}: ${displayStationName}.` : ""}
         </Text>
+        {pointsDecayWarning ? (
+          <Text
+            className="text-center font-semibold"
+            style={{
+              marginTop: adaptiveLayout.s(12, 8, 16),
+              borderRadius: adaptiveLayout.s(18, 14, 24),
+              borderWidth: 1,
+              borderColor: pointsDecayWarningBorderColor,
+              backgroundColor: pointsDecayWarningBackgroundColor,
+              paddingHorizontal: adaptiveLayout.s(14, 12, 18),
+              paddingVertical: adaptiveLayout.s(10, 8, 14),
+              color: pointsDecayWarningColor,
+              fontSize: adaptiveLayout.fs(isTabletLayout ? 16 : 13, 12, 20),
+              lineHeight: adaptiveLayout.s(isTabletLayout ? 24 : 19, 18, 28),
+            }}
+          >
+            {pointsDecayWarning}
+          </Text>
+        ) : null}
+
+        {supportsDifficulty ? (
+          <View
+            className="border"
+            style={{
+              marginTop: adaptiveLayout.s(12, 8, 16),
+              borderRadius: adaptiveLayout.s(18, 14, 24),
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panelMuted,
+              paddingHorizontal: adaptiveLayout.s(14, 12, 18),
+              paddingVertical: adaptiveLayout.s(10, 8, 14),
+            }}
+          >
+            <Text
+              className="text-center font-semibold"
+              style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 16 : 13, 12, 20) }}
+            >
+              {shouldChooseDifficulty ? text.chooseDifficulty : text.selectedDifficulty(difficultyLabel)}
+            </Text>
+            {!shouldChooseDifficulty ? (
+              <Text
+                className="mt-1 text-center"
+                style={{
+                  color: EXPEDITION_THEME.textMuted,
+                  fontSize: adaptiveLayout.fs(isTabletLayout ? 13 : 11, 10, 16),
+                  lineHeight: adaptiveLayout.s(isTabletLayout ? 20 : 16, 15, 24),
+                }}
+              >
+                {difficultyDescription}
+              </Text>
+            ) : null}
+            {shouldChooseDifficulty ? (
+              <View className="mt-3 gap-2">
+                {difficultyOptions.map((difficulty) => {
+                  const isSelected = selectedDifficulty === difficulty;
+                  const optionLabel =
+                    difficulty === "easy"
+                      ? text.difficultyEasy
+                      : difficulty === "hard"
+                        ? text.difficultyHard
+                        : text.difficultyMedium;
+                  const optionDescription =
+                    resolveDifficultyDescription(difficulty);
+
+                  return (
+                    <Pressable
+                      key={`prestart-difficulty-${difficulty}`}
+                      className="rounded-xl border px-3 py-2 active:opacity-90"
+                      style={{
+                        borderColor: isSelected ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
+                        backgroundColor: isSelected ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
+                      }}
+                      onPress={() => setSelectedDifficulty(difficulty)}
+                      disabled={isStarting}
+                    >
+                      <Text
+                        className="font-semibold"
+                        style={{
+                          color: isSelected ? accentButtonTextColor : EXPEDITION_THEME.textPrimary,
+                          fontSize: adaptiveLayout.fs(isTabletLayout ? 16 : 13, 12, 20),
+                        }}
+                      >
+                        {optionLabel}
+                      </Text>
+                      <Text
+                        style={{
+                          color: isSelected ? accentButtonTextColor : EXPEDITION_THEME.textMuted,
+                          fontSize: adaptiveLayout.fs(isTabletLayout ? 13 : 11, 10, 16),
+                        }}
+                      >
+                        {optionDescription}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <View className="mt-4 flex-row" style={{ columnGap: actionsGap }}>
           <Pressable
@@ -328,10 +568,10 @@ export function QuizPrestartOverlay({
               minHeight: actionMinHeight,
               borderRadius: adaptiveLayout.s(isTabletLayout ? 16 : 12, 10, 20),
               backgroundColor: EXPEDITION_THEME.accent,
-              opacity: isStarting ? 0.7 : 1,
+              opacity: canStart ? 1 : 0.55,
             }}
-            onPress={onStart}
-            disabled={isStarting}
+            onPress={() => onStart(supportsDifficulty ? effectiveDifficulty : undefined)}
+            disabled={!canStart}
           >
             <Text className="font-semibold" style={{ color: accentButtonTextColor, fontSize: actionFontSize }}>
               {isStarting ? text.starting : text.start}

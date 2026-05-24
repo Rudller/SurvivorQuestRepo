@@ -265,7 +265,11 @@ export function QuizAudioPanel({
             >
               <Text
                 className="text-center font-semibold"
-                style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 14 }}
+                style={{
+                  color: EXPEDITION_THEME.textPrimary,
+                  fontSize: layout.isTablet ? 18 : 14,
+                  lineHeight: layout.isTablet ? 26 : 21,
+                }}
               >
                 {option}
               </Text>

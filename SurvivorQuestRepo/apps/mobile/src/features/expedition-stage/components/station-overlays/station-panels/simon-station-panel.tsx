@@ -12,6 +12,8 @@ type SimonStationPanelProps = {
   simonSequence: string[];
   simonTargetLength: number;
   simonProgress: number;
+  simonMistakes: number;
+  simonMaxMistakes: number;
   simonActivePlaybackButtonId: string | null;
   simonActiveInputButtonId: string | null;
   isSimonPlaybackActive: boolean;
@@ -22,7 +24,7 @@ type SimonStationPanelProps = {
 };
 
 type SimonStationText = {
-  progress: string;
+  mistakes: string;
   status: string;
   statusPlayback: string;
   statusReady: string;
@@ -32,7 +34,7 @@ type SimonStationText = {
 };
 
 const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
-  progress: "Progress",
+  mistakes: "Mistakes",
   status: "Status",
   statusPlayback: "Playback",
   statusReady: "Ready",
@@ -43,7 +45,7 @@ const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
 
 const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
   polish: {
-    progress: "Postęp",
+    mistakes: "Błędy",
     status: "Status",
     statusPlayback: "Odtwarzanie",
     statusReady: "Gotowe",
@@ -53,7 +55,7 @@ const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
   },
   english: SIMON_STATION_TEXT_ENGLISH,
   ukrainian: {
-    progress: "Прогрес",
+    mistakes: "Помилки",
     status: "Статус",
     statusPlayback: "Відтворення",
     statusReady: "Готово",
@@ -62,7 +64,7 @@ const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
     button: "Кнопка",
   },
   russian: {
-    progress: "Прогресс",
+    mistakes: "Ошибки",
     status: "Статус",
     statusPlayback: "Воспроизведение",
     statusReady: "Готово",
@@ -77,6 +79,8 @@ export function SimonStationPanel({
   simonSequence,
   simonTargetLength,
   simonProgress,
+  simonMistakes,
+  simonMaxMistakes,
   simonActivePlaybackButtonId,
   simonActiveInputButtonId,
   isSimonPlaybackActive,
@@ -96,6 +100,9 @@ export function SimonStationPanel({
       ((gridWidth > 0 ? gridWidth : defaultGridWidth) - simonButtonGap * 2) / 3,
     );
   const safeSequenceLength = Math.max(1, Math.min(simonTargetLength, simonSequence.length));
+  const safeMaxMistakes = Math.max(1, simonMaxMistakes);
+  const visibleMistakes = Math.max(0, Math.min(simonMistakes, safeMaxMistakes));
+  const visibleProgress = Math.max(0, Math.min(simonProgress, safeSequenceLength));
   const isSimonLocked = isInteractiveLocked;
   const isSimonChecking = isSubmittingSimon;
   const simonStatusLabel = isSimonChecking
@@ -126,21 +133,21 @@ export function SimonStationPanel({
   return (
     <View className="mt-3">
       <View className="flex-row items-center justify-center" style={{ columnGap: layout.attemptDotGap }}>
-        {Array.from({ length: safeSequenceLength }).map((_, index) => (
+        {Array.from({ length: safeMaxMistakes }).map((_, index) => (
           <View
-            key={`${stationId}-simon-progress-${index}`}
+            key={`${stationId}-simon-mistake-${index}`}
             className="rounded-full"
             style={{
               width: layout.isTablet ? 14 : 11,
               height: layout.isTablet ? 14 : 11,
               backgroundColor:
-                index < simonProgress ? EXPEDITION_THEME.accentStrong : "rgba(148, 163, 184, 0.3)",
+                index < visibleMistakes ? EXPEDITION_THEME.danger : "rgba(148, 163, 184, 0.3)",
             }}
           />
         ))}
       </View>
       <Text className="mt-1 text-center" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
-        {text.progress}: {simonProgress}/{safeSequenceLength}
+        {text.mistakes}: {visibleMistakes}/{safeMaxMistakes}
       </Text>
       <View
         className="mt-2 self-center rounded-full border px-3 py-1"
@@ -218,8 +225,25 @@ export function SimonStationPanel({
           })()
         ))}
       </View>
+      <View
+        className="flex-row items-center justify-center"
+        style={{ columnGap: layout.attemptDotGap + 3, marginTop: layout.isTablet ? 24 : 18 }}
+      >
+        {Array.from({ length: safeSequenceLength }).map((_, index) => (
+          <View
+            key={`${stationId}-simon-progress-feedback-${index}`}
+            className="rounded-full"
+            style={{
+              width: layout.isTablet ? 24 : 18,
+              height: layout.isTablet ? 24 : 18,
+              backgroundColor:
+                index < visibleProgress ? EXPEDITION_THEME.accentStrong : "rgba(148, 163, 184, 0.3)",
+            }}
+          />
+        ))}
+      </View>
       {simonResult ? (
-        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
+        <Text className="mt-2 text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
           {simonResult}
         </Text>
       ) : null}

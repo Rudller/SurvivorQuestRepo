@@ -115,6 +115,7 @@ export function CaesarStationPanel({
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
           autoCapitalize="characters"
           autoCorrect={false}
+          showSoftInputOnFocus={false}
           maxLength={caesarMaxLength}
           value={caesarInput}
           onChangeText={onChangeInput}

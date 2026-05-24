@@ -7,6 +7,7 @@ import {
   appendCaesarCharacterController,
   backspaceBoggleInputController,
   backspaceCaesarInputController,
+  backspaceMastermindInputController,
   handleAnagramInputChangeController,
   handleBoggleInputChange,
   handleCaesarInputChangeController,
@@ -36,6 +37,7 @@ type CompleteTaskHandler = (
   stationId: string,
   completionCode: string,
   startedAt?: string,
+  challengeDifficulty?: string,
 ) => Promise<string | null>;
 
 type UseStationPreviewActionsArgs = {
@@ -87,6 +89,10 @@ type UseStationPreviewActionsArgs = {
   isSubmittingHangmanGuess: boolean;
   normalizedMastermindInput: string;
   mastermindSecret: string;
+  mastermindDifficulty: "easy" | "medium" | "hard";
+  mastermindCodeLength: number;
+  mastermindMaxAttempts: number;
+  mastermindSymbols: readonly string[];
   mastermindSolved: boolean;
   mastermindAttemptsLeft: number;
   mastermindAttempts: MastermindAttempt[];
@@ -434,6 +440,8 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
       isMastermindStation: args.isMastermindStation,
       normalizedMastermindInput: args.normalizedMastermindInput,
       mastermindSecret: args.mastermindSecret,
+      mastermindDifficulty: args.mastermindDifficulty,
+      mastermindMaxAttempts: args.mastermindMaxAttempts,
       isInteractiveLocked: args.isInteractiveLocked,
       isSubmittingMastermindGuess: args.isSubmittingMastermindGuess,
       mastermindSolved: args.mastermindSolved,
@@ -838,6 +846,8 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
   const handleMastermindInput = (value: string) => {
     handleMastermindInputChange({
       value,
+      mastermindSymbols: args.mastermindSymbols,
+      mastermindCodeLength: args.mastermindCodeLength,
       setMastermindInput: args.setMastermindInput,
       setMastermindResult: args.setMastermindResult,
       setQuizSubmitError: args.setQuizSubmitError,
@@ -847,12 +857,27 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
   const addMastermindSymbol = (symbol: string) => {
     handleMastermindAddSymbol({
       symbol,
+      mastermindSymbols: args.mastermindSymbols,
+      mastermindCodeLength: args.mastermindCodeLength,
       isInteractiveLocked: args.isInteractiveLocked,
       isSubmittingMastermindGuess: args.isSubmittingMastermindGuess,
       mastermindSolved: args.mastermindSolved,
       mastermindAttemptsLeft: args.mastermindAttemptsLeft,
       setMastermindInput: args.setMastermindInput,
       setMastermindResult: args.setMastermindResult,
+      setQuizSubmitError: args.setQuizSubmitError,
+    });
+  };
+
+  const backspaceMastermindInput = () => {
+    backspaceMastermindInputController({
+      isInteractiveLocked: args.isInteractiveLocked,
+      isSubmittingMastermindGuess: args.isSubmittingMastermindGuess,
+      mastermindSolved: args.mastermindSolved,
+      mastermindAttemptsLeft: args.mastermindAttemptsLeft,
+      setMastermindInput: args.setMastermindInput,
+      setMastermindResult: args.setMastermindResult,
+      setQuizSubmitError: args.setQuizSubmitError,
     });
   };
 
@@ -882,5 +907,6 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
     handleBoggleInput,
     handleMastermindInput,
     addMastermindSymbol,
+    backspaceMastermindInput,
   };
 }

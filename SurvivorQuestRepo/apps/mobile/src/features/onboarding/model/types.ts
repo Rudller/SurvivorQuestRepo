@@ -142,6 +142,7 @@ export type OnboardingRealizationSummary = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
+  timedStationPointsDecayEnabled?: boolean;
   introText?: string;
   gameRules?: string;
 };

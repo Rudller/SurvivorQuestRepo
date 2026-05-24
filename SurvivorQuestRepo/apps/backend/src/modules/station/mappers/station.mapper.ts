@@ -40,6 +40,7 @@ export function toPrismaStationType(type: StationType) {
   if (type === 'rebus') return PrismaStationType.REBUS;
   if (type === 'boggle') return PrismaStationType.BOGGLE;
   if (type === 'mini-sudoku') return PrismaStationType.MINI_SUDOKU;
+  if (type === 'strong-password') return PrismaStationType.STRONG_PASSWORD;
   return PrismaStationType.MATCHING;
 }
 
@@ -58,6 +59,7 @@ function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.REBUS) return 'rebus';
   if (type === PrismaStationType.BOGGLE) return 'boggle';
   if (type === PrismaStationType.MINI_SUDOKU) return 'mini-sudoku';
+  if (type === PrismaStationType.STRONG_PASSWORD) return 'strong-password';
   return 'matching';
 }
 
@@ -269,6 +271,8 @@ export function mapStation(input: {
   completionCode: string | null;
   quizData: Prisma.JsonValue | null;
   translations: Prisma.JsonValue | null;
+  challengeDifficultyMode: string;
+  challengeDifficulty: string;
   latitude: number | null;
   longitude: number | null;
   sourceTemplateId: string | null;
@@ -291,6 +295,11 @@ export function mapStation(input: {
     completionCode: input.completionCode || undefined,
     quiz: parseStationQuizData(input.quizData),
     translations: parseStationTranslationsData(input.translations),
+    challengeDifficultyMode: input.challengeDifficultyMode === 'player' ? 'player' : 'admin',
+    challengeDifficulty:
+      input.challengeDifficulty === 'easy' || input.challengeDifficulty === 'hard'
+        ? input.challengeDifficulty
+        : 'medium',
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
     longitude:
       typeof input.longitude === 'number' ? input.longitude : undefined,

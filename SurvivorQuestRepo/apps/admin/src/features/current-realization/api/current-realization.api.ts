@@ -135,6 +135,10 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           const task = asRecord(item);
           return {
             stationId: asString(task.stationId ?? task.station_id),
+            stationNumber: (() => {
+              const value = Math.round(asNumber(task.stationNumber ?? task.station_number, 0));
+              return value > 0 ? value : undefined;
+            })(),
             status: asString(task.status, "todo") as CurrentRealizationOverview["teams"][number]["tasks"][number]["status"],
             pointsAwarded: asNumber(task.pointsAwarded ?? task.points_awarded),
             finishedAt: (task.finishedAt as string | null) ?? (task.finished_at as string | null) ?? null,

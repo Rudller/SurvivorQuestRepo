@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,9 +11,11 @@ import {
   ScrollView,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import type {
   OnboardingSession,
@@ -40,6 +42,22 @@ const ADMIN_START_POLL_INTERVAL_MS = 3000;
 const STALE_REALIZATION_AUTO_RESUME_GRACE_MS = 6 * 60 * 60 * 1000;
 
 type MobileThemePreference = ExpeditionThemeMode;
+
+type HorizontalSafeAreaProps = {
+  children: ReactNode;
+  className?: string;
+  style?: StyleProp<ViewStyle>;
+};
+
+function HorizontalSafeArea({ children, className, style }: HorizontalSafeAreaProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View className={className} style={[style, { paddingLeft: insets.left, paddingRight: insets.right }]}>
+      {children}
+    </View>
+  );
+}
 
 type OnboardingRecoveryIntent = {
   realizationCode: string;
@@ -137,6 +155,8 @@ const MOBILE_APP_TEXT: Record<
     themeLabel: string;
     themeLight: string;
     themeDark: string;
+    realizationExitTitle: string;
+    realizationExitNotice: string;
   }
 > = {
   polish: {
@@ -154,6 +174,8 @@ const MOBILE_APP_TEXT: Record<
     themeLabel: "Motyw",
     themeLight: "Jasny",
     themeDark: "Ciemny",
+    realizationExitTitle: "Opuszczono realizację",
+    realizationExitNotice: "Możesz teraz wybrać lub potwierdzić realizację ponownie.",
   },
   english: {
     gameRulesTitle: "Game rules",
@@ -170,6 +192,8 @@ const MOBILE_APP_TEXT: Record<
     themeLabel: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
+    realizationExitTitle: "Realization exited",
+    realizationExitNotice: "You can now choose or confirm the realization again.",
   },
   ukrainian: {
     gameRulesTitle: "Правила гри",
@@ -186,6 +210,8 @@ const MOBILE_APP_TEXT: Record<
     themeLabel: "Тема",
     themeLight: "Світла",
     themeDark: "Темна",
+    realizationExitTitle: "Реалізацію залишено",
+    realizationExitNotice: "Тепер можна знову обрати або підтвердити реалізацію.",
   },
   russian: {
     gameRulesTitle: "Правила игры",
@@ -202,6 +228,8 @@ const MOBILE_APP_TEXT: Record<
     themeLabel: "Тема",
     themeLight: "Светлая",
     themeDark: "Тёмная",
+    realizationExitTitle: "Реализация покинута",
+    realizationExitNotice: "Теперь можно снова выбрать или подтвердить реализацию.",
   },
 };
 
@@ -615,6 +643,15 @@ export function MobileApp() {
     await AsyncStorage.removeItem(ONBOARDING_SESSION_STORAGE_KEY);
   }
 
+  async function handleExitRealization() {
+    setRecoveryIntent(null);
+    setIsWaitingForAdminStart(false);
+    setWaitingError(null);
+    setOnboardingSession(null);
+    await AsyncStorage.removeItem(ONBOARDING_SESSION_STORAGE_KEY);
+    Alert.alert(text.realizationExitTitle, text.realizationExitNotice);
+  }
+
   useEffect(() => {
     const shouldWaitForAdminStart = Boolean(
       onboardingSession?.awaitingAdminStart &&
@@ -731,8 +768,7 @@ export function MobileApp() {
   if (isHydratingSession) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView
-          edges={["left", "right"]}
+        <HorizontalSafeArea
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
@@ -741,7 +777,7 @@ export function MobileApp() {
           </View>
           {themeSwitchButton}
           <StatusBar style={statusBarStyle} hidden />
-        </SafeAreaView>
+        </HorizontalSafeArea>
       </SafeAreaProvider>
     );
   }
@@ -749,8 +785,7 @@ export function MobileApp() {
   if (onboardingSession && isWaitingForAdminStart) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView
-          edges={["left", "right"]}
+        <HorizontalSafeArea
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
@@ -773,7 +808,7 @@ export function MobileApp() {
           </View>
           {themeSwitchButton}
           <StatusBar style={statusBarStyle} hidden />
-        </SafeAreaView>
+        </HorizontalSafeArea>
       </SafeAreaProvider>
     );
   }
@@ -788,8 +823,7 @@ export function MobileApp() {
   return (
     <SafeAreaProvider>
       <UiLanguageProvider language={uiLanguage}>
-        <SafeAreaView
-          edges={["left", "right"]}
+        <HorizontalSafeArea
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
@@ -798,6 +832,9 @@ export function MobileApp() {
               session={onboardingSession}
               onSessionInvalid={(reason) => {
                 void resetToOnboardingWithMessage(reason);
+              }}
+              onExitRealization={() => {
+                void handleExitRealization();
               }}
               onSelectedLanguageChange={(language) => {
                 void handleSelectedLanguageChange(language);
@@ -830,7 +867,7 @@ export function MobileApp() {
             />
           ) : null}
           <StatusBar style={statusBarStyle} hidden />
-        </SafeAreaView>
+        </HorizontalSafeArea>
       </UiLanguageProvider>
     </SafeAreaProvider>
   );

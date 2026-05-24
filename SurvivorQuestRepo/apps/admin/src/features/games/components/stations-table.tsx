@@ -255,11 +255,11 @@ export function StationsTable({
                             unoptimized={isSvgImageUrl(game.imageUrl)}
                             className="h-18 w-18 rounded-lg border border-zinc-800 object-cover"
                           />
-                          <p className="line-clamp-2 text-sm font-medium text-zinc-100">{game.name}</p>
+                          <p className="line-clamp-2 pb-0.5 text-sm font-medium leading-6 text-zinc-100">{game.name}</p>
                           <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
                             {getStationTypeLabel(game.type)}
                           </span>
-                          <p className="line-clamp-2 text-sm text-zinc-400">{game.description}</p>
+                          <p className="line-clamp-2 pb-0.5 text-sm leading-6 text-zinc-400">{game.description}</p>
                           <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
                           <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
                           <p className="text-xs text-zinc-300">

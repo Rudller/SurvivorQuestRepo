@@ -1,11 +1,23 @@
 import type { ExpeditionSessionState } from "../model/types";
+
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+}));
+
 import {
   getMobileApiErrorCode,
   getMobileApiErrorStatusCode,
   isSessionTokenInvalidError,
   MobileApiHttpError,
 } from "../api/mobile-session.api";
-import { applyCompletedTaskState, isRetriableNetworkError, runRequestWithRetry } from "./use-expedition-session";
+import {
+  applyCompletedTaskState,
+  applyPendingTaskMutationsState,
+  isRetriableNetworkError,
+  runRequestWithRetry,
+} from "./use-expedition-session";
 
 function createSessionState(): ExpeditionSessionState {
   return {
@@ -21,6 +33,7 @@ function createSessionState(): ExpeditionSessionState {
       showLeaderboardDuringGame: true,
       showLeaderboardOnFinish: true,
       teamStationNumberingEnabled: true,
+      timedStationPointsDecayEnabled: true,
       scheduledAt: "2026-05-10T00:00:00.000Z",
       durationMinutes: 120,
       stations: [
@@ -98,6 +111,104 @@ describe("applyCompletedTaskState", () => {
     expect(secondCompletion).toBe(firstCompletion);
     expect(secondCompletion.team.points).toBe(180);
     expect(secondCompletion.meta.eventLogCount).toBe(1);
+  });
+
+  it("applies timed point decay to any station with a time limit", () => {
+    const initialState = createSessionState();
+    initialState.realization.stations[0] = {
+      ...initialState.realization.stations[0],
+      type: "quiz",
+      points: 100,
+      timeLimitSeconds: 100,
+    };
+
+    const completion = applyCompletedTaskState({
+      current: initialState,
+      stationId: "station-1",
+      startedAt: initialState.tasks[0]?.startedAt ?? undefined,
+      finishedAt: "2026-05-10T00:00:25.000Z",
+      requireExistingTask: true,
+    });
+
+    expect(completion.tasks[0]?.status).toBe("done");
+    expect(completion.tasks[0]?.pointsAwarded).toBe(75);
+    expect(completion.team.points).toBe(75);
+  });
+
+  it("marks timed point decay tasks as failed after the limit", () => {
+    const initialState = createSessionState();
+    initialState.realization.stations[0] = {
+      ...initialState.realization.stations[0],
+      type: "quiz",
+      points: 100,
+      timeLimitSeconds: 100,
+    };
+
+    const completion = applyCompletedTaskState({
+      current: initialState,
+      stationId: "station-1",
+      startedAt: initialState.tasks[0]?.startedAt ?? undefined,
+      finishedAt: "2026-05-10T00:01:40.000Z",
+      requireExistingTask: true,
+    });
+
+    expect(completion.tasks[0]?.status).toBe("failed");
+    expect(completion.tasks[0]?.pointsAwarded).toBe(0);
+    expect(completion.team.points).toBe(0);
+  });
+});
+
+describe("applyPendingTaskMutationsState", () => {
+  it("applies queued start and completion locally", () => {
+    const initialState = createSessionState();
+    initialState.tasks[0] = {
+      ...initialState.tasks[0],
+      status: "todo",
+      startedAt: null,
+    };
+
+    const nextState = applyPendingTaskMutationsState(initialState, [
+      {
+        id: "pending-start",
+        type: "task:start",
+        stationId: "station-1",
+        startedAt: "2026-05-10T00:00:00.000Z",
+        createdAt: "2026-05-10T00:00:00.000Z",
+      },
+      {
+        id: "pending-complete",
+        type: "task:complete",
+        stationId: "station-1",
+        completionCode: "OK",
+        startedAt: "2026-05-10T00:00:00.000Z",
+        finishedAt: "2026-05-10T00:00:10.000Z",
+        createdAt: "2026-05-10T00:00:10.000Z",
+      },
+    ]);
+
+    expect(nextState.tasks[0]?.status).toBe("done");
+    expect(nextState.tasks[0]?.startedAt).toBe("2026-05-10T00:00:00.000Z");
+    expect(nextState.tasks[0]?.finishedAt).toBe("2026-05-10T00:00:10.000Z");
+    expect(nextState.team.points).toBe(180);
+  });
+
+  it("applies queued failure locally", () => {
+    const initialState = createSessionState();
+
+    const nextState = applyPendingTaskMutationsState(initialState, [
+      {
+        id: "pending-fail",
+        type: "task:fail",
+        stationId: "station-1",
+        reason: "task_closed_before_completion",
+        startedAt: "2026-05-10T00:00:00.000Z",
+        finishedAt: "2026-05-10T00:00:10.000Z",
+        createdAt: "2026-05-10T00:00:10.000Z",
+      },
+    ]);
+
+    expect(nextState.tasks[0]?.status).toBe("failed");
+    expect(nextState.tasks[0]?.pointsAwarded).toBe(0);
   });
 });
 

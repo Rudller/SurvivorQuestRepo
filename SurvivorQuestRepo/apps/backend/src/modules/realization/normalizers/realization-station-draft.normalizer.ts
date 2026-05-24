@@ -26,6 +26,14 @@ function isValidStationCoordinate(latitude: unknown, longitude: unknown) {
   );
 }
 
+function normalizeChallengeDifficultyMode(value: unknown): StationDraftInput['challengeDifficultyMode'] {
+  return value === 'player' ? 'player' : 'admin';
+}
+
+function normalizeChallengeDifficulty(value: unknown): StationDraftInput['challengeDifficulty'] {
+  return value === 'easy' || value === 'hard' ? value : 'medium';
+}
+
 export function normalizeScenarioStationDrafts(
   drafts: ScenarioStationDraftPayload[] | undefined,
   parseTimeLimitSeconds: (value: unknown) => ParseTimeLimitResult,
@@ -81,6 +89,8 @@ export function normalizeScenarioStationDrafts(
           : undefined,
         quiz: draft.quiz,
         translations: draft.translations,
+        challengeDifficultyMode: normalizeChallengeDifficultyMode(draft.challengeDifficultyMode),
+        challengeDifficulty: normalizeChallengeDifficulty(draft.challengeDifficulty),
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,

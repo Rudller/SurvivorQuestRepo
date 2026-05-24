@@ -114,6 +114,7 @@ export function EditRealizationPanel({
     showLeaderboardOnFinish:
       realization.showLeaderboardOnFinish ?? realization.showLeaderboard,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
+    timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
@@ -427,6 +428,7 @@ export function EditRealizationPanel({
                   showLeaderboardDuringGame: editValues.showLeaderboardDuringGame,
                   showLeaderboardOnFinish: editValues.showLeaderboardOnFinish,
                   teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
+                  timedStationPointsDecayEnabled: editValues.timedStationPointsDecayEnabled,
                   status: editValues.status,
                   scheduledAt: normalizedScheduledAt,
                   scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -777,6 +779,21 @@ export function EditRealizationPanel({
                     Numeracja stanowisk dla drużyn
                   </label>
 
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.timedStationPointsDecayEnabled}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          timedStationPointsDecayEnabled: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Spadek punktów w grach czasowych
+                  </label>
+
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
                     <input
@@ -982,6 +999,10 @@ export function EditRealizationPanel({
               <p>
                 <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span>{" "}
                 {editValues.teamStationNumberingEnabled ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Spadek punktów w grach czasowych:</span>{" "}
+                {editValues.timedStationPointsDecayEnabled ? "Tak" : "Nie"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

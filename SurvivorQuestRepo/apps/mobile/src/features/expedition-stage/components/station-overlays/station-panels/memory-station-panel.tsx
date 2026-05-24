@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Pressable, Text, View, type DimensionValue } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -47,7 +47,10 @@ type DotMetricProps = {
 function DotMetric({ label, value, max, fillColor }: DotMetricProps) {
   const layout = useStationPanelLayout();
   const activeCount = Math.max(0, Math.min(value, max));
-  const dots = Array.from({ length: Math.max(1, max) }, (_, index) => index < activeCount);
+  const dots = useMemo(
+    () => Array.from({ length: Math.max(1, max) }, (_, index) => index < activeCount),
+    [activeCount, max],
+  );
 
   return (
     <View className="items-center justify-center">
@@ -77,6 +80,55 @@ function DotMetric({ label, value, max, fillColor }: DotMetricProps) {
   );
 }
 
+type MemoryCardButtonProps = {
+  card: MemoryCard;
+  disabled: boolean;
+  width: DimensionValue;
+  height: number;
+  minHeight: number;
+  fontSize: number;
+  onPressCard: (cardId: string) => void;
+};
+
+const MemoryCardButton = memo(function MemoryCardButton({
+  card,
+  disabled,
+  width,
+  height,
+  minHeight,
+  fontSize,
+  onPressCard,
+}: MemoryCardButtonProps) {
+  const handlePress = useCallback(() => {
+    onPressCard(card.id);
+  }, [card.id, onPressCard]);
+
+  return (
+    <Pressable
+      className="items-center justify-center rounded-lg border active:opacity-90"
+      style={{
+        width,
+        height,
+        minHeight,
+        borderColor: card.matched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
+        backgroundColor: card.matched
+          ? "rgba(34, 197, 94, 0.2)"
+          : card.revealed
+            ? "rgba(59, 130, 246, 0.2)"
+            : EXPEDITION_THEME.panelStrong,
+        opacity: disabled ? 0.85 : 1,
+      }}
+      onPress={handlePress}
+      disabled={disabled || card.matched || card.revealed}
+      hitSlop={6}
+    >
+      <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize }}>
+        {card.revealed || card.matched ? card.symbol : "?"}
+      </Text>
+    </Pressable>
+  );
+});
+
 export function MemoryStationPanel({
   memoryDeck,
   memoryMatchedCount,
@@ -105,6 +157,9 @@ export function MemoryStationPanel({
     computedCardWidth && computedCardWidth > 0
       ? Math.max(baseCardHeight, Math.round(computedCardWidth * (layout.isTablet ? 1.02 : 1.1)))
       : baseCardHeight;
+  const cardMinHeight = adaptiveLayout.hit(layout.isTablet ? 72 : 56);
+  const cardFontSize = layout.isTablet ? 36 : 30;
+  const areCardsDisabled = isInteractiveLocked || memoryBusy;
 
   return (
     <View className="mt-3">
@@ -127,31 +182,16 @@ export function MemoryStationPanel({
         }}
       >
         {memoryDeck.map((card) => (
-          <Pressable
+          <MemoryCardButton
             key={card.id}
-            className="items-center justify-center rounded-lg border active:opacity-90"
-            style={{
-              width: resolvedCardWidth,
-              height: resolvedCardHeight,
-              minHeight: adaptiveLayout.hit(layout.isTablet ? 72 : 56),
-              borderColor: card.matched ? "rgba(52, 211, 153, 0.8)" : EXPEDITION_THEME.border,
-              backgroundColor: card.matched
-                ? "rgba(34, 197, 94, 0.2)"
-                : card.revealed
-                  ? "rgba(59, 130, 246, 0.2)"
-                  : EXPEDITION_THEME.panelStrong,
-              opacity: isInteractiveLocked || memoryBusy ? 0.85 : 1,
-            }}
-            onPress={() => {
-              onPressCard(card.id);
-            }}
-            disabled={isInteractiveLocked || memoryBusy || card.matched || card.revealed}
-            hitSlop={6}
-          >
-            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 36 : 30 }}>
-              {card.revealed || card.matched ? card.symbol : "?"}
-            </Text>
-          </Pressable>
+            card={card}
+            disabled={areCardsDisabled}
+            width={resolvedCardWidth}
+            height={resolvedCardHeight}
+            minHeight={cardMinHeight}
+            fontSize={cardFontSize}
+            onPressCard={onPressCard}
+          />
         ))}
       </View>
       {memoryResult ? (

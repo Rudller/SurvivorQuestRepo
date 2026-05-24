@@ -316,6 +316,8 @@ describe("station-controllers puzzle validation coverage", () => {
       isMastermindStation: true,
       normalizedMastermindInput: "AA",
       mastermindSecret: "ABCD",
+      mastermindDifficulty: "medium",
+      mastermindMaxAttempts: 8,
       isInteractiveLocked: false,
       isSubmittingMastermindGuess: false,
       mastermindSolved: false,
@@ -503,6 +505,8 @@ describe("station-controllers helper coverage", () => {
     const submitErrorState = createStateSetter<string | null>("err");
     handleMastermindInputChange({
       value: "ab#f9",
+      mastermindSymbols: ["A", "B", "C", "D", "E", "F"],
+      mastermindCodeLength: 4,
       setMastermindInput: inputState.setter,
       setMastermindResult: resultState.setter,
       setQuizSubmitError: submitErrorState.setter,
@@ -515,17 +519,22 @@ describe("station-controllers helper coverage", () => {
   it("appends mastermind symbol when interactive and not solved", () => {
     const inputState = createStateSetter("A");
     const resultState = createStateSetter<string | null>("prev");
+    const submitErrorState = createStateSetter<string | null>("err");
     handleMastermindAddSymbol({
       symbol: "b",
+      mastermindSymbols: ["A", "B", "C", "D", "E", "F"],
+      mastermindCodeLength: 4,
       isInteractiveLocked: false,
       isSubmittingMastermindGuess: false,
       mastermindSolved: false,
       mastermindAttemptsLeft: 2,
       setMastermindInput: inputState.setter,
       setMastermindResult: resultState.setter,
+      setQuizSubmitError: submitErrorState.setter,
     });
-    expect(inputState.getState()).toBe("Ab");
+    expect(inputState.getState()).toBe("AB");
     expect(resultState.getState()).toBeNull();
+    expect(submitErrorState.getState()).toBeNull();
   });
 
   it("updates anagram input and clears previous feedback", () => {
@@ -1012,6 +1021,8 @@ describe("station-controllers puzzle double-submit guard", () => {
       isMastermindStation: true,
       normalizedMastermindInput: "ABCD",
       mastermindSecret: "ABCD",
+      mastermindDifficulty: "medium",
+      mastermindMaxAttempts: 8,
       isInteractiveLocked: false,
       isSubmittingMastermindGuess: false,
       mastermindSolved: false,

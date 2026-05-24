@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import { Animated, Keyboard, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
@@ -11,6 +10,7 @@ import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/q
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper } from "./station-panels/shared-ui";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
+import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
 import { createStationPreviewActions } from "./station-panels/use-station-preview-actions";
 import { useStationOverlayReset } from "./station-panels/use-station-overlay-reset";
@@ -24,6 +24,7 @@ import type {
 } from "./types";
 
 import {
+  type ChallengeDifficulty,
   type MemoryCard,
   normalizeWordleSecret,
   resolvePuzzleSecret,
@@ -736,6 +737,7 @@ export function StationPreviewOverlay({
   onQuizFailed,
   onQuizPassed,
   onTimeExpired,
+  timedStationPointsDecayEnabled = false,
   debugOutcomePreview,
   onDebugOutcomePreviewConsumed,
 }: StationPreviewOverlayProps) {
@@ -758,6 +760,7 @@ export function StationPreviewOverlay({
   const [mastermindInput, setMastermindInput] = useState("");
   const [mastermindAttempts, setMastermindAttempts] = useState<MastermindAttempt[]>([]);
   const [, setMastermindResult] = useState<string | null>(null);
+  const [selectedMastermindDifficulty, setSelectedMastermindDifficulty] = useState<ChallengeDifficulty | null>(null);
   const [anagramInput, setAnagramInput] = useState("");
   const [anagramAttempts, setAnagramAttempts] = useState(0);
   const [anagramResult, setAnagramResult] = useState<string | null>(null);
@@ -821,8 +824,6 @@ export function StationPreviewOverlay({
   const codeInputShakeAnimation = useRef(new Animated.Value(0)).current;
   const codeInputResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeInputSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const simonTonePlayerRef = useRef<AudioPlayer | null>(null);
-  const simonTonePlayerSourceButtonRef = useRef<string | null>(null);
   const simonPlaybackRunRef = useRef(0);
   const simonInputHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -945,18 +946,17 @@ export function StationPreviewOverlay({
       audioPlayFailed: text.audioPlayFailed,
     },
   });
-  const stopSimonTonePlayback = useCallback(() => {
-    const player = simonTonePlayerRef.current;
-    if (!player) {
-      return;
-    }
-    try {
-      player.pause();
-    } catch {
-      // noop
-    }
-    void player.seekTo(0).catch(() => undefined);
-  }, []);
+  const {
+    prepareSimonAudio,
+    playSequenceTone,
+    playInputTone,
+    startSequenceRun,
+    stopSequenceAudio,
+    stopAllSimonAudio,
+    releaseSimonAudio,
+  } = useSimonAudio({
+    toneAssetByButton: SIMON_TONE_ASSET_BY_BUTTON,
+  });
   const clearSimonInputHighlight = useCallback(() => {
     if (!simonInputHighlightTimeoutRef.current) {
       return;
@@ -964,95 +964,14 @@ export function StationPreviewOverlay({
     clearTimeout(simonInputHighlightTimeoutRef.current);
     simonInputHighlightTimeoutRef.current = null;
   }, []);
-  const ensureSimonTonePlayer = useCallback(
-    (buttonId: string) => {
-      const toneAssetId = SIMON_TONE_ASSET_BY_BUTTON[buttonId];
-      if (!toneAssetId) {
-        return null;
-      }
-
-      let player = simonTonePlayerRef.current;
-      if (!player) {
-        player = createAudioPlayer(
-          toneAssetId,
-          {
-            updateInterval: 250,
-            keepAudioSessionActive: true,
-          },
-        );
-        simonTonePlayerRef.current = player;
-        simonTonePlayerSourceButtonRef.current = buttonId;
-        return player;
-      }
-
-      if (simonTonePlayerSourceButtonRef.current !== buttonId) {
-        try {
-          player.replace(toneAssetId);
-          simonTonePlayerSourceButtonRef.current = buttonId;
-        } catch {
-          return null;
-        }
-      }
-
-      return player;
-    },
-    [],
-  );
-  const primeSimonTonePlayers = useCallback((buttonId: string) => {
-    ensureSimonTonePlayer(buttonId);
-  }, [ensureSimonTonePlayer]);
-  const releaseSimonTonePlayers = useCallback(() => {
-    const player = simonTonePlayerRef.current;
-    simonTonePlayerRef.current = null;
-    simonTonePlayerSourceButtonRef.current = null;
-    if (!player) {
-      return;
-    }
-    try {
-      player.pause();
-    } catch {
-      // noop
-    }
-    try {
-      player.remove();
-    } catch {
-      // noop
-    }
-  }, []);
-  const playSimonTone = useCallback(
-    async (buttonId: string) => {
-      const activePlayer = ensureSimonTonePlayer(buttonId);
-      if (!activePlayer) {
-        return;
-      }
-
-      activePlayer.volume = 1;
-      for (let attempt = 0; attempt < 30; attempt += 1) {
-        await activePlayer.seekTo(0).catch(() => undefined);
-        try {
-          activePlayer.play();
-        } catch {
-          // noop
-        }
-
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 35);
-        });
-        if (activePlayer.playing) {
-          return;
-        }
-      }
-    },
-    [ensureSimonTonePlayer],
-  );
   const stopSimonPlayback = useCallback(() => {
     simonPlaybackRunRef.current += 1;
     clearSimonInputHighlight();
-    stopSimonTonePlayback();
+    stopAllSimonAudio();
     setSimonActivePlaybackButtonId(null);
     setSimonActiveInputButtonId(null);
     setIsSimonPlaybackActive(false);
-  }, [clearSimonInputHighlight, stopSimonTonePlayback]);
+  }, [clearSimonInputHighlight, stopAllSimonAudio]);
   const playSimonSequence = useCallback(
     async (sequence: string[]) => {
       if (!sequence.length) {
@@ -1060,7 +979,7 @@ export function StationPreviewOverlay({
         return;
       }
 
-      const runId = simonPlaybackRunRef.current + 1;
+      const runId = startSequenceRun();
       simonPlaybackRunRef.current = runId;
       setIsSimonPlaybackActive(true);
       setSimonActivePlaybackButtonId(null);
@@ -1082,8 +1001,9 @@ export function StationPreviewOverlay({
           return;
         }
         setSimonActivePlaybackButtonId(buttonId);
-        await playSimonTone(buttonId);
+        await playSequenceTone(buttonId, runId);
         await wait(SIMON_PLAY_STEP_MS);
+        stopSequenceAudio();
 
         if (simonPlaybackRunRef.current !== runId) {
           return;
@@ -1098,7 +1018,7 @@ export function StationPreviewOverlay({
       setSimonActivePlaybackButtonId(null);
       setIsSimonPlaybackActive(false);
     },
-    [playSimonTone, stopSimonPlayback],
+    [playSequenceTone, startSequenceRun, stopSequenceAudio, stopSimonPlayback],
   );
   useEffect(() => {
     if (stationProp) {
@@ -1148,6 +1068,19 @@ export function StationPreviewOverlay({
     stationProp?.status,
     stationProp?.timeLimitSeconds,
   ]);
+
+  useEffect(() => {
+    if (!displayedStation || displayedStation.stationType !== "mastermind") {
+      setSelectedMastermindDifficulty(null);
+      return;
+    }
+
+    setSelectedMastermindDifficulty(
+      displayedStation.challengeDifficultyMode === "player"
+        ? null
+        : displayedStation.challengeDifficulty ?? "medium",
+    );
+  }, [displayedStation?.challengeDifficulty, displayedStation?.challengeDifficultyMode, displayedStation?.stationId, displayedStation?.stationType]);
 
   useStationOverlayReset({
     displayedStation,
@@ -1290,13 +1223,14 @@ export function StationPreviewOverlay({
     setSimonMistakes(0);
     setSimonTargetLength(initialLength);
     setSimonResult(null);
-    primeSimonTonePlayers(sequence[0] ?? "1");
-    void playSimonSequence(sequence.slice(0, initialLength));
+    void prepareSimonAudio().then(() => {
+      void playSimonSequence(sequence.slice(0, initialLength));
+    });
 
     return () => {
       stopSimonPlayback();
     };
-  }, [displayedStation, playSimonSequence, primeSimonTonePlayers, stopSimonPlayback]);
+  }, [displayedStation, playSimonSequence, prepareSimonAudio, stopSimonPlayback]);
 
   useEffect(() => {
     return () => {
@@ -1313,12 +1247,12 @@ export function StationPreviewOverlay({
         memoryHideTimeoutRef.current = null;
       }
       stopSimonPlayback();
-      releaseSimonTonePlayers();
+      releaseSimonAudio();
       clearWordleRevealTimeouts();
       clearTimeoutPopupCountdown();
       quizOutcomeActionRef.current = null;
     };
-  }, [clearTimeoutPopupCountdown, clearWordleRevealTimeouts, releaseSimonTonePlayers, stopSimonPlayback]);
+  }, [clearTimeoutPopupCountdown, clearWordleRevealTimeouts, releaseSimonAudio, stopSimonPlayback]);
 
   const { remainingTimeSeconds, finalTenSecondsProgress } = useStationCountdownPulse({
     station: displayedStation,
@@ -1346,6 +1280,7 @@ export function StationPreviewOverlay({
       boggle: isSubmittingBoggle,
       miniSudoku: isSubmittingMiniSudoku,
       matching: isSubmittingMatching,
+      strongPassword: false,
     },
     onQuizFailed,
     onTimeExpired,
@@ -1401,6 +1336,34 @@ export function StationPreviewOverlay({
     return null;
   }
   const station = displayedStation;
+  const dynamicAvailablePoints = (() => {
+    const safePoints = Math.max(0, Math.round(station.points));
+    const safeLimitMs = Math.max(0, Math.round(station.timeLimitSeconds)) * 1000;
+    if (!timedStationPointsDecayEnabled || safePoints === 0 || safeLimitMs <= 0 || !station.startedAt) {
+      return safePoints;
+    }
+
+    const startedAtMs = new Date(station.startedAt).getTime();
+    if (!Number.isFinite(startedAtMs)) {
+      return safePoints;
+    }
+
+    const elapsedMs = Math.max(0, nowMs - startedAtMs);
+    if (elapsedMs >= safeLimitMs) {
+      return 0;
+    }
+
+    return Math.max(0, Math.round(safePoints * (1 - elapsedMs / safeLimitMs)));
+  })();
+  const shouldShowDynamicPoints =
+    timedStationPointsDecayEnabled && station.timeLimitSeconds > 0 && Boolean(station.startedAt);
+  const pointsAccentColor = isLightTheme ? "#92400e" : "#fcd34d";
+  const pointsPanelBorderColor = isLightTheme ? "rgba(146, 64, 14, 0.38)" : "rgba(252, 211, 77, 0.4)";
+  const pointsPanelBackgroundColor = isLightTheme ? "rgba(146, 64, 14, 0.12)" : "rgba(252, 211, 77, 0.1)";
+  const mastermindDifficulty: ChallengeDifficulty =
+    station.challengeDifficultyMode === "player"
+      ? selectedMastermindDifficulty ?? station.challengeDifficulty ?? "medium"
+      : station.challengeDifficulty ?? "medium";
   const {
     isClassicQuizStation,
     isAudioQuizStation,
@@ -1439,6 +1402,7 @@ export function StationPreviewOverlay({
     hangmanHasWon,
     hangmanAttemptsLeft,
     mastermindSecret,
+    mastermindConfig,
     normalizedMastermindInput,
     mastermindSolved,
     mastermindAttemptsLeft,
@@ -1511,6 +1475,7 @@ export function StationPreviewOverlay({
     hangmanMisses,
     mastermindInput,
     mastermindAttempts,
+    mastermindDifficulty,
     anagramInput,
     anagramAttempts,
     caesarInput,
@@ -1575,6 +1540,7 @@ export function StationPreviewOverlay({
     handleBoggleInput,
     handleMastermindInput,
     addMastermindSymbol,
+    backspaceMastermindInput,
   } = createStationPreviewActions({
     stationId: station.stationId,
     stationStatus: station.status,
@@ -1620,6 +1586,10 @@ export function StationPreviewOverlay({
     isSubmittingHangmanGuess,
     normalizedMastermindInput,
     mastermindSecret,
+    mastermindDifficulty,
+    mastermindCodeLength: mastermindConfig.codeLength,
+    mastermindMaxAttempts: mastermindConfig.maxAttempts,
+    mastermindSymbols: mastermindConfig.symbols,
     mastermindSolved,
     mastermindAttemptsLeft,
     mastermindAttempts,
@@ -1680,7 +1650,7 @@ export function StationPreviewOverlay({
     memoryHideTimeoutRef,
     simonInputHighlightTimeoutRef,
     clearSimonInputHighlight,
-    playSimonTone,
+    playSimonTone: playInputTone,
     playSimonSequence,
     runWordleRevealSequence,
     setIsCodeInputInvalid,
@@ -1816,6 +1786,29 @@ export function StationPreviewOverlay({
       matchingWrongPair: text.matchingWrongPair,
     },
   });
+  const appendRebusCharacter = (character: string) => {
+    if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
+      return;
+    }
+
+    setRebusInput((current) => {
+      if (character === " " && (current.length === 0 || current.endsWith(" "))) {
+        return current;
+      }
+      return `${current}${character}`;
+    });
+    setRebusResult(null);
+    setQuizSubmitError(null);
+  };
+  const backspaceRebusInput = () => {
+    if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
+      return;
+    }
+
+    setRebusInput((current) => current.slice(0, -1));
+    setRebusResult(null);
+    setQuizSubmitError(null);
+  };
   const overlayBackdropStyle = {
     opacity: overlaySlideAnimation.interpolate({
       inputRange: [0, 1],
@@ -1857,6 +1850,8 @@ export function StationPreviewOverlay({
       simonSequence,
       simonTargetLength: simonRoundLength,
       simonProgress,
+      simonMistakes,
+      simonMaxMistakes: SIMON_MAX_MISTAKES,
       simonActivePlaybackButtonId,
       simonActiveInputButtonId,
       isSimonPlaybackActive,
@@ -1873,6 +1868,12 @@ export function StationPreviewOverlay({
       mastermindAttempts,
       mastermindAttemptsLeft,
       mastermindInput,
+      mastermindDifficulty,
+      mastermindDifficultyMode: station.challengeDifficultyMode ?? "admin",
+      selectedMastermindDifficulty,
+      mastermindCodeLength: mastermindConfig.codeLength,
+      mastermindMaxAttempts: mastermindConfig.maxAttempts,
+      mastermindSymbols: mastermindConfig.symbols,
       isInteractiveLocked,
       isSubmittingMastermindGuess,
       mastermindSolved,
@@ -1886,6 +1887,16 @@ export function StationPreviewOverlay({
       },
       onAddSymbol: (symbol) => {
         addMastermindSymbol(symbol);
+      },
+      onBackspace: () => {
+        backspaceMastermindInput();
+      },
+      onSelectDifficulty: (difficulty) => {
+        setSelectedMastermindDifficulty(difficulty);
+        setMastermindInput("");
+        setMastermindAttempts([]);
+        setMastermindResult(null);
+        setQuizSubmitError(null);
       },
     },
     memoryMediaSectionProps: {
@@ -2035,6 +2046,12 @@ export function StationPreviewOverlay({
       mastermindAttempts,
       mastermindAttemptsLeft,
       mastermindInput,
+      mastermindDifficulty,
+      mastermindDifficultyMode: station.challengeDifficultyMode ?? "admin",
+      selectedMastermindDifficulty,
+      mastermindCodeLength: mastermindConfig.codeLength,
+      mastermindMaxAttempts: mastermindConfig.maxAttempts,
+      mastermindSymbols: mastermindConfig.symbols,
       isInputEditable: !isInteractiveLocked && !isSubmittingMastermindGuess && !mastermindSolved,
       isActionDisabled: isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0,
       isSymbolDisabled: isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0,
@@ -2047,6 +2064,16 @@ export function StationPreviewOverlay({
       },
       onAddSymbol: (symbol) => {
         addMastermindSymbol(symbol);
+      },
+      onBackspace: () => {
+        backspaceMastermindInput();
+      },
+      onSelectDifficulty: (difficulty) => {
+        setSelectedMastermindDifficulty(difficulty);
+        setMastermindInput("");
+        setMastermindAttempts([]);
+        setMastermindResult(null);
+        setQuizSubmitError(null);
       },
     },
       anagramStationPanelProps: {
@@ -2091,10 +2118,32 @@ export function StationPreviewOverlay({
         onChangeInput: (value) => {
           handleRebusInputChange(value);
         },
+        onAppendCharacter: (character) => {
+          appendRebusCharacter(character);
+        },
+        onBackspace: () => {
+          backspaceRebusInput();
+        },
         onSubmit: () => {
           void submitRebus();
         },
       },
+    strongPasswordStationPanelProps: {
+      stationId: station.stationId,
+      configuredDifficulty: station.challengeDifficulty ?? "medium",
+      difficultyMode: station.challengeDifficultyMode,
+      basePoints: station.points,
+      startedAt: station.startedAt,
+      isActionDisabled: isInteractiveLocked,
+      onComplete: (difficulty) => {
+        void onCompleteTask?.(station.stationId, "STRONG-PASSWORD", station.startedAt ?? undefined, difficulty).then((error) => {
+          if (!error) {
+            showQuizOutcomePopup("success", text.quizSuccessPopup, onClose);
+            onQuizPassed?.(station.stationId);
+          }
+        });
+      },
+    },
   });
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
   const stationHeaderLabel = isCaesarStation
@@ -2109,13 +2158,38 @@ export function StationPreviewOverlay({
         overlayBackdropStyle,
       ]}
     >
-      <Animated.View className="flex-1 px-3 pb-5 pt-9" style={overlayPanelStyle}>
-        <View className="flex-1 rounded-3xl border" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}>
-          <View className="flex-row items-start justify-between gap-3 px-4 pb-2 pt-4">
+      <Animated.View
+        className="flex-1"
+        style={[
+          {
+            paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
+            paddingTop: adaptiveLayout.s(isTabletOverlay ? 36 : 20, 16, 44),
+            paddingBottom: adaptiveLayout.s(isTabletOverlay ? 20 : 12, 10, 28),
+          },
+          overlayPanelStyle,
+        ]}
+      >
+        <View
+          className="flex-1 border"
+          style={{
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panel,
+            borderRadius: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 30),
+          }}
+        >
+          <View
+            className="flex-row items-start justify-between"
+            style={{
+              columnGap: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
+              paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
+              paddingTop: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
+              paddingBottom: adaptiveLayout.s(isTabletOverlay ? 8 : 4, 3, 12),
+            }}
+          >
             <View className="flex-1">
                 <Text
                   className="uppercase tracking-widest"
-                  style={{ color: EXPEDITION_THEME.textSubtle, fontSize: adaptiveLayout.fs(isTabletOverlay ? 13 : 11, 10, 16) }}
+                  style={{ color: EXPEDITION_THEME.textSubtle, fontSize: adaptiveLayout.fs(isTabletOverlay ? 13 : 9, 8, 16) }}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -2127,8 +2201,8 @@ export function StationPreviewOverlay({
                 style={{
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
-                  width: adaptiveLayout.s(isTabletOverlay ? 48 : 36, 34, 56),
-                  height: adaptiveLayout.s(isTabletOverlay ? 48 : 36, 34, 56),
+                  width: adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56),
+                  height: adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56),
                 }}
               onPress={onRequestClose ?? onClose}
               hitSlop={8}
@@ -2137,8 +2211,8 @@ export function StationPreviewOverlay({
                 className="font-semibold text-center"
                 style={{
                   color: EXPEDITION_THEME.textPrimary,
-                  lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 16, 15, 24),
-                  fontSize: adaptiveLayout.fs(isTabletOverlay ? 20 : 16, 15, 24),
+                  lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
+                  fontSize: adaptiveLayout.fs(isTabletOverlay ? 20 : 13, 12, 24),
                   includeFontPadding: false,
                 }}
               >
@@ -2147,66 +2221,70 @@ export function StationPreviewOverlay({
             </Pressable>
             </View>
 
-            <View className="flex-1 px-4">
+            <View className="flex-1" style={{ paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22) }}>
               <View className="flex-1">
-                <StationMediaPanel
-                  stationId={station.stationId}
-                  stationType={station.stationType}
-                  viewportHeight={viewportHeight}
-                  stationMediaHeight={stationMediaHeight}
-                  requiresCode={requiresCode}
-                  isNumericCodeStation={isNumericCodeStation}
-                  renderedStationMedia={renderedStationMedia}
-                  shouldShowQuizFallbackGraphic={shouldShowQuizFallbackGraphic}
-                  stationImageUri={stationImageUri}
-                  quizIconLoadFailed={quizIconLoadFailed}
-                  onQuizIconLoadError={() => setQuizIconLoadFailed(true)}
-                  onStationImageLoadError={() => setImageLoadFailed(true)}
-                  caesarMedia={{
-                    decodedText: caesarDecoded,
-                    shiftValue: caesarShiftValue,
-                    attemptsLeft: caesarAttemptsLeft,
-                    shiftHintLabel: text.caesarShiftHint(caesarShiftValue),
-                    attemptsLabel: text.caesarAttemptsLeftLabel,
-                  }}
-                  hangmanMedia={{
-                    secret: hangmanSecret,
-                    guessedLetters: guessedHangmanSet,
-                  }}
-                  audioOverlay={
-                    isAudioQuizStation
-                        ? {
-                            hasPlaybackStarted: hasAudioPlaybackStarted,
-                            isPlayDisabled: isAudioOverlayControlDisabled,
-                            isStopDisabled: isAudioStopDisabled,
-                            isPlaying: isAudioPlaying,
-                            playLabel: text.audioOverlayPlay,
-                            replayLabel: text.audioOverlayReplay,
-                            stopLabel: text.audioOverlayStop,
-                            statusReadyLabel: text.audioOverlayStatusReady,
-                            statusPlayingLabel: text.audioOverlayStatusPlaying,
-                            statusDisabledLabel: text.audioOverlayStatusDisabled,
-                            onPlay: () => {
-                              void handlePlayAudio();
+                {station.stationType !== "strong-password" ? (
+                  <StationMediaPanel
+                    stationId={station.stationId}
+                    stationType={station.stationType}
+                    viewportHeight={viewportHeight}
+                    stationMediaHeight={stationMediaHeight}
+                    requiresCode={requiresCode}
+                    isNumericCodeStation={isNumericCodeStation}
+                    renderedStationMedia={renderedStationMedia}
+                    shouldShowQuizFallbackGraphic={shouldShowQuizFallbackGraphic}
+                    stationImageUri={stationImageUri}
+                    quizIconLoadFailed={quizIconLoadFailed}
+                    onQuizIconLoadError={() => setQuizIconLoadFailed(true)}
+                    onStationImageLoadError={() => setImageLoadFailed(true)}
+                    caesarMedia={{
+                      decodedText: caesarDecoded,
+                      shiftValue: caesarShiftValue,
+                      attemptsLeft: caesarAttemptsLeft,
+                      shiftHintLabel: text.caesarShiftHint(caesarShiftValue),
+                      attemptsLabel: text.caesarAttemptsLeftLabel,
+                    }}
+                    hangmanMedia={{
+                      secret: hangmanSecret,
+                      guessedLetters: guessedHangmanSet,
+                    }}
+                    audioOverlay={
+                      isAudioQuizStation
+                          ? {
+                              hasPlaybackStarted: hasAudioPlaybackStarted,
+                              isPlayDisabled: isAudioOverlayControlDisabled,
+                              isStopDisabled: isAudioStopDisabled,
+                              isPlaying: isAudioPlaying,
+                              playLabel: text.audioOverlayPlay,
+                              replayLabel: text.audioOverlayReplay,
+                              stopLabel: text.audioOverlayStop,
+                              statusReadyLabel: text.audioOverlayStatusReady,
+                              statusPlayingLabel: text.audioOverlayStatusPlaying,
+                              statusDisabledLabel: text.audioOverlayStatusDisabled,
+                              onPlay: () => {
+                                void handlePlayAudio();
+                              },
+                            onStop: () => {
+                              void handleStopAudio();
                             },
-                          onStop: () => {
-                            void handleStopAudio();
-                          },
-                        }
-                      : undefined
-                  }
-                />
+                          }
+                        : undefined
+                    }
+                  />
+                ) : null}
 
               {requiresCode ? (
                 <View
-                  className="my-3 px-1"
+                  className="px-1"
+                  style={{ marginVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 16) }}
                 >
                   <Text
                     className="leading-6"
                     style={{
                       color: EXPEDITION_THEME.textMuted,
                       textAlign: "justify",
-                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 18 : 16, 14, 22),
+                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 18 : 12, 11, 22),
+                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
                     }}
                   >
                     {stationDescription.length > 0
@@ -2216,16 +2294,24 @@ export function StationPreviewOverlay({
                 </View>
               ) : !isCaesarStation && stationDescription.length > 0 ? (
                 <Text
-                  className={`${isNumericCodeStation ? "mt-2" : "mt-3"} leading-5`}
-                  style={{ color: EXPEDITION_THEME.textMuted, fontSize: adaptiveLayout.fs(isTabletOverlay ? 16 : 14, 13, 20) }}
+                  className={isNumericCodeStation ? "mt-1" : "mt-2"}
+                  style={{
+                    color: EXPEDITION_THEME.textMuted,
+                    fontSize: adaptiveLayout.fs(isTabletOverlay ? 16 : 11, 10, 20),
+                    lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 15, 14, 24),
+                  }}
                 >
                   {stationDescription}
                 </Text>
               ) : null}
               {isAnagramStation ? (
                 <Text
-                  className="mt-2 leading-5"
-                  style={{ color: EXPEDITION_THEME.textSubtle, fontSize: adaptiveLayout.fs(isTabletOverlay ? 14 : 12, 11, 17) }}
+                  className="mt-1"
+                  style={{
+                    color: EXPEDITION_THEME.textSubtle,
+                    fontSize: adaptiveLayout.fs(isTabletOverlay ? 14 : 10, 9, 17),
+                    lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 14, 13, 24),
+                  }}
                 >
                   {text.anagramDisplayHint}
                 </Text>
@@ -2233,7 +2319,7 @@ export function StationPreviewOverlay({
 
               {isQuizStation && !isMatchingStation && !isBoggleStation && !isMastermindStation && !isMemoryStation && !isMiniSudokuStation && !isSimonStation ? (
                 <StationQuizTaskWrapper
-                  className="mt-3"
+                  className={isTabletOverlay ? "mt-3" : "mt-2"}
                   prompt={stationQuizPrompt}
                   hidePrompt={isRebusStation}
                   isTabletOverlay={isTabletOverlay}
@@ -2275,7 +2361,13 @@ export function StationPreviewOverlay({
 
           </View>
 
-          <View className={`px-4 ${isNumericCodeStation ? "pb-3 pt-1" : "pb-4 pt-2"}`}>
+          <View
+            style={{
+              paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
+              paddingTop: adaptiveLayout.s(isNumericCodeStation ? (isTabletOverlay ? 4 : 2) : isTabletOverlay ? 8 : 4, 1, 12),
+              paddingBottom: adaptiveLayout.s(isNumericCodeStation ? (isTabletOverlay ? 12 : 6) : isTabletOverlay ? 16 : 8, 5, 22),
+            }}
+          >
             <View className="flex-row items-end">
               <View className="flex-1" />
               {shouldShowExecutionTimer ? (
@@ -2296,14 +2388,53 @@ export function StationPreviewOverlay({
               ) : null}
               <View className="flex-1 items-end">
                 <View
-                  className="rounded-2xl border px-3 py-2"
-                  style={{ borderColor: "rgba(252, 211, 77, 0.4)", backgroundColor: "rgba(252, 211, 77, 0.1)" }}
+                  className="border"
+                  style={{
+                    borderColor: pointsPanelBorderColor,
+                    backgroundColor: pointsPanelBackgroundColor,
+                    borderRadius: adaptiveLayout.s(isTabletOverlay ? 24 : 14, 12, 30),
+                    paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 8, 7, 22),
+                    paddingVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 18),
+                  }}
                 >
-                  <Text className="text-[10px] uppercase tracking-widest" style={{ color: "#fcd34d" }}>
+                  <Text
+                    className="text-center uppercase tracking-widest"
+                    style={{ color: pointsAccentColor, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 8, 7, 14) }}
+                  >
                     {text.points}
                   </Text>
-                  <Text className="mt-0.5 text-right text-lg font-extrabold" style={{ color: "#fcd34d" }}>
-                    {station.points}
+                  <Text
+                    className="mt-0.5 text-center font-extrabold"
+                    style={{
+                      color: pointsAccentColor,
+                      fontSize: adaptiveLayout.fs(
+                        isTabletOverlay
+                          ? isNumericCodeStation
+                            ? 36
+                            : 46
+                          : isNumericCodeStation
+                            ? 20
+                            : 24,
+                        18,
+                        54,
+                      ),
+                      lineHeight: adaptiveLayout.s(
+                        isTabletOverlay
+                          ? isNumericCodeStation
+                            ? 40
+                            : 50
+                          : isNumericCodeStation
+                            ? 23
+                            : 27,
+                        20,
+                        58,
+                      ),
+                    }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.65}
+                  >
+                    {shouldShowDynamicPoints ? dynamicAvailablePoints : station.points}
                   </Text>
                 </View>
               </View>

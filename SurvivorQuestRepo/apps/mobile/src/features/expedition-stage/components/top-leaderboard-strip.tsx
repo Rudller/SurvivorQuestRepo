@@ -72,6 +72,17 @@ function LeaderboardIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
+function PodiumIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 21V10.5h6V21" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M3.5 21v-7h5.5v7" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M15 21v-5h5.5v5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M10.2 6.2 12 3.5l1.8 2.7 3.1.8-2 2.4.2 3.2-3.1-1.2-3.1 1.2.2-3.2-2-2.4 3.1-.8Z" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 function CloseIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -133,161 +144,150 @@ export function TopLeaderboardStrip({ entries, currentTeamId, compact = false }:
 
   const topThree = sortedEntries.slice(0, 3);
   const podiumEntries = Array.from({ length: 3 }, (_, index) => topThree[index] ?? null);
+  const leaderEntry = topThree[0] ?? null;
 
   if (topThree.length === 0) {
     return null;
   }
 
   const trigger = compact ? (
-    <Pressable
-      className="h-14 flex-row items-center rounded-lg border active:opacity-80"
-      style={{
-        borderColor: EXPEDITION_THEME.border,
-        backgroundColor: EXPEDITION_THEME.panelMuted,
-        overflow: "hidden",
-      }}
-      onPress={() => setIsPopupVisible(true)}
-    >
-      <View className="w-5 items-center justify-center">
-        <LeaderboardIcon
-          color={EXPEDITION_THEME.accentStrong}
-          size={adaptiveLayout.s(isTablet ? 14 : 12, 11, 16)}
-        />
+    <View style={{ rowGap: adaptiveLayout.s(isTablet ? 5 : 4, 3, 6) }}>
+      <Pressable
+        className="h-14 flex-row items-center rounded-2xl border px-2 active:opacity-80"
+        style={{
+          borderColor: leaderEntry?.teamId === currentTeamId ? EXPEDITION_THEME.accentStrong : "rgba(255,255,255,0.3)",
+          backgroundColor: leaderEntry ? resolveTeamColorHex(leaderEntry) : EXPEDITION_THEME.panelMuted,
+          columnGap: adaptiveLayout.s(isTablet ? 8 : 6, 5, 10),
+          shadowColor: "#020617",
+          shadowOpacity: 0.24,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        }}
+        onPress={() => setIsPopupVisible(true)}
+      >
+      {(() => {
+        if (!leaderEntry) {
+          return null;
+        }
+
+        const leaderColor = resolveTeamColorHex(leaderEntry);
+        const leaderTextColor = resolveRowTextColor(leaderColor);
+        const leaderMutedTextColor =
+          leaderTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.68)" : "rgba(248, 250, 252, 0.8)";
+        const leaderName = leaderEntry.name?.trim() || `#${leaderEntry.slotNumber}`;
+        const leaderBadgeLabel = leaderEntry.badgeKey?.trim() || "🏁";
+
+        return (
+          <>
+      <View
+        className="items-center justify-center rounded-full"
+        style={{
+          width: adaptiveLayout.s(isTablet ? 34 : 30, 28, 38),
+          height: adaptiveLayout.s(isTablet ? 34 : 30, 28, 38),
+          backgroundColor: leaderTextColor === "#0f172a" ? "rgba(255,255,255,0.44)" : "rgba(15,23,42,0.28)",
+        }}
+      >
+        <PodiumIcon color={leaderTextColor} size={adaptiveLayout.s(isTablet ? 22 : 19, 18, 25)} />
       </View>
-      <View className="flex-1 self-stretch">
-        {podiumEntries.map((entry, index) => {
-          if (!entry) {
-            return (
-              <View
-                key={`compact-top-three-empty-${index + 1}`}
-                className="w-full flex-row items-center border"
+      <View className="flex-1 justify-center">
+        <Text
+          className="font-extrabold uppercase"
+          numberOfLines={1}
+          style={{ color: leaderMutedTextColor, fontSize: adaptiveLayout.fs(isTablet ? 8 : 7, 7, 10), letterSpacing: 0.8 }}
+        >
+          Leaderboard
+        </Text>
+        <Text
+          className="font-extrabold"
+          numberOfLines={1}
+          style={{ color: leaderTextColor, fontSize: adaptiveLayout.fs(isTablet ? 13 : 11, 10, 15) }}
+        >
+          #{leaderEntry.position} {truncateTeamName(leaderName, isTablet ? 12 : 10)}
+        </Text>
+      </View>
+      <View className="items-end justify-center">
+        {leaderEntry.badgeImageUrl ? (
+          <Image
+            source={{ uri: leaderEntry.badgeImageUrl }}
+            resizeMode="cover"
+            style={{
+              width: adaptiveLayout.s(isTablet ? 18 : 16, 15, 21),
+              height: adaptiveLayout.s(isTablet ? 18 : 16, 15, 21),
+              borderRadius: 999,
+              marginBottom: adaptiveLayout.s(1, 1, 2),
+            }}
+          />
+        ) : (
+          <Text style={{ fontSize: adaptiveLayout.fs(isTablet ? 15 : 13, 12, 17), marginBottom: adaptiveLayout.s(1, 1, 2) }}>
+            {leaderBadgeLabel}
+          </Text>
+        )}
+        <Text
+          className="font-extrabold"
+          style={{ color: leaderTextColor, fontSize: adaptiveLayout.fs(isTablet ? 13 : 11, 10, 15) }}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
+          {leaderEntry.points}
+        </Text>
+      </View>
+          </>
+        );
+      })()}
+      </Pressable>
+      {topThree.slice(1, 3).map((entry) => {
+        const teamColor = resolveTeamColorHex(entry);
+        const textColor = resolveRowTextColor(teamColor);
+        const teamName = entry.name?.trim() || `#${entry.slotNumber}`;
+        const badgeLabel = entry.badgeKey?.trim() || "🏁";
+
+        return (
+          <Pressable
+            key={`compact-runner-up-${entry.teamId}`}
+            className="flex-row items-center rounded-full border active:opacity-80"
+            style={{
+              height: adaptiveLayout.s(isTablet ? 20 : 18, 17, 22),
+              paddingHorizontal: adaptiveLayout.s(isTablet ? 8 : 7, 6, 10),
+              borderColor: entry.teamId === currentTeamId ? EXPEDITION_THEME.accentStrong : "rgba(255,255,255,0.2)",
+              backgroundColor: teamColor,
+              opacity: entry.position === 2 ? 0.82 : 0.68,
+              columnGap: adaptiveLayout.s(4, 3, 5),
+            }}
+            onPress={() => setIsPopupVisible(true)}
+          >
+            <Text className="font-extrabold" style={{ color: textColor, fontSize: adaptiveLayout.fs(isTablet ? 9 : 8, 7, 10) }}>
+              #{entry.position}
+            </Text>
+            {entry.badgeImageUrl ? (
+              <Image
+                source={{ uri: entry.badgeImageUrl }}
+                resizeMode="cover"
                 style={{
-                  flex: 1,
-                  marginTop: -1,
-                  marginBottom: index === podiumEntries.length - 1 ? -1 : 0,
-                  borderColor: EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelStrong,
-                  opacity: 0.62,
+                  width: adaptiveLayout.s(isTablet ? 12 : 10, 9, 13),
+                  height: adaptiveLayout.s(isTablet ? 12 : 10, 9, 13),
+                  borderRadius: 999,
                 }}
-              >
-                <Text
-                  className="font-bold"
-                  style={{
-                    width: adaptiveLayout.s(isTablet ? 10 : 8, 7, 13),
-                    color: EXPEDITION_THEME.textSubtle,
-                    fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                  }}
-                >
-                  {index + 1}.
-                </Text>
-                <Text
-                  style={{
-                    width: adaptiveLayout.s(isTablet ? 8 : 7, 6, 10),
-                    color: EXPEDITION_THEME.textMuted,
-                    fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                  }}
-                >
-                  —
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  className="flex-1 font-semibold"
-                  style={{
-                    color: EXPEDITION_THEME.textMuted,
-                    fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                  }}
-                >
-                  {text.missingTeam}
-                </Text>
-                <Text
-                  className="font-bold text-right"
-                  style={{
-                    width: adaptiveLayout.s(isTablet ? 12 : 10, 9, 16),
-                    color: EXPEDITION_THEME.textSubtle,
-                    fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                  }}
-                >
-                  —
-                </Text>
-              </View>
-            );
-          }
-
-          const teamName = entry.name?.trim() || `#${entry.slotNumber}`;
-          const badgeLabel = entry.badgeKey?.trim() || "🏁";
-          const teamColorHex = resolveTeamColorHex(entry);
-          const rowTextColor = resolveRowTextColor(teamColorHex);
-          const rowMutedTextColor =
-            rowTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
-
-          return (
-            <View
-              key={`compact-top-three-${entry.teamId}`}
-              className="w-full flex-row items-center border"
-              style={{
-                flex: 1,
-                marginTop: -1,
-                marginBottom: index === podiumEntries.length - 1 ? -1 : 0,
-                borderColor: entry.teamId === currentTeamId ? EXPEDITION_THEME.accentStrong : "rgba(255,255,255,0.28)",
-                backgroundColor: teamColorHex,
-              }}
+              />
+            ) : (
+              <Text style={{ fontSize: adaptiveLayout.fs(isTablet ? 10 : 9, 8, 11) }}>{badgeLabel}</Text>
+            )}
+            <Text className="flex-1 font-semibold" numberOfLines={1} style={{ color: textColor, fontSize: adaptiveLayout.fs(isTablet ? 9 : 8, 7, 10) }}>
+              {truncateTeamName(teamName, isTablet ? 14 : 12)}
+            </Text>
+            <Text
+              className="font-extrabold"
+              style={{ color: textColor, fontSize: adaptiveLayout.fs(isTablet ? 9 : 8, 7, 10) }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
             >
-              <Text
-                className="font-extrabold"
-                style={{
-                  width: adaptiveLayout.s(isTablet ? 10 : 8, 7, 13),
-                  color: rowMutedTextColor,
-                  fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                }}
-              >
-                {entry.position}.
-              </Text>
-              {entry.badgeImageUrl ? (
-                <Image
-                  source={{ uri: entry.badgeImageUrl }}
-                  resizeMode="cover"
-                  style={{
-                    width: adaptiveLayout.s(isTablet ? 7 : 6, 5, 10),
-                    height: adaptiveLayout.s(isTablet ? 7 : 6, 5, 10),
-                    borderRadius: adaptiveLayout.s(999, 999, 999),
-                  }}
-                />
-              ) : (
-                <Text
-                  style={{
-                    width: adaptiveLayout.s(isTablet ? 8 : 7, 6, 10),
-                    color: rowTextColor,
-                    fontSize: adaptiveLayout.fs(isTablet ? 7 : 6, 5, 9),
-                  }}
-                >
-                  {badgeLabel}
-                </Text>
-              )}
-              <Text
-                numberOfLines={1}
-                className="flex-1 font-semibold"
-                style={{
-                  color: rowTextColor,
-                  fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                }}
-              >
-                {truncateTeamName(teamName, isTablet ? 10 : 8)}
-              </Text>
-              <Text
-                className="font-bold text-right"
-                style={{
-                  width: adaptiveLayout.s(isTablet ? 12 : 10, 9, 16),
-                  color: rowTextColor,
-                  fontSize: adaptiveLayout.fs(isTablet ? 6 : 5, 5, 8),
-                }}
-              >
-                {entry.points}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-    </Pressable>
+              {entry.points}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   ) : (
     <View>
       <View

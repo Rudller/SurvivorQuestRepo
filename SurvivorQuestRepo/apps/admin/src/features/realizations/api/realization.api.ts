@@ -1,6 +1,6 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { Station, StationKind, StationType } from "@/features/games/types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationKind, StationType } from "@/features/games/types/station";
 import { normalizeStationQuiz } from "@/features/games/station.utils";
 import type {
   Realization,
@@ -20,6 +20,8 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  challengeDifficultyMode?: ChallengeDifficultyMode | null;
+  challengeDifficulty?: ChallengeDifficulty | null;
   quiz?:
     | {
         question?: string;
@@ -88,6 +90,7 @@ type RealizationDto = {
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
+  timedStationPointsDecayEnabled?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -119,6 +122,7 @@ type CreateRealizationPayload = {
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -150,6 +154,7 @@ type UpdateRealizationPayload = {
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -295,6 +300,8 @@ function normalizeRealization(dto: RealizationDto): Realization {
           : true,
     teamStationNumberingEnabled:
       typeof dto.teamStationNumberingEnabled === "boolean" ? dto.teamStationNumberingEnabled : true,
+    timedStationPointsDecayEnabled:
+      typeof dto.timedStationPointsDecayEnabled === "boolean" ? dto.timedStationPointsDecayEnabled : false,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,
@@ -363,6 +370,11 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
+    challengeDifficulty:
+      station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
+        ? station.challengeDifficulty
+        : "medium",
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
         ? normalizeStationQuiz({

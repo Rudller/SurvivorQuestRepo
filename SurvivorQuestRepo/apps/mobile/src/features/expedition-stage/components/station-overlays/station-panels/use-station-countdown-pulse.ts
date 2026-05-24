@@ -22,23 +22,47 @@ export function useStationCountdownPulse({
   timerPulseAnimation,
   timerPulseLoopRef,
 }: UseStationCountdownPulseArgs) {
+  const stationStartedAt = station?.startedAt ?? null;
+  const stationTimeLimitSeconds = station?.timeLimitSeconds ?? 0;
+  const stationStatus = station?.status;
+
   useEffect(() => {
     if (
-      !station ||
-      !station.startedAt ||
-      station.timeLimitSeconds <= 0 ||
-      station.status === "done" ||
-      station.status === "failed"
+      !stationStartedAt ||
+      stationTimeLimitSeconds <= 0 ||
+      stationStatus === "done" ||
+      stationStatus === "failed"
     ) {
       return;
     }
 
+    const startedMs = new Date(stationStartedAt).getTime();
+    if (!Number.isFinite(startedMs)) {
+      return;
+    }
+
+    const endsAtMs = startedMs + stationTimeLimitSeconds * 1000;
+    const getRemainingSeconds = (timestampMs: number) => {
+      const remainingMs = Math.max(0, endsAtMs - timestampMs);
+      return Math.max(0, Math.ceil(remainingMs / 1000));
+    };
+
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const tick = () => {
       const nextNow = Date.now();
-      setNowMs(nextNow);
-      const msToNextSecond = 1000 - (nextNow % 1000);
-      timeout = setTimeout(tick, Math.max(40, msToNextSecond + 12));
+      const remainingMs = Math.max(0, endsAtMs - nextNow);
+
+      setNowMs((currentNow) => {
+        return getRemainingSeconds(currentNow) === getRemainingSeconds(nextNow) ? currentNow : nextNow;
+      });
+
+      if (remainingMs <= 0) {
+        return;
+      }
+
+      const msUntilDisplayedSecondChanges = remainingMs % 1000 || 1000;
+      const nextDelayMs = Math.max(32, msUntilDisplayedSecondChanges + 16);
+      timeout = setTimeout(tick, nextDelayMs);
     };
 
     tick();
@@ -48,7 +72,7 @@ export function useStationCountdownPulse({
         clearTimeout(timeout);
       }
     };
-  }, [setNowMs, station]);
+  }, [setNowMs, stationStartedAt, stationStatus, stationTimeLimitSeconds]);
 
   const remainingTimeSeconds = (() => {
     if (!station || !station.startedAt || station.timeLimitSeconds <= 0) {
@@ -88,8 +112,7 @@ export function useStationCountdownPulse({
       !hasCountdownForPulse ||
       !hasTimerStartedForPulse ||
       stationStatusForPulse === "done" ||
-      stationStatusForPulse === "failed" ||
-      remainingTimeSeconds === null
+      stationStatusForPulse === "failed"
     ) {
       return;
     }
@@ -121,7 +144,6 @@ export function useStationCountdownPulse({
     hasTimerStartedForPulse,
     isOverlayMounted,
     isUrgentPulse,
-    remainingTimeSeconds,
     stationStatusForPulse,
     timerPulseAnimation,
     timerPulseLoopRef,

@@ -13,7 +13,10 @@ export type StationType =
   | "rebus"
   | "boggle"
   | "mini-sudoku"
-  | "matching";
+  | "matching"
+  | "strong-password";
+export type ChallengeDifficultyMode = "admin" | "player";
+export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
 
 export type StationQuiz = {
@@ -49,6 +52,7 @@ export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "boggle", label: "Boggle" },
   { value: "mini-sudoku", label: "Mini Sudoku" },
   { value: "matching", label: "Dopasowywanie" },
+  { value: "strong-password", label: "Mocne hasło" },
 ];
 
 export type Station = {
@@ -63,6 +67,8 @@ export type Station = {
   completionCode?: string;
   quiz?: StationQuiz;
   translations?: StationTranslations;
+  challengeDifficultyMode: ChallengeDifficultyMode;
+  challengeDifficulty: ChallengeDifficulty;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

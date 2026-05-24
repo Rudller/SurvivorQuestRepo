@@ -62,16 +62,24 @@ export function CurrentRealizationTeamTasksPanel({
 
   const stationsWithTaskState = useMemo(() => {
     const taskByStationId = new Map(team.tasks.map((task) => [task.stationId, task]));
-    return realization.stations.map((station) => {
+    return realization.stations.map((station, index) => {
       const task = taskByStationId.get(station.stationId);
       return {
         stationId: station.stationId,
+        stationNumber: task?.stationNumber,
+        fallbackOrder: index,
         stationName: station.stationName || station.stationId,
         defaultPoints: station.defaultPoints,
         status: task?.status ?? "todo",
         pointsAwarded: task?.pointsAwarded ?? 0,
         finishedAt: task?.finishedAt ?? null,
       };
+    }).sort((left, right) => {
+      if (typeof left.stationNumber === "number" && typeof right.stationNumber === "number") {
+        return left.stationNumber - right.stationNumber;
+      }
+
+      return left.fallbackOrder - right.fallbackOrder;
     });
   }, [realization.stations, team.tasks]);
 
@@ -174,7 +182,10 @@ export function CurrentRealizationTeamTasksPanel({
                     const isPendingForRow = pendingAction?.stationId === task.stationId;
                     return (
                       <tr key={task.stationId} className="border-t border-zinc-800 bg-zinc-900/60">
-                        <td className="px-3 py-2 text-zinc-100">{task.stationName}</td>
+                        <td className="px-3 py-2 text-zinc-100">
+                          {typeof task.stationNumber === "number" ? `${task.stationNumber}. ` : ""}
+                          {task.stationName}
+                        </td>
                         <td className="px-3 py-2">
                           <span
                             className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${resolveTaskStatusClassName(task.status)}`}

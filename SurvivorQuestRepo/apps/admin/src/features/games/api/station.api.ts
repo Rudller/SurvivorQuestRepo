@@ -1,6 +1,6 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { Station, StationKind, StationQuiz, StationType } from "../types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationKind, StationQuiz, StationType } from "../types/station";
 import { normalizeStationQuiz } from "../station.utils";
 
 type StationDto = {
@@ -13,6 +13,8 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  challengeDifficultyMode?: ChallengeDifficultyMode | null;
+  challengeDifficulty?: ChallengeDifficulty | null;
   quiz?:
     | {
         question?: string;
@@ -41,6 +43,8 @@ type CreateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  challengeDifficultyMode?: ChallengeDifficultyMode;
+  challengeDifficulty?: ChallengeDifficulty;
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -56,6 +60,8 @@ type UpdateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  challengeDifficultyMode?: ChallengeDifficultyMode;
+  challengeDifficulty?: ChallengeDifficulty;
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -132,6 +138,11 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
+    challengeDifficulty:
+      station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
+        ? station.challengeDifficulty
+        : "medium",
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
         ? normalizeStationQuiz({

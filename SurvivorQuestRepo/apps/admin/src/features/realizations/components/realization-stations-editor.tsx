@@ -21,6 +21,8 @@ import {
   imageModeOptions,
   normalizeCompletionCode,
   generateSampleCompletionCode,
+  challengeDifficultyModeOptions,
+  challengeDifficultyOptions,
   type ImageInputMode,
   splitMatchingPairAnswer,
   joinMatchingPairAnswer,
@@ -29,6 +31,7 @@ import {
   completionCodeModeOptions,
   isValidCompletionCodeForMode,
   getQuizLikeStationCopy,
+  supportsChallengeDifficulty,
   MEMORY_SYSTEM_STATION_PROMPT,
   MINI_SUDOKU_SYSTEM_STATION_PROMPT,
   MATCHING_SYSTEM_STATION_PROMPT,
@@ -117,6 +120,8 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     points: 100,
     timeLimitSeconds: 0,
     completionCode: "",
+    challengeDifficultyMode: "admin",
+    challengeDifficulty: "medium",
     quiz: {
       question: "",
       answers: createEmptyQuizAnswers(),
@@ -227,6 +232,8 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    challengeDifficultyMode: station.challengeDifficultyMode,
+    challengeDifficulty: station.challengeDifficulty,
     quiz: station.quiz
         ? {
             question:
@@ -271,6 +278,12 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
     completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
+    challengeDifficultyMode: supportsChallengeDifficulty(station.type)
+      ? station.challengeDifficultyMode ?? "admin"
+      : "admin",
+    challengeDifficulty: supportsChallengeDifficulty(station.type)
+      ? station.challengeDifficulty ?? "medium"
+      : "medium",
     quiz:
       isQuizStationType(station.type) && station.quiz
         ? normalizeStationQuizForType(station.type, {
@@ -1112,6 +1125,12 @@ export function RealizationStationsEditor({
                           updateStation(stationIndex, {
                             type: nextType,
                             completionCode: isCompletionCodeRequired(nextType) ? station.completionCode : "",
+                            challengeDifficultyMode: supportsChallengeDifficulty(nextType)
+                              ? station.challengeDifficultyMode ?? "admin"
+                              : "admin",
+                            challengeDifficulty: supportsChallengeDifficulty(nextType)
+                              ? station.challengeDifficulty ?? "medium"
+                              : "medium",
                             imageUrl: isImageSupportedStationType(nextType) ? station.imageUrl : "",
                             quiz:
                               isQuizStationType(nextType)
@@ -1197,6 +1216,51 @@ export function RealizationStationsEditor({
                     </div>
                   </div>
 
+                  {supportsChallengeDifficulty(station.type) ? (
+                    <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Poziom trudności</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {challengeDifficultyModeOptions.map((option) => (
+                          <button
+                            key={`${stationKey}-difficulty-mode-${option.value}`}
+                            type="button"
+                            onClick={() => updateStation(stationIndex, { challengeDifficultyMode: option.value })}
+                            className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                              (station.challengeDifficultyMode ?? "admin") === option.value
+                                ? "border-amber-400 bg-amber-400 text-zinc-950"
+                                : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      {(station.challengeDifficultyMode ?? "admin") === "admin" ? (
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {challengeDifficultyOptions.map((option) => (
+                            <button
+                              key={`${stationKey}-difficulty-${option.value}`}
+                              type="button"
+                              onClick={() => updateStation(stationIndex, { challengeDifficulty: option.value })}
+                              className={`rounded-lg border p-3 text-left transition ${
+                                (station.challengeDifficulty ?? "medium") === option.value
+                                  ? "border-amber-400 bg-amber-400/10"
+                                  : "border-zinc-700 bg-zinc-950 hover:border-zinc-500"
+                              }`}
+                            >
+                              <span className="block text-sm font-semibold text-zinc-100">{option.label}</span>
+                              <span className="mt-1 block text-xs text-zinc-400">{option.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-500">
+                          Gracz wybierze poziom przed startem. Punkty zależą od wybranego poziomu.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+
                   {isCompletionCodeRequired(station.type) ? (
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Kod zaliczenia</span>
@@ -1224,7 +1288,7 @@ export function RealizationStationsEditor({
                             updateStation(stationIndex, { completionCode: nextValue });
                             setStationCompletionCodeMode(stationKey, resolveCompletionCodeGeneratorMode(nextValue));
                           }}
-                          placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
+                          placeholder={completionCodeMode === "digits" ? "Np. 2048" : "Np. CODE"}
                           className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
                             showValidation && stationValidation.invalidCompletionCode
                               ? "border-red-500/70 focus:border-red-400/80"
@@ -1234,7 +1298,7 @@ export function RealizationStationsEditor({
                         <button
                           type="button"
                           onClick={() =>
-                            updateStation(stationIndex, { completionCode: generateSampleCompletionCode(8, completionCodeMode) })
+                            updateStation(stationIndex, { completionCode: generateSampleCompletionCode(4, completionCodeMode) })
                           }
                           className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                         >

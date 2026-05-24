@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import {
   EXPEDITION_THEME,
@@ -22,6 +23,7 @@ import {
   type StationTestViewModel,
 } from "../components/station-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
+import { TopLeaderboardStrip } from "../components/top-leaderboard-strip";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import {
@@ -40,9 +42,36 @@ import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-over
 import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
 import { getMobileApiErrorCode, getMobileApiErrorStatusCode } from "../api/mobile-session.api";
 
+function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="4" stroke={color} strokeWidth="2" />
+      <Path d="M12 2.5V6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Path d="M12 18V21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Path d="M2.5 12H6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Path d="M18 12H21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function TasksPanelChevronIcon({ color, expanded, size }: { color: string; expanded: boolean; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={expanded ? "M6 14L12 8L18 14" : "M6 10L12 16L18 10"}
+        stroke={color}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 type ExpeditionStageScreenProps = {
   session: OnboardingSession;
   onSessionInvalid?: (reason?: string) => void;
+  onExitRealization: () => void;
   onSelectedLanguageChange?: (language: RealizationLanguage) => void;
   themeMode: ExpeditionThemeMode;
   onToggleTheme: () => void;
@@ -60,6 +89,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeHangman: string;
     stationTypeCaesar: string;
     stationTypeMatching: string;
+    stationTypeStrongPassword: string;
     stationTypeQuiz: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
@@ -102,6 +132,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeHangman: "Wisielec",
     stationTypeCaesar: "Szyfr Cezara",
     stationTypeMatching: "Łączenie par",
+    stationTypeStrongPassword: "Mocne hasło",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
@@ -143,6 +174,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeHangman: "Hangman",
     stationTypeCaesar: "Caesar cipher",
     stationTypeMatching: "Matching pairs",
+    stationTypeStrongPassword: "Strong password",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
@@ -184,6 +216,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeHangman: "Шибениця",
     stationTypeCaesar: "Шифр Цезаря",
     stationTypeMatching: "Поєднання пар",
+    stationTypeStrongPassword: "Надійний пароль",
     stationTypeQuiz: "Вікторина",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
@@ -225,6 +258,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeHangman: "Виселица",
     stationTypeCaesar: "Шифр Цезаря",
     stationTypeMatching: "Сопоставление пар",
+    stationTypeStrongPassword: "Надёжный пароль",
     stationTypeQuiz: "Викторина",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
@@ -355,6 +389,7 @@ const PIN_ICON_SVGS = {
     '<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" />',
   ),
   matching: buildPinIconSvg('<path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" x2="16" y1="12" y2="12" />'),
+  "strong-password": buildPinIconSvg('<path d="M7 11V8a5 5 0 0 1 10 0v3" /><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M12 15v2" />'),
 } as const;
 
 function resolveStationVisual(stationType: ExpeditionStationType | undefined, status: ExpeditionTaskStatus) {
@@ -418,6 +453,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
     return { icon: PIN_ICON_SVGS.matching, color: "#22c55e" };
   }
 
+  if (stationType === "strong-password") {
+    return { icon: PIN_ICON_SVGS["strong-password"], color: "#f43f5e" };
+  }
+
   if (stationType === "audio-quiz") {
     return { icon: PIN_ICON_SVGS["audio-quiz"], color: "#06b6d4" };
   }
@@ -464,6 +503,27 @@ function resolveTeamStationNumbers(stationIds: string[], slotNumber: number) {
   return numberByStationId;
 }
 
+function resolveTaskStationNumbers(tasks: ExpeditionTask[]) {
+  const numberByStationId = new Map<string, number>();
+
+  for (const task of tasks) {
+    const stationId = task.stationId.trim();
+    if (!stationId || numberByStationId.has(stationId)) {
+      continue;
+    }
+
+    if (
+      typeof task.stationNumber === "number" &&
+      Number.isFinite(task.stationNumber) &&
+      task.stationNumber > 0
+    ) {
+      numberByStationId.set(stationId, Math.round(task.stationNumber));
+    }
+  }
+
+  return numberByStationId;
+}
+
 function formatStationLabelWithNumber(label: string, stationNumber?: number) {
   if (typeof stationNumber !== "number" || !Number.isFinite(stationNumber) || stationNumber <= 0) {
     return label;
@@ -482,6 +542,7 @@ function resolveStationTypeLabel(
     | "stationTypeHangman"
     | "stationTypeCaesar"
     | "stationTypeMatching"
+    | "stationTypeStrongPassword"
     | "stationTypeQuiz"
   >,
 ) {
@@ -541,6 +602,10 @@ function resolveStationTypeLabel(
     return text.stationTypeMatching;
   }
 
+  if (stationType === "strong-password") {
+    return text.stationTypeStrongPassword;
+  }
+
   return text.stationTypeQuiz;
 }
 
@@ -558,7 +623,8 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
     stationType === "rebus" ||
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
-    stationType === "matching"
+    stationType === "matching" ||
+    stationType === "strong-password"
   );
 }
 
@@ -637,19 +703,33 @@ function extractStationQrToken(rawValue: string) {
 export function ExpeditionStageScreen({
   session,
   onSessionInvalid,
+  onExitRealization,
   onSelectedLanguageChange,
   themeMode,
   onToggleTheme,
 }: ExpeditionStageScreenProps) {
   const insets = useSafeAreaInsets();
   const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isTablet;
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_STAGE_TEXT[uiLanguage];
   const isLightTheme = getExpeditionThemeMode() === "light";
+  const tasksPanelWidth = adaptiveLayout.s(isTabletLayout ? 188 : 142, 126, 204);
+  const tasksPanelPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 8, 7, 16);
+  const tasksPanelPaddingVertical = adaptiveLayout.s(isTabletLayout ? 10 : 6, 5, 12);
+  const tasksTitleFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 8, 12);
+  const tasksRowGap = adaptiveLayout.s(isTabletLayout ? 8 : 4, 3, 9);
+  const tasksCheckboxSize = adaptiveLayout.s(isTabletLayout ? 18 : 13, 12, 20);
+  const tasksMarkFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 8, 12);
+  const tasksLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 10, 9, 14);
+  const tasksChevronSize = adaptiveLayout.s(16, 14, 20);
+  const mapControlButtonSize = adaptiveLayout.hit(isTabletLayout ? 50 : 44);
+  const mapControlTopOffset = adaptiveLayout.s(isTabletLayout ? 232 : 154, 146, 244);
   const {
     sessionState,
     isLoading,
     errorMessage,
+    syncMessage,
     isSessionInvalid,
     sessionInvalidReason,
     startStationTask,
@@ -664,15 +744,19 @@ export function ExpeditionStageScreen({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
+  const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(false);
+  const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
   const hasAutoSelectedStationRef = useRef(false);
   const autoLocationSyncTimestampRef = useRef(0);
   const uiChromeOpacity = useRef(new Animated.Value(1)).current;
+  const tasksPanelExpansion = useRef(new Animated.Value(isTabletLayout ? 1 : 0)).current;
   const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation();
   const { transientPopup } = useExpeditionStageTransientPopup({
     errorMessage,
     locationError,
     actionError,
     actionMessage,
+    syncMessage,
   });
   const mapPlayerLocation = useMemo(() => {
     return playerLocation ?? null;
@@ -751,11 +835,17 @@ export function ExpeditionStageScreen({
   );
   const isTeamStationNumberingEnabled = sessionState.realization.teamStationNumberingEnabled;
   const stationNumberById = useMemo(
-    () =>
-      isTeamStationNumberingEnabled
+    () => {
+      const taskStationNumbers = resolveTaskStationNumbers(sessionState.tasks);
+      if (taskStationNumbers.size > 0) {
+        return taskStationNumbers;
+      }
+
+      return isTeamStationNumberingEnabled
         ? resolveTeamStationNumbers(stationIds, sessionState.team.slotNumber)
-        : new Map<string, number>(),
-    [isTeamStationNumberingEnabled, sessionState.team.slotNumber, stationIds],
+        : new Map<string, number>();
+    },
+    [isTeamStationNumberingEnabled, sessionState.tasks, sessionState.team.slotNumber, stationIds],
   );
 
   useEffect(() => {
@@ -819,10 +909,18 @@ export function ExpeditionStageScreen({
       ),
     [sessionState.tasks],
   );
+  const taskByStationId = useMemo(
+    () =>
+      sessionState.tasks.reduce<Record<string, ExpeditionTask>>((accumulator, task) => {
+        accumulator[task.stationId] = task;
+        return accumulator;
+      }, {}),
+    [sessionState.tasks],
+  );
   const stationPins = useMemo(
     () =>
       mappableStationIds.map((stationId) => {
-        const task = sessionState.tasks.find((item) => item.stationId === stationId);
+        const task = taskByStationId[stationId];
         const metadata = stationMetadataMap[stationId];
         const visual = resolveStationVisual(metadata?.type, task?.status ?? "todo");
         const isFailed = task ? failedTaskIds.has(task.stationId) : false;
@@ -846,9 +944,9 @@ export function ExpeditionStageScreen({
       mapAnchor,
       mappableStationIds,
       realStationCoordinates,
-      sessionState.tasks,
       stationNumberById,
       stationMetadataMap,
+      taskByStationId,
       text,
     ],
   );
@@ -863,25 +961,27 @@ export function ExpeditionStageScreen({
     (task) => task.status === "done" || failedTaskIds.has(task.stationId),
   ).length;
   const taskTotal = sessionState.tasks.length;
-  const taskByStationId = useMemo(
-    () =>
-      sessionState.tasks.reduce<Record<string, ExpeditionTask>>((accumulator, task) => {
-        accumulator[task.stationId] = task;
-        return accumulator;
-      }, {}),
-    [sessionState.tasks],
-  );
   const checklistItems = useMemo(
     () =>
-      sessionState.tasks.map((task) => ({
-        stationId: task.stationId,
-        label: formatStationLabelWithNumber(
-          resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name, text),
-          stationNumberById.get(task.stationId),
-        ),
-        done: task.status === "done",
-        failed: task.status !== "done" && failedTaskIds.has(task.stationId),
-      })),
+      sessionState.tasks
+        .map((task, index) => ({
+          stationId: task.stationId,
+          stationNumber: stationNumberById.get(task.stationId),
+          fallbackOrder: index,
+          label: formatStationLabelWithNumber(
+            resolveStationLabel(task.stationId, stationMetadataMap[task.stationId]?.name, text),
+            stationNumberById.get(task.stationId),
+          ),
+          done: task.status === "done",
+          failed: task.status !== "done" && failedTaskIds.has(task.stationId),
+        }))
+        .sort((left, right) => {
+          if (typeof left.stationNumber === "number" && typeof right.stationNumber === "number") {
+            return left.stationNumber - right.stationNumber;
+          }
+
+          return left.fallbackOrder - right.fallbackOrder;
+        }),
     [failedTaskIds, sessionState.tasks, stationMetadataMap, stationNumberById, text],
   );
   const stationTestEntries = useMemo<StationTestViewModel[]>(
@@ -907,6 +1007,8 @@ export function ExpeditionStageScreen({
                 timeLimitSeconds: stationCatalog.timeLimitSeconds ?? 0,
                 completionCodeInputMode: stationCatalog.completionCodeInputMode ?? "alphanumeric",
                 completionCodeLength: stationCatalog.completionCodeLength,
+                challengeDifficultyMode: stationCatalog.challengeDifficultyMode,
+                challengeDifficulty: stationCatalog.challengeDifficulty,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
@@ -1126,6 +1228,16 @@ export function ExpeditionStageScreen({
   const shouldShowTopLeaderboard =
     sessionState.realization.showLeaderboardDuringGame &&
     sessionState.leaderboard.entries.length > 0;
+  const shouldShowTasksList = isTabletLayout || isTasksPanelExpanded;
+  const tasksListMaxHeight = adaptiveLayout.s(220, 180, 300);
+  const animatedTasksListMaxHeight = tasksPanelExpansion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, tasksListMaxHeight],
+  });
+  const animatedTasksListTranslateY = tasksPanelExpansion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-6, 0],
+  });
 
   useEffect(() => {
     if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
@@ -1142,6 +1254,14 @@ export function ExpeditionStageScreen({
       useNativeDriver: true,
     }).start();
   }, [themeMode, uiChromeOpacity]);
+
+  useEffect(() => {
+    Animated.timing(tasksPanelExpansion, {
+      toValue: shouldShowTasksList ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+  }, [shouldShowTasksList, tasksPanelExpansion]);
 
   function handleSelectStationFromMap(stationId: string | null) {
     setSelectedStationId(stationId);
@@ -1166,11 +1286,29 @@ export function ExpeditionStageScreen({
             pins={stationPins}
             selectedStationId={selectedStationId}
             focusCoordinate={null}
+            centerPlayerSignal={centerPlayerSignal}
             playerIcon={teamIcon}
             playerColor={teamColorHex}
             onSelectStation={handleSelectStationFromMap}
           />
         )}
+      </View>
+
+      <View className="absolute left-3" style={{ top: insets.top + mapControlTopOffset }}>
+        <Pressable
+          className="items-center justify-center rounded-full border active:opacity-90"
+          disabled={!mapPlayerLocation}
+          style={{
+            width: mapControlButtonSize,
+            height: mapControlButtonSize,
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panel,
+            opacity: mapPlayerLocation ? 1 : 0.44,
+          }}
+          onPress={() => setCenterPlayerSignal((value) => value + 1)}
+        >
+          <CenterPlayerIcon color={EXPEDITION_THEME.accentStrong} size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)} />
+        </Pressable>
       </View>
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
@@ -1194,64 +1332,150 @@ export function ExpeditionStageScreen({
             onOpenLanguagePicker={() => setIsLanguagePickerOpen(true)}
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
-            leaderboardEntries={sessionState.leaderboard.entries}
-            leaderboardCurrentTeamId={sessionState.team.id}
-            showLeaderboardDuringGame={shouldShowTopLeaderboard}
           />
         </Pressable>
 
-        <View className="mt-2 w-full flex-row items-start justify-end">
-          <View
-            className="rounded-2xl border px-3 py-2"
+        <View className="mt-2 w-full items-end">
+          <View style={{ width: tasksPanelWidth }}>
+          <Pressable
+            className="rounded-2xl border active:opacity-90"
             style={{
-              width: adaptiveLayout.s(164, 146, 196),
+              paddingHorizontal: tasksPanelPaddingHorizontal,
+              paddingVertical: tasksPanelPaddingVertical,
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panel,
             }}
+            onPress={() => {
+              if (!isTabletLayout) {
+                setIsTasksPanelExpanded((current) => !current);
+              }
+            }}
           >
-            <Text className="text-[10px] uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-              {text.tasks}
-            </Text>
-            <View className="mt-2 gap-1.5">
-              {checklistItems.map((item) => (
-                <View key={item.stationId} className="flex-row items-center gap-2">
-                  <View
-                    className="h-4 w-4 items-center justify-center rounded border"
-                    style={{
-                      borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
-                      backgroundColor: item.done
-                        ? "rgba(52, 211, 153, 0.2)"
-                        : item.failed
-                          ? "rgba(127, 29, 29, 0.3)"
-                          : EXPEDITION_THEME.panelStrong,
-                    }}
-                  >
-                    {item.done ? (
-                      <Text
-                        className="text-[10px] font-bold text-emerald-300"
-                        style={{ lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                      >
-                        ✓
-                      </Text>
-                    ) : item.failed ? (
-                      <Text
-                        className="text-[10px] font-bold"
-                        style={{ color: "#fecaca", lineHeight: 10, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                      >
-                        ✕
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text
-                    className="flex-1 text-xs"
-                    style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary }}
-                    numberOfLines={1}
-                  >
-                    {item.label}
-                  </Text>
-                </View>
-              ))}
+            <View className="flex-row items-center justify-between gap-2">
+              <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: tasksTitleFontSize }}>
+                {text.tasks}
+              </Text>
+              {!isTabletLayout ? (
+                <TasksPanelChevronIcon
+                  color={EXPEDITION_THEME.accentStrong}
+                  expanded={isTasksPanelExpanded}
+                  size={tasksChevronSize}
+                />
+              ) : null}
             </View>
+
+            {isTabletLayout ? (
+              <View style={{ marginTop: adaptiveLayout.s(8, 7, 10), rowGap: tasksRowGap }}>
+                {checklistItems.map((item) => (
+                  <View key={item.stationId} className="flex-row items-center gap-2">
+                    <View
+                      className="items-center justify-center rounded border"
+                      style={{
+                        width: tasksCheckboxSize,
+                        height: tasksCheckboxSize,
+                        borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
+                        backgroundColor: item.done
+                          ? "rgba(52, 211, 153, 0.2)"
+                          : item.failed
+                            ? "rgba(127, 29, 29, 0.3)"
+                            : EXPEDITION_THEME.panelStrong,
+                      }}
+                    >
+                      {item.done ? (
+                        <Text
+                          className="font-bold text-emerald-300"
+                          style={{ fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                        >
+                          ✓
+                        </Text>
+                      ) : item.failed ? (
+                        <Text
+                          className="font-bold"
+                          style={{ color: "#fecaca", fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                        >
+                          ✕
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text
+                      className="flex-1"
+                      style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary, fontSize: tasksLabelFontSize }}
+                      numberOfLines={1}
+                    >
+                      {item.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Animated.View
+                style={{
+                  maxHeight: animatedTasksListMaxHeight,
+                  opacity: tasksPanelExpansion,
+                  overflow: "hidden",
+                  transform: [{ translateY: animatedTasksListTranslateY }],
+                }}
+              >
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={checklistItems.length > 8}
+                  style={{ maxHeight: tasksListMaxHeight }}
+                  contentContainerStyle={{ rowGap: tasksRowGap }}
+                >
+                  {checklistItems.map((item) => (
+                    <View key={item.stationId} className="flex-row items-center gap-2">
+                      <View
+                        className="items-center justify-center rounded border"
+                        style={{
+                          width: tasksCheckboxSize,
+                          height: tasksCheckboxSize,
+                          borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
+                          backgroundColor: item.done
+                            ? "rgba(52, 211, 153, 0.2)"
+                            : item.failed
+                              ? "rgba(127, 29, 29, 0.3)"
+                              : EXPEDITION_THEME.panelStrong,
+                        }}
+                      >
+                        {item.done ? (
+                          <Text
+                            className="font-bold text-emerald-300"
+                            style={{ fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                          >
+                            ✓
+                          </Text>
+                        ) : item.failed ? (
+                          <Text
+                            className="font-bold"
+                            style={{ color: "#fecaca", fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
+                          >
+                            ✕
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text
+                        className="flex-1"
+                        style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary, fontSize: tasksLabelFontSize }}
+                        numberOfLines={1}
+                      >
+                        {item.label}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </Animated.View>
+            )}
+          </Pressable>
+
+          {shouldShowTopLeaderboard ? (
+            <View className="mt-2">
+              <TopLeaderboardStrip
+                entries={sessionState.leaderboard.entries}
+                currentTeamId={sessionState.team.id}
+                compact
+              />
+            </View>
+          ) : null}
           </View>
 
         </View>
@@ -1291,12 +1515,16 @@ export function ExpeditionStageScreen({
                 ? isLightTheme
                   ? "rgba(185, 92, 87, 0.28)"
                   : "rgba(127, 29, 29, 0.9)"
+                : transientPopup.tone === "info"
+                  ? isLightTheme
+                    ? "rgba(14, 116, 144, 0.2)"
+                    : "rgba(8, 47, 73, 0.9)"
                 : EXPEDITION_THEME.panel,
             }}
           >
             <Text
               className="text-center text-xs font-semibold"
-              style={{ color: transientPopup.tone === "error" ? "#fecaca" : EXPEDITION_THEME.accentStrong }}
+              style={{ color: transientPopup.tone === "error" ? "#fecaca" : transientPopup.tone === "info" ? "#bae6fd" : EXPEDITION_THEME.accentStrong }}
             >
               {transientPopup.message}
             </Text>
@@ -1313,6 +1541,7 @@ export function ExpeditionStageScreen({
           timedTaskAlertBack: text.timedTaskAlertBack,
           timedTaskAlertCloseAndFail: text.timedTaskAlertCloseAndFail,
         }}
+        onExitRealization={onExitRealization}
       />
 
       <Modal

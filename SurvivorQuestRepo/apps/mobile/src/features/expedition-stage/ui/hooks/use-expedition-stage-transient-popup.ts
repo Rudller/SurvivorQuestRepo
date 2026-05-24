@@ -7,7 +7,7 @@ const POPUP_MS_PER_CHAR = 45;
 export type ExpeditionTransientPopup = {
   id: number;
   message: string;
-  tone: "error" | "success";
+  tone: "error" | "success" | "info";
 };
 
 type UseExpeditionStageTransientPopupArgs = {
@@ -15,6 +15,7 @@ type UseExpeditionStageTransientPopupArgs = {
   locationError: string | null;
   actionError: string | null;
   actionMessage: string | null;
+  syncMessage?: string | null;
 };
 
 export function useExpeditionStageTransientPopup({
@@ -22,6 +23,7 @@ export function useExpeditionStageTransientPopup({
   locationError,
   actionError,
   actionMessage,
+  syncMessage,
 }: UseExpeditionStageTransientPopupArgs) {
   const [transientPopup, setTransientPopup] = useState<ExpeditionTransientPopup | null>(null);
   const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -30,14 +32,16 @@ export function useExpeditionStageTransientPopup({
     locationError: string | null;
     actionError: string | null;
     actionMessage: string | null;
+    syncMessage: string | null;
   }>({
     errorMessage: null,
     locationError: null,
     actionError: null,
     actionMessage: null,
+    syncMessage: null,
   });
 
-  const showTransientPopup = useCallback((message: string, tone: "error" | "success") => {
+  const showTransientPopup = useCallback((message: string, tone: "error" | "success" | "info") => {
     const popupId = Date.now();
     setTransientPopup({ id: popupId, message, tone });
 
@@ -110,6 +114,20 @@ export function useExpeditionStageTransientPopup({
     lastPopupSourceValuesRef.current.actionMessage = actionMessage;
     showTransientPopup(actionMessage, "success");
   }, [actionMessage, showTransientPopup]);
+
+  useEffect(() => {
+    if (!syncMessage) {
+      lastPopupSourceValuesRef.current.syncMessage = null;
+      return;
+    }
+
+    if (lastPopupSourceValuesRef.current.syncMessage === syncMessage) {
+      return;
+    }
+
+    lastPopupSourceValuesRef.current.syncMessage = syncMessage;
+    showTransientPopup(syncMessage, "info");
+  }, [showTransientPopup, syncMessage]);
 
   useEffect(() => {
     return () => {

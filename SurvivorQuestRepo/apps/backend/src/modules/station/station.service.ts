@@ -93,6 +93,8 @@ export class StationService {
           completionCode: station.completionCode,
           quizData: toPrismaStationQuizData(station.quiz),
           translations: toPrismaStationTranslationsData(station.translations),
+          challengeDifficultyMode: station.challengeDifficultyMode,
+          challengeDifficulty: station.challengeDifficulty,
           latitude: station.latitude,
           longitude: station.longitude,
           sourceTemplateId: station.id,
@@ -118,6 +120,8 @@ export class StationService {
           translations: toPrismaStationTranslationsData(
             updatedStation.translations,
           ),
+          challengeDifficultyMode: updatedStation.challengeDifficultyMode,
+          challengeDifficulty: updatedStation.challengeDifficulty,
           latitude: updatedStation.latitude,
           longitude: updatedStation.longitude,
         },
@@ -172,6 +176,8 @@ export class StationService {
               translations: toPrismaStationTranslationsData(
                 source.translations,
               ),
+              challengeDifficultyMode: source.challengeDifficultyMode,
+              challengeDifficulty: source.challengeDifficulty,
               latitude: source.latitude,
               longitude: source.longitude,
               sourceTemplateId: source.sourceTemplateId ?? source.id,
@@ -210,6 +216,8 @@ export class StationService {
           translations: toPrismaStationTranslationsData(
             normalized.translations,
           ),
+          challengeDifficultyMode: normalized.challengeDifficultyMode,
+          challengeDifficulty: normalized.challengeDifficulty,
           latitude: normalized.latitude,
           longitude: normalized.longitude,
           sourceTemplateId: normalized.sourceTemplateId,
@@ -243,6 +251,8 @@ export class StationService {
           translations: toPrismaStationTranslationsData(
             normalized.translations,
           ),
+          challengeDifficultyMode: normalized.challengeDifficultyMode,
+          challengeDifficulty: normalized.challengeDifficulty,
           latitude: normalized.latitude,
           longitude: normalized.longitude,
           sourceTemplateId:

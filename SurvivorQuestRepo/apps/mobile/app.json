@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/survivor_icon_512.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "CAMERA",
@@ -41,7 +41,14 @@
       "favicon": "./assets/survivor_icon_192.png"
     },
     "plugins": [
-      "expo-audio"
+      "expo-audio",
+      "expo-asset",
+      [
+        "expo-navigation-bar",
+        {
+          "visibility": "hidden"
+        }
+      ]
     ],
     "extra": {
       "eas": {

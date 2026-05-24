@@ -18,14 +18,14 @@ export function useStationPanelLayout() {
 
   return {
     isTablet,
-    infoFontSize: adaptiveLayout.fs(isTablet ? 14 : 12, 11, 16),
-    inputFontSize: adaptiveLayout.fs(isTablet ? 17 : 14, 13, 20),
-    actionFontSize: adaptiveLayout.fs(isTablet ? 16 : 13, 12, 19),
-    actionMinHeight: adaptiveLayout.hit(isTablet ? 54 : 44),
-    resultFontSize: adaptiveLayout.fs(isTablet ? 14 : 12, 11, 16),
-    attemptDotSize: adaptiveLayout.s(isTablet ? 10 : 8, 7, 14),
-    attemptRowGap: adaptiveLayout.s(isTablet ? 10 : 8, 6, 12),
-    attemptDotGap: adaptiveLayout.s(isTablet ? 8 : 6, 4, 10),
+    infoFontSize: adaptiveLayout.fs(isTablet ? 14 : 10, 10, 16),
+    inputFontSize: adaptiveLayout.fs(isTablet ? 17 : 12, 11, 20),
+    actionFontSize: adaptiveLayout.fs(isTablet ? 16 : 11, 10, 19),
+    actionMinHeight: adaptiveLayout.s(isTablet ? 54 : 34, 32, 58),
+    resultFontSize: adaptiveLayout.fs(isTablet ? 14 : 10, 10, 16),
+    attemptDotSize: adaptiveLayout.s(isTablet ? 10 : 6, 5, 14),
+    attemptRowGap: adaptiveLayout.s(isTablet ? 10 : 6, 4, 12),
+    attemptDotGap: adaptiveLayout.s(isTablet ? 8 : 4, 3, 10),
   };
 }
 
@@ -125,9 +125,9 @@ export function StationQuizTaskWrapper({
             className="font-semibold"
             style={{
               color: EXPEDITION_THEME.textPrimary,
-              fontSize: adaptiveLayout.fs(isTabletOverlay ? 21 : 16, 15, 25),
-              paddingHorizontal: adaptiveLayout.s(12, 10, 16),
-              paddingTop: adaptiveLayout.s(12, 10, 16),
+              fontSize: adaptiveLayout.fs(isTabletOverlay ? 21 : 13, 12, 25),
+              paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
+              paddingTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
             }}
           >
             {prompt}
@@ -135,8 +135,8 @@ export function StationQuizTaskWrapper({
         ) : null}
         <View
           style={{
-            paddingHorizontal: adaptiveLayout.s(12, 10, 16),
-            paddingBottom: adaptiveLayout.s(12, 10, 16),
+            paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
+            paddingBottom: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
           }}
         >
           {children}

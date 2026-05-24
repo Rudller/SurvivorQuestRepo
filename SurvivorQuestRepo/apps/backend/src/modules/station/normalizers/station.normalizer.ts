@@ -12,7 +12,20 @@ import {
   isWordPuzzleStationType,
   normalizeMatchingAnswer,
 } from '../domain/station.rules';
-import type { StationDraftInput, StationQuiz } from '../domain/station.types';
+import type {
+  ChallengeDifficulty,
+  ChallengeDifficultyMode,
+  StationDraftInput,
+  StationQuiz,
+} from '../domain/station.types';
+
+function normalizeChallengeDifficultyMode(value: StationDraftInput['challengeDifficultyMode']): ChallengeDifficultyMode {
+  return value === 'player' ? 'player' : 'admin';
+}
+
+function normalizeChallengeDifficulty(value: StationDraftInput['challengeDifficulty']): ChallengeDifficulty {
+  return value === 'easy' || value === 'hard' ? value : 'medium';
+}
 
 function resolveImageUrl(imageUrl: string | undefined, seed: string) {
   return imageUrl?.trim() || buildStationFallbackImage(seed);
@@ -140,6 +153,8 @@ export function normalizeStationDraft(
     completionCode: normalizedCompletionCode,
     quiz: normalizedQuiz,
     translations: input.translations,
+    challengeDifficultyMode: normalizeChallengeDifficultyMode(input.challengeDifficultyMode),
+    challengeDifficulty: normalizeChallengeDifficulty(input.challengeDifficulty),
     latitude:
       typeof input.latitude === 'number' && Number.isFinite(input.latitude)
         ? input.latitude

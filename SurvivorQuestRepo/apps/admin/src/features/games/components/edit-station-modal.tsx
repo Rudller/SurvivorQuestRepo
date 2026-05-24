@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
-import type { Station, StationType } from "../types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
 import {
   useUpdateStationMutation,
@@ -36,8 +36,12 @@ import {
   MEMORY_SYSTEM_STATION_PROMPT,
   MINI_SUDOKU_SYSTEM_STATION_PROMPT,
   MATCHING_SYSTEM_STATION_PROMPT,
+  STRONG_PASSWORD_SYSTEM_STATION_PROMPT,
   generateSimonSequence,
   normalizeSimonSequenceInput,
+  challengeDifficultyModeOptions,
+  challengeDifficultyOptions,
+  supportsChallengeDifficulty,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -157,6 +161,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     quizAnswers: station.quiz?.answers?.length === QUIZ_ANSWER_COUNT ? station.quiz.answers : createEmptyQuizAnswers(),
     quizCorrectAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
     quizAudioUrl: station.quiz?.audioUrl ?? "",
+    challengeDifficultyMode: station.challengeDifficultyMode as ChallengeDifficultyMode,
+    challengeDifficulty: station.challengeDifficulty as ChallengeDifficulty,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
@@ -292,6 +298,12 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                           audioUrl: editValues.type === "audio-quiz" ? nextAudioUrl || undefined : undefined,
                         }
                       : undefined,
+                  challengeDifficultyMode: supportsChallengeDifficulty(editValues.type)
+                    ? editValues.challengeDifficultyMode
+                    : "admin",
+                  challengeDifficulty: supportsChallengeDifficulty(editValues.type)
+                    ? editValues.challengeDifficulty
+                    : "medium",
                   latitude: nextLatitude,
                   longitude: nextLongitude,
                 }).unwrap();
@@ -330,6 +342,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                             ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
                             : nextType === "matching" && !prev.quizQuestion.trim()
                               ? MATCHING_SYSTEM_STATION_PROMPT
+                              : nextType === "strong-password" && !prev.quizQuestion.trim()
+                                ? STRONG_PASSWORD_SYSTEM_STATION_PROMPT
                           : prev.quizQuestion,
                     };
                   });
@@ -346,6 +360,49 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 ))}
               </select>
             </label>
+
+            {supportsChallengeDifficulty(editValues.type) ? (
+              <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Poziom trudności</h3>
+                <div className="flex flex-wrap gap-2">
+                  {challengeDifficultyModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setEditValues((prev) => ({ ...prev, challengeDifficultyMode: option.value }))}
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                        editValues.challengeDifficultyMode === option.value
+                          ? "border-amber-400 bg-amber-400 text-zinc-950"
+                          : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {editValues.challengeDifficultyMode === "admin" ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {challengeDifficultyOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setEditValues((prev) => ({ ...prev, challengeDifficulty: option.value }))}
+                        className={`rounded-lg border p-3 text-left transition ${
+                          editValues.challengeDifficulty === option.value
+                            ? "border-amber-400 bg-amber-400/10"
+                            : "border-zinc-700 bg-zinc-950 hover:border-zinc-500"
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold text-zinc-100">{option.label}</span>
+                        <span className="mt-1 block text-xs text-zinc-400">{option.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">Gracz wybierze poziom przed startem. Punkty zależą od poziomu.</p>
+                )}
+              </div>
+            ) : null}
 
             <div className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Kategorie</span>
@@ -426,7 +483,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       setEditValues((prev) => ({ ...prev, completionCode: nextValue }));
                       setCompletionCodeMode(resolveCompletionCodeGeneratorMode(nextValue));
                     }}
-                    placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
+                    placeholder={completionCodeMode === "digits" ? "Np. 2048" : "Np. CODE"}
                     className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                   <button
@@ -434,7 +491,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     onClick={() =>
                       setEditValues((prev) => ({
                         ...prev,
-                        completionCode: generateSampleCompletionCode(8, completionCodeMode),
+                        completionCode: generateSampleCompletionCode(4, completionCodeMode),
                       }))
                     }
                     className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"

@@ -13,7 +13,11 @@ export type StationType =
   | 'rebus'
   | 'boggle'
   | 'mini-sudoku'
-  | 'matching';
+  | 'matching'
+  | 'strong-password';
+
+export type ChallengeDifficultyMode = 'admin' | 'player';
+export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
 
 export type StationQuiz = {
   question: string;
@@ -52,6 +56,8 @@ export type StationEntity = {
   completionCode?: string;
   quiz?: StationQuiz;
   translations?: StationTranslations;
+  challengeDifficultyMode: ChallengeDifficultyMode;
+  challengeDifficulty: ChallengeDifficulty;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -74,6 +80,8 @@ export type StationDraftInput = {
   completionCode?: string;
   quiz?: StationQuiz;
   translations?: StationTranslations;
+  challengeDifficultyMode?: ChallengeDifficultyMode;
+  challengeDifficulty?: ChallengeDifficulty;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

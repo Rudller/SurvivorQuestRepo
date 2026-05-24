@@ -20,6 +20,7 @@ type MobileApiRequestOptions = { signal?: AbortSignal };
 export type MobileApiErrorCode =
   | "INVALID_COMPLETION_CODE"
   | "TASK_ALREADY_COMPLETED"
+  | "STATION_IN_USE"
   | "LOCATION_REQUIRED"
   | "SESSION_MISSING"
   | "SESSION_INVALID"
@@ -196,7 +197,8 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "rebus" ||
     value === "boggle" ||
     value === "mini-sudoku" ||
-    value === "matching"
+    value === "matching" ||
+    value === "strong-password"
   ) {
     return value;
   }
@@ -381,6 +383,14 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         );
         return value > 0 ? Math.min(32, value) : undefined;
       })(),
+      challengeDifficultyMode:
+        asString(station.challengeDifficultyMode ?? station.challenge_difficulty_mode, "admin") === "player"
+          ? "player"
+          : "admin",
+      challengeDifficulty: (() => {
+        const value = asString(station.challengeDifficulty ?? station.challenge_difficulty, "medium");
+        return value === "easy" || value === "hard" ? value : "medium";
+      })(),
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       latitude: (() => {
         const value = asNumber(station.latitude ?? station.lat, Number.NaN);
@@ -405,6 +415,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
     const task = asRecord(taskItem);
     return {
       stationId: asString(task.stationId ?? task.station_id).trim(),
+      stationNumber: (() => {
+        const value = Math.round(asNumber(task.stationNumber ?? task.station_number, 0));
+        return value > 0 ? value : undefined;
+      })(),
       status: normalizeTaskStatus(task.status),
       pointsAwarded: Math.max(0, Math.round(asNumber(task.pointsAwarded ?? task.points_awarded, 0))),
       startedAt: asString(task.startedAt ?? task.started_at) || null,
@@ -456,6 +470,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
 
     return {
       stationId,
+      stationNumber: undefined,
       status: "todo" as const,
       pointsAwarded: 0,
       startedAt: null,
@@ -507,6 +522,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       teamStationNumberingEnabled: asBoolean(
         realization.teamStationNumberingEnabled ?? realization.team_station_numbering_enabled,
         true,
+      ),
+      timedStationPointsDecayEnabled: asBoolean(
+        realization.timedStationPointsDecayEnabled ?? realization.timed_station_points_decay_enabled,
+        false,
       ),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
        durationMinutes:
@@ -715,6 +734,7 @@ export async function postMobileCompleteTask(
     completionCode: string;
     startedAt?: string;
     finishedAt?: string;
+    challengeDifficulty?: string;
   },
   options?: MobileApiRequestOptions,
 ) {
@@ -729,6 +749,7 @@ export async function postMobileCompleteTask(
         completionCode: payload.completionCode,
         startedAt: payload.startedAt,
         finishedAt: payload.finishedAt,
+        challengeDifficulty: payload.challengeDifficulty,
       }),
       signal: options?.signal,
     },

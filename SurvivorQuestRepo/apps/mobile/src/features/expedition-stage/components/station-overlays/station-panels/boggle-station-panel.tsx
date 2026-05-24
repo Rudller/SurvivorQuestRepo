@@ -24,6 +24,7 @@ type BoggleStationPanelProps = {
 type BoggleStationText = {
   instruction: string;
   attemptsLeft: string;
+  wordLength: string;
   placeholder: string;
   check: string;
 };
@@ -31,6 +32,7 @@ type BoggleStationText = {
 const BOGGLE_STATION_TEXT_ENGLISH: BoggleStationText = {
   instruction: "Build a word by tapping letters on the board",
   attemptsLeft: "Attempts left",
+  wordLength: "Word length",
   placeholder: "Enter a word",
   check: "Check",
 };
@@ -39,6 +41,7 @@ const BOGGLE_STATION_TEXT: Record<UiLanguage, BoggleStationText> = {
   polish: {
     instruction: "Ułóż słowo dotykając litery na planszy",
     attemptsLeft: "Pozostało prób",
+    wordLength: "Długość hasła",
     placeholder: "Wpisz słowo",
     check: "Sprawdź",
   },
@@ -46,12 +49,14 @@ const BOGGLE_STATION_TEXT: Record<UiLanguage, BoggleStationText> = {
   ukrainian: {
     instruction: "Складіть слово, торкаючись літер на полі",
     attemptsLeft: "Залишилось спроб",
+    wordLength: "Довжина слова",
     placeholder: "Введіть слово",
     check: "Перевірити",
   },
   russian: {
     instruction: "Составьте слово, нажимая буквы на поле",
     attemptsLeft: "Осталось попыток",
+    wordLength: "Длина слова",
     placeholder: "Введите слово",
     check: "Проверить",
   },
@@ -76,13 +81,19 @@ export function BoggleStationPanel({
   const text = BOGGLE_STATION_TEXT[uiLanguage];
   const selectedCellSet = new Set(selectedCellPath);
   const layout = useStationPanelLayout();
+  const boardWidth = layout.isTablet ? "82%" : "66%";
+  const boardRowGap = layout.isTablet ? 10 : 4;
+  const boardCellHeight = layout.isTablet ? 112 : 64;
+  const boardLetterFontSize = layout.isTablet ? 32 : 20;
+  const boardLetterLineHeight = layout.isTablet ? 32 : 22;
+  const visibleInputLength = Math.max(0, Math.min(boggleInput.length, boggleMaxInputLength));
 
   return (
-    <View className="h-full pt-1">
+    <View className="h-full" style={{ paddingTop: layout.isTablet ? 4 : 0 }}>
       <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
         {text.instruction}
       </Text>
-      <View className="mt-1">
+      <View style={{ marginTop: layout.isTablet ? 4 : 2 }}>
         <AttemptsIndicator
           label={text.attemptsLeft}
           attemptsLeft={boggleAttemptsLeft}
@@ -90,14 +101,36 @@ export function BoggleStationPanel({
           align="center"
         />
       </View>
+      <View className="items-center" style={{ marginTop: layout.isTablet ? 10 : 6 }}>
+        <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.isTablet ? 12 : 9 }}>
+          {text.wordLength}
+        </Text>
+        <View className="mt-2 flex-row items-center justify-center" style={{ columnGap: layout.attemptDotGap + 2 }}>
+          {Array.from({ length: boggleMaxInputLength }).map((_, index) => (
+            <View
+              key={`${stationId}-boggle-length-${index}`}
+              className="rounded-full"
+              style={{
+                width: layout.isTablet ? 16 : 12,
+                height: layout.isTablet ? 16 : 12,
+                backgroundColor:
+                  index < visibleInputLength ? EXPEDITION_THEME.accentStrong : "rgba(148, 163, 184, 0.3)",
+              }}
+            />
+          ))}
+        </View>
+      </View>
       <View className="flex-1 items-center justify-center">
-        <View className="mt-2 w-[82%] flex-row flex-wrap justify-between" style={{ rowGap: layout.isTablet ? 10 : 6 }}>
+        <View
+          className="flex-row flex-wrap justify-between"
+          style={{ marginTop: layout.isTablet ? 8 : 4, width: boardWidth, rowGap: boardRowGap }}
+        >
           {boggleBoardLetters.map((letter, index) => (
             <Pressable
               key={`${stationId}-boggle-${index}`}
               className="relative w-[32%] rounded-xl border"
                 style={{
-                  height: layout.isTablet ? 112 : 96,
+                  height: boardCellHeight,
                   borderColor: selectedCellSet.has(index) ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                   backgroundColor: selectedCellSet.has(index) ? withAlpha(EXPEDITION_THEME.accent, 0.22) : EXPEDITION_THEME.panelStrong,
                   opacity: isActionDisabled ? 0.55 : 1,
@@ -112,8 +145,8 @@ export function BoggleStationPanel({
                   className="text-center font-extrabold"
                   style={{
                     color: EXPEDITION_THEME.textPrimary,
-                    fontSize: layout.isTablet ? 32 : 26,
-                    lineHeight: layout.isTablet ? 32 : 26,
+                    fontSize: boardLetterFontSize,
+                    lineHeight: boardLetterLineHeight,
                     includeFontPadding: false,
                     textAlignVertical: "center",
                   }}
@@ -125,20 +158,24 @@ export function BoggleStationPanel({
           ))}
         </View>
         {boggleResult ? (
-          <Text className="mt-2 text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
+          <Text
+            className="text-center"
+            style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize, marginTop: layout.isTablet ? 8 : 4 }}
+          >
             {boggleResult}
           </Text>
         ) : null}
       </View>
-      <View className="pb-1 pt-2 flex-row gap-2">
+      <View className="flex-row" style={{ gap: layout.isTablet ? 8 : 5, paddingTop: layout.isTablet ? 8 : 4, paddingBottom: layout.isTablet ? 4 : 2 }}>
         <TextInput
-          className="flex-1 rounded-xl border px-4"
+          className="flex-1 rounded-xl border"
           style={{
             borderColor: EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panelStrong,
             color: EXPEDITION_THEME.textPrimary,
             fontSize: layout.inputFontSize,
-            paddingVertical: layout.isTablet ? 12 : 8,
+            paddingHorizontal: layout.isTablet ? 16 : 10,
+            paddingVertical: layout.isTablet ? 12 : 5,
           }}
           placeholder={text.placeholder}
           placeholderTextColor={EXPEDITION_THEME.textSubtle}
@@ -151,29 +188,32 @@ export function BoggleStationPanel({
           onSubmitEditing={onSubmit}
         />
         <Pressable
-          className="min-w-12 items-center justify-center rounded-xl px-3 active:opacity-90"
+          className="items-center justify-center rounded-xl active:opacity-90"
           style={{
             borderColor: EXPEDITION_THEME.accent,
             borderWidth: 1,
             backgroundColor: EXPEDITION_THEME.accent,
             opacity: isActionDisabled || boggleInput.length === 0 ? 0.45 : 1,
             minHeight: layout.actionMinHeight,
+            minWidth: layout.isTablet ? 48 : 36,
+            paddingHorizontal: layout.isTablet ? 12 : 8,
           }}
           onPress={onBackspaceInput}
           disabled={isActionDisabled || boggleInput.length === 0}
         >
           <Text
             className="font-semibold"
-            style={{ color: resolveActionLabelColor(isActionDisabled || boggleInput.length === 0), fontSize: layout.isTablet ? 22 : 16 }}
+            style={{ color: resolveActionLabelColor(isActionDisabled || boggleInput.length === 0), fontSize: layout.isTablet ? 22 : 13 }}
           >
             ⌫
           </Text>
         </Pressable>
         <Pressable
-          className="items-center justify-center rounded-xl px-6 active:opacity-90"
+          className="items-center justify-center rounded-xl active:opacity-90"
           style={{
             backgroundColor: isActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
             minHeight: layout.actionMinHeight,
+            paddingHorizontal: layout.isTablet ? 24 : 12,
           }}
           onPress={onSubmit}
           disabled={isActionDisabled}
@@ -193,8 +233,16 @@ export function BoggleStationPanel({
 type BoggleMediaSectionProps = BoggleStationPanelProps;
 
 export function BoggleMediaSection(props: BoggleMediaSectionProps) {
+  const layout = useStationPanelLayout();
+
   return (
-    <View className="flex-1 px-2 py-2">
+    <View
+      className="flex-1"
+      style={{
+        paddingHorizontal: layout.isTablet ? 8 : 4,
+        paddingVertical: layout.isTablet ? 8 : 4,
+      }}
+    >
       <BoggleStationPanel {...props} />
     </View>
   );

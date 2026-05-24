@@ -2,8 +2,7 @@ import { Image, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/model/constants";
-import type { ExpeditionLeaderboardEntry } from "../model/types";
-import { TopLeaderboardStrip } from "./top-leaderboard-strip";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -19,9 +18,6 @@ type TopRealizationPanelProps = {
   onOpenLanguagePicker?: () => void;
   themeMode: ExpeditionThemeMode;
   onToggleTheme: () => void;
-  leaderboardEntries?: ExpeditionLeaderboardEntry[];
-  leaderboardCurrentTeamId?: string;
-  showLeaderboardDuringGame?: boolean;
 };
 
 const TOP_REALIZATION_PANEL_TEXT: Record<
@@ -70,10 +66,10 @@ function resolveCardTextColor(hexColor: string) {
   return brightness > 172 ? "#0f172a" : "#f8fafc";
 }
 
-function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: string }) {
+function ThemeModeIcon({ mode, color, size = 22 }: { mode: ExpeditionThemeMode; color: string; size?: number }) {
   if (mode === "light") {
     return (
-      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Circle cx="12" cy="12" r="4.5" stroke={color} strokeWidth="2" />
         <Path d="M12 2.5V5" stroke={color} strokeWidth="2" strokeLinecap="round" />
         <Path d="M12 19V21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
@@ -88,7 +84,7 @@ function ThemeModeIcon({ mode, color }: { mode: ExpeditionThemeMode; color: stri
   }
 
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M20.7 15.2A8.7 8.7 0 1 1 8.8 3.3a7 7 0 1 0 11.9 11.9Z"
         stroke={color}
@@ -114,105 +110,125 @@ export function TopRealizationPanel({
   onOpenLanguagePicker,
   themeMode,
   onToggleTheme,
-  leaderboardEntries,
-  leaderboardCurrentTeamId,
-  showLeaderboardDuringGame = false,
 }: TopRealizationPanelProps) {
   const uiLanguage = useUiLanguage();
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isTablet;
   const text = TOP_REALIZATION_PANEL_TEXT[uiLanguage];
   const cardTextColor = resolveCardTextColor(teamColorHex);
   const cardMutedTextColor = cardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
   const iconBackground = cardTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
-  const resolvedLeaderboardEntries = leaderboardEntries ?? [];
-  const resolvedLeaderboardCurrentTeamId = leaderboardCurrentTeamId?.trim() ?? "";
-  const shouldShowTopbarLeaderboard =
-    showLeaderboardDuringGame && resolvedLeaderboardEntries.length > 0 && resolvedLeaderboardCurrentTeamId.length > 0;
+  const panelPadding = adaptiveLayout.s(isTabletLayout ? 8 : 4, 4, 10);
+  const panelRadius = adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 32);
+  const contentHeight = adaptiveLayout.s(isTabletLayout ? 208 : 116, 108, 224);
+  const logoWidth = adaptiveLayout.s(isTabletLayout ? 208 : 100, 88, 224);
+  const logoRadius = adaptiveLayout.s(isTabletLayout ? 22 : 14, 12, 26);
+  const contentGap = adaptiveLayout.s(isTabletLayout ? 10 : 6, 5, 12);
+  const companyFontSize = adaptiveLayout.fs(isTabletLayout ? 23 : 14, 13, 26);
+  const actionButtonSize = adaptiveLayout.s(isTabletLayout ? 50 : 34, 32, 52);
+  const languageFontSize = adaptiveLayout.fs(isTabletLayout ? 22 : 15, 14, 26);
+  const themeIconSize = adaptiveLayout.s(isTabletLayout ? 24 : 17, 16, 28);
+  const teamCardRadius = adaptiveLayout.s(isTabletLayout ? 18 : 10, 9, 22);
+  const teamCardPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 12 : 6, 5, 14);
+  const teamCardPaddingVertical = adaptiveLayout.s(isTabletLayout ? 8 : 3, 3, 10);
+  const teamIconFontSize = adaptiveLayout.fs(isTabletLayout ? 36 : 21, 19, 40);
+  const teamNameFontSize = adaptiveLayout.fs(isTabletLayout ? 23 : 14, 13, 26);
+  const teamMetaFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
+  const pointsLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
+  const pointsFontSize = adaptiveLayout.fs(isTabletLayout ? 24 : 15, 14, 28);
 
   return (
     <View
-      className="rounded-3xl border p-1.5"
       style={{
+        borderRadius: panelRadius,
+        borderWidth: 1,
+        padding: panelPadding,
         borderColor: EXPEDITION_THEME.border,
         backgroundColor: EXPEDITION_THEME.panel,
       }}
     >
-      <View className="h-48 flex-row items-stretch gap-2">
+      <View style={{ height: contentHeight, flexDirection: "row", alignItems: "stretch", columnGap: contentGap }}>
         <View
-          className="w-48 self-stretch items-center justify-center overflow-hidden rounded-2xl border"
-          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+          className="self-stretch items-center justify-center overflow-hidden border"
+          style={{ width: logoWidth, borderRadius: logoRadius, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
         >
           {logoUrl ? (
             <Image source={{ uri: logoUrl }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
           ) : (
-            <Text className="text-[20px] font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle }}>
+            <Text className="font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: companyFontSize }}>
               {text.logo}
             </Text>
           )}
         </View>
 
         <View className="flex-1">
-          <View className="h-1/2 pl-2">
-            <View className="h-full flex-row items-center gap-2">
+          <View style={{ height: "50%", paddingLeft: adaptiveLayout.s(isTabletLayout ? 10 : 8, 6, 12) }}>
+            <View style={{ height: "100%", flexDirection: "row", alignItems: "center", columnGap: contentGap }}>
               <Text
-                className="flex-1 text-xl font-bold"
-                style={{ color: EXPEDITION_THEME.textPrimary, includeFontPadding: false }}
+                className="flex-1 font-bold"
+                style={{ color: EXPEDITION_THEME.textPrimary, includeFontPadding: false, fontSize: companyFontSize }}
                 numberOfLines={1}
               >
                 {companyName}
               </Text>
-              {shouldShowTopbarLeaderboard ? (
-                <View style={{ minWidth: 176, maxWidth: 320 }}>
-                  <TopLeaderboardStrip
-                    entries={resolvedLeaderboardEntries}
-                    currentTeamId={resolvedLeaderboardCurrentTeamId}
-                    compact
-                  />
-                </View>
-              ) : null}
-              <View className="flex-row items-center gap-2">
+              <View style={{ flexDirection: "row", alignItems: "center", columnGap: contentGap }}>
                 {showLanguageButton && languageFlag && onOpenLanguagePicker ? (
                   <Pressable
-                    className="h-11 w-11 items-center justify-center rounded-full active:opacity-90"
-                    style={{ backgroundColor: EXPEDITION_THEME.panelStrong }}
+                    className="items-center justify-center rounded-full active:opacity-90"
+                    style={{ width: actionButtonSize, height: actionButtonSize, backgroundColor: EXPEDITION_THEME.panelStrong }}
                     onPress={onOpenLanguagePicker}
                   >
-                    <Text className="text-lg">{languageFlag}</Text>
+                    <Text style={{ fontSize: languageFontSize }}>{languageFlag}</Text>
                   </Pressable>
                 ) : null}
                 <Pressable
-                  className="mr-1 h-11 w-11 items-center justify-center rounded-full active:opacity-90"
-                  style={{ backgroundColor: EXPEDITION_THEME.panelStrong }}
+                  className="items-center justify-center rounded-full active:opacity-90"
+                  style={{ width: actionButtonSize, height: actionButtonSize, marginRight: adaptiveLayout.s(4, 2, 6), backgroundColor: EXPEDITION_THEME.panelStrong }}
                   onPress={onToggleTheme}
                 >
-                  <ThemeModeIcon mode={themeMode} color={EXPEDITION_THEME.textPrimary} />
+                  <ThemeModeIcon mode={themeMode} color={EXPEDITION_THEME.textPrimary} size={themeIconSize} />
                 </Pressable>
               </View>
             </View>
           </View>
           <View
-            className="h-1/2 justify-center rounded-xl border px-2 py-1"
+            className="justify-center border"
             style={{
+              height: "50%",
+              borderRadius: teamCardRadius,
+              paddingHorizontal: teamCardPaddingHorizontal,
+              paddingVertical: teamCardPaddingVertical,
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: teamColorHex,
             }}
           >
-            <View className="flex-row items-center gap-2">
-              <View className="h-full w-1/6 items-center justify-center rounded-md" style={{ backgroundColor: iconBackground }}>
-                <Text className="text-3xl">{teamIcon}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", columnGap: contentGap }}>
+              <View className="h-full items-center justify-center rounded-md" style={{ width: "16.666%", backgroundColor: iconBackground }}>
+                <Text style={{ fontSize: teamIconFontSize }}>{teamIcon}</Text>
               </View>
               <View className="flex-1">
-                <Text className="text-xl font-extrabold" style={{ color: cardTextColor }} numberOfLines={1}>
+                <Text className="font-extrabold" style={{ color: cardTextColor, fontSize: teamNameFontSize }} numberOfLines={1}>
                   {teamName}
                 </Text>
-                <Text className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: cardMutedTextColor }}>
+                <Text className="font-semibold uppercase tracking-wide" style={{ color: cardMutedTextColor, fontSize: teamMetaFontSize }}>
                   {text.team} {teamSlot ?? "-"} • {teamColorLabel}
                 </Text>
               </View>
-              <View>
-                <Text className="text-[9px] uppercase tracking-widest" style={{ color: cardMutedTextColor }}>
+              <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
+                <Text
+                  className="uppercase tracking-widest"
+                  style={{ color: cardMutedTextColor, fontSize: pointsLabelFontSize }}
+                  numberOfLines={1}
+                >
                   {text.points}
                 </Text>
-                <Text className="text-xl font-extrabold text-right" style={{ color: cardTextColor }}>
+                <Text
+                  className="font-extrabold text-right"
+                  style={{ color: cardTextColor, fontSize: pointsFontSize, includeFontPadding: false }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.65}
+                >
                   {points}
                 </Text>
               </View>

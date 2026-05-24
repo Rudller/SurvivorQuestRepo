@@ -214,6 +214,7 @@ export type Realization = {
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -233,6 +234,8 @@ export type RealizationStationDraft = {
   completionCode?: string;
   quiz?: Station["quiz"];
   translations?: Station["translations"];
+  challengeDifficultyMode?: Station["challengeDifficultyMode"];
+  challengeDifficulty?: Station["challengeDifficulty"];
   latitude?: number;
   longitude?: number;
   pendingAudioFile?: File | null;

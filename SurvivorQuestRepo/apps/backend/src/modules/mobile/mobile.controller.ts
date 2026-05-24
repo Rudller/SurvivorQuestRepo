@@ -170,6 +170,7 @@ export class MobileController {
       completionCode: optionalString(payload, 'completionCode'),
       startedAt: optionalString(payload, 'startedAt'),
       finishedAt: optionalString(payload, 'finishedAt'),
+      challengeDifficulty: optionalString(payload, 'challengeDifficulty'),
     });
   }
 

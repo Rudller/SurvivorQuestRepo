@@ -34,6 +34,7 @@ enum StationType {
   BOGGLE
   MINI_SUDOKU
   MATCHING
+  STRONG_PASSWORD
 }
 
 enum RealizationStatus {
@@ -118,6 +119,8 @@ model Station {
   completionCode   String?
   quizData         Json?
   translations     Json?
+  challengeDifficultyMode String             @default("admin")
+  challengeDifficulty String                 @default("medium")
   latitude         Float?
   longitude        Float?
   sourceTemplateId String?
@@ -189,6 +192,7 @@ model Realization {
   showLeaderboardDuringGame Boolean      @default(true)
   showLeaderboardOnFinish Boolean        @default(true)
   teamStationNumberingEnabled Boolean    @default(true)
+  timedStationPointsDecayEnabled Boolean @default(false)
   joinCode            String             @unique
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt

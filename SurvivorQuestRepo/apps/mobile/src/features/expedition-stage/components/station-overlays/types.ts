@@ -15,13 +15,18 @@ export type StationTestType =
   | "rebus"
   | "boggle"
   | "mini-sudoku"
-  | "matching";
+  | "matching"
+  | "strong-password";
+
+export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
 export type StationTestViewModel = {
   stationId: string;
   stationType: StationTestType;
   completionCodeInputMode?: "numeric" | "alphanumeric";
   completionCodeLength?: number;
+  challengeDifficultyMode?: "admin" | "player";
+  challengeDifficulty?: ChallengeDifficulty;
   name: string;
   typeLabel: string;
   description: string;
@@ -47,16 +52,18 @@ export type StationTestMenuOverlayProps = {
   onOpenFinishScreen: () => void;
   onPreviewSuccessPopup: () => void;
   onPreviewFailedPopup: () => void;
+  onExitRealization: () => void;
 };
 
 export type StationPreviewOverlayProps = {
   station: StationTestViewModel | null;
   onClose: () => void;
   onRequestClose?: () => void;
-  onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
+  onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;
   onTimeExpired?: (stationId: string) => void;
+  timedStationPointsDecayEnabled?: boolean;
   debugOutcomePreview?: {
     id: number;
     variant: "success" | "failed";
@@ -69,8 +76,13 @@ export type QuizPrestartOverlayProps = {
   visible: boolean;
   stationName: string | null;
   stationType?: StationTestType;
+  timeLimitSeconds?: number;
+  points?: number;
+  timedStationPointsDecayEnabled?: boolean;
+  challengeDifficultyMode?: "admin" | "player";
+  challengeDifficulty?: ChallengeDifficulty;
   isStarting?: boolean;
-  onStart: () => void;
+  onStart: (challengeDifficulty?: ChallengeDifficulty) => void;
   onClose: () => void;
 };
 

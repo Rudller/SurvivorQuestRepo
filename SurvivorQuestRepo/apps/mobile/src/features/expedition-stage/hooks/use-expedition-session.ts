@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OnboardingSession } from "../../onboarding/model/types";
 import { useUiLanguage } from "../../i18n/ui-language-context";
 import {
@@ -23,6 +24,38 @@ const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
 const TASK_REQUEST_RETRY_DELAYS_MS = [350, 900];
 const UNSAFE_MUTATION_RETRY_DELAYS_MS: readonly number[] = [];
 const MOBILE_REQUEST_TIMEOUT_MS = 12_000;
+const PENDING_TASK_MUTATIONS_STORAGE_PREFIX = "sq.mobile.pending-task-mutations.v1";
+const PENDING_SYNC_RETRY_INTERVAL_MS = 3_000;
+
+type PendingTaskMutation =
+  | {
+      id: string;
+      type: "task:start";
+      stationId: string;
+      startedAt: string;
+      createdAt: string;
+    }
+  | {
+      id: string;
+      type: "task:complete";
+      stationId: string;
+      completionCode: string;
+      startedAt?: string;
+      finishedAt: string;
+      challengeDifficulty?: string;
+      createdAt: string;
+    }
+  | {
+      id: string;
+      type: "task:fail";
+      stationId: string;
+      reason?: string;
+      startedAt?: string;
+      finishedAt: string;
+      createdAt: string;
+    };
+
+type SyncStatus = "idle" | "pending" | "syncing" | "synced" | "error";
 
 const EXPEDITION_SESSION_TEXT = {
   polish: {
@@ -40,6 +73,12 @@ const EXPEDITION_SESSION_TEXT = {
     invalidQrCode: "Nieprawidłowy kod QR.",
     qrRequiresBackend: "Skanowanie QR wymaga połączenia z backendem.",
     verifyQrFailed: "Nie udało się zweryfikować kodu QR.",
+    progressSavedOffline: "Brak połączenia. Twój progres został zapisany na urządzeniu i zostanie wysłany po odzyskaniu połączenia.",
+    progressChangesSavedOffline: (count: number) => `Brak połączenia. Zapisaliśmy ${count} zmian na urządzeniu i wyślemy je po odzyskaniu połączenia.`,
+    syncingSavedProgress: "Połączenie wróciło. Synchronizujemy zapisany progres z serwerem...",
+    progressSynced: "Progres został zsynchronizowany z serwerem.",
+    progressStillPending: "Nadal nie możemy połączyć się z serwerem. Twój progres pozostaje zapisany na urządzeniu i spróbujemy wysłać go ponownie.",
+    progressSyncRejected: "Nie udało się zsynchronizować części progresu z serwerem. Odświeżamy stan realizacji.",
   },
   english: {
     missingSessionStateApiConfig: "Missing API configuration to fetch session state.",
@@ -56,6 +95,12 @@ const EXPEDITION_SESSION_TEXT = {
     invalidQrCode: "Invalid QR code.",
     qrRequiresBackend: "QR scanning requires a backend connection.",
     verifyQrFailed: "Failed to verify the QR code.",
+    progressSavedOffline: "No connection. Your progress was saved on this device and will be sent when the connection is restored.",
+    progressChangesSavedOffline: (count: number) => `No connection. We saved ${count} changes on this device and will send them when the connection is restored.`,
+    syncingSavedProgress: "Connection is back. Syncing saved progress with the server...",
+    progressSynced: "Progress has been synced with the server.",
+    progressStillPending: "We still cannot connect to the server. Your progress remains saved on this device and we will try again.",
+    progressSyncRejected: "Some saved progress could not be synced with the server. Refreshing realization state.",
   },
   ukrainian: {
     missingSessionStateApiConfig: "Відсутня конфігурація API для отримання стану сесії.",
@@ -72,6 +117,12 @@ const EXPEDITION_SESSION_TEXT = {
     invalidQrCode: "Некоректний QR-код.",
     qrRequiresBackend: "Сканування QR потребує з'єднання з бекендом.",
     verifyQrFailed: "Не вдалося перевірити QR-код.",
+    progressSavedOffline: "Немає з'єднання. Ваш прогрес збережено на пристрої та буде надіслано після відновлення з'єднання.",
+    progressChangesSavedOffline: (count: number) => `Немає з'єднання. Ми зберегли ${count} змін на пристрої та надішлемо їх після відновлення з'єднання.`,
+    syncingSavedProgress: "З'єднання відновлено. Синхронізуємо збережений прогрес із сервером...",
+    progressSynced: "Прогрес синхронізовано із сервером.",
+    progressStillPending: "Поки що не можемо підключитися до сервера. Ваш прогрес залишається збереженим на пристрої, ми спробуємо ще раз.",
+    progressSyncRejected: "Частину прогресу не вдалося синхронізувати із сервером. Оновлюємо стан реалізації.",
   },
   russian: {
     missingSessionStateApiConfig: "Отсутствует конфигурация API для получения состояния сессии.",
@@ -88,6 +139,12 @@ const EXPEDITION_SESSION_TEXT = {
     invalidQrCode: "Некорректный QR-код.",
     qrRequiresBackend: "Сканирование QR требует подключения к бэкенду.",
     verifyQrFailed: "Не удалось проверить QR-код.",
+    progressSavedOffline: "Нет соединения. Ваш прогресс сохранён на устройстве и будет отправлен после восстановления соединения.",
+    progressChangesSavedOffline: (count: number) => `Нет соединения. Мы сохранили ${count} изменений на устройстве и отправим их после восстановления соединения.`,
+    syncingSavedProgress: "Соединение восстановлено. Синхронизируем сохранённый прогресс с сервером...",
+    progressSynced: "Прогресс синхронизирован с сервером.",
+    progressStillPending: "Пока не удаётся подключиться к серверу. Ваш прогресс остаётся сохранённым на устройстве, мы попробуем ещё раз.",
+    progressSyncRejected: "Часть прогресса не удалось синхронизировать с сервером. Обновляем состояние реализации.",
   },
 } as const;
 
@@ -182,8 +239,198 @@ export async function runRequestWithRetry<T>({
   throw lastError ?? new Error(timeoutMessage);
 }
 
+async function sendPendingTaskMutation({
+  apiBaseUrl,
+  sessionToken,
+  mutation,
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  mutation: PendingTaskMutation;
+}) {
+  if (mutation.type === "task:start") {
+    await runRequestWithRetry({
+      request: (signal) =>
+        postMobileStartTask(apiBaseUrl, {
+          sessionToken,
+          stationId: mutation.stationId,
+          startedAt: mutation.startedAt,
+        }, { signal }),
+      timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+      timeoutMessage: "Request timed out",
+      retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
+    });
+    return;
+  }
+
+  if (mutation.type === "task:complete") {
+    await runRequestWithRetry({
+      request: (signal) =>
+        postMobileCompleteTask(apiBaseUrl, {
+          sessionToken,
+          stationId: mutation.stationId,
+          completionCode: mutation.completionCode,
+          startedAt: mutation.startedAt,
+          finishedAt: mutation.finishedAt,
+          challengeDifficulty: mutation.challengeDifficulty,
+        }, { signal }),
+      timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+      timeoutMessage: "Request timed out",
+      retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
+    });
+    return;
+  }
+
+  await runRequestWithRetry({
+    request: (signal) =>
+      postMobileFailTask(apiBaseUrl, {
+        sessionToken,
+        stationId: mutation.stationId,
+        reason: mutation.reason,
+        startedAt: mutation.startedAt,
+        finishedAt: mutation.finishedAt,
+      }, { signal }),
+    timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
+    timeoutMessage: "Request timed out",
+    retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
+  });
+}
+
 function isOfflineSession(session: OnboardingSession) {
   return !session.apiBaseUrl?.trim();
+}
+
+function createPendingMutationId(type: PendingTaskMutation["type"], stationId: string) {
+  return `${type}:${stationId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getPendingMutationsStorageKey(sessionIdentityKey: string) {
+  return `${PENDING_TASK_MUTATIONS_STORAGE_PREFIX}:${sessionIdentityKey}`;
+}
+
+function isTaskAlreadyCompletedError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("task already completed") || message.includes("http 409");
+}
+
+function normalizePendingTaskMutation(value: unknown): PendingTaskMutation | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const item = value as Partial<PendingTaskMutation>;
+  if (typeof item.id !== "string" || typeof item.type !== "string" || typeof item.stationId !== "string") {
+    return null;
+  }
+
+  if (item.type === "task:start" && typeof item.startedAt === "string" && typeof item.createdAt === "string") {
+    return item as PendingTaskMutation;
+  }
+
+  if (
+    item.type === "task:complete" &&
+    typeof item.completionCode === "string" &&
+    typeof item.finishedAt === "string" &&
+    typeof item.createdAt === "string"
+  ) {
+    return item as PendingTaskMutation;
+  }
+
+  if (item.type === "task:fail" && typeof item.finishedAt === "string" && typeof item.createdAt === "string") {
+    return item as PendingTaskMutation;
+  }
+
+  return null;
+}
+
+function applyStartedTaskState(current: ExpeditionSessionState, stationId: string, startedAt: string): ExpeditionSessionState {
+  let taskUpdated = false;
+  const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+    if (task.stationId !== stationId || task.status === "done" || task.status === "failed") {
+      return task;
+    }
+
+    taskUpdated = true;
+    return {
+      ...task,
+      status: "in-progress",
+      startedAt: task.startedAt || startedAt,
+    };
+  });
+
+  return taskUpdated ? { ...current, tasks: nextTasks } : current;
+}
+
+function applyFailedTaskState({
+  current,
+  stationId,
+  startedAt,
+  finishedAt,
+}: {
+  current: ExpeditionSessionState;
+  stationId: string;
+  startedAt?: string;
+  finishedAt: string;
+}) {
+  const existingTask = current.tasks.find((task) => task.stationId === stationId);
+  if (!existingTask || existingTask.status === "done" || existingTask.status === "failed") {
+    return current;
+  }
+
+  const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
+  const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
+    if (task.stationId !== stationId) {
+      return task;
+    }
+
+    return {
+      ...task,
+      status: "failed" as const,
+      pointsAwarded: 0,
+      startedAt: task.startedAt ?? effectiveStartedAt,
+      finishedAt,
+    };
+  });
+
+  return {
+    ...current,
+    tasks: nextTasks,
+    meta: {
+      ...current.meta,
+      eventLogCount: current.meta.eventLogCount + 1,
+    },
+  };
+}
+
+export function applyPendingTaskMutationState(current: ExpeditionSessionState, mutation: PendingTaskMutation) {
+  if (mutation.type === "task:start") {
+    return applyStartedTaskState(current, mutation.stationId, mutation.startedAt);
+  }
+
+  if (mutation.type === "task:complete") {
+    return applyCompletedTaskState({
+      current,
+      stationId: mutation.stationId,
+      startedAt: mutation.startedAt,
+      finishedAt: mutation.finishedAt,
+      requireExistingTask: false,
+    });
+  }
+
+  return applyFailedTaskState({
+    current,
+    stationId: mutation.stationId,
+    startedAt: mutation.startedAt,
+    finishedAt: mutation.finishedAt,
+  });
+}
+
+export function applyPendingTaskMutationsState(current: ExpeditionSessionState, mutations: PendingTaskMutation[]) {
+  return mutations.reduce(applyPendingTaskMutationState, current);
 }
 
 function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, startedAt: string, finishedAt: string) {
@@ -213,6 +460,15 @@ function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, s
   return Math.max(0, Math.round(safeBasePoints * ratio));
 }
 
+function shouldApplyTimedPointsDecay(current: ExpeditionSessionState, stationId: string) {
+  if (!current.realization.timedStationPointsDecayEnabled) {
+    return false;
+  }
+
+  const station = current.realization.stations.find((item) => item.id === stationId);
+  return Boolean(station && station.timeLimitSeconds > 0);
+}
+
 type ApplyCompletedTaskStateArgs = {
   current: ExpeditionSessionState;
   stationId: string;
@@ -239,10 +495,12 @@ export function applyCompletedTaskState({
   const station = current.realization.stations.find((item) => item.id === stationId);
   const basePoints = station?.points ?? resolveDefaultStationPoints(stationId);
   const effectiveStartedAt = existingTask?.startedAt ?? startedAt ?? finishedAt;
+  const applyTimedPointsDecay = shouldApplyTimedPointsDecay(current, stationId);
   const awardedPoints =
-    station?.type === "time"
+    station && (applyTimedPointsDecay || station.type === "time")
       ? computeLinearTimePoints(basePoints, station.timeLimitSeconds, effectiveStartedAt, finishedAt)
       : Math.max(0, Math.round(basePoints));
+  const nextStatus = applyTimedPointsDecay && awardedPoints <= 0 ? "failed" : "done";
 
   let taskUpdated = false;
   const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
@@ -252,7 +510,7 @@ export function applyCompletedTaskState({
     taskUpdated = true;
     return {
       ...task,
-      status: "done" as const,
+      status: nextStatus,
       pointsAwarded: awardedPoints,
       startedAt: task.startedAt ?? effectiveStartedAt,
       finishedAt,
@@ -266,10 +524,10 @@ export function applyCompletedTaskState({
   return {
     ...current,
     tasks: nextTasks,
-    team: {
-      ...current.team,
-      points: current.team.points + awardedPoints,
-    },
+      team: {
+        ...current.team,
+      points: current.team.points + (nextStatus === "done" ? awardedPoints : 0),
+      },
     meta: {
       ...current.meta,
       eventLogCount: current.meta.eventLogCount + 1,
@@ -315,6 +573,14 @@ export function useExpeditionSession(session: OnboardingSession) {
   const [lastLocationSyncAt, setLastLocationSyncAt] = useState<string | null>(null);
   const [isSessionInvalid, setIsSessionInvalid] = useState(false);
   const [sessionInvalidReason, setSessionInvalidReason] = useState<string | null>(null);
+  const [pendingTaskMutations, setPendingTaskMutations] = useState<PendingTaskMutation[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [isFlushingPendingMutations, setIsFlushingPendingMutations] = useState(false);
+  const pendingMutationsStorageKey = useMemo(
+    () => getPendingMutationsStorageKey(sessionIdentityKey),
+    [sessionIdentityKey],
+  );
 
   useEffect(() => {
     setSessionState(buildInitialSessionState(stableSession));
@@ -324,7 +590,126 @@ export function useExpeditionSession(session: OnboardingSession) {
     setLastLocationSyncAt(null);
     setIsSessionInvalid(false);
     setSessionInvalidReason(null);
+    setSyncStatus("idle");
+    setSyncMessage(null);
+    setIsFlushingPendingMutations(false);
   }, [stableSession]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const hydratePendingMutations = async () => {
+      try {
+        const storedQueue = await AsyncStorage.getItem(pendingMutationsStorageKey);
+        if (!isActive) {
+          return;
+        }
+
+        const parsed = JSON.parse(storedQueue || "[]") as unknown;
+        const hydratedQueue = Array.isArray(parsed)
+          ? parsed.map(normalizePendingTaskMutation).filter((item): item is PendingTaskMutation => Boolean(item))
+          : [];
+        setPendingTaskMutations(hydratedQueue);
+        if (hydratedQueue.length > 0) {
+          setSyncStatus("pending");
+          setSyncMessage(text.progressChangesSavedOffline(hydratedQueue.length));
+        }
+      } catch {
+        if (isActive) {
+          setPendingTaskMutations([]);
+        }
+      }
+    };
+
+    void hydratePendingMutations();
+
+    return () => {
+      isActive = false;
+    };
+  }, [pendingMutationsStorageKey, text]);
+
+  const persistPendingTaskMutations = useCallback(
+    async (nextQueue: PendingTaskMutation[]) => {
+      setPendingTaskMutations(nextQueue);
+      if (nextQueue.length === 0) {
+        await AsyncStorage.removeItem(pendingMutationsStorageKey);
+        return;
+      }
+
+      await AsyncStorage.setItem(pendingMutationsStorageKey, JSON.stringify(nextQueue));
+    },
+    [pendingMutationsStorageKey],
+  );
+
+  const enqueuePendingTaskMutation = useCallback(
+    async (mutation: PendingTaskMutation) => {
+      const nextQueue = [...pendingTaskMutations, mutation];
+      setSyncStatus("pending");
+      setSyncMessage(nextQueue.length === 1 ? text.progressSavedOffline : text.progressChangesSavedOffline(nextQueue.length));
+      await persistPendingTaskMutations(nextQueue);
+    },
+    [pendingTaskMutations, persistPendingTaskMutations, text],
+  );
+
+  const flushPendingTaskMutations = useCallback(async () => {
+    if (offlineMode || isFlushingPendingMutations || pendingTaskMutations.length === 0) {
+      return null;
+    }
+
+    const apiBaseUrl = session.apiBaseUrl?.trim();
+    if (!apiBaseUrl) {
+      return text.missingApiConfig;
+    }
+
+    setIsFlushingPendingMutations(true);
+    setSyncStatus("syncing");
+    setSyncMessage(text.syncingSavedProgress);
+
+    let nextQueue = [...pendingTaskMutations];
+
+    try {
+      while (nextQueue.length > 0) {
+        const mutation = nextQueue[0];
+        try {
+          await sendPendingTaskMutation({ apiBaseUrl, sessionToken: session.sessionToken, mutation });
+          nextQueue = nextQueue.slice(1);
+          await persistPendingTaskMutations(nextQueue);
+        } catch (error) {
+          if (isTaskAlreadyCompletedError(error)) {
+            nextQueue = nextQueue.slice(1);
+            await persistPendingTaskMutations(nextQueue);
+            continue;
+          }
+
+          if (isRetriableNetworkError(error)) {
+            setSyncStatus("pending");
+            setSyncMessage(text.progressStillPending);
+            return getApiErrorMessage(error, text.progressStillPending);
+          }
+
+          nextQueue = nextQueue.slice(1);
+          await persistPendingTaskMutations(nextQueue);
+          setSyncStatus("error");
+          setSyncMessage(text.progressSyncRejected);
+          return getApiErrorMessage(error, text.progressSyncRejected);
+        }
+      }
+
+      setSyncStatus("synced");
+      setSyncMessage(text.progressSynced);
+      return null;
+    } finally {
+      setIsFlushingPendingMutations(false);
+    }
+  }, [
+    isFlushingPendingMutations,
+    offlineMode,
+    pendingTaskMutations,
+    persistPendingTaskMutations,
+    session.apiBaseUrl,
+    session.sessionToken,
+    text,
+  ]);
 
   const refreshSessionState = useCallback(async () => {
     if (offlineMode) {
@@ -349,7 +734,7 @@ export function useExpeditionSession(session: OnboardingSession) {
         timeoutMessage: text.requestTimedOut,
         retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
       });
-      setSessionState(nextState);
+      setSessionState(applyPendingTaskMutationsState(nextState, pendingTaskMutations));
       setErrorMessage(null);
       setIsSessionInvalid(false);
       setSessionInvalidReason(null);
@@ -366,7 +751,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [offlineMode, selectedLanguage, session.apiBaseUrl, session.sessionToken, text]);
+  }, [offlineMode, pendingTaskMutations, selectedLanguage, session.apiBaseUrl, session.sessionToken, text]);
 
   useEffect(() => {
     if (offlineMode) {
@@ -374,16 +759,30 @@ export function useExpeditionSession(session: OnboardingSession) {
       return;
     }
 
-    void refreshSessionState();
+    void flushPendingTaskMutations().then(() => refreshSessionState());
 
     const interval = setInterval(() => {
-      void refreshSessionState();
+      void flushPendingTaskMutations().then(() => refreshSessionState());
     }, SESSION_POLLING_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
     };
-  }, [offlineMode, refreshSessionState]);
+  }, [flushPendingTaskMutations, offlineMode, refreshSessionState]);
+
+  useEffect(() => {
+    if (offlineMode || pendingTaskMutations.length === 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      void flushPendingTaskMutations().then(() => refreshSessionState());
+    }, PENDING_SYNC_RETRY_INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [flushPendingTaskMutations, offlineMode, pendingTaskMutations.length, refreshSessionState]);
 
   const startStationTask = useCallback(
     async (stationId: string, startedAt?: string) => {
@@ -396,24 +795,7 @@ export function useExpeditionSession(session: OnboardingSession) {
       const startedAtIso = startedAt?.trim() || new Date().toISOString();
 
       if (offlineMode) {
-        setSessionState((current) => {
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
-              return task;
-            }
-
-            return {
-              ...task,
-              status: "in-progress",
-              startedAt: task.startedAt || startedAtIso,
-            };
-          });
-
-          return {
-            ...current,
-            tasks: nextTasks,
-          };
-        });
+        setSessionState((current) => applyStartedTaskState(current, normalizedStationId, startedAtIso));
         return null;
       }
 
@@ -422,6 +804,14 @@ export function useExpeditionSession(session: OnboardingSession) {
       if (!apiBaseUrl) {
         return text.missingApiConfig;
       }
+
+      const mutation: PendingTaskMutation = {
+        id: createPendingMutationId("task:start", normalizedStationId),
+        type: "task:start",
+        stationId: normalizedStationId,
+        startedAt: startedAtIso,
+        createdAt: new Date().toISOString(),
+      };
 
       try {
         await runRequestWithRetry({
@@ -436,36 +826,24 @@ export function useExpeditionSession(session: OnboardingSession) {
           retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
         });
       } catch (error) {
+        if (isRetriableNetworkError(error)) {
+          setSessionState((current) => applyStartedTaskState(current, normalizedStationId, startedAtIso));
+          await enqueuePendingTaskMutation(mutation);
+          return null;
+        }
         return getApiErrorMessage(error, text.startTaskFailed);
       }
 
-      setSessionState((current) => {
-        const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-          if (task.stationId !== normalizedStationId || task.status === "done" || task.status === "failed") {
-            return task;
-          }
-
-          return {
-            ...task,
-            status: "in-progress",
-            startedAt: task.startedAt || startedAtIso,
-          };
-        });
-
-        return {
-          ...current,
-          tasks: nextTasks,
-        };
-      });
+      setSessionState((current) => applyStartedTaskState(current, normalizedStationId, startedAtIso));
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, sessionState.tasks, text],
   );
 
   const completeStationTask = useCallback(
-    async (stationId: string, completionCode: string, startedAt?: string) => {
+    async (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => {
       const normalizedStationId = stationId.trim();
       const normalizedCode = completionCode.trim().toUpperCase();
 
@@ -473,13 +851,15 @@ export function useExpeditionSession(session: OnboardingSession) {
         return text.invalidTaskData;
       }
 
+      const finishedAt = new Date().toISOString();
+      const effectiveStartedAt = startedAt?.trim() || sessionState.tasks.find((task) => task.stationId === normalizedStationId)?.startedAt || finishedAt;
+
       if (offlineMode) {
         setSessionState((current) => {
-          const finishedAt = new Date().toISOString();
           return applyCompletedTaskState({
             current,
             stationId: normalizedStationId,
-            startedAt,
+            startedAt: effectiveStartedAt,
             finishedAt,
             requireExistingTask: false,
           });
@@ -494,16 +874,27 @@ export function useExpeditionSession(session: OnboardingSession) {
         return text.missingApiConfig;
       }
 
+      const mutation: PendingTaskMutation = {
+        id: createPendingMutationId("task:complete", normalizedStationId),
+        type: "task:complete",
+        stationId: normalizedStationId,
+        completionCode: normalizedCode,
+        startedAt: effectiveStartedAt,
+        finishedAt,
+        challengeDifficulty,
+        createdAt: new Date().toISOString(),
+      };
+
       try {
-        const finishedAt = new Date().toISOString();
         await runRequestWithRetry({
           request: (signal) =>
             postMobileCompleteTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
               stationId: normalizedStationId,
               completionCode: normalizedCode,
-              startedAt,
+              startedAt: effectiveStartedAt,
               finishedAt,
+              challengeDifficulty,
             }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
           timeoutMessage: text.requestTimedOut,
@@ -514,19 +905,32 @@ export function useExpeditionSession(session: OnboardingSession) {
           return applyCompletedTaskState({
             current,
             stationId: normalizedStationId,
-            startedAt,
+            startedAt: effectiveStartedAt,
             finishedAt,
             requireExistingTask: true,
           });
         });
       } catch (error) {
+        if (isRetriableNetworkError(error)) {
+          setSessionState((current) => {
+            return applyCompletedTaskState({
+              current,
+              stationId: normalizedStationId,
+              startedAt: effectiveStartedAt,
+              finishedAt,
+              requireExistingTask: false,
+            });
+          });
+          await enqueuePendingTaskMutation(mutation);
+          return null;
+        }
         return getApiErrorMessage(error, text.completeTaskFailed);
       }
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, sessionState.tasks, text],
   );
 
   const syncTeamLocation = useCallback(
@@ -602,38 +1006,13 @@ export function useExpeditionSession(session: OnboardingSession) {
       }
 
       if (offlineMode) {
-        setSessionState((current) => {
-          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
-          if (!existingTask || existingTask.status === "done" || existingTask.status === "failed") {
-            return current;
-          }
-
-          const finishedAt = new Date().toISOString();
-          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
-
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId) {
-              return task;
-            }
-
-            return {
-              ...task,
-              status: "failed" as const,
-              pointsAwarded: 0,
-              startedAt: task.startedAt ?? effectiveStartedAt,
-              finishedAt,
-            };
-          });
-
-          return {
-            ...current,
-            tasks: nextTasks,
-            meta: {
-              ...current.meta,
-              eventLogCount: current.meta.eventLogCount + 1,
-            },
-          };
-        });
+        const finishedAt = new Date().toISOString();
+        setSessionState((current) => applyFailedTaskState({
+          current,
+          stationId: normalizedStationId,
+          startedAt,
+          finishedAt,
+        }));
         return null;
       }
 
@@ -642,15 +1021,26 @@ export function useExpeditionSession(session: OnboardingSession) {
         return text.missingApiConfig;
       }
 
+      const finishedAt = new Date().toISOString();
+      const effectiveStartedAt = startedAt?.trim() || sessionState.tasks.find((task) => task.stationId === normalizedStationId)?.startedAt || finishedAt;
+      const mutation: PendingTaskMutation = {
+        id: createPendingMutationId("task:fail", normalizedStationId),
+        type: "task:fail",
+        stationId: normalizedStationId,
+        reason,
+        startedAt: effectiveStartedAt,
+        finishedAt,
+        createdAt: new Date().toISOString(),
+      };
+
       try {
-        const finishedAt = new Date().toISOString();
         await runRequestWithRetry({
           request: (signal) =>
             postMobileFailTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
               stationId: normalizedStationId,
               reason,
-              startedAt,
+              startedAt: effectiveStartedAt,
               finishedAt,
             }, { signal }),
           timeoutMs: MOBILE_REQUEST_TIMEOUT_MS,
@@ -658,45 +1048,30 @@ export function useExpeditionSession(session: OnboardingSession) {
           retryDelaysMs: UNSAFE_MUTATION_RETRY_DELAYS_MS,
         });
 
-        setSessionState((current) => {
-          const existingTask = current.tasks.find((task) => task.stationId === normalizedStationId);
-          if (!existingTask || existingTask.status === "done" || existingTask.status === "failed") {
-            return current;
-          }
-
-          const effectiveStartedAt = existingTask.startedAt ?? startedAt ?? finishedAt;
-
-          const nextTasks: ExpeditionSessionState["tasks"] = current.tasks.map((task) => {
-            if (task.stationId !== normalizedStationId) {
-              return task;
-            }
-
-            return {
-              ...task,
-              status: "failed" as const,
-              pointsAwarded: 0,
-              startedAt: task.startedAt ?? effectiveStartedAt,
-              finishedAt,
-            };
-          });
-
-          return {
-            ...current,
-            tasks: nextTasks,
-            meta: {
-              ...current.meta,
-              eventLogCount: current.meta.eventLogCount + 1,
-            },
-          };
-        });
+        setSessionState((current) => applyFailedTaskState({
+          current,
+          stationId: normalizedStationId,
+          startedAt: effectiveStartedAt,
+          finishedAt,
+        }));
       } catch (error) {
+        if (isRetriableNetworkError(error)) {
+          setSessionState((current) => applyFailedTaskState({
+            current,
+            stationId: normalizedStationId,
+            startedAt: effectiveStartedAt,
+            finishedAt,
+          }));
+          await enqueuePendingTaskMutation(mutation);
+          return null;
+        }
         return getApiErrorMessage(error, text.failTaskFailed);
       }
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const resolveStationQrToken = useCallback(
@@ -792,6 +1167,9 @@ export function useExpeditionSession(session: OnboardingSession) {
     isSessionInvalid,
     sessionInvalidReason,
     offlineMode,
+    pendingSyncCount: pendingTaskMutations.length,
+    syncStatus,
+    syncMessage,
     lastLocationSyncAt,
     refreshSessionState,
     startStationTask,

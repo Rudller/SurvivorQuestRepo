@@ -121,7 +121,6 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
     }
 
     try {
-      await activePlayer.seekTo(0);
       activePlayer.play();
       setHasAudioPlaybackStarted(true);
     } catch {
@@ -137,9 +136,15 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
     }
 
     try {
-      activePlayer.pause();
-      await activePlayer.seekTo(0);
-      setIsAudioPlaying(false);
+      if (activePlayer.playing) {
+        activePlayer.pause();
+        setIsAudioPlaying(false);
+        return;
+      }
+
+      activePlayer.play();
+      setHasAudioPlaybackStarted(true);
+      setIsAudioPlaying(true);
     } catch {
       setAudioLoadError(text.audioPlayFailed);
       setIsAudioPlaying(false);

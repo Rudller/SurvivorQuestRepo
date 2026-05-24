@@ -4,11 +4,10 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { DEFAULT_STATION_PIN_CUSTOMIZATION, type MapCoordinate, type PlayerLocation, type StationPin } from "../model/types";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 const DEFAULT_MAP_TILE_URL =
   process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim() || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DEFAULT_MAP_TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 type ExpeditionMapProps = {
   centerCoordinate: MapCoordinate;
@@ -16,6 +15,7 @@ type ExpeditionMapProps = {
   pins: StationPin[];
   selectedStationId: string | null;
   focusCoordinate: MapCoordinate | null;
+  centerPlayerSignal?: number;
   playerIcon: string;
   playerColor?: string | null;
   onSelectStation: (stationId: string | null) => void;
@@ -102,8 +102,8 @@ function buildOsmWebViewHtml(payload: unknown) {
       }
       .station-marker-wrapper {
         position: relative;
-        width: 34px;
-        height: 46px;
+        width: var(--station-marker-wrapper-width, 34px);
+        height: var(--station-marker-wrapper-height, 46px);
         display: flex;
         align-items: flex-start;
         justify-content: center;
@@ -111,13 +111,13 @@ function buildOsmWebViewHtml(payload: unknown) {
       .station-marker-spike {
         position: absolute;
         left: 50%;
-        top: 34px;
-        margin-left: -6px;
+        top: var(--station-marker-size, 34px);
+        margin-left: calc(var(--station-marker-spike-width, 12px) / -2);
         width: 0;
         height: 0;
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 9px solid var(--pin-color, #f59e0b);
+        border-left: calc(var(--station-marker-spike-width, 12px) / 2) solid transparent;
+        border-right: calc(var(--station-marker-spike-width, 12px) / 2) solid transparent;
+        border-top: var(--station-marker-spike-height, 9px) solid var(--pin-color, #f59e0b);
         filter: drop-shadow(0 2px 3px rgba(3, 7, 18, 0.35));
         z-index: 0;
         pointer-events: none;
@@ -127,9 +127,9 @@ function buildOsmWebViewHtml(payload: unknown) {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 34px;
-        border-radius: 12px;
+        width: var(--station-marker-size, 34px);
+        height: var(--station-marker-size, 34px);
+        border-radius: var(--station-marker-radius, 12px);
         box-sizing: border-box;
         box-shadow: 0 8px 18px rgba(3, 7, 18, 0.4);
         z-index: 1;
@@ -138,14 +138,14 @@ function buildOsmWebViewHtml(payload: unknown) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 18px;
-        height: 18px;
+        width: var(--station-marker-icon-size, 18px);
+        height: var(--station-marker-icon-size, 18px);
         color: #f8fafc;
       }
       .station-marker-icon svg {
         display: block;
-        width: 18px;
-        height: 18px;
+        width: var(--station-marker-icon-size, 18px);
+        height: var(--station-marker-icon-size, 18px);
         stroke: currentColor;
         stroke-width: 2.2;
         fill: none;
@@ -153,18 +153,18 @@ function buildOsmWebViewHtml(payload: unknown) {
       }
       .station-marker-number {
         position: absolute;
-        right: -7px;
-        top: -7px;
-        min-width: 16px;
-        height: 16px;
+        right: var(--station-marker-number-offset, -7px);
+        top: var(--station-marker-number-offset, -7px);
+        min-width: var(--station-marker-number-size, 16px);
+        height: var(--station-marker-number-size, 16px);
         padding: 0 4px;
         border-radius: 999px;
         border: 1px solid ${markerNumberBorder};
         background: ${markerNumberBackground};
         color: ${markerNumberText};
-        font-size: 9px;
+        font-size: var(--station-marker-number-font-size, 9px);
         font-weight: 700;
-        line-height: 14px;
+        line-height: calc(var(--station-marker-number-size, 16px) - 2px);
         text-align: center;
         box-sizing: border-box;
         pointer-events: none;
@@ -179,54 +179,72 @@ function buildOsmWebViewHtml(payload: unknown) {
       }
       .player-marker {
         position: relative;
-        width: 40px;
-        height: 40px;
+        width: 56px;
+        height: 56px;
         border-radius: 999px;
-        overflow: hidden;
+        overflow: visible;
         pointer-events: none;
+      }
+      @keyframes player-location-pulse {
+        0% {
+          transform: scale(0.68);
+          opacity: 0.72;
+        }
+        70% {
+          transform: scale(1.42);
+          opacity: 0.12;
+        }
+        100% {
+          transform: scale(1.42);
+          opacity: 0;
+        }
+      }
+      .player-marker-ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 54px;
+        height: 54px;
+        margin-left: -27px;
+        margin-top: -27px;
+        border-radius: 999px;
+        border: 3px solid var(--player-accent, #0ea5e9);
+        background: rgba(14, 165, 233, 0.24);
+        transform: scale(0.68);
+        transform-origin: center center;
+        animation: player-location-pulse 2.4s ease-out infinite;
       }
       .player-marker-shadow {
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 22px;
-        height: 22px;
-        margin-left: -11px;
-        margin-top: -11px;
+        width: 38px;
+        height: 38px;
+        margin-left: -19px;
+        margin-top: -19px;
         border-radius: 999px;
-        background: rgba(15, 23, 42, 0.16);
+        background: rgba(15, 23, 42, 0.2);
+        filter: blur(3px);
       }
       .player-marker-dot {
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 22px;
-        height: 22px;
-        margin-left: -11px;
-        margin-top: -11px;
+        width: 34px;
+        height: 34px;
+        margin-left: -17px;
+        margin-top: -17px;
         border-radius: 999px;
-        border: 2px solid #f8fafc;
+        border: 3px solid #f8fafc;
         background: var(--player-accent, #0ea5e9);
-        box-shadow: 0 0 0 1px rgba(8, 47, 73, 0.28), 0 1px 2px rgba(2, 6, 23, 0.35);
-      }
-      .player-marker-dot::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 4px;
-        height: 4px;
-        margin-left: -2px;
-        margin-top: -2px;
-        border-radius: 999px;
-        background: #e0f2fe;
+        box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.24), 0 8px 18px rgba(2, 6, 23, 0.38);
       }
       .player-marker-badge {
         position: absolute;
         left: 50%;
         top: 50%;
         transform: translate(-50%, -52%);
-        font-size: 11px;
+        font-size: 15px;
         line-height: 1;
         color: #f8fafc;
         text-shadow: 0 1px 1px rgba(2, 6, 23, 0.4);
@@ -243,10 +261,13 @@ function buildOsmWebViewHtml(payload: unknown) {
     ></script>
     <script>
       const payload = ${encodedPayload};
+      let currentPayload = payload;
       const map = L.map("map", {
+        attributionControl: false,
         zoomControl: false,
-      }).setView([payload.center.latitude, payload.center.longitude], 16);
+      }).setView([payload.center.latitude, payload.center.longitude], payload.initialZoom || 17);
       const stationLayer = L.layerGroup().addTo(map);
+      const stationMarkers = new Map();
       let playerMarker = null;
       const PLAYER_MOVING_SPEED_THRESHOLD_MPS = 0.9;
       const PLAYER_MOVEMENT_STEP_THRESHOLD_METERS = 3;
@@ -311,11 +332,17 @@ function buildOsmWebViewHtml(payload: unknown) {
 
       L.tileLayer(payload.tileUrl, {
         maxZoom: 20,
-        attribution: payload.tileAttribution,
       }).addTo(map);
 
       function renderPins(nextPins) {
-        stationLayer.clearLayers();
+        const nextPinIds = new Set(nextPins.map((pin) => pin.stationId));
+        stationMarkers.forEach((marker, stationId) => {
+          if (!nextPinIds.has(stationId)) {
+            stationLayer.removeLayer(marker);
+            stationMarkers.delete(stationId);
+          }
+        });
+
         nextPins.forEach((pin) => {
           const markerClass = pin.isSelected ? "station-marker station-marker--selected" : "station-marker station-marker--default";
           const stationNumber =
@@ -325,27 +352,55 @@ function buildOsmWebViewHtml(payload: unknown) {
           const stationNumberBadge = stationNumber
             ? '<span class="station-marker-number">' + stationNumber + "</span>"
             : "";
-          const marker = L.marker([pin.latitude, pin.longitude], {
-            icon: L.divIcon({
-              className: "",
-              html:
-                '<div class="station-marker-wrapper" style="--pin-color:' +
-                pin.color +
-                ";opacity:" +
-                pin.opacity +
-                ';"><div class="station-marker-spike"></div><div class="' +
-                markerClass +
-                '" style="background:' +
-                pin.color +
-                ';"><span class="station-marker-icon">' +
-                pin.icon +
-                "</span>" +
-                stationNumberBadge +
-                "</div></div>",
-              iconSize: [34, 46],
-              iconAnchor: [17, 44],
-            }),
-          }).addTo(stationLayer);
+          const icon = L.divIcon({
+            className: "",
+            html:
+              '<div class="station-marker-wrapper" style="--pin-color:' +
+              pin.color +
+              ";opacity:" +
+              pin.opacity +
+              ";--station-marker-wrapper-width:" +
+              payload.marker.wrapperWidth +
+              "px;--station-marker-wrapper-height:" +
+              payload.marker.wrapperHeight +
+              "px;--station-marker-size:" +
+              payload.marker.size +
+              "px;--station-marker-radius:" +
+              payload.marker.radius +
+              "px;--station-marker-icon-size:" +
+              payload.marker.iconSize +
+              "px;--station-marker-spike-width:" +
+              payload.marker.spikeWidth +
+              "px;--station-marker-spike-height:" +
+              payload.marker.spikeHeight +
+              "px;--station-marker-number-size:" +
+              payload.marker.numberSize +
+              "px;--station-marker-number-offset:" +
+              payload.marker.numberOffset +
+              "px;--station-marker-number-font-size:" +
+              payload.marker.numberFontSize +
+              ';"><div class="station-marker-spike"></div><div class="' +
+              markerClass +
+              '" style="background:' +
+              pin.color +
+              ';"><span class="station-marker-icon">' +
+              pin.icon +
+              "</span>" +
+              stationNumberBadge +
+              "</div></div>",
+            iconSize: [payload.marker.wrapperWidth, payload.marker.wrapperHeight],
+            iconAnchor: [payload.marker.anchorX, payload.marker.anchorY],
+          });
+
+          const existingMarker = stationMarkers.get(pin.stationId);
+          if (existingMarker) {
+            existingMarker.setLatLng([pin.latitude, pin.longitude]);
+            existingMarker.setIcon(icon);
+            return;
+          }
+
+          const marker = L.marker([pin.latitude, pin.longitude], { icon }).addTo(stationLayer);
+          stationMarkers.set(pin.stationId, marker);
 
           marker.on("click", () => {
             if (window.ReactNativeWebView) {
@@ -381,11 +436,11 @@ function buildOsmWebViewHtml(payload: unknown) {
           html:
             '<div class="player-marker" style="--player-accent:' +
             playerAccentColor +
-            ';"><div class="player-marker-shadow"></div><div class="player-marker-dot">' +
+            ';"><div class="player-marker-ring"></div><div class="player-marker-shadow"></div><div class="player-marker-dot">' +
             playerBadgeHtml +
             "</div></div>",
-          iconSize: [40, 40],
-          iconAnchor: [20, 20],
+          iconSize: [56, 56],
+          iconAnchor: [28, 28],
         });
 
         if (playerMarker) {
@@ -395,6 +450,21 @@ function buildOsmWebViewHtml(payload: unknown) {
         }
 
         playerMarker = L.marker([player.latitude, player.longitude], { icon }).addTo(map);
+      }
+
+      function centerOnPlayer() {
+        const player = currentPayload.player;
+        if (!player || !Number.isFinite(player.latitude) || !Number.isFinite(player.longitude)) {
+          return;
+        }
+
+        const targetZoom = Math.max(map.getZoom(), payload.focusZoom || 17);
+        map.setView([player.latitude, player.longitude], targetZoom, {
+          animate: true,
+          duration: 0.45,
+        });
+        lastAutoFocusedPlayer = L.latLng(player.latitude, player.longitude);
+        lastPayloadCenter = lastAutoFocusedPlayer;
       }
 
       function smoothMoveTo(target) {
@@ -483,11 +553,13 @@ function buildOsmWebViewHtml(payload: unknown) {
           return;
         }
 
+        currentPayload = nextPayload;
+
         renderPins(Array.isArray(nextPayload.pins) ? nextPayload.pins : []);
         renderPlayer(nextPayload.player ?? null);
 
         if (nextPayload.focus && Number.isFinite(nextPayload.focus.latitude) && Number.isFinite(nextPayload.focus.longitude)) {
-          map.setView([nextPayload.focus.latitude, nextPayload.focus.longitude], 17, {
+          map.setView([nextPayload.focus.latitude, nextPayload.focus.longitude], nextPayload.focusZoom || 18, {
             animate: true,
             duration: 0.45,
           });
@@ -513,6 +585,7 @@ function buildOsmWebViewHtml(payload: unknown) {
 
       applyPayload(payload);
       window.__SQ_UPDATE_MAP = applyPayload;
+      window.__SQ_CENTER_PLAYER = centerOnPlayer;
     </script>
   </body>
 </html>`;
@@ -524,11 +597,14 @@ export function ExpeditionMap({
   pins,
   selectedStationId,
   focusCoordinate,
+  centerPlayerSignal = 0,
   playerIcon,
   playerColor,
   onSelectStation,
 }: ExpeditionMapProps) {
   const uiLanguage = useUiLanguage();
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isTablet;
   const text = EXPEDITION_MAP_TEXT[uiLanguage];
   const renderablePins = useMemo(
     () =>
@@ -545,6 +621,8 @@ export function ExpeditionMap({
     () => ({
       center: centerCoordinate,
       focus: isFiniteCoordinate(focusCoordinate) ? focusCoordinate : null,
+      initialZoom: isTabletLayout ? 17 : 16,
+      focusZoom: isTabletLayout ? 18 : 17,
       player:
         playerLocation && isFiniteCoordinate(playerLocation)
           ? {
@@ -564,7 +642,20 @@ export function ExpeditionMap({
             }
           : null,
       tileUrl: DEFAULT_MAP_TILE_URL,
-      tileAttribution: DEFAULT_MAP_TILE_ATTRIBUTION,
+      marker: {
+        wrapperWidth: adaptiveLayout.s(isTabletLayout ? 40 : 34, 34, 42),
+        wrapperHeight: adaptiveLayout.s(isTabletLayout ? 54 : 46, 46, 56),
+        size: adaptiveLayout.s(isTabletLayout ? 40 : 34, 34, 42),
+        radius: adaptiveLayout.s(isTabletLayout ? 14 : 12, 12, 15),
+        iconSize: adaptiveLayout.s(isTabletLayout ? 21 : 18, 18, 22),
+        spikeWidth: adaptiveLayout.s(isTabletLayout ? 14 : 12, 12, 15),
+        spikeHeight: adaptiveLayout.s(isTabletLayout ? 10 : 9, 9, 11),
+        numberSize: adaptiveLayout.s(isTabletLayout ? 18 : 16, 16, 20),
+        numberOffset: adaptiveLayout.s(isTabletLayout ? -8 : -7, -8, -7),
+        numberFontSize: adaptiveLayout.fs(isTabletLayout ? 10 : 9, 9, 11),
+        anchorX: adaptiveLayout.s(isTabletLayout ? 20 : 17, 17, 21),
+        anchorY: adaptiveLayout.s(isTabletLayout ? 52 : 44, 44, 54),
+      },
       pins: renderablePins.map((pin) => {
         const isSelected = selectedStationId === pin.stationId;
         return {
@@ -573,13 +664,13 @@ export function ExpeditionMap({
           longitude: pin.coordinate.longitude,
           icon: pin.customization?.icon || DEFAULT_STATION_PIN_CUSTOMIZATION.icon,
           color: resolveStationPinColor(pin, isSelected),
-          opacity: pin.status === "done" || pin.failed ? 0.9 : 1,
+          opacity: pin.status === "done" || pin.failed ? 0.45 : 1,
           isSelected,
           number: typeof pin.stationNumber === "number" && Number.isFinite(pin.stationNumber) ? pin.stationNumber : null,
         };
       }),
     }),
-    [centerCoordinate, focusCoordinate, playerColor, playerIcon, playerLocation, renderablePins, selectedStationId],
+    [adaptiveLayout, centerCoordinate, focusCoordinate, isTabletLayout, playerColor, playerIcon, playerLocation, renderablePins, selectedStationId],
   );
   const webViewRef = useRef<WebView>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -595,6 +686,14 @@ export function ExpeditionMap({
     const updateScript = `window.__SQ_UPDATE_MAP?.(${escapeHtmlData(webViewPayload)});true;`;
     webViewRef.current?.injectJavaScript(updateScript);
   }, [isMapLoaded, webViewPayload]);
+
+  useEffect(() => {
+    if (!isMapLoaded || centerPlayerSignal <= 0) {
+      return;
+    }
+
+    webViewRef.current?.injectJavaScript("window.__SQ_CENTER_PLAYER?.();true;");
+  }, [centerPlayerSignal, isMapLoaded]);
 
   function handleWebViewMessage(event: WebViewMessageEvent) {
     const message = event.nativeEvent.data?.trim();

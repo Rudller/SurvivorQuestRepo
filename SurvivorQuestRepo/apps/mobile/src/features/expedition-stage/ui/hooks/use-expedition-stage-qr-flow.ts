@@ -142,13 +142,7 @@ export function useExpeditionStageQrFlow({
 
         const scannedStationId = result.station.id;
         setSelectedStationId(scannedStationId);
-        if (isInteractiveQuizStationType(result.station.type)) {
-          openStationByType(scannedStationId, result.station.type);
-        } else if (result.station.type === "time") {
-          openStationByType(scannedStationId, "time");
-        } else {
-          openStationByType(scannedStationId, result.station.type);
-        }
+        openStationByType(scannedStationId, result.station.type);
         setIsQrScannerOpen(false);
         setActionMessage(interpolate(text.scannedStation, { name: result.station.name }));
       } catch (error) {

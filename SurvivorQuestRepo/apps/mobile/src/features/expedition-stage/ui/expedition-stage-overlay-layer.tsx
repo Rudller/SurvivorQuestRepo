@@ -28,12 +28,14 @@ type ExpeditionStageOverlayLayerProps = {
   adaptiveLayout: AdaptiveLayoutLike;
   isLightTheme: boolean;
   text: ExpeditionStageOverlayText;
+  onExitRealization: () => void;
 };
 
 export function ExpeditionStageOverlayLayer({
   adaptiveLayout,
   isLightTheme,
   text,
+  onExitRealization,
 }: ExpeditionStageOverlayLayerProps) {
   const { session, sessionState, isSessionEnded, sessionEndReason, sessionEndedAt } = useExpeditionStageSessionContext();
   const { stationTestEntries, overlayFlow, qrFlow } = useExpeditionStageOverlayContext();
@@ -52,6 +54,7 @@ export function ExpeditionStageOverlayLayer({
         }}
         onPreviewSuccessPopup={() => overlayFlow.handlePreviewOutcomePopup("success")}
         onPreviewFailedPopup={() => overlayFlow.handlePreviewOutcomePopup("failed")}
+        onExitRealization={onExitRealization}
         onOpenWelcomeScreen={() => {
           overlayFlow.setIsStationTestMenuOpen(false);
           overlayFlow.setIsWelcomePreviewOpen(true);
@@ -82,6 +85,7 @@ export function ExpeditionStageOverlayLayer({
         onCompleteTask={overlayFlow.handleCompleteStationTestTask}
         onQuizFailed={overlayFlow.handleQuizFailed}
         onTimeExpired={overlayFlow.handleTimeStationExpired}
+        timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
         debugOutcomePreview={overlayFlow.debugOutcomePreview}
         onDebugOutcomePreviewConsumed={() => overlayFlow.setDebugOutcomePreview(null)}
       />
@@ -90,20 +94,30 @@ export function ExpeditionStageOverlayLayer({
         visible={Boolean(overlayFlow.pendingQuizStartStation)}
         stationName={overlayFlow.pendingQuizStartStation?.name ?? null}
         stationType={overlayFlow.pendingQuizStartStation?.stationType ?? "quiz"}
+        timeLimitSeconds={overlayFlow.pendingQuizStartStation?.timeLimitSeconds ?? 0}
+        points={overlayFlow.pendingQuizStartStation?.points ?? 0}
+        timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
+        challengeDifficultyMode={overlayFlow.pendingQuizStartStation?.challengeDifficultyMode ?? "admin"}
+        challengeDifficulty={overlayFlow.pendingQuizStartStation?.challengeDifficulty ?? "medium"}
         isStarting={overlayFlow.isStartingPendingQuiz}
         onClose={() => {
           overlayFlow.setPendingQuizStartStationId(null);
           overlayFlow.setIsStartingPendingQuiz(false);
         }}
-        onStart={() => {
-          void overlayFlow.handleStartPendingQuiz();
+        onStart={(challengeDifficulty) => {
+          void overlayFlow.handleStartPendingQuiz(challengeDifficulty);
         }}
       />
 
       <QuizPrestartOverlay
         visible={Boolean(overlayFlow.pendingTimeStartStation)}
         stationName={overlayFlow.pendingTimeStartStation?.name ?? null}
-        stationType="time"
+        stationType={overlayFlow.pendingTimeStartStation?.stationType ?? "time"}
+        timeLimitSeconds={overlayFlow.pendingTimeStartStation?.timeLimitSeconds ?? 0}
+        points={overlayFlow.pendingTimeStartStation?.points ?? 0}
+        timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
+        challengeDifficultyMode={overlayFlow.pendingTimeStartStation?.challengeDifficultyMode ?? "admin"}
+        challengeDifficulty={overlayFlow.pendingTimeStartStation?.challengeDifficulty ?? "medium"}
         isStarting={overlayFlow.isStartingPendingTime}
         onClose={() => {
           overlayFlow.setPendingTimeStartStationId(null);

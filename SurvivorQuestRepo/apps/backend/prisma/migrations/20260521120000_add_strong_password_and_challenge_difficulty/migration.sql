@@ -1,0 +1,5 @@
+ALTER TYPE "StationType" ADD VALUE IF NOT EXISTS 'STRONG_PASSWORD';
+
+ALTER TABLE "Station"
+  ADD COLUMN IF NOT EXISTS "challengeDifficultyMode" TEXT NOT NULL DEFAULT 'admin',
+  ADD COLUMN IF NOT EXISTS "challengeDifficulty" TEXT NOT NULL DEFAULT 'medium';

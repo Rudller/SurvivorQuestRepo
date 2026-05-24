@@ -5,10 +5,10 @@ import type { UiLanguage } from "../../../../i18n";
 import type { StationTestType, StationTestViewModel } from "../types";
 import {
   HANGMAN_MAX_MISSES,
-  MASTERMIND_MAX_ATTEMPTS,
   MEMORY_MAX_MISTAKES,
   TEXT_PUZZLE_MAX_ATTEMPTS,
   WORDLE_MAX_ATTEMPTS,
+  type ChallengeDifficulty,
   type MemoryCard,
   type WordleCellState,
   blendHexColors,
@@ -23,6 +23,7 @@ import {
   resolveCaesarShift,
   resolveCorrectAnswerText,
   resolveMatchingPairs,
+  resolveMastermindConfig,
   resolveMastermindSecret,
   resolveMiniSudokuPuzzle,
   resolvePuzzleSecret,
@@ -49,7 +50,8 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "rebus" ||
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
-    stationType === "matching"
+    stationType === "matching" ||
+    stationType === "strong-password"
   );
 }
 
@@ -133,6 +135,7 @@ type UseStationPreviewModelArgs = {
   hangmanMisses: string[];
   mastermindInput: string;
   mastermindAttempts: MastermindAttempt[];
+  mastermindDifficulty: ChallengeDifficulty;
   anagramInput: string;
   anagramAttempts: number;
   caesarInput: string;
@@ -191,6 +194,7 @@ export function buildStationPreviewModel({
   hangmanMisses,
   mastermindInput,
   mastermindAttempts,
+  mastermindDifficulty,
   anagramInput,
   anagramAttempts,
   caesarInput,
@@ -241,6 +245,7 @@ export function buildStationPreviewModel({
   const isBoggleStation = station.stationType === "boggle";
   const isMiniSudokuStation = station.stationType === "mini-sudoku";
   const isMatchingStation = station.stationType === "matching";
+  const isStrongPasswordStation = station.stationType === "strong-password";
   const isQuizStation = isQuizStationType(station.stationType);
   const requiresCode = station.stationType === "time" || station.stationType === "points";
   const isNumericCodeStation = requiresCode && station.completionCodeInputMode === "numeric";
@@ -252,38 +257,63 @@ export function buildStationPreviewModel({
   const stationDescription = station.description.trim();
   const stationMediaHeight = (() => {
     if (isNumericCodeStation) {
-      return Math.max(104, Math.round(viewportHeight * 0.14));
+      return isTabletOverlay
+        ? Math.max(104, Math.round(viewportHeight * 0.14))
+        : Math.max(72, Math.round(viewportHeight * 0.1));
     }
     if (requiresCode) {
-      return Math.max(128, Math.round(viewportHeight * 0.2));
+      return isTabletOverlay
+        ? Math.max(128, Math.round(viewportHeight * 0.2))
+        : Math.max(92, Math.round(viewportHeight * 0.14));
     }
     if (isWordleStation) {
-      return Math.max(230, Math.round(viewportHeight * 0.4));
+      return isTabletOverlay
+        ? Math.max(230, Math.round(viewportHeight * 0.4))
+        : Math.max(150, Math.round(viewportHeight * 0.25));
     }
     if (isAnagramStation) {
-      return Math.max(210, Math.round(viewportHeight * 0.34));
+      return isTabletOverlay
+        ? Math.max(210, Math.round(viewportHeight * 0.34))
+        : Math.max(140, Math.round(viewportHeight * 0.22));
     }
     if (isSimonStation) {
       return isTabletOverlay
         ? Math.max(540, Math.round(viewportHeight * 0.72))
-        : Math.max(430, Math.round(viewportHeight * 0.64));
+        : Math.max(280, Math.round(viewportHeight * 0.44));
     }
     if (isMemoryStation) {
-      return Math.max(560, Math.round(viewportHeight * 0.8));
+      return isTabletOverlay
+        ? Math.max(560, Math.round(viewportHeight * 0.8))
+        : Math.max(330, Math.round(viewportHeight * 0.52));
     }
     if (isMiniSudokuStation) {
-      return Math.max(560, Math.round(viewportHeight * 0.74));
+      return isTabletOverlay
+        ? Math.max(560, Math.round(viewportHeight * 0.74))
+        : Math.max(330, Math.round(viewportHeight * 0.5));
     }
     if (isMastermindStation) {
-      return Math.max(340, Math.round(viewportHeight * 0.56));
+      return isTabletOverlay
+        ? Math.max(340, Math.round(viewportHeight * 0.56))
+        : Math.max(230, Math.round(viewportHeight * 0.36));
     }
     if (isMatchingStation) {
-      return Math.max(430, Math.round(viewportHeight * 0.7));
+      return isTabletOverlay
+        ? Math.max(430, Math.round(viewportHeight * 0.7))
+        : Math.max(280, Math.round(viewportHeight * 0.44));
     }
     if (isBoggleStation) {
-      return Math.max(400, Math.round(viewportHeight * 0.64));
+      return isTabletOverlay
+        ? Math.max(400, Math.round(viewportHeight * 0.64))
+        : Math.max(260, Math.round(viewportHeight * 0.4));
     }
-    return Math.max(190, Math.round(viewportHeight * 0.33));
+    if (isStrongPasswordStation) {
+      return isTabletOverlay
+        ? Math.max(280, Math.round(viewportHeight * 0.42))
+        : Math.max(180, Math.round(viewportHeight * 0.28));
+    }
+    return isTabletOverlay
+      ? Math.max(190, Math.round(viewportHeight * 0.33))
+      : Math.max(128, Math.round(viewportHeight * 0.22));
   })();
   const hasTimerStarted = Boolean(station.startedAt);
   const hasQuizAnswer = selectedQuizOption !== null;
@@ -354,10 +384,15 @@ export function buildStationPreviewModel({
     : false;
   const hangmanAttemptsLeft = Math.max(0, HANGMAN_MAX_MISSES - hangmanMisses.length);
   const puzzleSourceAnswer = resolveCorrectAnswerText(station);
-  const mastermindSecret = isMastermindStation ? resolveMastermindSecret(station) : "";
-  const normalizedMastermindInput = sanitizeMastermindInput(mastermindInput);
-  const mastermindSolved = mastermindAttempts.some((attempt) => attempt.exact === mastermindSecret.length);
-  const mastermindAttemptsLeft = Math.max(0, MASTERMIND_MAX_ATTEMPTS - mastermindAttempts.length);
+  const mastermindConfig = resolveMastermindConfig(mastermindDifficulty);
+  const mastermindSecret = isMastermindStation ? resolveMastermindSecret(station, mastermindDifficulty) : "";
+  const normalizedMastermindInput = sanitizeMastermindInput(
+    mastermindInput,
+    mastermindConfig.symbols,
+    mastermindConfig.codeLength,
+  );
+  const mastermindSolved = mastermindAttempts.some((attempt) => attempt.exact === mastermindConfig.codeLength);
+  const mastermindAttemptsLeft = Math.max(0, mastermindConfig.maxAttempts - mastermindAttempts.length);
   const anagramTarget = isAnagramStation ? normalizePuzzleWord(puzzleSourceAnswer || station.name) : "";
   const anagramHintSource = isAnagramStation
     ? normalizePuzzleText(puzzleSourceAnswer || station.name || "")
@@ -487,7 +522,7 @@ export function buildStationPreviewModel({
     isTimeExpired ||
     !hasAudioSource;
   const isAudioStopDisabled =
-    isAudioOverlayControlDisabled || !hasAudioPlaybackStarted || !isAudioPlaying;
+    isAudioOverlayControlDisabled || !hasAudioPlaybackStarted;
   const isCodeActionDisabled =
     station.status === "done" ||
     station.status === "failed" ||
@@ -543,6 +578,7 @@ export function buildStationPreviewModel({
     hangmanAttemptsLeft,
     puzzleSourceAnswer,
     mastermindSecret,
+    mastermindConfig,
     normalizedMastermindInput,
     mastermindSolved,
     mastermindAttemptsLeft,
@@ -600,9 +636,10 @@ export function buildStationPreviewModel({
   };
 }
 
-function sanitizeMastermindInput(value: string) {
+function sanitizeMastermindInput(value: string, allowedSymbols: readonly string[], codeLength: number) {
+  const allowedPattern = new RegExp(`[^${allowedSymbols.join("")}]`, "g");
   return value
     .toUpperCase()
-    .replace(/[^A-F]/g, "")
-    .slice(0, 4);
+    .replace(allowedPattern, "")
+    .slice(0, codeLength);
 }

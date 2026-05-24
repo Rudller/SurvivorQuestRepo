@@ -26,6 +26,8 @@ export type MatchingPair = {
   right: string;
 };
 
+export type ChallengeDifficulty = "easy" | "medium" | "hard";
+
 type StationPuzzleViewModel = {
   stationId: string;
   name: string;
@@ -37,6 +39,31 @@ type StationPuzzleViewModel = {
 export const WORDLE_MAX_ATTEMPTS = 6;
 export const HANGMAN_MAX_MISSES = 7;
 export const MASTERMIND_MAX_ATTEMPTS = 8;
+export const MASTERMIND_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, {
+  codeLength: number;
+  maxAttempts: number;
+  symbols: readonly string[];
+  allowDuplicates: boolean;
+}> = {
+  easy: {
+    codeLength: 4,
+    maxAttempts: 10,
+    symbols: ["A", "B", "C", "D"],
+    allowDuplicates: false,
+  },
+  medium: {
+    codeLength: 4,
+    maxAttempts: 8,
+    symbols: ["A", "B", "C", "D", "E", "F"],
+    allowDuplicates: true,
+  },
+  hard: {
+    codeLength: 5,
+    maxAttempts: 6,
+    symbols: ["A", "B", "C", "D", "E", "F"],
+    allowDuplicates: true,
+  },
+};
 export const TEXT_PUZZLE_MAX_ATTEMPTS = 3;
 export const MEMORY_MAX_MISTAKES = 7;
 export const NUMERIC_PINPAD_LAYOUT = [
@@ -317,17 +344,31 @@ export function buildMastermindFeedback(guess: string, secret: string) {
   return { exact, misplaced };
 }
 
-export function resolveMastermindSecret(station: StationPuzzleViewModel) {
+export function resolveMastermindConfig(difficulty: ChallengeDifficulty = "medium") {
+  return MASTERMIND_DIFFICULTY_CONFIG[difficulty] ?? MASTERMIND_DIFFICULTY_CONFIG.medium;
+}
+
+export function resolveMastermindSecret(station: StationPuzzleViewModel, difficulty: ChallengeDifficulty = "medium") {
+  const config = resolveMastermindConfig(difficulty);
   const source = resolveCorrectAnswerText(station) || station.name;
   const normalized = source.toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!normalized) {
-    return "ABCD";
+    return config.symbols.slice(0, config.codeLength).join("");
   }
 
-  return Array.from({ length: 4 }, (_, index) => {
+  const selectedSymbols: string[] = [];
+  return Array.from({ length: config.codeLength }, (_, index) => {
     const character = normalized[index % normalized.length];
     const charCode = character.charCodeAt(0);
-    return MASTERMIND_SYMBOLS[charCode % MASTERMIND_SYMBOLS.length];
+    if (config.allowDuplicates) {
+      return config.symbols[charCode % config.symbols.length] ?? config.symbols[0] ?? "A";
+    }
+
+    const availableSymbols = config.symbols.filter((symbol) => !selectedSymbols.includes(symbol));
+    const fallbackSymbols = availableSymbols.length > 0 ? availableSymbols : config.symbols;
+    const symbol = fallbackSymbols[charCode % fallbackSymbols.length] ?? config.symbols[0] ?? "A";
+    selectedSymbols.push(symbol);
+    return symbol;
   }).join("");
 }
 
@@ -423,6 +464,70 @@ export function resolveBoggleTarget(station: StationPuzzleViewModel) {
   return "TEAM";
 }
 
+function resolveBoggleNeighbors(cellIndex: number) {
+  const side = Math.sqrt(BOGGLE_BOARD_SIZE);
+  const row = Math.floor(cellIndex / side);
+  const col = cellIndex % side;
+  const neighbors: number[] = [];
+
+  for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
+    for (let colOffset = -1; colOffset <= 1; colOffset += 1) {
+      if (rowOffset === 0 && colOffset === 0) {
+        continue;
+      }
+
+      const nextRow = row + rowOffset;
+      const nextCol = col + colOffset;
+      if (nextRow < 0 || nextCol < 0 || nextRow >= side || nextCol >= side) {
+        continue;
+      }
+
+      neighbors.push(nextRow * side + nextCol);
+    }
+  }
+
+  return neighbors;
+}
+
+function resolveBogglePlacementPath(station: StationPuzzleViewModel, targetWord: string) {
+  const fallbackPath = [0, 1, 2, 5, 8, 7, 6, 3, 4];
+  const pathLength = Math.max(1, Math.min(Array.from(targetWord).length, BOGGLE_BOARD_SIZE));
+  const seedBase = `${station.stationId}-${targetWord}-boggle-path`;
+
+  for (let attempt = 0; attempt < BOGGLE_BOARD_SIZE * 3; attempt += 1) {
+    const starts = shuffleDeterministic(
+      Array.from({ length: BOGGLE_BOARD_SIZE }, (_, index) => index),
+      `${seedBase}-start-${attempt}`,
+    );
+
+    for (const start of starts) {
+      const path = [start];
+      const visited = new Set(path);
+
+      while (path.length < pathLength) {
+        const current = path[path.length - 1] ?? start;
+        const next = shuffleDeterministic(
+          resolveBoggleNeighbors(current).filter((index) => !visited.has(index)),
+          `${seedBase}-next-${attempt}-${path.length}-${current}`,
+        )[0];
+
+        if (next === undefined) {
+          break;
+        }
+
+        path.push(next);
+        visited.add(next);
+      }
+
+      if (path.length === pathLength) {
+        return path;
+      }
+    }
+  }
+
+  return fallbackPath.slice(0, pathLength);
+}
+
 export function resolveBoggleBoard(
   station: StationPuzzleViewModel,
   targetWord: string,
@@ -433,7 +538,7 @@ export function resolveBoggleBoard(
       BOGGLE_FILLER_LETTERS.length;
     return BOGGLE_FILLER_LETTERS[nextIndex] ?? "A";
   });
-  const placementPath = [0, 1, 2, 5, 8, 7, 6, 3, 4];
+  const placementPath = resolveBogglePlacementPath(station, targetWord);
   Array.from(targetWord)
     .slice(0, placementPath.length)
     .forEach((letter, index) => {

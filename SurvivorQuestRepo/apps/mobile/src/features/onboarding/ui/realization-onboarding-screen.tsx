@@ -51,6 +51,7 @@ type MobileBootstrapRealization = {
   showLeaderboard?: boolean;
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
+  timedStationPointsDecayEnabled?: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -150,6 +151,7 @@ type MobileSessionStateResponse = {
 };
 
 const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
+const API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY = "sq.mobile.api-base-url-last-successful.v1";
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
 const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.2:3001";
@@ -1129,6 +1131,36 @@ function isTeamColor(value: string | null): value is TeamColor {
   return TEAM_COLORS.some((color) => color.key === value);
 }
 
+const DEFAULT_TEAM_COLOR: TeamColor = "amber";
+const DEFAULT_TEAM_ICON = "🦊";
+const DEFAULT_TEAM_COLOR_INDEX = Math.max(
+  TEAM_COLORS.findIndex((color) => color.key === DEFAULT_TEAM_COLOR),
+  0,
+);
+const DEFAULT_TEAM_ICON_INDEX = Math.max(
+  TEAM_ICONS.indexOf(DEFAULT_TEAM_ICON),
+  0,
+);
+
+function getDefaultTeamCustomization(slotNumber: number | null | undefined) {
+  const slotOffset = Math.max((slotNumber ?? 1) - 1, 0);
+  return {
+    color: TEAM_COLORS[(DEFAULT_TEAM_COLOR_INDEX + slotOffset) % TEAM_COLORS.length].key,
+    icon: TEAM_ICONS[(DEFAULT_TEAM_ICON_INDEX + slotOffset) % TEAM_ICONS.length],
+  };
+}
+
+function hasCompleteTeamCustomization<T extends { name: string | null; color: string | null; badgeKey: string | null }>(
+  team: T,
+): team is T & { name: string; color: TeamColor; badgeKey: string } {
+  return Boolean(
+    team.name?.trim() &&
+      isTeamColor(team.color) &&
+      typeof team.badgeKey === "string" &&
+      TEAM_ICONS.includes(team.badgeKey),
+  );
+}
+
 function normalizeOccupancyMap(
   value: Record<string, number> | undefined,
 ): Record<string, number> {
@@ -1176,6 +1208,7 @@ export function RealizationOnboardingScreen({
   const teamPickerListMaxHeight = adaptiveLayout.s(isTabletLayout ? 420 : 316, 280, 500);
 
   const [screen, setScreen] = useState<Screen>("api");
+  const shouldCenterOnboardingContent = isTabletLayout || screen !== "customization";
   const [setupState, setSetupState] = useState<SetupState>("idle");
   const [setupMessage, setSetupMessage] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -1188,6 +1221,7 @@ export function RealizationOnboardingScreen({
 
   const [realizationCode, setRealizationCode] = useState("");
   const [apiBaseUrlOverride, setApiBaseUrlOverride] = useState<string | null>(null);
+  const [lastSuccessfulApiBaseUrl, setLastSuccessfulApiBaseUrl] = useState<string | null>(null);
   const [apiServerPreset, setApiServerPreset] = useState<ApiServerPreset>("local");
   const [apiBaseUrlDraft, setApiBaseUrlDraft] = useState("");
   const [isApiBaseUrlFocused, setIsApiBaseUrlFocused] = useState(false);
@@ -1214,8 +1248,8 @@ export function RealizationOnboardingScreen({
 
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("");
-  const [teamColor, setTeamColor] = useState<TeamColor>("amber");
-  const [teamIcon, setTeamIcon] = useState("🦊");
+  const [teamColor, setTeamColor] = useState<TeamColor>(DEFAULT_TEAM_COLOR);
+  const [teamIcon, setTeamIcon] = useState(DEFAULT_TEAM_ICON);
   const [customizationBlockMessage, setCustomizationBlockMessage] =
     useState<string | null>(null);
   const [customizationOccupancy, setCustomizationOccupancy] = useState(() =>
@@ -1272,6 +1306,16 @@ export function RealizationOnboardingScreen({
     setApiConfigMessageTone(tone);
   }, []);
 
+  const rememberSuccessfulApiBaseUrl = useCallback(async (baseUrl: string) => {
+    const normalized = normalizeApiBaseUrl(baseUrl);
+    if (!normalized) {
+      return;
+    }
+
+    setLastSuccessfulApiBaseUrl(normalized);
+    await AsyncStorage.setItem(API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY, normalized);
+  }, []);
+
   useEffect(() => {
     if (!hasMultipleLanguageOptions && isLanguagePickerOpen) {
       setIsLanguagePickerOpen(false);
@@ -1322,16 +1366,22 @@ export function RealizationOnboardingScreen({
 
     const hydrateApiBaseUrlConfig = async () => {
       try {
-        const storedOverride = await AsyncStorage.getItem(API_BASE_URL_OVERRIDE_STORAGE_KEY);
+        const [storedOverride, storedLastSuccessfulBaseUrl] = await Promise.all([
+          AsyncStorage.getItem(API_BASE_URL_OVERRIDE_STORAGE_KEY),
+          AsyncStorage.getItem(API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY),
+        ]);
         if (!isActive) {
           return;
         }
 
         const normalizedOverride = normalizeApiBaseUrl(storedOverride);
+        const normalizedLastSuccessfulBaseUrl = normalizeApiBaseUrl(storedLastSuccessfulBaseUrl);
+        const preferredBaseUrl = normalizedOverride ?? normalizedLastSuccessfulBaseUrl;
         setApiBaseUrlOverride(normalizedOverride);
-        setApiServerPreset(resolveApiServerPreset(normalizedOverride));
-        const initialCandidates = resolveApiBaseUrlCandidates(normalizedOverride);
-        setApiBaseUrlDraft(normalizedOverride ?? initialCandidates[0] ?? "");
+        setLastSuccessfulApiBaseUrl(normalizedLastSuccessfulBaseUrl);
+        setApiServerPreset(resolveApiServerPreset(preferredBaseUrl));
+        const initialCandidates = resolveApiBaseUrlCandidates(preferredBaseUrl);
+        setApiBaseUrlDraft(preferredBaseUrl ?? initialCandidates[0] ?? "");
       } catch {
         if (!isActive) {
           return;
@@ -1421,7 +1471,7 @@ export function RealizationOnboardingScreen({
       return;
     }
 
-    const baseUrlCandidates = resolveApiBaseUrlCandidates(apiBaseUrlOverride);
+    const baseUrlCandidates = resolveApiBaseUrlCandidates(apiBaseUrlOverride ?? lastSuccessfulApiBaseUrl);
 
     if (baseUrlCandidates.length === 0) {
       setApiConnectionStatus("config-missing");
@@ -1450,6 +1500,7 @@ export function RealizationOnboardingScreen({
             setApiConnectionStatus("connected");
             setApiBaseUrlDraft(candidate);
             setApiConfigFeedback(null, null);
+            void rememberSuccessfulApiBaseUrl(candidate);
           }
           return;
         } catch (error) {
@@ -1471,7 +1522,7 @@ export function RealizationOnboardingScreen({
     return () => {
       isCancelled = true;
     };
-  }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig, setApiConfigFeedback, text]);
+  }, [apiBaseUrlOverride, apiProbeNonce, isHydratingApiConfig, lastSuccessfulApiBaseUrl, rememberSuccessfulApiBaseUrl, setApiConfigFeedback, text]);
 
   useEffect(() => {
     if (screen !== "customization" || !apiBaseUrl || !sessionToken) {
@@ -1506,57 +1557,78 @@ export function RealizationOnboardingScreen({
     };
   }, [apiBaseUrl, refreshCustomizationState, screen, sessionToken]);
 
-  function completeOnboarding(nextSessionToken: string, nextTeamName: string) {
-    const normalizedStatus = normalizeRealizationStatus(activeRealization?.status);
-    const awaitingAdminStart = normalizedStatus === "planned" && Boolean(apiBaseUrl);
+  function completeOnboarding(
+    nextSessionToken: string,
+    nextTeamName: string,
+    options?: {
+      apiBaseUrl?: string | null;
+      realization?: MobileBootstrapRealization | null;
+      realizationCode?: string;
+      selectedLanguage?: RealizationLanguage;
+      slotNumber?: number | null;
+      color?: TeamColor;
+      icon?: string;
+    },
+  ) {
+    const effectiveApiBaseUrl = options && "apiBaseUrl" in options ? options.apiBaseUrl ?? null : apiBaseUrl;
+    const effectiveRealization = options && "realization" in options ? options.realization : activeRealization;
+    const effectiveRealizationCode = options?.realizationCode ?? realizationCode;
+    const effectiveTeamColor = options?.color ?? teamColor;
+    const effectiveTeamIcon = options?.icon ?? teamIcon;
+    const effectiveSelectedColor = teamColors.find((color) => color.key === effectiveTeamColor) ?? selectedColor;
+    const normalizedStatus = normalizeRealizationStatus(effectiveRealization?.status);
+    const awaitingAdminStart = normalizedStatus === "planned" && Boolean(effectiveApiBaseUrl);
     const effectiveSelectedLanguage =
+      options?.selectedLanguage ??
       selectedLanguage ??
-      activeRealization?.selectedLanguage ??
-      activeRealization?.language ??
+      effectiveRealization?.selectedLanguage ??
+      effectiveRealization?.language ??
       "polish";
 
     onComplete?.({
-      realizationId: activeRealization?.id ?? null,
-      realizationCode,
+      realizationId: effectiveRealization?.id ?? null,
+      realizationCode: effectiveRealizationCode,
       sessionToken: nextSessionToken,
-      apiBaseUrl,
+      apiBaseUrl: effectiveApiBaseUrl,
       selectedLanguage: effectiveSelectedLanguage,
-      realization: activeRealization
+      realization: effectiveRealization
         ? {
-            id: activeRealization.id,
-            companyName: activeRealization.companyName,
-            language: activeRealization.language,
-            customLanguage: activeRealization.customLanguage?.trim() || undefined,
+            id: effectiveRealization.id,
+            companyName: effectiveRealization.companyName,
+            language: effectiveRealization.language,
+            customLanguage: effectiveRealization.customLanguage?.trim() || undefined,
             selectedLanguage: effectiveSelectedLanguage,
-            availableLanguages: activeRealization.availableLanguages ?? [],
+            availableLanguages: effectiveRealization.availableLanguages ?? [],
             status: normalizedStatus,
-            scheduledAt: activeRealization.scheduledAt,
-            durationMinutes: normalizeDurationMinutes(activeRealization.durationMinutes),
-            joinCode: realizationCode,
-            teamCount: activeRealization.teamCount,
-            stationIds: activeRealization.stationIds,
-            locationRequired: activeRealization.locationRequired,
-            showLeaderboard: activeRealization.showLeaderboard !== false,
+            scheduledAt: effectiveRealization.scheduledAt,
+            durationMinutes: normalizeDurationMinutes(effectiveRealization.durationMinutes),
+            joinCode: effectiveRealizationCode,
+            teamCount: effectiveRealization.teamCount,
+            stationIds: effectiveRealization.stationIds,
+            locationRequired: effectiveRealization.locationRequired,
+            showLeaderboard: effectiveRealization.showLeaderboard !== false,
             showLeaderboardDuringGame:
-              activeRealization.showLeaderboardDuringGame ??
-              activeRealization.showLeaderboard !== false,
+              effectiveRealization.showLeaderboardDuringGame ??
+              effectiveRealization.showLeaderboard !== false,
             showLeaderboardOnFinish:
-              activeRealization.showLeaderboardOnFinish ??
-              activeRealization.showLeaderboard !== false,
-            introText: activeRealization.introText?.trim() || undefined,
-            gameRules: activeRealization.gameRules?.trim() || undefined,
+              effectiveRealization.showLeaderboardOnFinish ??
+              effectiveRealization.showLeaderboard !== false,
+            timedStationPointsDecayEnabled:
+              effectiveRealization.timedStationPointsDecayEnabled ?? false,
+            introText: effectiveRealization.introText?.trim() || undefined,
+            gameRules: effectiveRealization.gameRules?.trim() || undefined,
           }
         : null,
       awaitingAdminStart,
       showGameRulesAfterStart:
-        !awaitingAdminStart && Boolean(activeRealization?.gameRules?.trim()),
+        !awaitingAdminStart && Boolean(effectiveRealization?.gameRules?.trim()),
       team: {
-        slotNumber: selectedTeam,
+        slotNumber: options?.slotNumber ?? selectedTeam,
         name: nextTeamName,
-        colorKey: teamColor,
-        colorLabel: selectedColor.label,
-        colorHex: selectedColor.hex,
-        icon: teamIcon,
+        colorKey: effectiveTeamColor,
+        colorLabel: effectiveSelectedColor.label,
+        colorHex: effectiveSelectedColor.hex,
+        icon: effectiveTeamIcon,
       },
     });
   }
@@ -1652,9 +1724,9 @@ export function RealizationOnboardingScreen({
     const baseUrlCandidates = normalizedPreferredApiBaseUrl
       ? mergeBaseUrlCandidates(
           [normalizedPreferredApiBaseUrl],
-          resolveApiBaseUrlCandidates(apiBaseUrlOverride),
+          resolveApiBaseUrlCandidates(apiBaseUrlOverride ?? lastSuccessfulApiBaseUrl),
         )
-      : resolveApiBaseUrlCandidates(apiBaseUrlOverride);
+      : resolveApiBaseUrlCandidates(apiBaseUrlOverride ?? lastSuccessfulApiBaseUrl);
 
     if (baseUrlCandidates.length === 0) {
       setApiConnectionStatus("config-missing");
@@ -1689,6 +1761,7 @@ export function RealizationOnboardingScreen({
       setApiConnectionStatus("connected");
       setApiConnectionTarget(resolvedBaseUrl);
       setApiBaseUrlDraft(resolvedBaseUrl);
+      void rememberSuccessfulApiBaseUrl(resolvedBaseUrl);
 
       const join = await requestMobileApi<MobileJoinResponse>(resolvedBaseUrl, "/api/mobile/session/join", {
         method: "POST",
@@ -1741,6 +1814,8 @@ export function RealizationOnboardingScreen({
         showLeaderboardOnFinish:
           realization.showLeaderboardOnFinish ??
           realization.showLeaderboard !== false,
+        timedStationPointsDecayEnabled:
+          realization.timedStationPointsDecayEnabled ?? false,
       };
 
       setApiBaseUrl(resolvedBaseUrl);
@@ -1754,16 +1829,31 @@ export function RealizationOnboardingScreen({
         normalizeCustomizationOccupancy(join.customizationOccupancy),
       );
 
+      const defaultCustomization = getDefaultTeamCustomization(join.team.slotNumber);
+
       if (isTeamColor(join.team.color)) {
         setTeamColor(join.team.color);
       } else {
-        setTeamColor("amber");
+        setTeamColor(defaultCustomization.color);
       }
 
       if (typeof join.team.badgeKey === "string" && TEAM_ICONS.includes(join.team.badgeKey)) {
         setTeamIcon(join.team.badgeKey);
       } else {
-        setTeamIcon("🦊");
+        setTeamIcon(defaultCustomization.icon);
+      }
+
+      if (hasCompleteTeamCustomization(join.team)) {
+        completeOnboarding(join.sessionToken, join.team.name.trim(), {
+          apiBaseUrl: resolvedBaseUrl,
+          realization: normalizedRealization,
+          realizationCode: normalizedCode,
+          selectedLanguage: normalizedRealization.selectedLanguage,
+          slotNumber: join.team.slotNumber,
+          color: join.team.color,
+          icon: join.team.badgeKey,
+        });
+        return;
       }
 
       setSetupState("ready");
@@ -1809,16 +1899,18 @@ export function RealizationOnboardingScreen({
         normalizeCustomizationOccupancy(result.customizationOccupancy),
       );
 
+      const defaultCustomization = getDefaultTeamCustomization(result.team.slotNumber);
+
       if (isTeamColor(result.team.color)) {
         setTeamColor(result.team.color);
       } else {
-        setTeamColor("amber");
+        setTeamColor(defaultCustomization.color);
       }
 
       if (typeof result.team.badgeKey === "string" && TEAM_ICONS.includes(result.team.badgeKey)) {
         setTeamIcon(result.team.badgeKey);
       } else {
-        setTeamIcon("🦊");
+        setTeamIcon(defaultCustomization.icon);
       }
 
       const reassignmentMessage =
@@ -2126,6 +2218,7 @@ export function RealizationOnboardingScreen({
     const fallbackCandidates = resolveLocalApiBaseUrlCandidates();
     setApiServerPreset("local");
     setApiBaseUrlOverride(null);
+    setLastSuccessfulApiBaseUrl(null);
     setApiBaseUrlDraft(fallbackCandidates[0] ?? "");
     setApiConnectionTarget(fallbackCandidates[0] ?? null);
     setApiConnectionStatus(fallbackCandidates.length > 0 ? "checking" : "config-missing");
@@ -2133,7 +2226,10 @@ export function RealizationOnboardingScreen({
     setIsApiConfigOpen(false);
 
     try {
-      await AsyncStorage.removeItem(API_BASE_URL_OVERRIDE_STORAGE_KEY);
+      await Promise.all([
+        AsyncStorage.removeItem(API_BASE_URL_OVERRIDE_STORAGE_KEY),
+        AsyncStorage.removeItem(API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY),
+      ]);
       setApiConfigFeedback(text.resetDefaultSaved, "info");
     } catch {
       setApiConfigFeedback(text.resetDefaultSessionOnly, "error");
@@ -2185,7 +2281,7 @@ export function RealizationOnboardingScreen({
         contentContainerStyle={{
           flexGrow: 1,
           alignItems: "center",
-          justifyContent: isTabletLayout ? "center" : "flex-start",
+          justifyContent: shouldCenterOnboardingContent ? "center" : "flex-start",
           paddingHorizontal: contentHorizontalPadding,
           paddingTop: contentTopPadding,
           paddingBottom: contentBottomPadding,

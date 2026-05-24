@@ -3,6 +3,7 @@ import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 type QrScannerOverlayProps = {
   visible: boolean;
@@ -20,6 +21,8 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     cameraAccessDescription: string;
     enableCamera: string;
     verifyingCode: string;
+    tabletHintTitle: string;
+    tabletHintBody: string;
   }
 > = {
   polish: {
@@ -29,6 +32,8 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     cameraAccessDescription: "Aby skanować kody QR stanowisk, włącz dostęp do kamery.",
     enableCamera: "Włącz kamerę",
     verifyingCode: "Weryfikuję kod...",
+    tabletHintTitle: "Skanowanie stanowiska",
+    tabletHintBody: "Trzymaj tablet stabilnie i ustaw kod QR w środku ramki. Po rozpoznaniu stanowisko otworzy się automatycznie.",
   },
   english: {
     title: "QR scanner",
@@ -37,6 +42,8 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     cameraAccessDescription: "Enable camera access to scan station QR codes.",
     enableCamera: "Enable camera",
     verifyingCode: "Verifying code...",
+    tabletHintTitle: "Station scanning",
+    tabletHintBody: "Hold the tablet steady and place the QR code in the center of the frame. The station opens automatically after detection.",
   },
   ukrainian: {
     title: "QR-сканер",
@@ -45,6 +52,8 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     cameraAccessDescription: "Щоб сканувати QR-коди станцій, увімкніть доступ до камери.",
     enableCamera: "Увімкнути камеру",
     verifyingCode: "Перевіряю код...",
+    tabletHintTitle: "Сканування станції",
+    tabletHintBody: "Тримайте планшет стабільно та розмістіть QR-код у центрі рамки. Після розпізнавання станція відкриється автоматично.",
   },
   russian: {
     title: "QR-сканер",
@@ -53,12 +62,16 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     cameraAccessDescription: "Чтобы сканировать QR-коды станций, включите доступ к камере.",
     enableCamera: "Включить камеру",
     verifyingCode: "Проверяю код...",
+    tabletHintTitle: "Сканирование станции",
+    tabletHintBody: "Держите планшет ровно и поместите QR-код в центр рамки. После распознавания станция откроется автоматически.",
   },
 };
 
 export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: QrScannerOverlayProps) {
+  const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = QR_SCANNER_OVERLAY_TEXT[uiLanguage];
+  const isTabletLayout = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
   const backdropColor = isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.65)";
@@ -138,153 +151,163 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
       },
     ],
   } as const;
+  const horizontalInset = adaptiveLayout.s(isTabletLayout ? 44 : 16, 14, 56);
+  const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 1040 : 520, 340, 1120);
+  const panelRadius = adaptiveLayout.s(isTabletLayout ? 34 : 24, 20, 42);
+  const panelPadding = adaptiveLayout.s(isTabletLayout ? 28 : 16, 14, 34);
+  const titleFontSize = adaptiveLayout.fs(isTabletLayout ? 34 : 22, 20, 40);
+  const subtitleFontSize = adaptiveLayout.fs(isTabletLayout ? 18 : 14, 13, 22);
+  const cameraHeight = adaptiveLayout.s(isTabletLayout ? 620 : 420, 320, 680);
+  const frameSize = adaptiveLayout.s(isTabletLayout ? 420 : 300, 240, 480);
+  const cornerSize = adaptiveLayout.s(isTabletLayout ? 52 : 34, 30, 60);
+  const cornerRadius = adaptiveLayout.s(isTabletLayout ? 18 : 10, 10, 22);
+  const cornerBorderWidth = adaptiveLayout.s(isTabletLayout ? 5 : 3, 3, 6);
+  const contentGap = adaptiveLayout.s(isTabletLayout ? 22 : 14, 12, 28);
+  const closeSize = adaptiveLayout.hit(isTabletLayout ? 54 : 42);
 
   return (
     <Animated.View
       className="absolute inset-0 z-50"
       style={[{ backgroundColor: backdropColor }, backdropStyle]}
     >
-      <Animated.View className="absolute inset-0 items-center justify-center px-4" style={panelStyle}>
+      <Animated.View className="absolute inset-0 items-center justify-center" style={[{ paddingHorizontal: horizontalInset }, panelStyle]}>
         <View
-          className="w-full max-w-xl rounded-2xl border p-4"
-          style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+          className="w-full border"
+          style={{
+            maxWidth: panelMaxWidth,
+            borderRadius: panelRadius,
+            padding: panelPadding,
+            borderColor: EXPEDITION_THEME.border,
+            backgroundColor: EXPEDITION_THEME.panel,
+          }}
         >
-          <View className="flex-row items-start justify-between gap-3">
+          <View className="flex-row items-start justify-between" style={{ columnGap: contentGap }}>
             <View className="flex-1">
               <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
                 {text.title}
               </Text>
-              <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text className="mt-1 font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: titleFontSize }}>
+                {text.tabletHintTitle}
+              </Text>
+              <Text className="mt-1" style={{ color: EXPEDITION_THEME.textMuted, fontSize: subtitleFontSize }}>
                 {text.subtitle}
               </Text>
             </View>
             <Pressable
-              className="h-9 w-9 items-center justify-center rounded-full border active:opacity-90"
+              className="items-center justify-center rounded-full border active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
               onPress={onClose}
             >
-              <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <View style={{ width: closeSize, height: closeSize, alignItems: "center", justifyContent: "center" }}>
+              <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 24 : 18, 16, 28) }}>
                 ✕
               </Text>
+              </View>
             </Pressable>
           </View>
 
           {!permission?.granted ? (
             <View
-              className="mt-4 rounded-xl border px-3 py-3"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              className="border"
+              style={{
+                marginTop: contentGap,
+                borderRadius: adaptiveLayout.s(24, 18, 30),
+                padding: adaptiveLayout.s(isTabletLayout ? 24 : 16, 14, 28),
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: EXPEDITION_THEME.panelMuted,
+              }}
             >
-              <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 24 : 16, 15, 28) }}>
                 {text.cameraAccessTitle}
               </Text>
-              <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+              <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: adaptiveLayout.fs(isTabletLayout ? 17 : 13, 12, 20) }}>
                 {text.cameraAccessDescription}
               </Text>
               <Pressable
-                className="mt-3 rounded-lg bg-amber-400 px-3 py-2 active:opacity-90"
+                className="active:opacity-90"
+                style={{
+                  marginTop: adaptiveLayout.s(18, 12, 24),
+                  borderRadius: adaptiveLayout.s(16, 12, 20),
+                  paddingVertical: adaptiveLayout.s(14, 10, 18),
+                  paddingHorizontal: adaptiveLayout.s(18, 14, 24),
+                  backgroundColor: EXPEDITION_THEME.accent,
+                }}
                 onPress={() => void requestPermission()}
               >
-                <Text className="text-center text-sm font-semibold" style={{ color: accentButtonTextColor }}>
+                <Text className="text-center font-semibold" style={{ color: accentButtonTextColor, fontSize: adaptiveLayout.fs(isTabletLayout ? 18 : 14, 13, 22) }}>
                   {text.enableCamera}
                 </Text>
               </Pressable>
             </View>
           ) : (
-            <View
-              className="mt-3 rounded-xl border bg-black"
-              style={{ height: 420, borderColor: EXPEDITION_THEME.border }}
-            >
-              <CameraView
-                style={{ flex: 1 }}
-                active={visible}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                onBarcodeScanned={
-                  canScan
-                    ? ({ data }) => {
-                        const value = typeof data === "string" ? data.trim() : "";
-                        if (!value) {
-                          return;
-                        }
+            <View style={{ marginTop: contentGap }}>
+              <View
+                className="overflow-hidden border bg-black"
+                style={{
+                  width: "100%",
+                  height: cameraHeight,
+                  borderRadius: adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 34),
+                  borderColor: EXPEDITION_THEME.border,
+                }}
+              >
+                <CameraView
+                  style={{ flex: 1 }}
+                  active={visible}
+                  facing="back"
+                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  onBarcodeScanned={
+                    canScan
+                      ? ({ data }) => {
+                          const value = typeof data === "string" ? data.trim() : "";
+                          if (!value) {
+                            return;
+                          }
 
-                        setIsScanLocked(true);
-                        onDetected(value);
-                      }
-                    : undefined
-                }
-              />
-              <View className="pointer-events-none absolute inset-0 items-center justify-center">
-                <View
-                  style={{
-                    width: 300,
-                    height: 300,
-                    position: "relative",
-                  }}
-                >
+                          setIsScanLocked(true);
+                          onDetected(value);
+                        }
+                      : undefined
+                  }
+                />
+                <View className="pointer-events-none absolute inset-0 items-center justify-center">
                   <View
                     style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: 34,
-                      height: 34,
-                      borderTopWidth: 3,
-                      borderLeftWidth: 3,
-                      borderColor: "#fbbf24",
-                      borderTopLeftRadius: 10,
+                      width: frameSize,
+                      height: frameSize,
+                      position: "relative",
                     }}
-                  />
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      right: 0,
-                      width: 34,
-                      height: 34,
-                      borderTopWidth: 3,
-                      borderRightWidth: 3,
-                      borderColor: "#fbbf24",
-                      borderTopRightRadius: 10,
-                    }}
-                  />
-                  <View
-                    style={{
-                      position: "absolute",
-                      bottom: 0,
-                      left: 0,
-                      width: 34,
-                      height: 34,
-                      borderBottomWidth: 3,
-                      borderLeftWidth: 3,
-                      borderColor: "#fbbf24",
-                      borderBottomLeftRadius: 10,
-                    }}
-                  />
-                  <View
-                    style={{
-                      position: "absolute",
-                      bottom: 0,
-                      right: 0,
-                      width: 34,
-                      height: 34,
-                      borderBottomWidth: 3,
-                      borderRightWidth: 3,
-                      borderColor: "#fbbf24",
-                      borderBottomRightRadius: 10,
-                    }}
-                  />
-                </View>
-              </View>
-              {isResolving ? (
-                <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/45">
-                  <View className="flex-row items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(0, 0, 0, 0.52)" }}>
-                    <ActivityIndicator color="#fbbf24" />
-                    <Text className="text-sm" style={{ color: cameraOverlayTextColor }}>
-                      {text.verifyingCode}
-                    </Text>
+                  >
+                    {[
+                      { top: 0, left: 0, borderTopWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderTopLeftRadius: cornerRadius },
+                      { top: 0, right: 0, borderTopWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderTopRightRadius: cornerRadius },
+                      { bottom: 0, left: 0, borderBottomWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderBottomLeftRadius: cornerRadius },
+                      { bottom: 0, right: 0, borderBottomWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderBottomRightRadius: cornerRadius },
+                    ].map((cornerStyle, index) => (
+                      <View
+                        key={index}
+                        style={{
+                          position: "absolute",
+                          width: cornerSize,
+                          height: cornerSize,
+                          borderColor: EXPEDITION_THEME.accent,
+                          ...cornerStyle,
+                        }}
+                      />
+                    ))}
                   </View>
                 </View>
-              ) : null}
+                {isResolving ? (
+                  <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/45">
+                    <View className="flex-row items-center" style={{ columnGap: 10, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "rgba(0, 0, 0, 0.52)" }}>
+                      <ActivityIndicator color={EXPEDITION_THEME.accent} />
+                      <Text style={{ color: cameraOverlayTextColor, fontSize: adaptiveLayout.fs(isTabletLayout ? 17 : 14, 13, 20) }}>
+                        {text.verifyingCode}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
             </View>
           )}
         </View>

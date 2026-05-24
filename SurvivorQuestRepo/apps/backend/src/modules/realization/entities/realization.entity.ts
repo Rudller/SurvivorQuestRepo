@@ -60,6 +60,7 @@ export type RealizationEntity = {
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -79,6 +80,8 @@ export type ScenarioStationDraftPayload = {
   completionCode?: string;
   quiz?: StationQuiz;
   translations?: StationTranslations;
+  challengeDifficultyMode?: 'admin' | 'player';
+  challengeDifficulty?: 'easy' | 'medium' | 'hard';
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -108,6 +111,7 @@ export type ValidatedRealizationPayload = {
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

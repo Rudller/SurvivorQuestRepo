@@ -12,6 +12,7 @@ import { MiniSudokuMediaSection } from "./mini-sudoku-station-panel";
 import { QuizAudioPanel } from "./quiz-audio-station-panel";
 import { RebusStationPanel } from "./rebus-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
+import { StrongPasswordStationPanel } from "./strong-password-station-panel";
 import { WordleInteractionPanel, WordleMediaBoard } from "./wordle-station-panel";
 import type { StationTestType } from "../types";
 
@@ -62,6 +63,7 @@ type BuildQuizStationRendererByTypeArgs = {
   anagramStationPanelProps: ComponentProps<typeof AnagramStationPanel>;
   caesarStationPanelProps: ComponentProps<typeof CaesarStationPanel>;
   rebusStationPanelProps: ComponentProps<typeof RebusStationPanel>;
+  strongPasswordStationPanelProps: ComponentProps<typeof StrongPasswordStationPanel>;
 };
 
 export function buildQuizStationRendererByType({
@@ -72,6 +74,7 @@ export function buildQuizStationRendererByType({
   anagramStationPanelProps,
   caesarStationPanelProps,
   rebusStationPanelProps,
+  strongPasswordStationPanelProps,
 }: BuildQuizStationRendererByTypeArgs): StationRendererByType {
   return {
     quiz: () => <QuizAudioPanel {...quizAudioPanelSharedProps} isAudioQuizStation={false} />,
@@ -82,5 +85,6 @@ export function buildQuizStationRendererByType({
     anagram: () => <AnagramStationPanel {...anagramStationPanelProps} />,
     "caesar-cipher": () => <CaesarStationPanel {...caesarStationPanelProps} />,
     rebus: () => <RebusStationPanel {...rebusStationPanelProps} />,
+    "strong-password": () => <StrongPasswordStationPanel {...strongPasswordStationPanelProps} />,
   };
 }

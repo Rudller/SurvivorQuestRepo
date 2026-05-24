@@ -3,7 +3,6 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 
 import {
   HANGMAN_MAX_MISSES,
-  MASTERMIND_MAX_ATTEMPTS,
   MEMORY_MAX_MISTAKES,
   TEXT_PUZZLE_MAX_ATTEMPTS,
   WORDLE_MAX_ATTEMPTS,
@@ -15,6 +14,8 @@ import {
   isInvalidCompletionCodeErrorMessage,
   normalizeHangmanSecret,
   normalizePuzzleWord,
+  resolveMastermindConfig,
+  type ChallengeDifficulty,
   type MemoryCard,
   type MatchingPair,
 } from "../puzzle-helpers";
@@ -25,6 +26,7 @@ type CompleteTaskHandler = (
   stationId: string,
   completionCode: string,
   startedAt?: string,
+  challengeDifficulty?: string,
 ) => Promise<string | null>;
 
 type QuizOutcomeVariant = "success" | "failed";
@@ -64,15 +66,22 @@ function releasePuzzleSubmitLock(key: string) {
   activePuzzleSubmitLocks.delete(key);
 }
 
-export function sanitizeMastermindInput(value: string) {
+export function sanitizeMastermindInput(
+  value: string,
+  allowedSymbols: readonly string[] = resolveMastermindConfig("medium").symbols,
+  codeLength = resolveMastermindConfig("medium").codeLength,
+) {
+  const allowedPattern = new RegExp(`[^${allowedSymbols.join("")}]`, "g");
   return value
     .toUpperCase()
-    .replace(/[^A-F]/g, "")
-    .slice(0, 4);
+    .replace(allowedPattern, "")
+    .slice(0, codeLength);
 }
 
 type HandleMastermindInputChangeArgs = {
   value: string;
+  mastermindSymbols: readonly string[];
+  mastermindCodeLength: number;
   setMastermindInput: StringStateSetter;
   setMastermindResult: NullableStringStateSetter;
   setQuizSubmitError: NullableStringStateSetter;
@@ -80,40 +89,84 @@ type HandleMastermindInputChangeArgs = {
 
 export function handleMastermindInputChange({
   value,
+  mastermindSymbols,
+  mastermindCodeLength,
   setMastermindInput,
   setMastermindResult,
   setQuizSubmitError,
 }: HandleMastermindInputChangeArgs) {
-  setMastermindInput(sanitizeMastermindInput(value));
+  setMastermindInput(sanitizeMastermindInput(value, mastermindSymbols, mastermindCodeLength));
   setMastermindResult(null);
   setQuizSubmitError(null);
 }
 
 type HandleMastermindAddSymbolArgs = {
   symbol: string;
+  mastermindSymbols: readonly string[];
+  mastermindCodeLength: number;
   isInteractiveLocked: boolean;
   isSubmittingMastermindGuess: boolean;
   mastermindSolved: boolean;
   mastermindAttemptsLeft: number;
   setMastermindInput: StringStateSetter;
   setMastermindResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
 };
 
 export function handleMastermindAddSymbol({
   symbol,
+  mastermindSymbols,
+  mastermindCodeLength,
   isInteractiveLocked,
   isSubmittingMastermindGuess,
   mastermindSolved,
   mastermindAttemptsLeft,
   setMastermindInput,
   setMastermindResult,
+  setQuizSubmitError,
 }: HandleMastermindAddSymbolArgs) {
   if (isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0) {
     return;
   }
+  const normalizedSymbol = symbol.toUpperCase();
+  if (!mastermindSymbols.includes(normalizedSymbol)) {
+    return;
+  }
 
-  setMastermindInput((current) => `${sanitizeMastermindInput(current)}${symbol}`.slice(0, 4));
+  setMastermindInput((current) => {
+    const normalizedCurrent = sanitizeMastermindInput(current, mastermindSymbols, mastermindCodeLength);
+    return `${normalizedCurrent}${normalizedSymbol}`.slice(0, mastermindCodeLength);
+  });
   setMastermindResult(null);
+  setQuizSubmitError(null);
+}
+
+type BackspaceMastermindInputArgs = {
+  isInteractiveLocked: boolean;
+  isSubmittingMastermindGuess: boolean;
+  mastermindSolved: boolean;
+  mastermindAttemptsLeft: number;
+  setMastermindInput: StringStateSetter;
+  setMastermindResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function backspaceMastermindInputController({
+  isInteractiveLocked,
+  isSubmittingMastermindGuess,
+  mastermindSolved,
+  mastermindAttemptsLeft,
+  setMastermindInput,
+  setMastermindResult,
+  setQuizSubmitError,
+}: BackspaceMastermindInputArgs) {
+  if (isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0) {
+    return;
+  }
+
+  setMastermindInput((current) => current.slice(0, -1));
+  setMastermindResult(null);
+  setQuizSubmitError(null);
 }
 
 type TriggerInvalidCodeFeedbackControllerArgs = {
@@ -1231,6 +1284,8 @@ type SubmitMastermindGuessControllerArgs = {
   isMastermindStation: boolean;
   normalizedMastermindInput: string;
   mastermindSecret: string;
+  mastermindDifficulty: ChallengeDifficulty;
+  mastermindMaxAttempts: number;
   isInteractiveLocked: boolean;
   isSubmittingMastermindGuess: boolean;
   mastermindSolved: boolean;
@@ -1262,6 +1317,8 @@ export async function submitMastermindGuessController({
   isMastermindStation,
   normalizedMastermindInput,
   mastermindSecret,
+  mastermindDifficulty,
+  mastermindMaxAttempts,
   isInteractiveLocked,
   isSubmittingMastermindGuess,
   mastermindSolved,
@@ -1301,7 +1358,7 @@ export async function submitMastermindGuessController({
   setQuizSubmitError(null);
 
   if (feedback.exact !== mastermindSecret.length) {
-    if (nextAttempts.length >= MASTERMIND_MAX_ATTEMPTS) {
+    if (nextAttempts.length >= mastermindMaxAttempts) {
       setMastermindResult(text.mastermindNoAttempts());
       onQuizFailed?.(stationId, "quiz_incorrect_answer");
       showQuizOutcomePopup("failed", text.mastermindFailedPopup);
@@ -1326,7 +1383,7 @@ export async function submitMastermindGuessController({
   setIsSubmittingMastermindGuess(true);
   let error: string | null;
   try {
-    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined, mastermindDifficulty);
   } finally {
     setIsSubmittingMastermindGuess(false);
     releasePuzzleSubmitLock(submitLockKey);
@@ -1452,7 +1509,7 @@ export async function handleSimonPressController({
   }
 
   if (nextInput.length < simonRoundLength) {
-    setSimonResult(text.simonProgress(nextInput.length, simonRoundLength));
+    setSimonResult(null);
     return;
   }
 
@@ -1460,7 +1517,7 @@ export async function handleSimonPressController({
     const nextRoundLength = Math.min(simonRoundLength + 1, simonSequence.length);
     setSimonInput([]);
     setSimonTargetLength(nextRoundLength);
-    setSimonResult(text.simonProgress(simonRoundLength, nextRoundLength));
+    setSimonResult(null);
     void playSimonSequence(simonSequence.slice(0, nextRoundLength));
     return;
   }

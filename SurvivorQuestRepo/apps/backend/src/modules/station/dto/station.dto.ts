@@ -26,6 +26,7 @@ const STATION_TYPES: StationType[] = [
   'boggle',
   'mini-sudoku',
   'matching',
+  'strong-password',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =
@@ -49,7 +50,8 @@ function isQuizDataStationType(type: StationType) {
     type === 'rebus' ||
     type === 'boggle' ||
     type === 'mini-sudoku' ||
-    type === 'matching'
+    type === 'matching' ||
+    type === 'strong-password'
   );
 }
 
@@ -64,7 +66,8 @@ function isWordPuzzleStationType(type: StationType) {
     type === 'boggle' ||
     type === 'memory' ||
     type === 'simon' ||
-    type === 'mini-sudoku'
+    type === 'mini-sudoku' ||
+    type === 'strong-password'
   );
 }
 
@@ -98,6 +101,8 @@ export type CreateStationDto = {
   timeLimitSeconds: number;
   completionCode?: string;
   quiz?: StationQuiz;
+  challengeDifficultyMode?: 'admin' | 'player';
+  challengeDifficulty?: 'easy' | 'medium' | 'hard';
   latitude?: number;
   longitude?: number;
 };
@@ -311,6 +316,11 @@ function ensureStationBody(payload: unknown): CreateStationDto {
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
     completionCode: ensureCompletionCode(body.completionCode, type),
     quiz: ensureStationQuiz(body.quiz, type),
+    challengeDifficultyMode: body.challengeDifficultyMode === 'player' ? 'player' : 'admin',
+    challengeDifficulty:
+      body.challengeDifficulty === 'easy' || body.challengeDifficulty === 'hard'
+        ? body.challengeDifficulty
+        : 'medium',
     latitude,
     longitude,
   };
@@ -370,6 +380,8 @@ export function toCreateStationEntity(
     categories: dto.categories ?? [],
     completionCode: dto.completionCode,
     quiz: dto.quiz,
+    challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
+    challengeDifficulty: dto.challengeDifficulty ?? 'medium',
     latitude: dto.latitude,
     longitude: dto.longitude,
     createdAt: now,
@@ -393,6 +405,8 @@ export function toUpdateStationEntity(
     categories: dto.categories ?? current.categories,
     completionCode: dto.completionCode,
     quiz: dto.quiz,
+    challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
+    challengeDifficulty: dto.challengeDifficulty ?? 'medium',
     latitude: dto.latitude,
     longitude: dto.longitude,
     updatedAt: new Date().toISOString(),
@@ -413,6 +427,8 @@ export function toStationDraftInput(
     categories: dto.categories,
     completionCode: dto.completionCode,
     quiz: dto.quiz,
+    challengeDifficultyMode: dto.challengeDifficultyMode,
+    challengeDifficulty: dto.challengeDifficulty,
     latitude: dto.latitude,
     longitude: dto.longitude,
   };

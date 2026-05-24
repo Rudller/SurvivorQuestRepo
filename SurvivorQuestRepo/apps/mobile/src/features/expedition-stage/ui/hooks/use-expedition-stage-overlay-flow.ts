@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { ExpeditionStationType, ExpeditionTask, PlayerLocation } from "../../model/types";
-import type { StationTestViewModel } from "../../components/station-overlays";
+import type { ChallengeDifficulty, StationTestViewModel } from "../../components/station-overlays";
 
 const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
 
@@ -35,7 +35,7 @@ type UseExpeditionStageOverlayFlowArgs = {
   taskByStationId: Record<string, ExpeditionTask>;
   text: OverlayFlowText;
   startStationTask: (stationId: string, startedAt?: string) => Promise<string | null>;
-  completeStationTask: (stationId: string, completionCode: string, startedAt?: string) => Promise<string | null>;
+  completeStationTask: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
   failStationTask: (stationId: string, reason?: string, startedAt?: string) => Promise<string | null>;
   setSelectedStationId: (stationId: string | null) => void;
   setActionError: Dispatch<SetStateAction<string | null>>;
@@ -79,6 +79,7 @@ export function useExpeditionStageOverlayFlow({
     startedAt: string | null;
   } | null>(null);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
+  const [localChallengeDifficultyByStationId, setLocalChallengeDifficultyByStationId] = useState<Record<string, ChallengeDifficulty>>({});
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -139,11 +140,14 @@ export function useExpeditionStageOverlayFlow({
 
     const stationId = previewStation.stationId;
     const activeTask = taskByStationId[stationId];
+    const localChallengeDifficulty = localChallengeDifficultyByStationId[stationId];
     return {
       ...previewStation,
+      challengeDifficulty: localChallengeDifficulty ?? previewStation.challengeDifficulty,
+      challengeDifficultyMode: localChallengeDifficulty ? "admin" : previewStation.challengeDifficultyMode,
       startedAt: activeTask?.startedAt ?? previewStation.startedAt ?? localStartedAtByStationId[stationId] ?? null,
     };
-  }, [activeStationSnapshot, activeStationTest, activeStationTestId, localStartedAtByStationId, taskByStationId]);
+  }, [activeStationSnapshot, activeStationTest, activeStationTestId, localChallengeDifficultyByStationId, localStartedAtByStationId, taskByStationId]);
 
   useEffect(() => {
     if (!activeStationTestId) {
@@ -240,11 +244,15 @@ export function useExpeditionStageOverlayFlow({
 
   const openStationByType = useCallback(
     (stationId: string, stationType?: ExpeditionStationType) => {
-      if (isInteractiveQuizStationType(stationType)) {
+      const selectedStation = stationTestEntries.find((item) => item.stationId === stationId) ?? null;
+      const resolvedStationType = stationType ?? selectedStation?.stationType;
+      const hasTimedLimit = Boolean(selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0);
+
+      if (isInteractiveQuizStationType(resolvedStationType)) {
         setPendingQuizStartStationId(stationId);
         setPendingTimeStartStationId(null);
         setActiveStationTestId(null);
-      } else if (stationType === "time") {
+      } else if (hasTimedLimit || resolvedStationType === "time") {
         setPendingQuizStartStationId(null);
         setPendingTimeStartStationId(stationId);
         setActiveStationTestId(null);
@@ -254,7 +262,7 @@ export function useExpeditionStageOverlayFlow({
         setActiveStationTestId(stationId);
       }
     },
-    [isInteractiveQuizStationType],
+    [isInteractiveQuizStationType, stationTestEntries],
   );
 
   const handleEnterStationTest = useCallback(
@@ -269,23 +277,10 @@ export function useExpeditionStageOverlayFlow({
       if (stationIds.includes(stationId)) {
         setSelectedStationId(stationId);
       }
-      if (isInteractiveQuizStationType(selectedStation?.stationType)) {
-        openStationByType(stationId, selectedStation?.stationType);
-      } else if (selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0) {
-        setPendingQuizStartStationId(null);
-        setPendingTimeStartStationId(stationId);
-        setActiveStationTestId(null);
-      } else if (selectedStation?.stationType === "time") {
-        setPendingQuizStartStationId(null);
-        setPendingTimeStartStationId(stationId);
-        setActiveStationTestId(null);
-      } else {
-        openStationByType(stationId, selectedStation?.stationType);
-      }
+      openStationByType(stationId, selectedStation?.stationType);
       setIsStationTestMenuOpen(false);
     },
     [
-      isInteractiveQuizStationType,
       isSessionEnded,
       openStationByType,
       setActionError,
@@ -376,7 +371,7 @@ export function useExpeditionStageOverlayFlow({
   );
 
   const handleCompleteStationTestTask = useCallback(
-    async (stationId: string, completionCode: string, startedAt?: string) => {
+    async (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => {
       setActionError(null);
       setActionMessage(null);
 
@@ -390,7 +385,7 @@ export function useExpeditionStageOverlayFlow({
         return text.taskAlreadyFailedAfterClose;
       }
 
-      const result = await completeStationTask(stationId, completionCode, startedAt);
+      const result = await completeStationTask(stationId, completionCode, startedAt, challengeDifficulty);
       if (result) {
         if (isTaskAlreadyCompletedError(result)) {
           setActionMessage(text.taskCompleted);
@@ -473,34 +468,61 @@ export function useExpeditionStageOverlayFlow({
     [ensureLocationRequirement, failStationTask, localStartedAtByStationId, setActionError, taskByStationId],
   );
 
-  const handleStartPendingQuiz = useCallback(async () => {
+  const handleStartPendingQuiz = useCallback(async (challengeDifficulty?: ChallengeDifficulty) => {
     if (!pendingQuizStartStationId) {
       return;
     }
+    const stationId = pendingQuizStartStationId;
     const startedAtIso = new Date().toISOString();
     setIsStartingPendingQuiz(true);
     setLocalStartedAtByStationId((current) => ({
       ...current,
-      [pendingQuizStartStationId]: startedAtIso,
+      [stationId]: startedAtIso,
     }));
+    if (challengeDifficulty) {
+      setLocalChallengeDifficultyByStationId((current) => ({
+        ...current,
+        [stationId]: challengeDifficulty,
+      }));
+    }
     setActionError(null);
     setActionMessage(null);
 
     const locationError = await ensureLocationRequirement();
     if (locationError) {
       setActionError(locationError);
+      setLocalStartedAtByStationId((current) => {
+        const next = { ...current };
+        delete next[stationId];
+        return next;
+      });
+      setLocalChallengeDifficultyByStationId((current) => {
+        const next = { ...current };
+        delete next[stationId];
+        return next;
+      });
       setIsStartingPendingQuiz(false);
       return;
     }
 
-    const startError = await startStationTask(pendingQuizStartStationId, startedAtIso);
+    const startError = await startStationTask(stationId, startedAtIso);
     if (startError) {
       setActionError(startError);
+      setLocalStartedAtByStationId((current) => {
+        const next = { ...current };
+        delete next[stationId];
+        return next;
+      });
+      setLocalChallengeDifficultyByStationId((current) => {
+        const next = { ...current };
+        delete next[stationId];
+        return next;
+      });
       setIsStartingPendingQuiz(false);
       return;
     }
 
-    setActiveStationTestId(pendingQuizStartStationId);
+    setActiveStationTestId(stationId);
     setPendingQuizStartStationId(null);
     setIsStartingPendingQuiz(false);
   }, [ensureLocationRequirement, pendingQuizStartStationId, setActionError, setActionMessage, startStationTask]);

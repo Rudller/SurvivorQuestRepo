@@ -64,6 +64,7 @@ export type ExpeditionSessionState = {
     showLeaderboardDuringGame: boolean;
     showLeaderboardOnFinish: boolean;
     teamStationNumberingEnabled: boolean;
+    timedStationPointsDecayEnabled: boolean;
     scheduledAt: string;
     durationMinutes: number;
     stations: ExpeditionRealizationStation[];
@@ -95,6 +96,7 @@ export type ExpeditionSessionState = {
 
 export type ExpeditionTask = {
   stationId: string;
+  stationNumber?: number;
   status: ExpeditionTaskStatus;
   pointsAwarded: number;
   startedAt: string | null;
@@ -116,7 +118,11 @@ export type ExpeditionStationType =
   | "rebus"
   | "boggle"
   | "mini-sudoku"
-  | "matching";
+  | "matching"
+  | "strong-password";
+
+export type ChallengeDifficultyMode = "admin" | "player";
+export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
 export type ExpeditionStationQuiz = {
   question: string;
@@ -135,6 +141,8 @@ export type ExpeditionRealizationStation = {
   timeLimitSeconds: number;
   completionCodeInputMode?: "numeric" | "alphanumeric";
   completionCodeLength?: number;
+  challengeDifficultyMode?: ChallengeDifficultyMode;
+  challengeDifficulty?: ChallengeDifficulty;
   quiz?: ExpeditionStationQuiz;
   latitude?: number;
   longitude?: number;
@@ -260,6 +268,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
         session.realization?.showLeaderboard ??
         true,
       teamStationNumberingEnabled: true,
+      timedStationPointsDecayEnabled: session.realization?.timedStationPointsDecayEnabled ?? false,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:
         typeof session.realization?.durationMinutes === "number" &&
@@ -290,6 +299,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
     },
     tasks: stationIds.map((stationId) => ({
       stationId,
+      stationNumber: undefined,
       status: "todo",
       pointsAwarded: 0,
       startedAt: null,

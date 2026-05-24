@@ -16,6 +16,7 @@ export const STATION_TYPES: StationType[] = [
   'boggle',
   'mini-sudoku',
   'matching',
+  'strong-password',
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;
@@ -44,7 +45,8 @@ export function isQuizDataStationType(stationType: StationType) {
     stationType === 'rebus' ||
     stationType === 'boggle' ||
     stationType === 'mini-sudoku' ||
-    stationType === 'matching'
+    stationType === 'matching' ||
+    stationType === 'strong-password'
   );
 }
 
@@ -59,7 +61,8 @@ export function isWordPuzzleStationType(stationType: StationType) {
     stationType === 'boggle' ||
     stationType === 'memory' ||
     stationType === 'simon' ||
-    stationType === 'mini-sudoku'
+    stationType === 'mini-sudoku' ||
+    stationType === 'strong-password'
   );
 }
 

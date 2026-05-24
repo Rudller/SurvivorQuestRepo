@@ -57,6 +57,7 @@ export type CreateRealizationDto = {
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
+  timedStationPointsDecayEnabled?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
 };
@@ -126,6 +127,7 @@ export function validateRealizationPayload(
   const showLeaderboardDuringGame = payload.showLeaderboardDuringGame;
   const showLeaderboardOnFinish = payload.showLeaderboardOnFinish;
   const teamStationNumberingEnabled = payload.teamStationNumberingEnabled;
+  const timedStationPointsDecayEnabled = payload.timedStationPointsDecayEnabled;
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
     : null;
@@ -176,6 +178,12 @@ export function validateRealizationPayload(
   if (
     typeof teamStationNumberingEnabled !== 'undefined' &&
     typeof teamStationNumberingEnabled !== 'boolean'
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+  if (
+    typeof timedStationPointsDecayEnabled !== 'undefined' &&
+    typeof timedStationPointsDecayEnabled !== 'boolean'
   ) {
     throw new BadRequestException('Invalid payload');
   }
@@ -233,6 +241,8 @@ export function validateRealizationPayload(
     showLeaderboardDuringGame: resolvedShowLeaderboardDuringGame,
     showLeaderboardOnFinish: resolvedShowLeaderboardOnFinish,
     teamStationNumberingEnabled: payload.teamStationNumberingEnabled ?? true,
+    timedStationPointsDecayEnabled:
+      payload.timedStationPointsDecayEnabled ?? false,
     status: payload.status,
     scheduledAt,
     changedBy: payload.changedBy?.trim() || 'admin@local',

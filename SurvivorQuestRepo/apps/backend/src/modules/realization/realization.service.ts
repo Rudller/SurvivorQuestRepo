@@ -130,6 +130,8 @@ export class RealizationService {
         showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
         showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
+        timedStationPointsDecayEnabled:
+          validated.timedStationPointsDecayEnabled,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -241,6 +243,8 @@ export class RealizationService {
         showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
         showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
+        timedStationPointsDecayEnabled:
+          validated.timedStationPointsDecayEnabled,
         status: toPrismaRealizationStatus(
           resolveRealizationStatus(
             validated.status,
@@ -375,6 +379,10 @@ export class RealizationService {
     return buildRealizationEntity({
       realization: {
         ...realization,
+        timedStationPointsDecayEnabled:
+          'timedStationPointsDecayEnabled' in realization
+            ? realization.timedStationPointsDecayEnabled
+            : false,
         scenarioTemplateId,
         scenarioTemplateName,
         joinCode: publicJoinCode,

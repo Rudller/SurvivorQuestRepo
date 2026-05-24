@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState, type ClipboardEvent } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
-import type { StationType } from "../types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
 import { useCreateStationMutation, useUploadStationAudioMutation, useUploadStationImageMutation } from "../api/station.api";
 import {
@@ -32,8 +32,12 @@ import {
   MEMORY_SYSTEM_STATION_PROMPT,
   MINI_SUDOKU_SYSTEM_STATION_PROMPT,
   MATCHING_SYSTEM_STATION_PROMPT,
+  STRONG_PASSWORD_SYSTEM_STATION_PROMPT,
   generateSimonSequence,
   normalizeSimonSequenceInput,
+  challengeDifficultyModeOptions,
+  challengeDifficultyOptions,
+  supportsChallengeDifficulty,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -131,6 +135,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [quizAnswers, setQuizAnswers] = useState<string[]>(() => createEmptyQuizAnswers());
   const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
   const [quizAudioUrl, setQuizAudioUrl] = useState("");
+  const [challengeDifficultyMode, setChallengeDifficultyMode] = useState<ChallengeDifficultyMode>("admin");
+  const [challengeDifficulty, setChallengeDifficulty] = useState<ChallengeDifficulty>("medium");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
@@ -261,6 +267,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   isQuizStationType(type) && quizConfig
                     ? { ...quizConfig, audioUrl: type === "audio-quiz" ? nextAudioUrl || undefined : undefined }
                     : undefined,
+                challengeDifficultyMode: supportsChallengeDifficulty(type) ? challengeDifficultyMode : "admin",
+                challengeDifficulty: supportsChallengeDifficulty(type) ? challengeDifficulty : "medium",
                 latitude: nextLatitude,
                 longitude: nextLongitude,
               }).unwrap();
@@ -279,6 +287,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setQuizCorrectAnswerIndex(0);
               setQuizAudioUrl("");
               setAudioFile(null);
+              setChallengeDifficultyMode("admin");
+              setChallengeDifficulty("medium");
               setLatitude(undefined);
               setLongitude(undefined);
               setCreateImageMode("upload");
@@ -337,6 +347,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 if (nextType === "matching" && !quizQuestion.trim()) {
                   setQuizQuestion(MATCHING_SYSTEM_STATION_PROMPT);
                 }
+                if (nextType === "strong-password" && !quizQuestion.trim()) {
+                  setQuizQuestion(STRONG_PASSWORD_SYSTEM_STATION_PROMPT);
+                }
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             >
@@ -347,6 +360,49 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               ))}
             </select>
           </label>
+
+          {supportsChallengeDifficulty(type) ? (
+            <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Poziom trudności</h3>
+              <div className="flex flex-wrap gap-2">
+                {challengeDifficultyModeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setChallengeDifficultyMode(option.value)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                      challengeDifficultyMode === option.value
+                        ? "border-amber-400 bg-amber-400 text-zinc-950"
+                        : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {challengeDifficultyMode === "admin" ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {challengeDifficultyOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setChallengeDifficulty(option.value)}
+                      className={`rounded-lg border p-3 text-left transition ${
+                        challengeDifficulty === option.value
+                          ? "border-amber-400 bg-amber-400/10"
+                          : "border-zinc-700 bg-zinc-950 hover:border-zinc-500"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold text-zinc-100">{option.label}</span>
+                      <span className="mt-1 block text-xs text-zinc-400">{option.description}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500">Gracz wybierze poziom przed startem. Punkty zależą od poziomu.</p>
+              )}
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Kategorie</span>
@@ -424,12 +480,12 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                       setCompletionCode(nextValue);
                       setCompletionCodeMode(resolveCompletionCodeGeneratorMode(nextValue));
                     }}
-                    placeholder={completionCodeMode === "digits" ? "Np. 20481234" : "Np. CODEWXYZ"}
+                    placeholder={completionCodeMode === "digits" ? "Np. 2048" : "Np. CODE"}
                     className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   />
                   <button
                     type="button"
-                    onClick={() => setCompletionCode(generateSampleCompletionCode(8, completionCodeMode))}
+                    onClick={() => setCompletionCode(generateSampleCompletionCode(4, completionCodeMode))}
                     className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                   >
                     Wygeneruj
