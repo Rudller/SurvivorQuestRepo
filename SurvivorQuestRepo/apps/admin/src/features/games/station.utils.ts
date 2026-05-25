@@ -13,7 +13,27 @@ export const MINI_SUDOKU_SYSTEM_STATION_PROMPT =
   "to jest placeholder, treść tego inputu nie zmieni zadania bo jest generowane po stronie mobilki a musi coś być w tym inpucie w celu walidacji :)";
 export const MATCHING_SYSTEM_STATION_PROMPT =
   "Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.";
-export const STRONG_PASSWORD_SYSTEM_STATION_PROMPT = "Ułóż mocne hasło spełniające dzienne reguły.";
+export const STRONG_PASSWORD_SYSTEM_STATION_PROMPT = "Ułóż mocne hasło spełniające reguły.";
+
+export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
+  quiz: "#f59e0b",
+  "audio-quiz": "#06b6d4",
+  time: "#3b82f6",
+  points: "#a855f7",
+  wordle: "#22c55e",
+  hangman: "#f97316",
+  mastermind: "#6366f1",
+  anagram: "#14b8a6",
+  "caesar-cipher": "#0ea5e9",
+  memory: "#8b5cf6",
+  simon: "#ec4899",
+  rebus: "#f59e0b",
+  boggle: "#10b981",
+  "mini-sudoku": "#ef4444",
+  matching: "#22c55e",
+  "strong-password": "#f43f5e",
+};
+
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
   { value: "admin", label: "Admin ustala" },
   { value: "player", label: "Gracz wybiera" },

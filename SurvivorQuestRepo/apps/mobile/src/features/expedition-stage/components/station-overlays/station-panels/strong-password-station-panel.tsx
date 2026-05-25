@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { buildStrongPasswordRules, getDifficultyPointsMultiplier, type ChallengeDifficulty } from "./strong-password-rules";
@@ -30,13 +30,19 @@ export function StrongPasswordStationPanel({
   const [password, setPassword] = useState("");
   const difficulty = selectedDifficulty ?? configuredDifficulty;
   const rules = useMemo(() => buildStrongPasswordRules(stationId, difficulty), [difficulty, stationId]);
-  const visibleRuleCount = Math.min(
+  const maxVisibleRef = useRef<{ key: string; count: number }>({ key: "", count: 0 });
+  const ruleSetKey = `${stationId}-${difficulty}`;
+  if (maxVisibleRef.current.key !== ruleSetKey) {
+    maxVisibleRef.current = { key: ruleSetKey, count: 0 };
+  }
+  const currentVisibleRuleCount = Math.min(
     rules.length,
     rules.findIndex((rule) => !rule.validate(password)) === -1
       ? rules.length
       : rules.findIndex((rule) => !rule.validate(password)) + 1,
   );
-  const visibleRules = rules.slice(0, visibleRuleCount);
+  maxVisibleRef.current.count = Math.max(maxVisibleRef.current.count, currentVisibleRuleCount);
+  const visibleRules = rules.slice(0, maxVisibleRef.current.count);
   const isSolved = rules.every((rule) => rule.validate(password));
   const multiplier = getDifficultyPointsMultiplier(difficulty);
   const awardedPoints = Math.round(basePoints * multiplier);
@@ -86,7 +92,7 @@ export function StrongPasswordStationPanel({
         Poziom: {difficulty === "easy" ? "łatwy" : difficulty === "hard" ? "trudny" : "średni"} • Punkty: {awardedPoints}
       </Text>
       <View className="mt-3 gap-2">
-        {visibleRules.map((rule) => {
+        {[...visibleRules].reverse().map((rule) => {
           const passed = rule.validate(password);
           return (
             <View key={rule.id} className="rounded-xl border px-3 py-2" style={{ borderColor: passed ? "#34d399" : EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}>

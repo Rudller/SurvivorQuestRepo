@@ -92,7 +92,7 @@ export function buildStrongPasswordRules(stationId: string, difficulty: Challeng
     { id: "special", label: "Hasło ma zawierać znak specjalny", validate: (password) => /[^\p{L}\p{N}\s]/u.test(password) },
     { id: "digit-sum", label: `Suma cyfr w haśle ma wynosić ${digitSum}`, validate: (password) => sumDigits(password) === digitSum },
     { id: "prime", label: "Hasło ma zawierać liczbę pierwszą", validate: hasPrimeNumber },
-    { id: "emoji", label: `Hasło ma zawierać emoji ${requiredEmoji}`, validate: (password) => password.includes(requiredEmoji) },
+    { id: "emoji", label: `Hasło ma zawierać emoji ${requiredEmoji}`, validate: (password) => password.replace(/️/g, "").includes(requiredEmoji.replace(/️/g, "")) },
     { id: "month", label: `Hasło ma zawierać słowo „${requiredMonth}”`, validate: (password) => password.toLowerCase().includes(requiredMonth) },
     { id: "code", label: `Hasło ma zawierać kod dnia ${requiredCode}`, validate: (password) => password.toUpperCase().includes(requiredCode) },
   ];

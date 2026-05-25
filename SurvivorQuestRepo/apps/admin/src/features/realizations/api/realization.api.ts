@@ -22,6 +22,7 @@ type StationDto = {
   completionCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
+  color?: string | null;
   quiz?:
     | {
         question?: string;
@@ -424,6 +425,7 @@ function normalizeStation(station: StationDto): Station {
             return acc;
           }, {})
         : undefined,
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
     longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
     sourceTemplateId: station.sourceTemplateId,

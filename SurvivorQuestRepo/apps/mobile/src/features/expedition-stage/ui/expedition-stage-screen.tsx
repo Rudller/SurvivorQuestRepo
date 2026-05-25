@@ -772,11 +772,12 @@ export function ExpeditionStageScreen({
   const stationMetadataMap = useMemo(
     () =>
       sessionState.realization.stations.reduce<
-        Record<string, { name: string; type: ExpeditionStationType; coordinate: MapCoordinate | null }>
+        Record<string, { name: string; type: ExpeditionStationType; color?: string; coordinate: MapCoordinate | null }>
       >((accumulator, station) => {
         accumulator[station.id] = {
           name: station.name,
           type: station.type,
+          color: station.color,
           coordinate: toStationCoordinate(station.latitude, station.longitude),
         };
         return accumulator;
@@ -922,8 +923,12 @@ export function ExpeditionStageScreen({
       mappableStationIds.map((stationId) => {
         const task = taskByStationId[stationId];
         const metadata = stationMetadataMap[stationId];
-        const visual = resolveStationVisual(metadata?.type, task?.status ?? "todo");
+        const taskStatus = task?.status ?? "todo";
+        const visual = resolveStationVisual(metadata?.type, taskStatus);
         const isFailed = task ? failedTaskIds.has(task.stationId) : false;
+        if (metadata?.color && taskStatus !== "done" && taskStatus !== "failed") {
+          visual.color = metadata.color;
+        }
 
         return {
           stationId,
@@ -933,7 +938,7 @@ export function ExpeditionStageScreen({
           ),
           stationNumber: stationNumberById.get(stationId),
           coordinate: realStationCoordinates[stationId] ?? (mapAnchor ?? DEFAULT_MAP_ANCHOR),
-          status: task?.status ?? "todo",
+          status: taskStatus,
           failed: isFailed,
           pointsAwarded: task?.pointsAwarded ?? 0,
           customization: visual,

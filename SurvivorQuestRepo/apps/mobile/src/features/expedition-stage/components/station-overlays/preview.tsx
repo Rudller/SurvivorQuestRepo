@@ -1844,6 +1844,11 @@ export function StationPreviewOverlay({
       scrambledWords: anagramScrambledWords,
       hintWordCount: anagramHintWordCount,
       hintLettersLayout: anagramHintLettersLayout,
+      anagramInput,
+      isActionDisabled: isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0,
+      onLetterPress: (letter: string) => {
+        handleAnagramInputChange(anagramInput + letter);
+      },
     },
     simonPanelProps: {
       stationId: station.stationId,
@@ -2292,7 +2297,7 @@ export function StationPreviewOverlay({
                       : text.taskDescriptionMissing}
                   </Text>
                 </View>
-              ) : !isCaesarStation && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <Text
                   className={isNumericCodeStation ? "mt-1" : "mt-2"}
                   style={{

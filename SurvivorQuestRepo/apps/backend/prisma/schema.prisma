@@ -121,6 +121,7 @@ model Station {
   translations     Json?
   challengeDifficultyMode String             @default("admin")
   challengeDifficulty String                 @default("medium")
+  color            String             @default("#f59e0b")
   latitude         Float?
   longitude        Float?
   sourceTemplateId String?

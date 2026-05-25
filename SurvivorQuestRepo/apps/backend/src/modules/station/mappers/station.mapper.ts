@@ -273,6 +273,7 @@ export function mapStation(input: {
   translations: Prisma.JsonValue | null;
   challengeDifficultyMode: string;
   challengeDifficulty: string;
+  color: string;
   latitude: number | null;
   longitude: number | null;
   sourceTemplateId: string | null;
@@ -300,6 +301,7 @@ export function mapStation(input: {
       input.challengeDifficulty === 'easy' || input.challengeDifficulty === 'hard'
         ? input.challengeDifficulty
         : 'medium',
+    color: input.color || '#f59e0b',
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
     longitude:
       typeof input.longitude === 'number' ? input.longitude : undefined,

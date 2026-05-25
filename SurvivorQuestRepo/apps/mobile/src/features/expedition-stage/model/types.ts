@@ -143,6 +143,7 @@ export type ExpeditionRealizationStation = {
   completionCodeLength?: number;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  color?: string;
   quiz?: ExpeditionStationQuiz;
   latitude?: number;
   longitude?: number;

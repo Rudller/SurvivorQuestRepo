@@ -236,6 +236,7 @@ export type RealizationStationDraft = {
   translations?: Station["translations"];
   challengeDifficultyMode?: Station["challengeDifficultyMode"];
   challengeDifficulty?: Station["challengeDifficulty"];
+  color: string;
   latitude?: number;
   longitude?: number;
   pendingAudioFile?: File | null;

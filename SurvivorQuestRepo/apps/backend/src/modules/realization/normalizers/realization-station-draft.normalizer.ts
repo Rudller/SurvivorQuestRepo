@@ -91,6 +91,7 @@ export function normalizeScenarioStationDrafts(
         translations: draft.translations,
         challengeDifficultyMode: normalizeChallengeDifficultyMode(draft.challengeDifficultyMode),
         challengeDifficulty: normalizeChallengeDifficulty(draft.challengeDifficulty),
+        color: draft.color,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,
         sourceTemplateId: draft.sourceTemplateId?.trim() || undefined,

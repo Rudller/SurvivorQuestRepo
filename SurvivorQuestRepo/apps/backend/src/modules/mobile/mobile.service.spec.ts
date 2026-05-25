@@ -857,6 +857,9 @@ describe('MobileService station payload mapper', () => {
       imageUrl: 'https://example.com/image.png',
       points: 10,
       timeLimitSeconds: 60,
+      challengeDifficultyMode: 'admin',
+      challengeDifficulty: 'medium',
+      color: '#06b6d4',
       quiz: {
         question: 'Pytanie bazowe',
         answers: ['A', 'B', 'C', 'D'],

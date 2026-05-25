@@ -103,6 +103,7 @@ export type CreateStationDto = {
   quiz?: StationQuiz;
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
+  color?: string;
   latitude?: number;
   longitude?: number;
 };
@@ -321,6 +322,9 @@ function ensureStationBody(payload: unknown): CreateStationDto {
       body.challengeDifficulty === 'easy' || body.challengeDifficulty === 'hard'
         ? body.challengeDifficulty
         : 'medium',
+    color: /^#[0-9a-fA-F]{6}$/.test(String(body.color ?? ''))
+      ? String(body.color)
+      : undefined,
     latitude,
     longitude,
   };
@@ -382,6 +386,7 @@ export function toCreateStationEntity(
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
+    color: dto.color ?? '#f59e0b',
     latitude: dto.latitude,
     longitude: dto.longitude,
     createdAt: now,
@@ -407,6 +412,7 @@ export function toUpdateStationEntity(
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
+    color: dto.color ?? current.color,
     latitude: dto.latitude,
     longitude: dto.longitude,
     updatedAt: new Date().toISOString(),

@@ -146,6 +146,9 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
   if (station.stationType === "mini-sudoku") {
     return station.quizQuestion?.trim() || text.miniSudokuFallback;
   }
+  if (station.stationType === "strong-password") {
+    return (station.quizQuestion?.trim() || text.matchingFallback).replace(/\s*dzienne\s*/i, " ").trim();
+  }
   return station.quizQuestion?.trim() || text.matchingFallback;
 }
 

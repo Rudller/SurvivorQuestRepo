@@ -163,6 +163,7 @@ export function normalizeStationDraft(
       typeof input.longitude === 'number' && Number.isFinite(input.longitude)
         ? input.longitude
         : undefined,
+    color: /^#[0-9a-fA-F]{6}$/.test(input.color ?? '') ? input.color! : '#f59e0b',
     sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
   };
 }

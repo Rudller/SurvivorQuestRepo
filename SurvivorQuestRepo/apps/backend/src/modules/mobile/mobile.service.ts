@@ -2593,6 +2593,7 @@ export class MobileService {
               ...(quizAudioUrl ? { audioUrl: quizAudioUrl } : {}),
             }
           : undefined,
+      color: station.color,
       latitude: station.latitude,
       longitude: station.longitude,
     };

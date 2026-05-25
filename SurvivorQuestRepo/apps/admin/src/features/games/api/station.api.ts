@@ -15,6 +15,7 @@ type StationDto = {
   completionCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
+  color?: string | null;
   quiz?:
     | {
         question?: string;
@@ -143,6 +144,7 @@ function normalizeStation(station: StationDto): Station {
       station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
         ? normalizeStationQuiz({

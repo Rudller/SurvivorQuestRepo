@@ -58,6 +58,7 @@ export type StationEntity = {
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
+  color: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;
@@ -82,6 +83,7 @@ export type StationDraftInput = {
   translations?: StationTranslations;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  color?: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

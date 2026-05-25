@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
 import { useUploadStationImageMutation } from "@/features/games/api/station.api";
 import { filterStationCatalogItems, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
@@ -37,6 +37,7 @@ import {
   MATCHING_SYSTEM_STATION_PROMPT,
   generateSimonSequence,
   normalizeSimonSequenceInput,
+  STATION_TYPE_DEFAULT_COLOR,
 } from "@/features/games/station.utils";
 import {
   getRealizationLanguageFlag,
@@ -122,6 +123,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     completionCode: "",
     challengeDifficultyMode: "admin",
     challengeDifficulty: "medium",
+    color: STATION_TYPE_DEFAULT_COLOR["quiz"],
     quiz: {
       question: "",
       answers: createEmptyQuizAnswers(),
@@ -234,6 +236,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     completionCode: station.completionCode ?? "",
     challengeDifficultyMode: station.challengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty,
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? station.color! : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz: station.quiz
         ? {
             question:
@@ -284,6 +287,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     challengeDifficulty: supportsChallengeDifficulty(station.type)
       ? station.challengeDifficulty ?? "medium"
       : "medium",
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color) ? station.color : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz:
       isQuizStationType(station.type) && station.quiz
         ? normalizeStationQuizForType(station.type, {
@@ -410,6 +414,10 @@ export function RealizationStationsEditor({
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
   const [stationCategoryInputs, setStationCategoryInputs] = useState<Record<string, string>>({});
+  const colorInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const colorSwatchButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const colorCommitCallbackRef = useRef<Map<string, (v: string) => void>>(new Map());
+  const colorSwatchPointerDownRef = useRef<string | null>(null);
   const [stationSearchQuery, setStationSearchQuery] = useState("");
   const [selectedStationCategories, setSelectedStationCategories] = useState<string[]>([]);
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
@@ -999,6 +1007,7 @@ export function RealizationStationsEditor({
       <div className="space-y-3">
         {filteredStationEntries.map(({ station, index: stationIndex }) => {
           const stationKey = getStationKey(stationIndex, station);
+          colorCommitCallbackRef.current.set(stationKey, (v: string) => updateStation(stationIndex, { color: v }));
           const imageMode = stationImageModes[stationKey] ?? "upload";
           const audioMode = stationAudioModes[stationKey] ?? "upload";
           const audioFile = station.pendingAudioFile ?? null;
@@ -1131,6 +1140,7 @@ export function RealizationStationsEditor({
                             challengeDifficulty: supportsChallengeDifficulty(nextType)
                               ? station.challengeDifficulty ?? "medium"
                               : "medium",
+                            color: STATION_TYPE_DEFAULT_COLOR[nextType],
                             imageUrl: isImageSupportedStationType(nextType) ? station.imageUrl : "",
                             quiz:
                               isQuizStationType(nextType)
@@ -1213,6 +1223,78 @@ export function RealizationStationsEditor({
                       ) : (
                         <p className="text-xs text-zinc-500">Brak kategorii. Dodaj tagi, aby łatwiej filtrować stanowiska.</p>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Kolor pina na mapie</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        ref={(el) => { if (el) colorSwatchButtonRefs.current.set(stationKey, el); else colorSwatchButtonRefs.current.delete(stationKey); }}
+                        type="button"
+                        title="Wybierz kolor"
+                        style={{ backgroundColor: station.color }}
+                        className="h-9 w-9 cursor-pointer rounded border border-zinc-700 flex-shrink-0"
+                        onPointerDown={() => { colorSwatchPointerDownRef.current = stationKey; }}
+                        onPointerLeave={() => { if (colorSwatchPointerDownRef.current === stationKey) colorSwatchPointerDownRef.current = null; }}
+                        onClick={() => {
+                          if (colorSwatchPointerDownRef.current !== stationKey) return;
+                          colorSwatchPointerDownRef.current = null;
+                          const colorInput = colorInputRefs.current.get(stationKey);
+                          if (colorInput) {
+                            colorInput.value = station.color;
+                            colorInput.click();
+                          }
+                        }}
+                      />
+                      <input
+                        ref={(el) => {
+                          const prev = colorInputRefs.current.get(stationKey);
+                          if (el && el !== prev) {
+                            colorInputRefs.current.set(stationKey, el);
+                            el.addEventListener("input", (e) => {
+                              const v = (e.target as HTMLInputElement).value;
+                              const btn = colorSwatchButtonRefs.current.get(stationKey);
+                              if (btn) btn.style.backgroundColor = v;
+                            });
+                            el.addEventListener("change", (e) => {
+                              const v = (e.target as HTMLInputElement).value;
+                              colorCommitCallbackRef.current.get(stationKey)?.(v);
+                            });
+                          } else if (!el) {
+                            colorInputRefs.current.delete(stationKey);
+                          }
+                        }}
+                        type="color"
+                        defaultValue={station.color}
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        className="sr-only pointer-events-none"
+                      />
+                      <input
+                        type="text"
+                        value={station.color}
+                        onChange={(event) => {
+                          const v = event.target.value;
+                          if (/^#[0-9a-fA-F]{0,6}$/.test(v)) {
+                            if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                              const colorInput = colorInputRefs.current.get(stationKey);
+                              if (colorInput) colorInput.value = v;
+                              const btn = colorSwatchButtonRefs.current.get(stationKey);
+                              if (btn) btn.style.backgroundColor = v;
+                            }
+                            updateStation(stationIndex, { color: v });
+                          }
+                        }}
+                        onBlur={(event) => {
+                          if (!/^#[0-9a-fA-F]{6}$/.test(event.target.value)) {
+                            updateStation(stationIndex, { color: STATION_TYPE_DEFAULT_COLOR[station.type] });
+                          }
+                        }}
+                        maxLength={7}
+                        placeholder="#f59e0b"
+                        className="w-24 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-sm text-zinc-100"
+                      />
                     </div>
                   </div>
 

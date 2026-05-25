@@ -82,6 +82,7 @@ export type ScenarioStationDraftPayload = {
   translations?: StationTranslations;
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
+  color?: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

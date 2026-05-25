@@ -69,6 +69,7 @@ export type Station = {
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
+  color: string;
   latitude?: number;
   longitude?: number;
   sourceTemplateId?: string;

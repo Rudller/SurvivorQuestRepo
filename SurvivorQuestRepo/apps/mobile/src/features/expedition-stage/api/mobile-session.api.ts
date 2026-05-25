@@ -392,6 +392,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         return value === "easy" || value === "hard" ? value : "medium";
       })(),
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
+      color: (() => {
+        const value = asString(station.color);
+        return /^#[0-9a-fA-F]{6}$/.test(value) ? value : undefined;
+      })(),
       latitude: (() => {
         const value = asNumber(station.latitude ?? station.lat, Number.NaN);
         return Number.isFinite(value) ? value : undefined;

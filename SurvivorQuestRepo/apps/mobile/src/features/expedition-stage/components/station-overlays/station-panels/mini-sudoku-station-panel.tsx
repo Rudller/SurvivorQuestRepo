@@ -378,18 +378,17 @@ function MiniSudokuStationPanelComponent({
                     </Text>
                   </View>
                 ) : (
-                  <Text
-                    className="text-base font-semibold text-center"
-                    style={{
-                      color: EXPEDITION_THEME.textPrimary,
-                      width: "100%",
-                      textAlign: "center",
-                      textAlignVertical: "center",
-                      fontSize: layout.isTablet ? 18 : 16,
-                    }}
-                  >
-                    {label}
-                  </Text>
+                  <View className="h-full w-full items-center justify-center">
+                    <Text
+                      className="text-base font-semibold"
+                      style={{
+                        color: EXPEDITION_THEME.textPrimary,
+                        fontSize: layout.isTablet ? 18 : 16,
+                      }}
+                    >
+                      {label}
+                    </Text>
+                  </View>
                 )}
               </Pressable>
             );
