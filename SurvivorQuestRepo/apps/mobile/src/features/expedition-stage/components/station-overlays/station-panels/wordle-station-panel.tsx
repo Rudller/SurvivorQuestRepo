@@ -278,6 +278,7 @@ export function WordleInteractionPanel({
   const submitLabelColor = resolveActionLabelColor(!hasSubmitAccent);
   const inputLetterFontSize = Math.max(9, Math.min(layout.isTablet ? 20 : 16, Math.floor(boardCellSize * 0.58)));
   const backspaceFontSize = Math.max(9, Math.min(layout.isTablet ? 18 : 14, Math.floor(boardCellSize * 0.52)));
+  const keyboardKeyHeight = layout.isTablet ? keyboardKeySize : Math.round(keyboardKeySize * 1.25);
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
   const previousInputRef = useRef<string[]>(inputCharacters);
   const inputShakeAnimation = useRef(new Animated.Value(0)).current;
@@ -408,10 +409,10 @@ export function WordleInteractionPanel({
               return (
                 <Pressable
                   key={`${stationId}-wordle-kb-${key}`}
-                  className="items-center justify-center rounded-2xl border active:opacity-85"
+                  className="items-center justify-center rounded-xl border active:opacity-85"
                   style={{
                     width: keyboardKeySize,
-                    height: keyboardKeySize,
+                    height: keyboardKeyHeight,
                     borderColor: colors.borderColor,
                     backgroundColor: colors.backgroundColor,
                     opacity: isInteractiveDisabled ? 0.45 : 1,

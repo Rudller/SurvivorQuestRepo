@@ -63,9 +63,6 @@ const SUDOKU_PINPAD_LAYOUT = [
   "7",
   "8",
   "9",
-  "spacer-left",
-  "backspace",
-  "spacer-right",
 ] as const;
 
 type MiniSudokuGridCellProps = {
@@ -224,8 +221,8 @@ function MiniSudokuStationPanelComponent({
   const cellPercent = `${100 / side}%` as `${number}%`;
   const boardLineStrong = layout.isTablet ? 3 : 2;
   const boardLineThin = 1;
-  const valueFontSize = side >= 9 ? (layout.isTablet ? 20 : 15) : layout.isTablet ? 34 : 28;
-  const boardWidthPercent = `${side >= 9 ? (layout.isTablet ? 72 : 66) : 100}%` as `${number}%`;
+  const valueFontSize = side >= 9 ? (layout.isTablet ? 20 : 17) : layout.isTablet ? 34 : 28;
+  const boardWidthPercent = `${side >= 9 ? (layout.isTablet ? 72 : 88) : 100}%` as `${number}%`;
 
   const editableIndexes = useMemo(
     () =>
@@ -297,31 +294,11 @@ function MiniSudokuStationPanelComponent({
         </View>
       </View>
 
-      <View className="mx-auto mt-3 w-full max-w-[320px] flex-row flex-wrap justify-between gap-y-2">
+      <View className="mx-auto mt-3 w-full max-w-[210px] flex-row flex-wrap justify-between" style={{ rowGap: layout.isTablet ? 8 : 2 }}>
           {SUDOKU_PINPAD_LAYOUT.map((key) => {
-            const isSpacer =
-              key === "spacer-left" || key === "spacer-right";
-
-            if (isSpacer) {
-              return (
-                <View
-                  key={`${stationId}-sudoku-pin-${key}`}
-                  style={{ width: "31%", aspectRatio: 1 }}
-                />
-              );
-            }
-
-            const isBackspaceKey = key === "backspace";
             const targetIndex = activeCellIndex ?? firstEditableIndex;
-            const hasValue =
-              targetIndex !== null && Boolean(normalizedMiniSudokuValues[targetIndex]);
-            const isDisabled =
-              !canUsePinpad ||
-              targetIndex === null ||
-              (isBackspaceKey && !hasValue);
-            const label = isBackspaceKey ? "⌫" : key;
-            const isDigitKey = /^\d$/.test(label);
-            const sublabel = isDigitKey ? NUMERIC_PINPAD_SUBLABELS[label] : "";
+            const isDisabled = !canUsePinpad || targetIndex === null;
+            const sublabel = NUMERIC_PINPAD_SUBLABELS[key];
 
             return (
               <Pressable
@@ -337,15 +314,7 @@ function MiniSudokuStationPanelComponent({
                 }}
                 disabled={isDisabled}
                 onPressIn={() => {
-                  if (targetIndex === null) {
-                    return;
-                  }
-
-                  if (isBackspaceKey) {
-                    onChangeCell(targetIndex, "");
-                    return;
-                  }
-
+                  if (targetIndex === null) return;
                   onChangeCell(targetIndex, key);
                   const nextIndex =
                     editableIndexes.find((index) => index > targetIndex) ??
@@ -354,42 +323,28 @@ function MiniSudokuStationPanelComponent({
                   setActiveCellIndex(nextIndex);
                 }}
               >
-                {isDigitKey ? (
-                  <View className="h-full w-full items-center justify-center">
-                    <Text
-                      className="text-[30px] font-medium text-center"
-                      style={{
-                        color: EXPEDITION_THEME.textPrimary,
-                        textAlign: "center",
-                        fontVariant: ["tabular-nums"],
-                        fontSize: layout.isTablet ? 36 : 30,
-                      }}
-                    >
-                      {label}
-                    </Text>
-                    <Text
-                      className="mt-[-2px] text-[9px] font-semibold tracking-[1.6px] text-center"
-                      style={{
-                        color: EXPEDITION_THEME.textSubtle,
-                        fontSize: layout.isTablet ? 9 : 8,
-                      }}
-                    >
-                      {sublabel}
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="h-full w-full items-center justify-center">
-                    <Text
-                      className="text-base font-semibold"
-                      style={{
-                        color: EXPEDITION_THEME.textPrimary,
-                        fontSize: layout.isTablet ? 18 : 16,
-                      }}
-                    >
-                      {label}
-                    </Text>
-                  </View>
-                )}
+                <View className="h-full w-full items-center justify-center">
+                  <Text
+                    style={{
+                      color: EXPEDITION_THEME.textPrimary,
+                      textAlign: "center",
+                      fontVariant: ["tabular-nums"],
+                      fontSize: layout.isTablet ? 36 : 20,
+                      fontWeight: "500",
+                    }}
+                  >
+                    {key}
+                  </Text>
+                  <Text
+                    className="mt-[-2px] font-semibold tracking-[1.6px] text-center"
+                    style={{
+                      color: EXPEDITION_THEME.textSubtle,
+                      fontSize: layout.isTablet ? 9 : 8,
+                    }}
+                  >
+                    {sublabel}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -470,7 +425,7 @@ export function MiniSudokuMediaSection({
   const adaptiveLayout = useAdaptiveLayout();
 
   return (
-    <View className="flex-1 px-2 py-2">
+    <View className="px-2 py-2">
       <View className="rounded-2xl">
         <View
           style={{

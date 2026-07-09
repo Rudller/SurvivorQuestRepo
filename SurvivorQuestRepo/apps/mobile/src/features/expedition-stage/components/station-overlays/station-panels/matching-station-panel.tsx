@@ -117,9 +117,9 @@ export function MatchingStationPanel({
   const activeDragRef = useRef<ActiveDragState | null>(null);
   const canInteract = !isInteractiveLocked && matchingAttemptsLeft > 0;
   const rowCount = Math.max(matchingLeftOptions.length, matchingRightOptions.length, 1);
-  const verticalPadding = adaptiveLayout.s(layout.isTablet ? 14 : 10, 8, 18);
-  const rowHeight = adaptiveLayout.s(layout.isTablet ? 82 : 68, 56, 96);
-  const rowGap = adaptiveLayout.s(layout.isTablet ? 14 : 10, 8, 18);
+  const verticalPadding = adaptiveLayout.s(layout.isTablet ? 14 : 6, 8, 18);
+  const rowHeight = adaptiveLayout.s(layout.isTablet ? 82 : 46, 56, 96);
+  const rowGap = adaptiveLayout.s(layout.isTablet ? 14 : 5, 8, 18);
   const leftDotRadius = adaptiveLayout.s(layout.isTablet ? 15 : 13, 10, 20);
   const rightDotRadius = adaptiveLayout.s(layout.isTablet ? 12 : 10, 8, 16);
   const hardSnapRadius = Math.max(rightDotRadius * 1.5, adaptiveLayout.s(18, 14, 28));
@@ -701,18 +701,16 @@ export function MatchingMediaSection({
   totalPairs,
   ...panelProps
 }: MatchingMediaSectionProps) {
+  const layout = useStationPanelLayout();
   return (
-    <View className="flex-1 px-2 py-2">
-      <View className="flex-1 justify-center">
-        <MatchingStationPanel {...panelProps} />
-      </View>
-
-      <View className="w-full px-1">
+    <View className="px-2 py-2">
+      <MatchingStationPanel {...panelProps} />
+      <View className="mt-1 w-full px-1">
         <View className="flex-row items-center justify-between">
-          <Text className="text-base font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          <Text className="font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 16 : 13 }}>
             {matchingAttemptsLabel}: {panelProps.matchingAttemptsLeft}
           </Text>
-          <Text className="text-base font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+          <Text className="font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 16 : 13 }}>
             {matchingMatchedLabel}: {matchingMatchedCount}/{totalPairs}
           </Text>
         </View>

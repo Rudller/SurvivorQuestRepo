@@ -83,6 +83,8 @@ export function StationMediaPanel({
   const isCaesarStation = stationType === "caesar-cipher";
   const isHangmanStation = stationType === "hangman";
   const isSimonStation = stationType === "simon";
+  const isMiniSudokuStation = stationType === "mini-sudoku";
+  const isMemoryStation = stationType === "memory";
   const isAudioQuizStation = stationType === "audio-quiz";
   const caesarEncoded = caesarShift(caesarMedia.decodedText, caesarMedia.shiftValue);
   const [hangmanWordContainerWidth, setHangmanWordContainerWidth] = useState(0);
@@ -108,7 +110,7 @@ export function StationMediaPanel({
       style={{
         ...(requiresCode
           ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
-          : isSimonStation
+          : isSimonStation || isMiniSudokuStation || isMemoryStation || stationType === "mastermind" || stationType === "matching" || stationType === "boggle" || stationType === "anagram"
             ? { minHeight: stationMediaHeight }
             : { height: stationMediaHeight }),
         borderColor: EXPEDITION_THEME.border,
@@ -252,6 +254,7 @@ export function StationMediaPanel({
       {isAudioQuizStation && audioOverlay ? (
         <View className="absolute inset-0 items-center justify-center px-3">
           <View className="flex-row items-center" style={{ gap: adaptiveLayout.s(isTabletOverlay ? 16 : 8, 6, 24) }}>
+            {/* START / STOP toggle */}
             <Pressable
               className={`items-center justify-center rounded-2xl px-2 py-2 ${MOBILE_UX_TOKENS.activePressClass}`}
               style={{
@@ -260,17 +263,20 @@ export function StationMediaPanel({
                 minWidth: MOBILE_UX_TOKENS.minTouchTarget,
                 minHeight: MOBILE_UX_TOKENS.minTouchTarget,
                 backgroundColor: "rgba(9, 12, 18, 0.62)",
-                opacity: audioOverlay.isPlayDisabled ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                opacity: (audioOverlay.isPlaying ? audioOverlay.isStopDisabled : audioOverlay.isPlayDisabled)
+                  ? MOBILE_UX_TOKENS.disabledOpacity
+                  : 1,
               }}
-              onPress={audioOverlay.onPlay}
-              disabled={audioOverlay.isPlayDisabled}
+              onPress={audioOverlay.isPlaying || audioOverlay.hasPlaybackStarted ? audioOverlay.onStop : audioOverlay.onPlay}
+              disabled={audioOverlay.isPlaying || audioOverlay.hasPlaybackStarted ? audioOverlay.isStopDisabled : audioOverlay.isPlayDisabled}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={audioOverlay.hasPlaybackStarted ? audioOverlay.replayLabel : audioOverlay.playLabel}
-              accessibilityState={{ disabled: audioOverlay.isPlayDisabled, busy: audioOverlay.isPlaying }}
+              accessibilityLabel={audioOverlay.isPlaying ? audioOverlay.stopLabel : audioOverlay.playLabel}
+              accessibilityState={{ disabled: audioOverlay.isPlaying || audioOverlay.hasPlaybackStarted ? audioOverlay.isStopDisabled : audioOverlay.isPlayDisabled, busy: audioOverlay.isPlaying }}
             >
               <SvgUri
-                uri={audioOverlay.hasPlaybackStarted ? AUDIO_REPLAY_ICON_SVG_URI : AUDIO_PLAY_ICON_SVG_URI}
+                key={audioOverlay.isPlaying ? "pause" : "play"}
+                uri={audioOverlay.isPlaying ? AUDIO_PAUSE_ICON_SVG_URI : AUDIO_PLAY_ICON_SVG_URI}
                 width={audioOverlayIconSize}
                 height={audioOverlayIconSize}
                 color="#ffffff"
@@ -281,9 +287,10 @@ export function StationMediaPanel({
                 className="mt-1 text-center font-semibold"
                 style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 9, 8, 13) }}
               >
-                {audioOverlay.hasPlaybackStarted ? audioOverlay.replayLabel : audioOverlay.playLabel}
+                {audioOverlay.isPlaying ? audioOverlay.stopLabel : audioOverlay.playLabel}
               </Text>
             </Pressable>
+            {/* REPLAY — visible after first playback */}
             {audioOverlay.hasPlaybackStarted ? (
               <Pressable
                 className={`items-center justify-center rounded-2xl px-2 py-2 ${MOBILE_UX_TOKENS.activePressClass}`}
@@ -293,17 +300,17 @@ export function StationMediaPanel({
                   minWidth: MOBILE_UX_TOKENS.minTouchTarget,
                   minHeight: MOBILE_UX_TOKENS.minTouchTarget,
                   backgroundColor: "rgba(9, 12, 18, 0.62)",
-                  opacity: audioOverlay.isStopDisabled ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                  opacity: audioOverlay.isPlayDisabled ? MOBILE_UX_TOKENS.disabledOpacity : 1,
                 }}
-                onPress={audioOverlay.onStop}
-                disabled={audioOverlay.isStopDisabled}
+                onPress={audioOverlay.onPlay}
+                disabled={audioOverlay.isPlayDisabled}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel={audioOverlay.stopLabel}
-                accessibilityState={{ disabled: audioOverlay.isStopDisabled, busy: false }}
+                accessibilityLabel={audioOverlay.replayLabel}
+                accessibilityState={{ disabled: audioOverlay.isPlayDisabled }}
               >
                 <SvgUri
-                  uri={AUDIO_PAUSE_ICON_SVG_URI}
+                  uri={AUDIO_REPLAY_ICON_SVG_URI}
                   width={audioOverlayIconSize}
                   height={audioOverlayIconSize}
                   color="#ffffff"
@@ -314,7 +321,7 @@ export function StationMediaPanel({
                   className="mt-1 text-center font-semibold"
                   style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 9, 8, 13) }}
                 >
-                  {audioOverlay.stopLabel}
+                  {audioOverlay.replayLabel}
                 </Text>
               </Pressable>
             ) : null}

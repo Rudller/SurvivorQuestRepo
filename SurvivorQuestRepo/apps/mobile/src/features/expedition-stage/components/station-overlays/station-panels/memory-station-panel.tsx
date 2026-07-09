@@ -144,21 +144,24 @@ export function MemoryStationPanel({
   const [memoryGridWidth, setMemoryGridWidth] = useState(0);
   const totalPairs = memoryDeck.length / 2;
   const matchedPairs = memoryMatchedCount / 2;
-  const memoryGridColumns = layout.isTablet ? 6 : 4;
-  const memoryGridGap = adaptiveLayout.s(layout.isTablet ? 10 : 7, 6, 14);
-  const fallbackCardWidth = layout.isTablet ? "16%" : "24%";
-  const baseCardHeight = adaptiveLayout.s(layout.isTablet ? 110 : 84, 76, 128);
+  const memoryGridColumns = 6;
+  const memoryGridGap = adaptiveLayout.s(layout.isTablet ? 10 : 2, 6, 14);
+  const fallbackCardWidth = "16%";
+  const baseCardHeight = layout.isTablet ? adaptiveLayout.s(110, 76, 128) : 12;
   const computedCardWidth =
     memoryGridWidth > 0
       ? (memoryGridWidth - memoryGridGap * Math.max(0, memoryGridColumns - 1)) / memoryGridColumns
       : null;
   const resolvedCardWidth = computedCardWidth && computedCardWidth > 0 ? computedCardWidth : fallbackCardWidth;
-  const resolvedCardHeight =
-    computedCardWidth && computedCardWidth > 0
-      ? Math.max(baseCardHeight, Math.round(computedCardWidth * (layout.isTablet ? 1.02 : 1.1)))
+  const resolvedCardHeight = layout.isTablet
+    ? computedCardWidth && computedCardWidth > 0
+      ? Math.max(baseCardHeight, Math.round(computedCardWidth * 1.02))
+      : baseCardHeight
+    : computedCardWidth && computedCardWidth > 0
+      ? Math.round(computedCardWidth)
       : baseCardHeight;
-  const cardMinHeight = adaptiveLayout.hit(layout.isTablet ? 72 : 56);
-  const cardFontSize = layout.isTablet ? 36 : 30;
+  const cardMinHeight = layout.isTablet ? adaptiveLayout.hit(72) : 12;
+  const cardFontSize = layout.isTablet ? 36 : 13;
   const areCardsDisabled = isInteractiveLocked || memoryBusy;
 
   return (
@@ -227,7 +230,7 @@ export function MemoryMediaSection({
   onPressCard,
 }: MemoryMediaSectionProps) {
   return (
-    <View className="flex-1 px-2 py-2">
+    <View className="px-2 py-2">
       <StationQuizTaskWrapper
         prompt={prompt}
         isTabletOverlay={isTabletOverlay}

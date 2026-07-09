@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type AnagramStationPanelProps = {
@@ -200,9 +201,20 @@ export function AnagramMediaPanel({
   const uiLanguage = useUiLanguage();
   const text = ANAGRAM_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
 
   const isInteractive = Boolean(onLetterPress);
   const wordsToDisplay = scrambledWords.length > 0 ? scrambledWords : ["—"];
+
+  const tileGap = layout.isTablet ? 12 : 6;
+  const rowGap = layout.isTablet ? 18 : 8;
+  const longestWordLength = Math.max(...wordsToDisplay.map((w) => w.length), 1);
+  const availableWidth = adaptiveLayout.width - (layout.isTablet ? 48 : 24);
+  const maxTileFromWidth = Math.floor(
+    (availableWidth - tileGap * (longestWordLength - 1)) / longestWordLength,
+  );
+  const tileSize = layout.isTablet ? 62 : Math.max(28, Math.min(48, maxTileFromWidth));
+  const tileFontSize = layout.isTablet ? 28 : Math.max(12, Math.round(tileSize * 0.46));
 
   const letterRemaining = isInteractive
     ? computeLetterRemaining(scrambledWords, anagramInput ?? "")
@@ -222,14 +234,16 @@ export function AnagramMediaPanel({
     }),
   );
 
+  const wordRowGap = layout.isTablet ? 18 : 12;
+
   return (
-    <View className="flex-1 items-center justify-center px-3">
-      <View className="items-center justify-center" style={{ rowGap: layout.isTablet ? 18 : 14 }}>
+    <View className="items-center justify-center px-3 py-2">
+      <View className="w-full items-center" style={{ rowGap: wordRowGap }}>
         {wordTiles.map((tiles, wordIndex) => (
           <View
             key={`anagram-top-word-${wordIndex}`}
-            className="flex-row justify-center"
-            style={{ columnGap: layout.isTablet ? 12 : 10 }}
+            className="flex-row flex-wrap justify-center"
+            style={{ columnGap: tileGap, rowGap: tileGap }}
           >
             {tiles.map(({ character, isAvailable }, characterIndex) => {
               const tileDisabled = !isAvailable || Boolean(isActionDisabled);
@@ -237,15 +251,18 @@ export function AnagramMediaPanel({
                 <View
                   className="items-center justify-center rounded-lg border"
                   style={{
-                    minWidth: layout.isTablet ? 62 : 52,
-                    height: layout.isTablet ? 62 : 52,
+                    width: tileSize,
+                    height: tileSize,
                     borderColor: EXPEDITION_THEME.border,
                     backgroundColor: EXPEDITION_THEME.panelStrong,
                   }}
                 >
                   <Text
                     className="font-bold"
-                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 28 : 20 }}
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: tileFontSize }}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                    numberOfLines={1}
                   >
                     {character}
                   </Text>
@@ -275,7 +292,7 @@ export function AnagramMediaPanel({
           </View>
         ))}
       </View>
-      <Text className="mt-3" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
+      <Text className="mt-2" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
         {text.words}: {hintWordCount} • {text.letters}: {hintLettersLayout}
       </Text>
     </View>

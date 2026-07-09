@@ -43,7 +43,7 @@ export function buildStationMediaRendererByType({
     wordle: () => <WordleMediaBoard {...wordleMediaBoardProps} />,
     anagram: () => <AnagramMediaPanel {...anagramMediaPanelProps} />,
     simon: () => (
-      <View className="flex-1 px-2 py-2">
+      <View className="px-2 py-2">
         <SimonStationPanel {...simonPanelProps} />
       </View>
     ),

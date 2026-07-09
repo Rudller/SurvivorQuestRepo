@@ -2299,11 +2299,13 @@ export function StationPreviewOverlay({
                 </View>
               ) : !isCaesarStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <Text
-                  className={isNumericCodeStation ? "mt-1" : "mt-2"}
+                  className={isNumericCodeStation ? "mt-1" : "mt-1"}
+                  numberOfLines={isTabletOverlay ? undefined : 2}
+                  ellipsizeMode="tail"
                   style={{
                     color: EXPEDITION_THEME.textMuted,
                     fontSize: adaptiveLayout.fs(isTabletOverlay ? 16 : 11, 10, 20),
-                    lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 15, 14, 24),
+                    lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                   }}
                 >
                   {stationDescription}

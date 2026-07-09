@@ -352,6 +352,10 @@ export function useExpeditionStageOverlayFlow({
           delete next[stationId];
           return next;
         });
+        if (isTaskAlreadyCompletedError(result)) {
+          setActionMessage(text.taskCompleted);
+          return null;
+        }
         setActionError(result);
         return result;
       }
@@ -362,10 +366,12 @@ export function useExpeditionStageOverlayFlow({
     [
       isSessionEnded,
       ensureLocationRequirement,
+      isTaskAlreadyCompletedError,
       setActionError,
       setActionMessage,
       startStationTask,
       text.realizationEndedCannotStartTasks,
+      text.taskCompleted,
       text.taskTimerStarted,
     ],
   );
@@ -507,7 +513,6 @@ export function useExpeditionStageOverlayFlow({
 
     const startError = await startStationTask(stationId, startedAtIso);
     if (startError) {
-      setActionError(startError);
       setLocalStartedAtByStationId((current) => {
         const next = { ...current };
         delete next[stationId];
@@ -519,13 +524,18 @@ export function useExpeditionStageOverlayFlow({
         return next;
       });
       setIsStartingPendingQuiz(false);
+      if (isTaskAlreadyCompletedError(startError)) {
+        setActionMessage(text.taskCompleted);
+        return;
+      }
+      setActionError(startError);
       return;
     }
 
     setActiveStationTestId(stationId);
     setPendingQuizStartStationId(null);
     setIsStartingPendingQuiz(false);
-  }, [ensureLocationRequirement, pendingQuizStartStationId, setActionError, setActionMessage, startStationTask]);
+  }, [ensureLocationRequirement, isTaskAlreadyCompletedError, pendingQuizStartStationId, setActionError, setActionMessage, startStationTask, text.taskCompleted]);
 
   const handleStartPendingTime = useCallback(async () => {
     if (!pendingTimeStartStationId) {

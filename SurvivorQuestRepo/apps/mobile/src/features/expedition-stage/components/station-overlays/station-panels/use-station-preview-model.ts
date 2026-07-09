@@ -269,42 +269,42 @@ export function buildStationPreviewModel({
     if (isWordleStation) {
       return isTabletOverlay
         ? Math.max(230, Math.round(viewportHeight * 0.4))
-        : Math.max(150, Math.round(viewportHeight * 0.25));
+        : Math.max(290, Math.round(viewportHeight * 0.38));
     }
     if (isAnagramStation) {
       return isTabletOverlay
         ? Math.max(210, Math.round(viewportHeight * 0.34))
-        : Math.max(140, Math.round(viewportHeight * 0.22));
+        : Math.max(100, Math.round(viewportHeight * 0.16));
     }
     if (isSimonStation) {
       return isTabletOverlay
         ? Math.max(540, Math.round(viewportHeight * 0.72))
-        : Math.max(280, Math.round(viewportHeight * 0.44));
+        : Math.max(420, Math.round(viewportHeight * 0.56));
     }
     if (isMemoryStation) {
       return isTabletOverlay
         ? Math.max(560, Math.round(viewportHeight * 0.8))
-        : Math.max(330, Math.round(viewportHeight * 0.52));
+        : Math.max(180, Math.round(viewportHeight * 0.28));
     }
     if (isMiniSudokuStation) {
       return isTabletOverlay
         ? Math.max(560, Math.round(viewportHeight * 0.74))
-        : Math.max(330, Math.round(viewportHeight * 0.5));
+        : Math.max(300, Math.round(viewportHeight * 0.45));
     }
     if (isMastermindStation) {
       return isTabletOverlay
         ? Math.max(340, Math.round(viewportHeight * 0.56))
-        : Math.max(230, Math.round(viewportHeight * 0.36));
+        : Math.max(180, Math.round(viewportHeight * 0.28));
     }
     if (isMatchingStation) {
       return isTabletOverlay
         ? Math.max(430, Math.round(viewportHeight * 0.7))
-        : Math.max(280, Math.round(viewportHeight * 0.44));
+        : Math.max(160, Math.round(viewportHeight * 0.26));
     }
     if (isBoggleStation) {
       return isTabletOverlay
         ? Math.max(400, Math.round(viewportHeight * 0.64))
-        : Math.max(260, Math.round(viewportHeight * 0.4));
+        : Math.max(160, Math.round(viewportHeight * 0.26));
     }
     if (isStrongPasswordStation) {
       return isTabletOverlay

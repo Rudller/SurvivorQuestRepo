@@ -203,15 +203,15 @@ export function MastermindStationPanel({
             style={{
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panelStrong,
-              width: layout.isTablet ? 52 : 44,
-              height: layout.isTablet ? 52 : 44,
+              width: layout.isTablet ? 52 : 34,
+              height: layout.isTablet ? 52 : 34,
             }}
           >
             <Text
               className="font-semibold"
               style={{
                 color: symbol ? EXPEDITION_THEME.textPrimary : EXPEDITION_THEME.textSubtle,
-                fontSize: layout.isTablet ? 22 : 18,
+                fontSize: layout.isTablet ? 22 : 14,
               }}
             >
               {symbol || "•"}
@@ -262,8 +262,8 @@ export function MastermindStationPanel({
             style={{
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panelStrong,
-              width: layout.isTablet ? 56 : 44,
-              height: layout.isTablet ? 56 : 44,
+              width: layout.isTablet ? 56 : 36,
+              height: layout.isTablet ? 56 : 36,
             }}
             onPress={() => {
               onAddSymbol(symbol);
@@ -275,7 +275,7 @@ export function MastermindStationPanel({
               className="font-semibold"
               style={{
                 color: EXPEDITION_THEME.textPrimary,
-                fontSize: layout.isTablet ? 22 : 17,
+                fontSize: layout.isTablet ? 22 : 14,
                 textAlign: "center",
                 textAlignVertical: "center",
                 includeFontPadding: false,
@@ -290,8 +290,8 @@ export function MastermindStationPanel({
           style={{
             borderColor: EXPEDITION_THEME.accent,
             backgroundColor: EXPEDITION_THEME.accent,
-            width: layout.isTablet ? 56 : 44,
-            height: layout.isTablet ? 56 : 44,
+            width: layout.isTablet ? 56 : 36,
+            height: layout.isTablet ? 56 : 36,
             opacity: canBackspace ? 1 : 0.45,
           }}
           onPress={onBackspace}
@@ -302,7 +302,7 @@ export function MastermindStationPanel({
             className="font-semibold"
             style={{
               color: resolveActionLabelColor(!canBackspace),
-              fontSize: layout.isTablet ? 22 : 17,
+              fontSize: layout.isTablet ? 22 : 14,
               textAlign: "center",
               textAlignVertical: "center",
               includeFontPadding: false,
@@ -345,13 +345,13 @@ export function MastermindAttemptsList({ stationId, mastermindAttempts }: Master
                 key={`${stationId}-mastermind-history-${index}-${symbolIndex}`}
                 className="items-center justify-center rounded-lg border"
                 style={{
-                  width: layout.isTablet ? 38 : 30,
-                  height: layout.isTablet ? 38 : 30,
+                  width: layout.isTablet ? 38 : 24,
+                  height: layout.isTablet ? 38 : 24,
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
                 }}
               >
-                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 17 : 13 }}>
+                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 17 : 11 }}>
                   {symbol}
                 </Text>
               </View>
@@ -419,7 +419,7 @@ export function MastermindMediaSection({
   onSelectDifficulty,
 }: MastermindMediaSectionProps) {
   return (
-    <View className="flex-1 px-2 py-2">
+    <View className="px-2 py-2">
       <StationQuizTaskWrapper
         prompt={prompt}
         isTabletOverlay={isTabletOverlay}

@@ -71,33 +71,28 @@ export function CaesarStationPanel({
   const [keyboardWidth, setKeyboardWidth] = useState(0);
   const canAppendCharacter = !isActionDisabled && caesarInput.length < caesarMaxLength;
   const canBackspace = !isActionDisabled && caesarInput.length > 0;
-  const keyboardGap = layout.isTablet ? 8 : 6;
-  const desiredKeySize = layout.isTablet ? 58 : 42;
-  const minKeySize = layout.isTablet ? 40 : 30;
+  const keyboardGap = layout.isTablet ? 8 : 2;
 
   const keySize = useMemo(() => {
-    if (keyboardWidth <= 0) {
-      return desiredKeySize;
+    if (layout.isTablet) {
+      const desiredTablet = 58;
+      const minTablet = 40;
+      if (keyboardWidth <= 0) return desiredTablet;
+      const computed = Math.floor((keyboardWidth - keyboardGap * 9) / 10);
+      return Math.max(minTablet, Math.min(desiredTablet, computed));
     }
+    const available = keyboardWidth > 0 ? keyboardWidth : 260;
+    return Math.max(24, Math.floor((available - 9 * keyboardGap) / 10));
+  }, [keyboardGap, keyboardWidth, layout.isTablet]);
 
-    const availableForTopRow = keyboardWidth - keyboardGap * 9;
-    if (availableForTopRow <= 0) {
-      return minKeySize;
-    }
-
-    const computed = Math.floor(availableForTopRow / 10);
-    return Math.max(minKeySize, Math.min(desiredKeySize, computed));
-  }, [desiredKeySize, keyboardGap, keyboardWidth, minKeySize]);
-
+  const keyHeight = layout.isTablet ? keySize : Math.round(keySize * 1.25);
   const backspaceWidth = Math.max(layout.isTablet ? 84 : 66, keySize + (layout.isTablet ? 24 : 18));
-  const topRowWidth = keySize * 10 + keyboardGap * 9;
-  const measuredKeyboardWidth = keyboardWidth > 0 ? keyboardWidth : topRowWidth;
+  const measuredKeyboardWidth = keyboardWidth > 0 ? keyboardWidth : Math.max(260, keySize * 10 + keyboardGap * 9);
   const actionRowGap = keyboardGap;
   const spaceWidth = Math.min(
     Math.max(120, measuredKeyboardWidth - backspaceWidth - actionRowGap),
     Math.max(keySize * (layout.isTablet ? 6.5 : 5.8), layout.isTablet ? 320 : 220),
   );
-  const [topRow, ...bottomRows] = CAESAR_KEYBOARD_ROWS;
 
   return (
     <View className="mt-3">
@@ -147,42 +142,15 @@ export function CaesarStationPanel({
           setKeyboardWidth(event.nativeEvent.layout.width);
         }}
       >
-        <View className="items-center">
-          <View style={{ width: topRowWidth, maxWidth: "100%" }}>
-            <View className="flex-row" style={{ columnGap: keyboardGap }}>
-              {topRow.map((key) => (
-                <Pressable
-                  key={`caesar-key-${key}`}
-                  className="items-center justify-center rounded-2xl border active:opacity-85"
-                  style={{
-                    width: keySize,
-                    height: keySize,
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelStrong,
-                    opacity: canAppendCharacter ? 1 : 0.45,
-                  }}
-                  disabled={!canAppendCharacter}
-                  onPress={() => onAppendCharacter(key)}
-                  hitSlop={3}
-                >
-                  <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 15 }}>
-                    {key}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        {bottomRows.map((row, rowIndex) => (
-          <View key={`caesar-keyboard-row-${rowIndex + 1}`} className="flex-row justify-center" style={{ columnGap: keyboardGap }}>
+        {CAESAR_KEYBOARD_ROWS.map((row, rowIndex) => (
+          <View key={`caesar-keyboard-row-${rowIndex}`} className="flex-row justify-center" style={{ columnGap: keyboardGap }}>
             {row.map((key) => (
               <Pressable
                 key={`caesar-key-${key}`}
-                className="items-center justify-center rounded-2xl border active:opacity-85"
+                className="items-center justify-center rounded-xl border active:opacity-85"
                 style={{
                   width: keySize,
-                  height: keySize,
+                  height: keyHeight,
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelStrong,
                   opacity: canAppendCharacter ? 1 : 0.45,
@@ -201,10 +169,10 @@ export function CaesarStationPanel({
 
         <View className="flex-row justify-center" style={{ columnGap: actionRowGap }}>
           <Pressable
-            className="items-center justify-center rounded-2xl border px-4 active:opacity-85"
+            className="items-center justify-center rounded-xl border px-4 active:opacity-85"
             style={{
               width: spaceWidth,
-              height: keySize,
+              height: keyHeight,
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panelStrong,
               opacity: canAppendCharacter ? 1 : 0.45,
@@ -218,10 +186,10 @@ export function CaesarStationPanel({
             </Text>
           </Pressable>
           <Pressable
-            className="items-center justify-center rounded-2xl border px-4 active:opacity-85"
+            className="items-center justify-center rounded-xl border px-4 active:opacity-85"
             style={{
               width: backspaceWidth,
-              height: keySize,
+              height: keyHeight,
               borderColor: EXPEDITION_THEME.accent,
               backgroundColor: EXPEDITION_THEME.accent,
               opacity: canBackspace ? 1 : 0.45,

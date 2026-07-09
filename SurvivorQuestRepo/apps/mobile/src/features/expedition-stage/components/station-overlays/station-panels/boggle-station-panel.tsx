@@ -81,15 +81,15 @@ export function BoggleStationPanel({
   const text = BOGGLE_STATION_TEXT[uiLanguage];
   const selectedCellSet = new Set(selectedCellPath);
   const layout = useStationPanelLayout();
-  const boardWidth = layout.isTablet ? "82%" : "66%";
-  const boardRowGap = layout.isTablet ? 10 : 4;
-  const boardCellHeight = layout.isTablet ? 112 : 64;
-  const boardLetterFontSize = layout.isTablet ? 32 : 20;
-  const boardLetterLineHeight = layout.isTablet ? 32 : 22;
+  const boardWidth = layout.isTablet ? "82%" : "92%";
+  const boardRowGap = layout.isTablet ? 10 : 3;
+  const boardCellHeight = layout.isTablet ? 112 : 62;
+  const boardLetterFontSize = layout.isTablet ? 32 : 22;
+  const boardLetterLineHeight = layout.isTablet ? 32 : 24;
   const visibleInputLength = Math.max(0, Math.min(boggleInput.length, boggleMaxInputLength));
 
   return (
-    <View className="h-full" style={{ paddingTop: layout.isTablet ? 4 : 0 }}>
+    <View style={{ paddingTop: layout.isTablet ? 4 : 0 }}>
       <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
         {text.instruction}
       </Text>
@@ -101,18 +101,18 @@ export function BoggleStationPanel({
           align="center"
         />
       </View>
-      <View className="items-center" style={{ marginTop: layout.isTablet ? 10 : 6 }}>
+      <View className="items-center" style={{ marginTop: layout.isTablet ? 10 : 4 }}>
         <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.isTablet ? 12 : 9 }}>
           {text.wordLength}
         </Text>
-        <View className="mt-2 flex-row items-center justify-center" style={{ columnGap: layout.attemptDotGap + 2 }}>
+        <View className="mt-1 flex-row items-center justify-center" style={{ columnGap: layout.attemptDotGap + 2 }}>
           {Array.from({ length: boggleMaxInputLength }).map((_, index) => (
             <View
               key={`${stationId}-boggle-length-${index}`}
               className="rounded-full"
               style={{
-                width: layout.isTablet ? 16 : 12,
-                height: layout.isTablet ? 16 : 12,
+                width: layout.isTablet ? 16 : 10,
+                height: layout.isTablet ? 16 : 10,
                 backgroundColor:
                   index < visibleInputLength ? EXPEDITION_THEME.accentStrong : "rgba(148, 163, 184, 0.3)",
               }}
@@ -120,10 +120,10 @@ export function BoggleStationPanel({
           ))}
         </View>
       </View>
-      <View className="flex-1 items-center justify-center">
+      <View className="items-center" style={{ marginTop: layout.isTablet ? 8 : 4 }}>
         <View
           className="flex-row flex-wrap justify-between"
-          style={{ marginTop: layout.isTablet ? 8 : 4, width: boardWidth, rowGap: boardRowGap }}
+          style={{ width: boardWidth, rowGap: boardRowGap }}
         >
           {boggleBoardLetters.map((letter, index) => (
             <Pressable
@@ -237,7 +237,6 @@ export function BoggleMediaSection(props: BoggleMediaSectionProps) {
 
   return (
     <View
-      className="flex-1"
       style={{
         paddingHorizontal: layout.isTablet ? 8 : 4,
         paddingVertical: layout.isTablet ? 8 : 4,

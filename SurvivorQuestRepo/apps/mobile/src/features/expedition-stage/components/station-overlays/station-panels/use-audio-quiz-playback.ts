@@ -21,12 +21,14 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
   const [hasAudioPlaybackStarted, setHasAudioPlaybackStarted] = useState(false);
   const audioPlayerRef = useRef<AudioPlayer | null>(null);
   const audioPlaybackSubscriptionRef = useRef<{ remove: () => void } | null>(null);
+  const hasAudioPlaybackStartedRef = useRef(false);
 
   const resetAudioPlaybackState = useCallback(() => {
     setAudioLoadError(null);
     setIsAudioLoading(false);
     setIsAudioPlaying(false);
     setHasAudioPlaybackStarted(false);
+    hasAudioPlaybackStartedRef.current = false;
   }, []);
 
   const unloadAudioSound = useCallback(async () => {
@@ -111,10 +113,9 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
     }
 
     const audioUrl = normalizeAudioQuizUrl(quizAudioUrl);
-    let activePlayer = audioPlayerRef.current;
-    if (!activePlayer) {
-      activePlayer = await loadAudioSound(audioUrl);
-    }
+    // Reload on replay — expo-audio player state after didJustFinish is unreliable
+    const needsLoad = !audioPlayerRef.current || hasAudioPlaybackStartedRef.current;
+    const activePlayer = needsLoad ? await loadAudioSound(audioUrl) : audioPlayerRef.current;
 
     if (!activePlayer) {
       return;
@@ -123,6 +124,7 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
     try {
       activePlayer.play();
       setHasAudioPlaybackStarted(true);
+      hasAudioPlaybackStartedRef.current = true;
     } catch {
       setAudioLoadError(text.audioPlayFailed);
       setIsAudioPlaying(false);
@@ -139,17 +141,14 @@ export function useAudioQuizPlayback({ stationType, quizAudioUrl, text }: UseAud
       if (activePlayer.playing) {
         activePlayer.pause();
         setIsAudioPlaying(false);
-        return;
+      } else {
+        activePlayer.play();
+        setIsAudioPlaying(true);
       }
-
-      activePlayer.play();
-      setHasAudioPlaybackStarted(true);
-      setIsAudioPlaying(true);
     } catch {
-      setAudioLoadError(text.audioPlayFailed);
       setIsAudioPlaying(false);
     }
-  }, [text.audioPlayFailed]);
+  }, []);
 
   useEffect(() => {
     void setAudioModeAsync({
