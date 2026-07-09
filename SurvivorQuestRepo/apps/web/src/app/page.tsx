@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LandingPage } from "@/features/landing/components/landing-page";
+import { FAQ_ITEMS } from "@/features/landing/model/content";
 
 export const metadata: Metadata = {
   title: "SurvivorQuest (Survivor Quest) | Gry terenowe i realizacje eventowe",
@@ -29,25 +30,41 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  };
+
   const adminPanelHref =
     process.env.NEXT_PUBLIC_ADMIN_URL?.trim() ||
     (process.env.NODE_ENV === "development" ? "http://localhost:3100/admin/login" : "/admin/login");
   const demoHref =
     process.env.NEXT_PUBLIC_DEMO_URL?.trim() ||
-    "mailto:hello@survivorquest.pl?subject=Um%C3%B3wienie%20demo%20SurvivorQuest";
+    "mailto:kontakt@survivorquest.pl?subject=Um%C3%B3wienie%20demo%20SurvivorQuest";
   const quoteHref =
     process.env.NEXT_PUBLIC_QUOTE_URL?.trim() ||
-    "mailto:hello@survivorquest.pl?subject=Pro%C5%9Bba%20o%20wycen%C4%99%20SurvivorQuest";
-  const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "hello@survivorquest.pl";
-  const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || "+48 000 000 000";
+    "mailto:kontakt@survivorquest.pl?subject=Pro%C5%9Bba%20o%20wycen%C4%99%20SurvivorQuest";
+  const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "kontakt@survivorquest.pl";
+  const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || "+48 730 622 029";
 
   return (
-    <LandingPage
-      adminPanelHref={adminPanelHref}
-      demoHref={demoHref}
-      quoteHref={quoteHref}
-      contactEmail={contactEmail}
-      contactPhone={contactPhone}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+      <LandingPage
+        adminPanelHref={adminPanelHref}
+        demoHref={demoHref}
+        quoteHref={quoteHref}
+        contactEmail={contactEmail}
+        contactPhone={contactPhone}
+      />
+    </>
   );
 }

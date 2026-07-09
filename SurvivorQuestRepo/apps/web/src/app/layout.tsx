@@ -59,6 +59,14 @@ export const metadata: Metadata = {
     locale: "pl_PL",
     type: "website",
     siteName: BRAND_NAME,
+    images: [
+      {
+        url: "/hero-visual.png",
+        width: 1536,
+        height: 1024,
+        alt: "SurvivorQuest — platforma do gier terenowych i realizacji eventowych",
+      },
+    ],
   },
   alternates: {
     canonical: "/",
@@ -68,6 +76,7 @@ export const metadata: Metadata = {
     title: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i realizacje eventowe`,
     description:
       "Platforma eventowa do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji na żywo.",
+    images: ["/hero-visual.png"],
   },
   ...(googleSiteVerification
     ? {
@@ -93,7 +102,7 @@ export default function RootLayout({
         alternateName: BRAND_ALTERNATE_NAME,
         url: siteUrl,
         logo: toAbsoluteUrl("/icon.png"),
-        email: "hello@survivorquest.pl",
+        email: "kontakt@survivorquest.pl",
       },
       {
         "@type": "WebSite",
@@ -102,6 +111,20 @@ export default function RootLayout({
         alternateName: BRAND_ALTERNATE_NAME,
         url: siteUrl,
         inLanguage: "pl-PL",
+        publisher: {
+          "@id": `${siteUrl}#organization`,
+        },
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${siteUrl}#app`,
+        name: BRAND_NAME,
+        alternateName: BRAND_ALTERNATE_NAME,
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Android, iOS",
+        url: siteUrl,
+        description:
+          "Platforma event-tech do organizacji gier terenowych i realizacji eventowych — panel admina i aplikacja mobilna dla uczestników.",
         publisher: {
           "@id": `${siteUrl}#organization`,
         },

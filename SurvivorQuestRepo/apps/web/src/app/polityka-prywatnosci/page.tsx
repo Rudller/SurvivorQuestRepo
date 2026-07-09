@@ -32,8 +32,8 @@ export default function PrivacyPolicyPage() {
         <p>
           Administratorem danych jest właściciel marki SurvivorQuest. W sprawach związanych z danymi osobowymi możesz
           skontaktować się mailowo na adres:{" "}
-          <a href="mailto:hello@survivorquest.pl" className="text-[#f0c977] underline-offset-4 hover:underline">
-            hello@survivorquest.pl
+          <a href="mailto:kontakt@survivorquest.pl" className="text-[#f0c977] underline-offset-4 hover:underline">
+            kontakt@survivorquest.pl
           </a>
           .
         </p>
