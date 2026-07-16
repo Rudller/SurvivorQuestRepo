@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, Image, Pressable, Text, View } from "react-native";
 import { SvgUri } from "react-native-svg";
 
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -13,6 +13,7 @@ import {
 } from "../puzzle-helpers";
 import type { StationTestType } from "../types";
 import { AttemptsIndicator } from "./shared-ui";
+import { PhotoTaskInlineCamera } from "./photo-task-inline-camera";
 
 const AUDIO_PLAY_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-play.svg";
@@ -20,6 +21,8 @@ const AUDIO_REPLAY_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-skip-back.svg";
 const AUDIO_PAUSE_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-pause.svg";
+const CAMERA_ICON_SVG_URI =
+  "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/camera.svg";
 
 type StationMediaPanelProps = {
   stationId: string;
@@ -59,6 +62,21 @@ type StationMediaPanelProps = {
     onPlay: () => void;
     onStop: () => void;
   };
+  photoTaskCapture?: {
+    canCapture: boolean;
+    previewUri: string | null;
+    onOpenCamera: () => void;
+    takePhotoLabel: string;
+    retakePhotoLabel: string;
+    isCaptureActive: boolean;
+    isUploading: boolean;
+    uploadError: string | null;
+    cameraAccessTitle: string;
+    cameraAccessDescription: string;
+    enableCameraLabel: string;
+    onCancelCapture: () => void;
+    onConfirmCapture: (uri: string) => void;
+  };
 };
 
 export function StationMediaPanel({
@@ -77,10 +95,12 @@ export function StationMediaPanel({
   caesarMedia,
   hangmanMedia,
   audioOverlay,
+  photoTaskCapture,
 }: StationMediaPanelProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletOverlay = adaptiveLayout.isTablet;
   const isCaesarStation = stationType === "caesar-cipher";
+  const isPhotoTaskStation = stationType === "photo-task";
   const isHangmanStation = stationType === "hangman";
   const isSimonStation = stationType === "simon";
   const isMiniSudokuStation = stationType === "mini-sudoku";
@@ -104,6 +124,58 @@ export function StationMediaPanel({
     40,
     106,
   );
+  const photoTaskButtonSize = adaptiveLayout.s(
+    photoTaskCapture?.previewUri ? (isTabletOverlay ? 64 : 44) : isTabletOverlay ? 96 : 64,
+    40,
+    108,
+  );
+  const photoTaskIconSize = adaptiveLayout.s(
+    photoTaskCapture?.previewUri ? (isTabletOverlay ? 28 : 20) : isTabletOverlay ? 44 : 30,
+    18,
+    50,
+  );
+  const photoTaskLabelFontSize = adaptiveLayout.fs(isTabletOverlay ? 15 : 12, 11, 18);
+  const photoTaskPulseAnimation = useRef(new Animated.Value(0)).current;
+  const isPhotoTaskCaptureIdle =
+    isPhotoTaskStation &&
+    Boolean(photoTaskCapture?.canCapture) &&
+    !photoTaskCapture?.previewUri &&
+    !photoTaskCapture?.isCaptureActive;
+
+  useEffect(() => {
+    if (!isPhotoTaskCaptureIdle) {
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(photoTaskPulseAnimation, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(photoTaskPulseAnimation, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+
+    return () => {
+      pulse.stop();
+    };
+  }, [isPhotoTaskCaptureIdle, photoTaskPulseAnimation]);
+
+  const photoTaskPulseRingStyle = {
+    opacity: photoTaskPulseAnimation.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+    transform: [
+      {
+        scale: photoTaskPulseAnimation.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] }),
+      },
+    ],
+  };
   return (
     <View
       className={`${isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden rounded-2xl border`}
@@ -224,6 +296,110 @@ export function StationMediaPanel({
             </View>
           </View>
         </View>
+      ) : isPhotoTaskStation && photoTaskCapture ? (
+        photoTaskCapture.isCaptureActive ? (
+          <PhotoTaskInlineCamera
+            isUploading={photoTaskCapture.isUploading}
+            uploadError={photoTaskCapture.uploadError}
+            cameraAccessTitle={photoTaskCapture.cameraAccessTitle}
+            cameraAccessDescription={photoTaskCapture.cameraAccessDescription}
+            enableCameraLabel={photoTaskCapture.enableCameraLabel}
+            onCancel={photoTaskCapture.onCancelCapture}
+            onConfirm={photoTaskCapture.onConfirmCapture}
+          />
+        ) : (
+        <View className="flex-1 items-center justify-center">
+          {photoTaskCapture.previewUri ? (
+            <Image
+              source={{ uri: photoTaskCapture.previewUri }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            />
+          ) : null}
+          {photoTaskCapture.canCapture ? (
+            photoTaskCapture.previewUri ? (
+              <Pressable
+                className="absolute bottom-2 right-2 items-center justify-center rounded-full border-4 active:opacity-90"
+                style={{
+                  width: photoTaskButtonSize,
+                  height: photoTaskButtonSize,
+                  minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+                  minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                  borderColor: EXPEDITION_THEME.accent,
+                  backgroundColor: EXPEDITION_THEME.panelStrong,
+                }}
+                onPress={photoTaskCapture.onOpenCamera}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={photoTaskCapture.retakePhotoLabel}
+              >
+                <SvgUri
+                  uri={CAMERA_ICON_SVG_URI}
+                  width={photoTaskIconSize}
+                  height={photoTaskIconSize}
+                  color={EXPEDITION_THEME.accent}
+                  fill={EXPEDITION_THEME.accent}
+                  stroke={EXPEDITION_THEME.accent}
+                />
+              </Pressable>
+            ) : (
+              <View className="items-center" style={{ rowGap: adaptiveLayout.s(8, 6, 12) }}>
+                <View
+                  style={{
+                    width: photoTaskButtonSize,
+                    height: photoTaskButtonSize,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Animated.View
+                    pointerEvents="none"
+                    className="absolute rounded-full border-2"
+                    style={[
+                      {
+                        width: photoTaskButtonSize,
+                        height: photoTaskButtonSize,
+                        borderColor: EXPEDITION_THEME.accent,
+                      },
+                      photoTaskPulseRingStyle,
+                    ]}
+                  />
+                  <Pressable
+                    className="items-center justify-center rounded-full border-4 active:opacity-90"
+                    style={{
+                      width: photoTaskButtonSize,
+                      height: photoTaskButtonSize,
+                      minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+                      minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                      borderColor: EXPEDITION_THEME.accent,
+                      backgroundColor: EXPEDITION_THEME.panelStrong,
+                    }}
+                    onPress={photoTaskCapture.onOpenCamera}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={photoTaskCapture.takePhotoLabel}
+                  >
+                    <SvgUri
+                      uri={CAMERA_ICON_SVG_URI}
+                      width={photoTaskIconSize}
+                      height={photoTaskIconSize}
+                      color={EXPEDITION_THEME.accent}
+                      fill={EXPEDITION_THEME.accent}
+                      stroke={EXPEDITION_THEME.accent}
+                    />
+                  </Pressable>
+                </View>
+                <Text
+                  className="text-center font-semibold"
+                  style={{ color: EXPEDITION_THEME.accent, fontSize: photoTaskLabelFontSize }}
+                >
+                  {photoTaskCapture.takePhotoLabel}
+                </Text>
+              </View>
+            )
+          ) : null}
+        </View>
+        )
       ) : renderedStationMedia ? (
         renderedStationMedia
       ) : shouldShowQuizFallbackGraphic ? (

@@ -83,6 +83,7 @@ export function ExpeditionStageOverlayLayer({
         onClose={() => overlayFlow.setActiveStationTestId(null)}
         onRequestClose={overlayFlow.handleRequestCloseActiveStation}
         onCompleteTask={overlayFlow.handleCompleteStationTestTask}
+        onSubmitPhotoTask={overlayFlow.handleSubmitPhotoTask}
         onQuizFailed={overlayFlow.handleQuizFailed}
         onTimeExpired={overlayFlow.handleTimeStationExpired}
         timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}

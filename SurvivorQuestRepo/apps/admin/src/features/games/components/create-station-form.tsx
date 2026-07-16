@@ -137,6 +137,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [quizAudioUrl, setQuizAudioUrl] = useState("");
   const [challengeDifficultyMode, setChallengeDifficultyMode] = useState<ChallengeDifficultyMode>("admin");
   const [challengeDifficulty, setChallengeDifficulty] = useState<ChallengeDifficulty>("medium");
+  const [completionStopwatchEnabled, setCompletionStopwatchEnabled] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
@@ -269,6 +270,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                     : undefined,
                 challengeDifficultyMode: supportsChallengeDifficulty(type) ? challengeDifficultyMode : "admin",
                 challengeDifficulty: supportsChallengeDifficulty(type) ? challengeDifficulty : "medium",
+                completionStopwatchEnabled: clampTimeLimitSeconds(timeLimitSeconds) === 0 ? completionStopwatchEnabled : false,
                 latitude: nextLatitude,
                 longitude: nextLongitude,
               }).unwrap();
@@ -289,6 +291,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setAudioFile(null);
               setChallengeDifficultyMode("admin");
               setChallengeDifficulty("medium");
+              setCompletionStopwatchEnabled(false);
               setLatitude(undefined);
               setLongitude(undefined);
               setCreateImageMode("upload");
@@ -676,11 +679,13 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
           ) : null}
 
           <label className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">Opis (opcjonalny)</span>
+            <span className="text-xs uppercase tracking-wider text-zinc-400">
+              {type === "photo-task" ? "Polecenie (co należy sfotografować)" : "Opis (opcjonalny)"}
+            </span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Krótki opis stanowiska"
+              placeholder={type === "photo-task" ? "Np. Znajdź młotek i zrób jego zdjęcie" : "Krótki opis stanowiska"}
               rows={4}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             />
@@ -903,6 +908,16 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               />
               <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
             </div>
+            {timeLimitSeconds === 0 ? (
+              <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                <input
+                  type="checkbox"
+                  checked={completionStopwatchEnabled}
+                  onChange={(event) => setCompletionStopwatchEnabled(event.target.checked)}
+                />
+                Pokaż stoper czasu wykonania (dla graczy i organizatora)
+              </label>
+            ) : null}
           </div>
 
           <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">

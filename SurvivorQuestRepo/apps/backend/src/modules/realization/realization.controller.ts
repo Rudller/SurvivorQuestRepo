@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Post,
   Put,
@@ -84,6 +85,53 @@ export class RealizationController {
     }
 
     return this.stationStorageService.uploadRealizationLogo(file);
+  }
+
+  @Post('upload-map-image')
+  @AdminOnly()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_LOGO_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadRealizationMapImage(
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Map image is required');
+    }
+
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('Unsupported map image type');
+    }
+
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      throw new BadRequestException('Invalid map image file');
+    }
+
+    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+      throw new BadRequestException('Invalid map image file signature');
+    }
+
+    return this.stationStorageService.uploadRealizationMapImage(file);
+  }
+
+  @Get('media-library')
+  @AdminOnly()
+  async getMediaLibrary() {
+    return this.realizationService.listMediaLibrary();
+  }
+
+  @Delete('media-library')
+  @AdminOnly()
+  async deleteMediaAsset(@Body() body: { url?: string }) {
+    const url = body.url?.trim();
+    if (!url) {
+      throw new BadRequestException('Asset url is required');
+    }
+
+    await this.realizationService.deleteMediaAsset(url);
+    return { ok: true };
   }
 
   @Post('upload-offer')

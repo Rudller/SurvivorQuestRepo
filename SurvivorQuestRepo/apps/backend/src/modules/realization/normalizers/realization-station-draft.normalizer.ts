@@ -26,12 +26,22 @@ function isValidStationCoordinate(latitude: unknown, longitude: unknown) {
   );
 }
 
-function normalizeChallengeDifficultyMode(value: unknown): StationDraftInput['challengeDifficultyMode'] {
+function normalizeChallengeDifficultyMode(
+  value: unknown,
+): StationDraftInput['challengeDifficultyMode'] {
   return value === 'player' ? 'player' : 'admin';
 }
 
-function normalizeChallengeDifficulty(value: unknown): StationDraftInput['challengeDifficulty'] {
+function normalizeChallengeDifficulty(
+  value: unknown,
+): StationDraftInput['challengeDifficulty'] {
   return value === 'easy' || value === 'hard' ? value : 'medium';
+}
+
+function normalizeCompletionStopwatchEnabled(
+  value: unknown,
+): StationDraftInput['completionStopwatchEnabled'] {
+  return value === true;
 }
 
 export function normalizeScenarioStationDrafts(
@@ -89,8 +99,15 @@ export function normalizeScenarioStationDrafts(
           : undefined,
         quiz: draft.quiz,
         translations: draft.translations,
-        challengeDifficultyMode: normalizeChallengeDifficultyMode(draft.challengeDifficultyMode),
-        challengeDifficulty: normalizeChallengeDifficulty(draft.challengeDifficulty),
+        challengeDifficultyMode: normalizeChallengeDifficultyMode(
+          draft.challengeDifficultyMode,
+        ),
+        challengeDifficulty: normalizeChallengeDifficulty(
+          draft.challengeDifficulty,
+        ),
+        completionStopwatchEnabled: normalizeCompletionStopwatchEnabled(
+          draft.completionStopwatchEnabled,
+        ),
         color: draft.color,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,

@@ -4,6 +4,7 @@ import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
+import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
 import type { MastermindAttempt } from "./station-panels/mastermind-station-panel";
 import { StationMediaPanel } from "./station-panels/station-media-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
@@ -12,6 +13,7 @@ import { StationQuizTaskWrapper } from "./station-panels/shared-ui";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
+import { useStationCompletionStopwatch } from "./station-panels/use-station-completion-stopwatch";
 import { createStationPreviewActions } from "./station-panels/use-station-preview-actions";
 import { useStationOverlayReset } from "./station-panels/use-station-overlay-reset";
 import { buildStationPreviewModel } from "./station-panels/use-station-preview-model";
@@ -90,6 +92,46 @@ function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: Stati
     return text.codeApproved;
   }
   return text.quizSuccessPopup;
+}
+
+function resolveFailureOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
+  if (station.stationType === "wordle") {
+    return text.wordleFailedPopup;
+  }
+  if (station.stationType === "hangman") {
+    return text.hangmanFailedPopup;
+  }
+  if (station.stationType === "mastermind") {
+    return text.mastermindFailedPopup;
+  }
+  if (station.stationType === "anagram") {
+    return text.anagramFailedPopup;
+  }
+  if (station.stationType === "caesar-cipher") {
+    return text.caesarFailedPopup;
+  }
+  if (station.stationType === "memory") {
+    return text.memoryFailedPopup;
+  }
+  if (station.stationType === "simon") {
+    return text.simonFailedPopup;
+  }
+  if (station.stationType === "rebus") {
+    return text.rebusFailedPopup;
+  }
+  if (station.stationType === "boggle") {
+    return text.boggleFailedPopup;
+  }
+  if (station.stationType === "mini-sudoku") {
+    return text.miniSudokuFailedPopup;
+  }
+  if (station.stationType === "matching") {
+    return text.matchingFailedPopup;
+  }
+  if (station.stationType === "photo-task") {
+    return text.photoTaskRejectedPopup;
+  }
+  return text.outcomeFailed;
 }
 
 
@@ -201,6 +243,9 @@ type StationPreviewText = {
   outcomePassed: string;
   outcomeTimedOut: string;
   outcomeFailed: string;
+  outcomePending: string;
+  photoTaskRejectedPopup: string;
+  pendingReviewPopupMessage: string;
   matchingChecking: string;
   matchingCheck: string;
   matchingAttempts: string;
@@ -208,6 +253,7 @@ type StationPreviewText = {
   taskDescriptionMissing: string;
   anagramDisplayHint: string;
   executionTimerLabel: string;
+  executionStopwatchLabel: string;
   points: string;
   backToMapNow: string;
   backToMap: string;
@@ -327,6 +373,10 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   outcomePassed: "Passed",
   outcomeTimedOut: "Time expired",
   outcomeFailed: "Failed",
+  outcomePending: "Submitted",
+  photoTaskRejectedPopup: "Your photo was rejected by the Game Master. The task was not completed.",
+  pendingReviewPopupMessage:
+    "The task has been submitted. The Game Master will now check whether the photo shows what it should, then you'll continue in the game.",
   matchingChecking: "Checking...",
   matchingCheck: "Check",
   matchingAttempts: "Attempts",
@@ -334,6 +384,7 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   taskDescriptionMissing: "Task description has not been added yet.",
   anagramDisplayHint: "Jumbled text is displayed word by word, each in a separate row.",
   executionTimerLabel: "Time left to complete task",
+  executionStopwatchLabel: "Time spent on task",
   points: "Points",
   backToMapNow: "Back to map now",
   backToMap: "Back to map",
@@ -454,6 +505,10 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   outcomePassed: "Зараховано",
   outcomeTimedOut: "Час вичерпано",
   outcomeFailed: "Не зараховано",
+  outcomePending: "Надіслано",
+  photoTaskRejectedPopup: "Ваше фото відхилено організатором. Завдання не зараховано.",
+  pendingReviewPopupMessage:
+    "Завдання надіслано. Організатор тепер перевірить, чи фото показує потрібне, після чого ви зможете продовжити гру.",
   matchingChecking: "Перевірка...",
   matchingCheck: "Перевірити",
   matchingAttempts: "Спроби",
@@ -462,6 +517,7 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   anagramDisplayHint:
     "Перемішаний текст відображається слово за словом, кожне в окремому рядку.",
   executionTimerLabel: "Час до завершення завдання",
+  executionStopwatchLabel: "Час виконання завдання",
   points: "Бали",
   backToMapNow: "Повернутися до мапи зараз",
   backToMap: "Повернутися до мапи",
@@ -582,6 +638,10 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   outcomePassed: "Зачтено",
   outcomeTimedOut: "Время истекло",
   outcomeFailed: "Не зачтено",
+  outcomePending: "Отправлено",
+  photoTaskRejectedPopup: "Ваше фото отклонено организатором. Задание не зачтено.",
+  pendingReviewPopupMessage:
+    "Задание отправлено. Организатор теперь проверит, соответствует ли фото заданию, после чего вы сможете продолжить игру.",
   matchingChecking: "Проверка...",
   matchingCheck: "Проверить",
   matchingAttempts: "Попытки",
@@ -590,6 +650,7 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   anagramDisplayHint:
     "Перемешанный текст отображается слово за словом, каждое в отдельной строке.",
   executionTimerLabel: "Время до завершения задания",
+  executionStopwatchLabel: "Время выполнения задания",
   points: "Баллы",
   backToMapNow: "Вернуться к карте сейчас",
   backToMap: "Вернуться к карте",
@@ -711,6 +772,10 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     outcomePassed: "Zaliczono",
     outcomeTimedOut: "Czas minął",
     outcomeFailed: "Nie zaliczono",
+    outcomePending: "Wysłano",
+    photoTaskRejectedPopup: "Zdjęcie zostało odrzucone przez organizatora. Zadanie nie zostało zaliczone.",
+    pendingReviewPopupMessage:
+      "Zadanie zostało wysłane. Organizator (Mistrz Gry) sprawdzi teraz, czy zdjęcie przedstawia to, co powinno, a potem będziesz mógł kontynuować grę.",
     matchingChecking: "Sprawdzanie...",
     matchingCheck: "Sprawdź",
     matchingAttempts: "Próby",
@@ -719,6 +784,7 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     anagramDisplayHint:
       "Rozsypanka jest wyświetlana wyraz po wyrazie, a każdy wyraz znajduje się w osobnym wierszu.",
     executionTimerLabel: "Czas do ukończenia zadania",
+    executionStopwatchLabel: "Czas wykonania zadania",
     points: "Punkty",
     backToMapNow: "Wróć do mapy teraz",
     backToMap: "Wróć do mapy",
@@ -734,6 +800,7 @@ export function StationPreviewOverlay({
   onClose,
   onRequestClose,
   onCompleteTask,
+  onSubmitPhotoTask,
   onQuizFailed,
   onQuizPassed,
   onTimeExpired,
@@ -919,15 +986,21 @@ export function StationPreviewOverlay({
 
     const stationSeenBefore = previousStatus !== undefined;
     const transitionedToDone = stationSeenBefore && previousStatus !== "done" && currentStatus === "done";
-    if (!transitionedToDone) {
+    const transitionedToFailed =
+      stationSeenBefore && previousStatus !== "failed" && previousStatus !== "done" && currentStatus === "failed";
+
+    if (transitionedToDone && quizOutcomePopup?.variant !== "success") {
+      showQuizOutcomePopup("success", resolveSuccessOutcomeMessage(displayedStation, text));
       return;
     }
 
-    if (quizOutcomePopup?.variant === "success") {
-      return;
+    if (
+      transitionedToFailed &&
+      quizOutcomePopup?.variant !== "failed" &&
+      quizOutcomePopup?.variant !== "timeout"
+    ) {
+      showQuizOutcomePopup("failed", resolveFailureOutcomeMessage(displayedStation, text));
     }
-
-    showQuizOutcomePopup("success", resolveSuccessOutcomeMessage(displayedStation, text));
   }, [displayedStation, quizOutcomePopup?.variant, showQuizOutcomePopup, text]);
   const {
     audioLoadError,
@@ -1263,6 +1336,13 @@ export function StationPreviewOverlay({
     timerPulseLoopRef,
   });
 
+  const { elapsedTimeSeconds } = useStationCompletionStopwatch({
+    station: displayedStation,
+    isOverlayMounted,
+    nowMs,
+    setNowMs,
+  });
+
   useStationTimeoutOutcome({
     station: displayedStation,
     remainingTimeSeconds,
@@ -1332,6 +1412,10 @@ export function StationPreviewOverlay({
     });
   }, [wordleAttempts.length, wordleDisplayLengthForTracking, wordleRevealedCellCounts.length]);
 
+  const photoTaskCapture = usePhotoTaskCapture(displayedStation, onSubmitPhotoTask, () => {
+    showQuizOutcomePopup("pending", text.pendingReviewPopupMessage);
+  });
+
   if (!isOverlayMounted || !displayedStation) {
     return null;
   }
@@ -1380,6 +1464,7 @@ export function StationPreviewOverlay({
     isMatchingStation,
     isQuizStation,
     requiresCode,
+    requiresPhotoUpload,
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,
@@ -1448,6 +1533,7 @@ export function StationPreviewOverlay({
     feedbackTone,
     executionTimeLabel,
     shouldShowExecutionTimer,
+    isCompletionStopwatchActive,
     hasTimedLimit,
     isTimeExpired,
     isWordleInteractiveDisabled,
@@ -1492,6 +1578,7 @@ export function StationPreviewOverlay({
     matchingConnections,
     matchingAttempts,
     remainingTimeSeconds,
+    elapsedTimeSeconds,
     finalTenSecondsProgress,
     timerPulseAnimation,
     isSubmittingQuizAnswer,
@@ -2234,7 +2321,7 @@ export function StationPreviewOverlay({
                     stationType={station.stationType}
                     viewportHeight={viewportHeight}
                     stationMediaHeight={stationMediaHeight}
-                    requiresCode={requiresCode}
+                    requiresCode={requiresCode || requiresPhotoUpload}
                     isNumericCodeStation={isNumericCodeStation}
                     renderedStationMedia={renderedStationMedia}
                     shouldShowQuizFallbackGraphic={shouldShowQuizFallbackGraphic}
@@ -2275,8 +2362,51 @@ export function StationPreviewOverlay({
                           }
                         : undefined
                     }
+                    photoTaskCapture={
+                      requiresPhotoUpload
+                        ? {
+                            canCapture: photoTaskCapture.canCapture,
+                            previewUri: photoTaskCapture.previewUri,
+                            onOpenCamera: photoTaskCapture.openCapture,
+                            takePhotoLabel: photoTaskCapture.text.takePhoto,
+                            retakePhotoLabel: photoTaskCapture.text.retakePhoto,
+                            isCaptureActive: photoTaskCapture.isCaptureActive,
+                            isUploading: photoTaskCapture.isUploading,
+                            uploadError: photoTaskCapture.uploadError,
+                            cameraAccessTitle: photoTaskCapture.text.cameraAccessTitle,
+                            cameraAccessDescription: photoTaskCapture.text.cameraAccessDescription,
+                            enableCameraLabel: photoTaskCapture.text.enableCamera,
+                            onCancelCapture: photoTaskCapture.closeCapture,
+                            onConfirmCapture: photoTaskCapture.handleConfirmedCapture,
+                          }
+                        : undefined
+                    }
                   />
                 ) : null}
+
+              {requiresPhotoUpload ? (
+                <View
+                  className="items-center"
+                  style={{ marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16), rowGap: adaptiveLayout.s(6, 4, 10) }}
+                >
+                  <Text
+                    className="text-center font-semibold"
+                    style={{
+                      color: EXPEDITION_THEME.textPrimary,
+                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 18 : 13, 12, 22),
+                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 28),
+                    }}
+                  >
+                    {stationQuizPrompt}
+                  </Text>
+                  <PhotoTaskStatusText
+                    text={photoTaskCapture.text}
+                    isApproved={photoTaskCapture.isApproved}
+                    isRejected={photoTaskCapture.isRejected}
+                    hasPendingSubmission={photoTaskCapture.hasPendingSubmission}
+                  />
+                </View>
+              ) : null}
 
               {requiresCode ? (
                 <View
@@ -2297,7 +2427,7 @@ export function StationPreviewOverlay({
                       : text.taskDescriptionMissing}
                   </Text>
                 </View>
-              ) : !isCaesarStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && !requiresPhotoUpload && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <Text
                   className={isNumericCodeStation ? "mt-1" : "mt-1"}
                   numberOfLines={isTabletOverlay ? undefined : 2}
@@ -2336,6 +2466,7 @@ export function StationPreviewOverlay({
                   {renderedQuizStation}
                 </StationQuizTaskWrapper>
               ) : null}
+
             </View>
 
             {requiresCode ? (
@@ -2389,7 +2520,7 @@ export function StationPreviewOverlay({
                     className="mt-1 text-center text-[10px] uppercase tracking-widest"
                     style={{ color: EXPEDITION_THEME.textSubtle }}
                   >
-                    {text.executionTimerLabel}
+                    {isCompletionStopwatchActive ? text.executionStopwatchLabel : text.executionTimerLabel}
                   </Text>
                 </View>
               ) : null}
@@ -2459,6 +2590,7 @@ export function StationPreviewOverlay({
           outcomePassed: text.outcomePassed,
           outcomeTimedOut: text.outcomeTimedOut,
           outcomeFailed: text.outcomeFailed,
+          outcomePending: text.outcomePending,
           backToMapNow: text.backToMapNow,
           backToMap: text.backToMap,
         }}

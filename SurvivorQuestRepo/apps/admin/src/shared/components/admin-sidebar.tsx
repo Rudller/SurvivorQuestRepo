@@ -28,6 +28,7 @@ const navItems: AdminNavItem[] = [
   { href: "/realizations", label: "Realizacje" },
   { href: "/station", label: "Stanowisko", roles: ["admin"] },
   { href: "/scenario", label: "Scenariusz", roles: ["admin"] },
+  { href: "/media-library", label: "Biblioteka plików", roles: ["admin"] },
   { href: "/chat", label: "Czat" },
 ];
 

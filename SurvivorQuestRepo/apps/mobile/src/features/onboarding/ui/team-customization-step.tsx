@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import { EXPEDITION_THEME, TEAM_ICONS } from "../model/constants";
+import { Image, Pressable, Text, TextInput, View } from "react-native";
+import { EXPEDITION_THEME, getExpeditionThemeMode } from "../model/constants";
 import type { TeamColor, TeamColorOption } from "../model/types";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
@@ -15,7 +15,11 @@ export type TeamCustomizationStepText = {
   customizationLabel: string;
   teamNamePlaceholder: string;
   teamColorLabel: string;
-  teamIconLabel: string;
+  selfieLabel: string;
+  takeSelfie: string;
+  retakeSelfie: string;
+  selfieOverlayTitle: string;
+  selfieOverlaySubtitle: string;
   startAction: string;
   startingAction: string;
 };
@@ -25,7 +29,7 @@ type TeamCustomizationStepProps = {
   selectedTeam: number | null;
   teamName: string;
   teamColor: TeamColor;
-  teamIcon: string;
+  selfiePreviewUri: string | null;
   teamColors: TeamColorOption[];
   selectedColor: TeamColorOption;
   bannerTextColor: string;
@@ -37,11 +41,11 @@ type TeamCustomizationStepProps = {
   isSaving: boolean;
   canSave: boolean;
   occupiedColors: Record<string, number>;
-  occupiedIcons: Record<string, number>;
+  selfieUploadError: string | null;
   text: TeamCustomizationStepText;
   onTeamNameChange: (value: string) => void;
   onTeamColorChange: (value: TeamColor) => void;
-  onTeamIconChange: (value: string) => void;
+  onOpenSelfieCapture: () => void;
   onSave: () => void | Promise<void>;
 };
 
@@ -103,70 +107,12 @@ const ColorOptionButton = memo(function ColorOptionButton({
   );
 });
 
-type IconOptionButtonProps = {
-  iconOption: string;
-  isSelected: boolean;
-  selectedTeam: number | null;
-  occupiedByTeam: number | null;
-  onSelect: (value: string) => void;
-};
-
-const IconOptionButton = memo(function IconOptionButton({
-  iconOption,
-  isSelected,
-  selectedTeam,
-  occupiedByTeam,
-  onSelect,
-}: IconOptionButtonProps) {
-  const isTakenByAnotherTeam =
-    typeof occupiedByTeam === "number" &&
-    (!selectedTeam || occupiedByTeam !== selectedTeam);
-
-  const containerStyle = useMemo(
-    () => ({
-      borderColor: isSelected
-        ? EXPEDITION_THEME.accentStrong
-        : isTakenByAnotherTeam
-          ? EXPEDITION_THEME.danger
-          : EXPEDITION_THEME.border,
-      backgroundColor: isSelected
-        ? EXPEDITION_THEME.panelStrong
-        : isTakenByAnotherTeam
-          ? "rgba(239, 111, 108, 0.16)"
-          : EXPEDITION_THEME.panel,
-    }),
-    [isSelected, isTakenByAnotherTeam],
-  );
-
-  return (
-    <Pressable
-      className={`h-14 w-14 items-center justify-center rounded-2xl border ${MOBILE_UX_TOKENS.activePressClass}`}
-      style={{
-        ...containerStyle,
-        minWidth: MOBILE_UX_TOKENS.minTouchTarget,
-        minHeight: MOBILE_UX_TOKENS.minTouchTarget,
-      }}
-      onPress={() => onSelect(iconOption)}
-    >
-      <Text className="text-2xl">{iconOption}</Text>
-      {isTakenByAnotherTeam ? (
-        <Text
-          className="absolute -top-2 -right-2 rounded-full px-1 text-[10px] font-bold"
-          style={{ backgroundColor: EXPEDITION_THEME.danger, color: "#fff" }}
-        >
-          {occupiedByTeam}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-});
-
 export function TeamCustomizationStep({
   isTabletLayout,
   selectedTeam,
   teamName,
   teamColor,
-  teamIcon,
+  selfiePreviewUri,
   teamColors,
   selectedColor,
   bannerTextColor,
@@ -178,14 +124,16 @@ export function TeamCustomizationStep({
   isSaving,
   canSave,
   occupiedColors,
-  occupiedIcons,
+  selfieUploadError,
   text,
   onTeamNameChange,
   onTeamColorChange,
-  onTeamIconChange,
+  onOpenSelfieCapture,
   onSave,
 }: TeamCustomizationStepProps) {
   const [isTeamNameFocused, setIsTeamNameFocused] = useState(false);
+  const isLightTheme = getExpeditionThemeMode() === "light";
+  const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
 
   return (
     <View
@@ -223,8 +171,15 @@ export function TeamCustomizationStep({
           }}
         >
           <View className="flex-1 flex-row items-center gap-2">
-            <View className="h-full w-1/6 items-center justify-center rounded-md" style={{ backgroundColor: bannerIconBackground }}>
-              <Text className={isTabletLayout ? "text-4xl" : "text-3xl"}>{teamIcon}</Text>
+            <View
+              className="h-full w-1/6 items-center justify-center overflow-hidden rounded-md"
+              style={{ backgroundColor: bannerIconBackground }}
+            >
+              {selfiePreviewUri ? (
+                <Image source={{ uri: selfiePreviewUri }} className="h-full w-full" resizeMode="cover" />
+              ) : (
+                <Text className={isTabletLayout ? "text-4xl" : "text-3xl"}>🙂</Text>
+              )}
             </View>
             <View className="flex-1">
               <Text
@@ -297,20 +252,59 @@ export function TeamCustomizationStep({
         </View>
 
         <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
-          {text.teamIconLabel}
+          {text.selfieLabel}
         </Text>
-        <View className="mt-2 flex-row flex-wrap gap-3">
-          {TEAM_ICONS.map((iconOption) => (
-            <IconOptionButton
-              key={iconOption}
-              iconOption={iconOption}
-              isSelected={iconOption === teamIcon}
-              selectedTeam={selectedTeam}
-              occupiedByTeam={occupiedIcons[iconOption] ?? null}
-              onSelect={onTeamIconChange}
+        {selfiePreviewUri ? (
+          <View
+            className="mt-2 flex-row items-center gap-3 rounded-2xl border p-2"
+            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+          >
+            <Image
+              source={{ uri: selfiePreviewUri }}
+              className="h-14 w-14 rounded-xl border"
+              style={{ borderColor: EXPEDITION_THEME.border }}
+              resizeMode="cover"
             />
-          ))}
-        </View>
+            <Pressable
+              className={`flex-1 flex-row items-center justify-center gap-2 rounded-full px-4 ${MOBILE_UX_TOKENS.activePressClass}`}
+              style={{
+                minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                backgroundColor: EXPEDITION_THEME.accent,
+              }}
+              onPress={onOpenSelfieCapture}
+            >
+              <Text style={{ fontSize: 16 }}>🔄</Text>
+              <Text className="font-bold" style={{ color: accentButtonTextColor }}>
+                {text.retakeSelfie}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            className={`mt-2 flex-row items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-4 ${MOBILE_UX_TOKENS.activePressClass}`}
+            style={{
+              minHeight: MOBILE_UX_TOKENS.minTouchTarget + 12,
+              borderColor: EXPEDITION_THEME.accent,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={onOpenSelfieCapture}
+          >
+            <View
+              className="h-10 w-10 items-center justify-center rounded-full"
+              style={{ backgroundColor: EXPEDITION_THEME.accent }}
+            >
+              <Text style={{ fontSize: 18 }}>📸</Text>
+            </View>
+            <Text className="text-base font-bold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              {text.takeSelfie}
+            </Text>
+          </Pressable>
+        )}
+        {selfieUploadError ? (
+          <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.danger }}>
+            {selfieUploadError}
+          </Text>
+        ) : null}
       </View>
 
       <View className="mt-4">

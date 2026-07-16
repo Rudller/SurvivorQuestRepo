@@ -6,17 +6,30 @@ import {
   Param,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
+import type { Express } from 'express';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import {
   MOBILE_JOIN_THROTTLE,
+  MOBILE_PHOTO_UPLOAD_THROTTLE,
   MOBILE_QR_RESOLVE_THROTTLE,
 } from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
+
+const MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_TEAM_PHOTO_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 type AdminFailTaskPayload = {
   reason?: string;
@@ -77,6 +90,24 @@ function optionalFiniteNumber(payload: MobilePayload, key: string) {
   return value;
 }
 
+function assertValidTeamPhotoFile(file: Express.Multer.File | undefined) {
+  if (!file) {
+    throw new BadRequestException('Photo is required');
+  }
+
+  if (!ALLOWED_TEAM_PHOTO_MIME_TYPES.has(file.mimetype)) {
+    throw new BadRequestException('Unsupported photo type');
+  }
+
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new BadRequestException('Invalid photo file');
+  }
+
+  if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
+    throw new BadRequestException('Invalid photo file signature');
+  }
+}
+
 @Controller(['mobile', 'api/mobile'])
 export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
@@ -114,7 +145,24 @@ export class MobileController {
       name: requireString(payload, 'name'),
       color: requireString(payload, 'color'),
       badgeKey: optionalString(payload, 'badgeKey'),
-      badgeImageUrl: optionalString(payload, 'badgeImageUrl'),
+    });
+  }
+
+  @Post('team/selfie')
+  @Throttle(MOBILE_PHOTO_UPLOAD_THROTTLE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadMobileTeamSelfie(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { sessionToken?: string },
+  ) {
+    assertValidTeamPhotoFile(file);
+    return this.mobileService.uploadTeamSelfie({
+      sessionToken: requireString(body as MobilePayload, 'sessionToken'),
+      file: file!,
     });
   }
 
@@ -193,6 +241,25 @@ export class MobileController {
       sessionToken: requireString(payload, 'sessionToken'),
       stationId: requireString(payload, 'stationId'),
       startedAt: optionalString(payload, 'startedAt'),
+    });
+  }
+
+  @Post('task/photo')
+  @Throttle(MOBILE_PHOTO_UPLOAD_THROTTLE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async uploadMobileTaskPhoto(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { sessionToken?: string; stationId?: string },
+  ) {
+    assertValidTeamPhotoFile(file);
+    return this.mobileService.uploadTeamTaskPhoto({
+      sessionToken: requireString(body as MobilePayload, 'sessionToken'),
+      stationId: requireString(body as MobilePayload, 'stationId'),
+      file: file!,
     });
   }
 
@@ -306,6 +373,13 @@ export class MobileController {
     });
   }
 
+  @Get('admin/realizations/current/photo-reviews')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getMobileAdminCurrentPhotoReviews() {
+    return this.mobileService.listPendingPhotoReviews('current');
+  }
+
   @Get('admin/realizations/:realizationId')
   @AdminOrInstructor()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
@@ -375,6 +449,15 @@ export class MobileController {
       realizationId,
       ttlCandidate,
     );
+  }
+
+  @Get('admin/realizations/:realizationId/photo-reviews')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getMobileAdminPhotoReviews(
+    @Param('realizationId') realizationId: string,
+  ) {
+    return this.mobileService.listPendingPhotoReviews(realizationId);
   }
 
   @Post(

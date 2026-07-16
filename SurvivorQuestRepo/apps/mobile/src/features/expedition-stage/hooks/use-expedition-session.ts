@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OnboardingSession } from "../../onboarding/model/types";
 import { useUiLanguage } from "../../i18n/ui-language-context";
@@ -11,13 +11,22 @@ import {
   postMobileResolveStationQr,
   postMobileStartTask,
   postMobileTeamLocation,
+  postMobileUploadTaskPhoto,
 } from "../api/mobile-session.api";
 import {
   buildInitialSessionState,
   resolveDefaultStationPoints,
   type ExpeditionSessionState,
+  type ExpeditionTaskStatus,
   type PlayerLocation,
 } from "../model/types";
+
+type GlobalTaskOutcomeEvent = {
+  id: string;
+  stationId: string;
+  variant: "success" | "failed";
+  message: string;
+};
 
 const SESSION_POLLING_INTERVAL_MS = 15_000;
 const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
@@ -67,6 +76,7 @@ const EXPEDITION_SESSION_TEXT = {
     invalidTaskData: "Nieprawidłowe dane zadania.",
     requestTimedOut: "Przekroczono czas oczekiwania na odpowiedź serwera.",
     completeTaskFailed: "Nie udało się ukończyć zadania.",
+    submitPhotoFailed: "Nie udało się wysłać zdjęcia.",
     noLocationServerResponse: "Brak odpowiedzi serwera dla lokalizacji.",
     sendLocationFailed: "Nie udało się wysłać lokalizacji.",
     failTaskFailed: "Nie udało się oznaczyć zadania jako niezaliczone.",
@@ -79,6 +89,15 @@ const EXPEDITION_SESSION_TEXT = {
     progressSynced: "Progres został zsynchronizowany z serwerem.",
     progressStillPending: "Nadal nie możemy połączyć się z serwerem. Twój progres pozostaje zapisany na urządzeniu i spróbujemy wysłać go ponownie.",
     progressSyncRejected: "Nie udało się zsynchronizować części progresu z serwerem. Odświeżamy stan realizacji.",
+    globalTaskApproved: (stationName: string) =>
+      `Twoje zgłoszenie dla „${stationName}” zostało zatwierdzone. Punkty dodane.`,
+    globalTaskRejected: (stationName: string) => `Twoje zgłoszenie dla „${stationName}” zostało odrzucone.`,
+    globalOutcomePassed: "Zatwierdzone",
+    globalOutcomeFailed: "Odrzucone",
+    globalOutcomeTimedOut: "Czas minął",
+    globalOutcomePending: "Wysłano",
+    globalBackToMapNow: "Wróć do mapy teraz",
+    globalBackToMap: "Wróć do mapy",
   },
   english: {
     missingSessionStateApiConfig: "Missing API configuration to fetch session state.",
@@ -89,6 +108,7 @@ const EXPEDITION_SESSION_TEXT = {
     invalidTaskData: "Invalid task data.",
     requestTimedOut: "Server response timeout exceeded.",
     completeTaskFailed: "Failed to complete the task.",
+    submitPhotoFailed: "Failed to upload the photo.",
     noLocationServerResponse: "No server response for location update.",
     sendLocationFailed: "Failed to send location.",
     failTaskFailed: "Failed to mark the task as failed.",
@@ -101,6 +121,14 @@ const EXPEDITION_SESSION_TEXT = {
     progressSynced: "Progress has been synced with the server.",
     progressStillPending: "We still cannot connect to the server. Your progress remains saved on this device and we will try again.",
     progressSyncRejected: "Some saved progress could not be synced with the server. Refreshing realization state.",
+    globalTaskApproved: (stationName: string) => `Your submission for “${stationName}” was approved. Points added.`,
+    globalTaskRejected: (stationName: string) => `Your submission for “${stationName}” was rejected.`,
+    globalOutcomePassed: "Approved",
+    globalOutcomeFailed: "Rejected",
+    globalOutcomeTimedOut: "Time expired",
+    globalOutcomePending: "Submitted",
+    globalBackToMapNow: "Back to the map now",
+    globalBackToMap: "Back to the map",
   },
   ukrainian: {
     missingSessionStateApiConfig: "Відсутня конфігурація API для отримання стану сесії.",
@@ -111,6 +139,7 @@ const EXPEDITION_SESSION_TEXT = {
     invalidTaskData: "Некоректні дані завдання.",
     requestTimedOut: "Перевищено час очікування відповіді сервера.",
     completeTaskFailed: "Не вдалося завершити завдання.",
+    submitPhotoFailed: "Не вдалося надіслати фото.",
     noLocationServerResponse: "Немає відповіді сервера для оновлення локації.",
     sendLocationFailed: "Не вдалося надіслати локацію.",
     failTaskFailed: "Не вдалося позначити завдання як незараховане.",
@@ -123,6 +152,15 @@ const EXPEDITION_SESSION_TEXT = {
     progressSynced: "Прогрес синхронізовано із сервером.",
     progressStillPending: "Поки що не можемо підключитися до сервера. Ваш прогрес залишається збереженим на пристрої, ми спробуємо ще раз.",
     progressSyncRejected: "Частину прогресу не вдалося синхронізувати із сервером. Оновлюємо стан реалізації.",
+    globalTaskApproved: (stationName: string) =>
+      `Ваше подання для «${stationName}» затверджено. Бали нараховано.`,
+    globalTaskRejected: (stationName: string) => `Ваше подання для «${stationName}» відхилено.`,
+    globalOutcomePassed: "Затверджено",
+    globalOutcomeFailed: "Відхилено",
+    globalOutcomeTimedOut: "Час вичерпано",
+    globalOutcomePending: "Надіслано",
+    globalBackToMapNow: "Повернутися на мапу зараз",
+    globalBackToMap: "Повернутися на мапу",
   },
   russian: {
     missingSessionStateApiConfig: "Отсутствует конфигурация API для получения состояния сессии.",
@@ -133,6 +171,7 @@ const EXPEDITION_SESSION_TEXT = {
     invalidTaskData: "Некорректные данные задания.",
     requestTimedOut: "Превышено время ожидания ответа сервера.",
     completeTaskFailed: "Не удалось завершить задание.",
+    submitPhotoFailed: "Не удалось отправить фото.",
     noLocationServerResponse: "Нет ответа сервера для обновления локации.",
     sendLocationFailed: "Не удалось отправить локацию.",
     failTaskFailed: "Не удалось отметить задание как незачтенное.",
@@ -145,6 +184,15 @@ const EXPEDITION_SESSION_TEXT = {
     progressSynced: "Прогресс синхронизирован с сервером.",
     progressStillPending: "Пока не удаётся подключиться к серверу. Ваш прогресс остаётся сохранённым на устройстве, мы попробуем ещё раз.",
     progressSyncRejected: "Часть прогресса не удалось синхронизировать с сервером. Обновляем состояние реализации.",
+    globalTaskApproved: (stationName: string) =>
+      `Ваша заявка для «${stationName}» подтверждена. Баллы начислены.`,
+    globalTaskRejected: (stationName: string) => `Ваша заявка для «${stationName}» отклонена.`,
+    globalOutcomePassed: "Подтверждено",
+    globalOutcomeFailed: "Отклонено",
+    globalOutcomeTimedOut: "Время истекло",
+    globalOutcomePending: "Отправлено",
+    globalBackToMapNow: "Вернуться на карту сейчас",
+    globalBackToMap: "Вернуться на карту",
   },
 } as const;
 
@@ -535,9 +583,14 @@ export function applyCompletedTaskState({
   };
 }
 
-export function useExpeditionSession(session: OnboardingSession) {
+export function useExpeditionSession(
+  session: OnboardingSession,
+  isAnyStationOverlayOpenRef?: MutableRefObject<boolean>,
+) {
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_SESSION_TEXT[uiLanguage];
+  const previousTaskStatusByStationIdRef = useRef<Record<string, ExpeditionTaskStatus>>({});
+  const [globalTaskOutcomeQueue, setGlobalTaskOutcomeQueue] = useState<GlobalTaskOutcomeEvent[]>([]);
   const sessionIdentityKey = useMemo(
     () =>
       [
@@ -593,7 +646,63 @@ export function useExpeditionSession(session: OnboardingSession) {
     setSyncStatus("idle");
     setSyncMessage(null);
     setIsFlushingPendingMutations(false);
+    previousTaskStatusByStationIdRef.current = {};
+    setGlobalTaskOutcomeQueue([]);
   }, [stableSession]);
+
+  useEffect(() => {
+    const additions: GlobalTaskOutcomeEvent[] = [];
+
+    for (const task of sessionState.tasks) {
+      const previousStatus = previousTaskStatusByStationIdRef.current[task.stationId];
+      previousTaskStatusByStationIdRef.current[task.stationId] = task.status;
+
+      const stationSeenBefore = previousStatus !== undefined;
+      const transitioned =
+        stationSeenBefore &&
+        previousStatus !== "done" &&
+        previousStatus !== "failed" &&
+        (task.status === "done" || task.status === "failed");
+
+      if (!transitioned || isAnyStationOverlayOpenRef?.current) {
+        continue;
+      }
+
+      const stationName =
+        sessionState.realization.stations.find((station) => station.id === task.stationId)?.name?.trim() ||
+        task.stationId;
+
+      additions.push({
+        id: `${task.stationId}:${task.status}:${Date.now()}`,
+        stationId: task.stationId,
+        variant: task.status === "done" ? "success" : "failed",
+        message:
+          task.status === "done"
+            ? text.globalTaskApproved(stationName)
+            : text.globalTaskRejected(stationName),
+      });
+    }
+
+    if (additions.length > 0) {
+      setGlobalTaskOutcomeQueue((current) => [...current, ...additions]);
+    }
+  }, [isAnyStationOverlayOpenRef, sessionState.realization.stations, sessionState.tasks, text]);
+
+  const dismissCurrentGlobalTaskOutcome = useCallback(() => {
+    setGlobalTaskOutcomeQueue((current) => current.slice(1));
+  }, []);
+
+  const globalOutcomePanelText = useMemo(
+    () => ({
+      outcomePassed: text.globalOutcomePassed,
+      outcomeFailed: text.globalOutcomeFailed,
+      outcomeTimedOut: text.globalOutcomeTimedOut,
+      outcomePending: text.globalOutcomePending,
+      backToMapNow: text.globalBackToMapNow,
+      backToMap: text.globalBackToMap,
+    }),
+    [text],
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -933,6 +1042,43 @@ export function useExpeditionSession(session: OnboardingSession) {
     [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, sessionState.tasks, text],
   );
 
+  const submitTaskPhoto = useCallback(
+    async (stationId: string, fileUri: string) => {
+      const normalizedStationId = stationId.trim();
+      if (!normalizedStationId || !fileUri) {
+        return text.invalidTaskData;
+      }
+
+      if (offlineMode) {
+        return text.submitPhotoFailed;
+      }
+
+      const apiBaseUrl = session.apiBaseUrl?.trim();
+      if (!apiBaseUrl) {
+        return text.missingApiConfig;
+      }
+
+      try {
+        await withRequestTimeout(
+          (signal) =>
+            postMobileUploadTaskPhoto(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              stationId: normalizedStationId,
+              fileUri,
+            }, { signal }),
+          MOBILE_REQUEST_TIMEOUT_MS,
+          text.requestTimedOut,
+        );
+      } catch (error) {
+        return getApiErrorMessage(error, text.submitPhotoFailed);
+      }
+
+      void refreshSessionState();
+      return null;
+    },
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+  );
+
   const syncTeamLocation = useCallback(
     async (location: PlayerLocation) => {
       const locationAt = location.at || new Date().toISOString();
@@ -1174,8 +1320,12 @@ export function useExpeditionSession(session: OnboardingSession) {
     refreshSessionState,
     startStationTask,
     completeStationTask,
+    submitTaskPhoto,
     failStationTask,
     syncTeamLocation,
     resolveStationQrToken,
+    globalTaskOutcomePopup: globalTaskOutcomeQueue[0] ?? null,
+    dismissCurrentGlobalTaskOutcome,
+    globalOutcomePanelText,
   };
 }

@@ -25,6 +25,7 @@ type QuizPromptText = {
   boggleFallback: string;
   miniSudokuFallback: string;
   matchingFallback: string;
+  photoTaskFallback: string;
   playAudio: string;
   audioPlaying: string;
   loadingRecording: string;
@@ -44,6 +45,7 @@ const QUIZ_PROMPT_TEXT_ENGLISH: QuizPromptText = {
   boggleFallback: "Boggle: find the target word on the board.",
   miniSudokuFallback: "Mini Sudoku: fill the 2x2 grid.",
   matchingFallback: "Matching pairs: match the elements.",
+  photoTaskFallback: "Photo task: take a photo as proof, following the organizer's instructions.",
   playAudio: "▶️ Play / replay audio",
   audioPlaying: "Playing...",
   loadingRecording: "Loading recording...",
@@ -64,6 +66,7 @@ const QUIZ_PROMPT_TEXT: Record<UiLanguage, QuizPromptText> = {
     boggleFallback: "Boggle: znajdź docelowe słowo na planszy.",
     miniSudokuFallback: "Mini Sudoku: uzupełnij siatkę 2x2.",
     matchingFallback: "Łączenie par: dopasuj elementy.",
+    photoTaskFallback: "Zadanie fotograficzne: wykonaj zdjęcie zgodnie z poleceniem organizatora.",
     playAudio: "▶️ Odtwórz / odtwórz ponownie audio",
     audioPlaying: "Odtwarzanie...",
     loadingRecording: "Ładowanie nagrania...",
@@ -83,6 +86,7 @@ const QUIZ_PROMPT_TEXT: Record<UiLanguage, QuizPromptText> = {
     boggleFallback: "Boggle: знайдіть цільове слово на полі.",
     miniSudokuFallback: "Мінісудоку: заповніть сітку 2x2.",
     matchingFallback: "Підбір пар: зіставте елементи.",
+    photoTaskFallback: "Фотозавдання: зробіть фото як підтвердження, дотримуючись інструкцій організатора.",
     playAudio: "▶️ Відтворити / відтворити аудіо знову",
     audioPlaying: "Відтворення...",
     loadingRecording: "Завантаження запису...",
@@ -101,6 +105,7 @@ const QUIZ_PROMPT_TEXT: Record<UiLanguage, QuizPromptText> = {
     boggleFallback: "Boggle: найдите целевое слово на поле.",
     miniSudokuFallback: "Мини-судоку: заполните сетку 2x2.",
     matchingFallback: "Сопоставление пар: сопоставьте элементы.",
+    photoTaskFallback: "Фотозадание: сделайте фото как подтверждение, следуя инструкциям организатора.",
     playAudio: "▶️ Воспроизвести / воспроизвести аудио снова",
     audioPlaying: "Воспроизведение...",
     loadingRecording: "Загрузка записи...",
@@ -148,6 +153,9 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
   }
   if (station.stationType === "strong-password") {
     return (station.quizQuestion?.trim() || text.matchingFallback).replace(/\s*dzienne\s*/i, " ").trim();
+  }
+  if (station.stationType === "photo-task") {
+    return station.description?.trim() || text.photoTaskFallback;
   }
   return station.quizQuestion?.trim() || text.matchingFallback;
 }

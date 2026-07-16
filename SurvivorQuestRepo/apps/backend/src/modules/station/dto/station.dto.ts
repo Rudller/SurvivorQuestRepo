@@ -27,6 +27,7 @@ const STATION_TYPES: StationType[] = [
   'mini-sudoku',
   'matching',
   'strong-password',
+  'photo-task',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =
@@ -103,6 +104,7 @@ export type CreateStationDto = {
   quiz?: StationQuiz;
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
+  completionStopwatchEnabled?: boolean;
   color?: string;
   latitude?: number;
   longitude?: number;
@@ -317,11 +319,13 @@ function ensureStationBody(payload: unknown): CreateStationDto {
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
     completionCode: ensureCompletionCode(body.completionCode, type),
     quiz: ensureStationQuiz(body.quiz, type),
-    challengeDifficultyMode: body.challengeDifficultyMode === 'player' ? 'player' : 'admin',
+    challengeDifficultyMode:
+      body.challengeDifficultyMode === 'player' ? 'player' : 'admin',
     challengeDifficulty:
       body.challengeDifficulty === 'easy' || body.challengeDifficulty === 'hard'
         ? body.challengeDifficulty
         : 'medium',
+    completionStopwatchEnabled: body.completionStopwatchEnabled === true,
     color: /^#[0-9a-fA-F]{6}$/.test(String(body.color ?? ''))
       ? String(body.color)
       : undefined,
@@ -386,6 +390,7 @@ export function toCreateStationEntity(
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
+    completionStopwatchEnabled: dto.completionStopwatchEnabled ?? false,
     color: dto.color ?? '#f59e0b',
     latitude: dto.latitude,
     longitude: dto.longitude,
@@ -412,6 +417,7 @@ export function toUpdateStationEntity(
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
+    completionStopwatchEnabled: dto.completionStopwatchEnabled ?? false,
     color: dto.color ?? current.color,
     latitude: dto.latitude,
     longitude: dto.longitude,
@@ -435,6 +441,7 @@ export function toStationDraftInput(
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode,
     challengeDifficulty: dto.challengeDifficulty,
+    completionStopwatchEnabled: dto.completionStopwatchEnabled,
     latitude: dto.latitude,
     longitude: dto.longitude,
   };

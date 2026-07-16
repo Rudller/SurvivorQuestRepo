@@ -14,7 +14,8 @@ export type StationType =
   | 'boggle'
   | 'mini-sudoku'
   | 'matching'
-  | 'strong-password';
+  | 'strong-password'
+  | 'photo-task';
 
 export type ChallengeDifficultyMode = 'admin' | 'player';
 export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
@@ -58,6 +59,7 @@ export type StationEntity = {
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
+  completionStopwatchEnabled: boolean;
   color: string;
   latitude?: number;
   longitude?: number;
@@ -83,6 +85,7 @@ export type StationDraftInput = {
   translations?: StationTranslations;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  completionStopwatchEnabled?: boolean;
   color?: string;
   latitude?: number;
   longitude?: number;

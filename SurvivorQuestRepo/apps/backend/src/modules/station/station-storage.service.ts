@@ -1,7 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import type { Express } from 'express';
+
+export type StorageObjectSummary = {
+  key: string;
+  url: string;
+  size: number;
+  lastModifiedAt: string;
+};
 
 const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -55,6 +67,18 @@ export class StationStorageService {
     };
   }
 
+  async uploadRealizationMapImage(file: Express.Multer.File) {
+    const extension = IMAGE_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    const objectKey = this.buildObjectKey('realizations/map-images', extension);
+
+    await this.uploadObject(file, objectKey);
+
+    return {
+      key: objectKey,
+      url: `${this.getPublicBaseUrl()}/${objectKey}`,
+    };
+  }
+
   async uploadRealizationOfferPdf(file: Express.Multer.File) {
     const extension = DOCUMENT_EXTENSION_BY_MIME_TYPE[file.mimetype];
     const objectKey = this.buildObjectKey('realizations/offers', extension);
@@ -80,6 +104,100 @@ export class StationStorageService {
       key: objectKey,
       url: `${this.getPublicBaseUrl()}/${objectKey}`,
     };
+  }
+
+  async uploadTeamSelfie(
+    file: Express.Multer.File,
+    { realizationId, teamId }: { realizationId: string; teamId: string },
+  ) {
+    const extension = IMAGE_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    const objectKey = this.buildObjectKey(
+      `realizations/${realizationId}/teams/${teamId}/selfie`,
+      extension,
+    );
+
+    await this.uploadObject(file, objectKey);
+
+    return {
+      key: objectKey,
+      url: `${this.getPublicBaseUrl()}/${objectKey}`,
+    };
+  }
+
+  async uploadTeamTaskPhoto(
+    file: Express.Multer.File,
+    {
+      realizationId,
+      teamId,
+      stationId,
+    }: { realizationId: string; teamId: string; stationId: string },
+  ) {
+    const extension = IMAGE_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    const objectKey = this.buildObjectKey(
+      `realizations/${realizationId}/teams/${teamId}/tasks/${stationId}`,
+      extension,
+    );
+
+    await this.uploadObject(file, objectKey);
+
+    return {
+      key: objectKey,
+      url: `${this.getPublicBaseUrl()}/${objectKey}`,
+    };
+  }
+
+  async listObjectsByPrefix(prefix: string): Promise<StorageObjectSummary[]> {
+    const bucket = this.getRequiredEnv('R2_BUCKET');
+    const publicBaseUrl = this.getPublicBaseUrl();
+    const objects: StorageObjectSummary[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const response = await this.getClient().send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      for (const item of response.Contents ?? []) {
+        if (!item.Key) {
+          continue;
+        }
+
+        objects.push({
+          key: item.Key,
+          url: `${publicBaseUrl}/${item.Key}`,
+          size: item.Size ?? 0,
+          lastModifiedAt: item.LastModified?.toISOString() ?? new Date(0).toISOString(),
+        });
+      }
+
+      continuationToken = response.IsTruncated
+        ? response.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    return objects;
+  }
+
+  async deleteObject(key: string) {
+    await this.getClient().send(
+      new DeleteObjectCommand({
+        Bucket: this.getRequiredEnv('R2_BUCKET'),
+        Key: key,
+      }),
+    );
+  }
+
+  getObjectKeyFromUrl(url: string): string | null {
+    const prefix = `${this.getPublicBaseUrl()}/`;
+    if (!url.startsWith(prefix)) {
+      return null;
+    }
+
+    return url.slice(prefix.length);
   }
 
   private buildObjectKey(prefix: string, extension: string) {

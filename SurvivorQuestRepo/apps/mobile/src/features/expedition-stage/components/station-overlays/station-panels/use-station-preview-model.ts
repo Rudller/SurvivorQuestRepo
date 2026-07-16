@@ -152,6 +152,7 @@ type UseStationPreviewModelArgs = {
   matchingConnections: Record<string, string>;
   matchingAttempts: number;
   remainingTimeSeconds: number | null;
+  elapsedTimeSeconds: number | null;
   finalTenSecondsProgress: number;
   timerPulseAnimation: Animated.Value;
   isSubmittingQuizAnswer: boolean;
@@ -211,6 +212,7 @@ export function buildStationPreviewModel({
   matchingConnections,
   matchingAttempts,
   remainingTimeSeconds,
+  elapsedTimeSeconds,
   finalTenSecondsProgress,
   timerPulseAnimation,
   isSubmittingQuizAnswer,
@@ -248,6 +250,7 @@ export function buildStationPreviewModel({
   const isStrongPasswordStation = station.stationType === "strong-password";
   const isQuizStation = isQuizStationType(station.stationType);
   const requiresCode = station.stationType === "time" || station.stationType === "points";
+  const requiresPhotoUpload = station.stationType === "photo-task";
   const isNumericCodeStation = requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
   const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
@@ -261,7 +264,7 @@ export function buildStationPreviewModel({
         ? Math.max(104, Math.round(viewportHeight * 0.14))
         : Math.max(72, Math.round(viewportHeight * 0.1));
     }
-    if (requiresCode) {
+    if (requiresCode || requiresPhotoUpload) {
       return isTabletOverlay
         ? Math.max(128, Math.round(viewportHeight * 0.2))
         : Math.max(92, Math.round(viewportHeight * 0.14));
@@ -476,6 +479,8 @@ export function buildStationPreviewModel({
         : null;
   const remainingTimeLabel =
     remainingTimeSeconds !== null ? formatRemainingTimeLabel(remainingTimeSeconds) : null;
+  const stopwatchElapsedLabel =
+    elapsedTimeSeconds !== null ? formatRemainingTimeLabel(elapsedTimeSeconds) : null;
   const timerScalePeak = 1.04 + finalTenSecondsProgress * 0.14;
   const timerMinOpacity = 0.94 - finalTenSecondsProgress * 0.18;
   const timerTextColor =
@@ -499,8 +504,9 @@ export function buildStationPreviewModel({
           ],
         } as const)
       : undefined;
-  const executionTimeLabel = remainingTimeLabel ?? station.timeLimitLabel;
+  const executionTimeLabel = remainingTimeLabel ?? stopwatchElapsedLabel ?? station.timeLimitLabel;
   const shouldShowExecutionTimer = executionTimeLabel.trim().length > 0;
+  const isCompletionStopwatchActive = remainingTimeLabel === null && stopwatchElapsedLabel !== null;
   const hasTimedLimit = station.timeLimitSeconds > 0;
   const isTimeExpired = hasTimedLimit && hasTimerStarted && remainingTimeSeconds !== null && remainingTimeSeconds <= 0;
   const isWordleInteractiveDisabled =
@@ -552,6 +558,7 @@ export function buildStationPreviewModel({
     isMatchingStation,
     isQuizStation,
     requiresCode,
+    requiresPhotoUpload,
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,
@@ -624,6 +631,7 @@ export function buildStationPreviewModel({
     feedbackTone,
     executionTimeLabel,
     shouldShowExecutionTimer,
+    isCompletionStopwatchActive,
     hasTimedLimit,
     isTimeExpired,
     isWordleInteractiveDisabled,

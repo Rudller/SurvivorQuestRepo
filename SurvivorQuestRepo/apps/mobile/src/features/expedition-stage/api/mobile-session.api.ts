@@ -198,7 +198,8 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "boggle" ||
     value === "mini-sudoku" ||
     value === "matching" ||
-    value === "strong-password"
+    value === "strong-password" ||
+    value === "photo-task"
   ) {
     return value;
   }
@@ -391,6 +392,9 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         const value = asString(station.challengeDifficulty ?? station.challenge_difficulty, "medium");
         return value === "easy" || value === "hard" ? value : "medium";
       })(),
+      completionStopwatchEnabled: asBoolean(
+        station.completionStopwatchEnabled ?? station.completion_stopwatch_enabled,
+      ),
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       color: (() => {
         const value = asString(station.color);
@@ -506,6 +510,8 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       contactPhone: asString(realization.contactPhone ?? realization.contact_phone) || undefined,
       contactEmail: asString(realization.contactEmail ?? realization.contact_email) || undefined,
       logoUrl: asString(realization.logoUrl ?? realization.logo_url) || undefined,
+      hideMap: asBoolean(realization.hideMap ?? realization.hide_map),
+      mapImageUrl: asString(realization.mapImageUrl ?? realization.map_image_url) || undefined,
       type: asString(realization.type) || undefined,
       language: realizationLanguage,
       customLanguage: realizationCustomLanguage,
@@ -542,6 +548,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       name: (team.name as string | null) ?? null,
       color: (team.color as string | null) ?? null,
       badgeKey: (team.badgeKey as string | null) ?? (team.badge_key as string | null) ?? null,
+      badgeImageUrl: (() => {
+        const value = asString(team.badgeImageUrl ?? team.badge_image_url).trim();
+        return value.length > 0 ? value : null;
+      })(),
       points: Math.max(0, Math.round(asNumber(team.points, 0))),
       lastLocation: normalizePlayerLocation(team.lastLocation ?? team.last_location),
     },
@@ -624,6 +634,70 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   }
 
   return data as T;
+}
+
+async function requestMobileApiMultipart<T>(baseUrl: string, path: string, formData: FormData, options?: MobileApiRequestOptions) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    body: formData,
+    signal: options?.signal,
+  });
+
+  const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
+
+  if (!response.ok) {
+    const message = normalizeErrorMessage(data.message, `HTTP ${response.status}`);
+    throw new MobileApiHttpError({
+      statusCode: typeof data.statusCode === "number" ? data.statusCode : response.status,
+      code: resolveMobileApiErrorCode(response.status, message, data.code),
+      message,
+      responseBody: data,
+    });
+  }
+
+  return data as T;
+}
+
+function buildPhotoFormDataPart(fileUri: string) {
+  const fileName = fileUri.split("/").pop() || "photo.jpg";
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  const mimeType = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+  return { uri: fileUri, name: fileName, type: mimeType } as unknown as Blob;
+}
+
+export async function postMobileUploadTeamSelfie(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; fileUri: string },
+  options?: MobileApiRequestOptions,
+) {
+  const formData = new FormData();
+  formData.append("sessionToken", payload.sessionToken);
+  formData.append("file", buildPhotoFormDataPart(payload.fileUri));
+
+  return requestMobileApiMultipart<{ teamId: string; url: string }>(
+    apiBaseUrl,
+    "/api/mobile/team/selfie",
+    formData,
+    options,
+  );
+}
+
+export async function postMobileUploadTaskPhoto(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; stationId: string; fileUri: string },
+  options?: MobileApiRequestOptions,
+) {
+  const formData = new FormData();
+  formData.append("sessionToken", payload.sessionToken);
+  formData.append("stationId", payload.stationId);
+  formData.append("file", buildPhotoFormDataPart(payload.fileUri));
+
+  return requestMobileApiMultipart<{
+    teamId: string;
+    stationId: string;
+    url: string;
+    taskStatus: "in-progress";
+  }>(apiBaseUrl, "/api/mobile/task/photo", formData, options);
 }
 
 export function getApiErrorMessage(error: unknown, fallback?: string, language?: RealizationLanguage) {

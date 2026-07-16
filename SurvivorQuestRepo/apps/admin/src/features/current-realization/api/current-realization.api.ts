@@ -76,6 +76,9 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           stationName: asString(item.stationName ?? item.station_name),
           stationType: asString(item.stationType ?? item.station_type, "quiz"),
           defaultPoints: asNumber(item.defaultPoints ?? item.default_points),
+          completionStopwatchEnabled: asBoolean(
+            item.completionStopwatchEnabled ?? item.completion_stopwatch_enabled,
+          ),
           latitude:
             typeof latitudeCandidate === "number" && Number.isFinite(latitudeCandidate)
               ? latitudeCandidate
@@ -141,6 +144,7 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
             })(),
             status: asString(task.status, "todo") as CurrentRealizationOverview["teams"][number]["tasks"][number]["status"],
             pointsAwarded: asNumber(task.pointsAwarded ?? task.points_awarded),
+            startedAt: (task.startedAt as string | null) ?? (task.started_at as string | null) ?? null,
             finishedAt: (task.finishedAt as string | null) ?? (task.finished_at as string | null) ?? null,
           };
         }),
@@ -202,6 +206,31 @@ type TeamTaskAdminMutationResponse = {
   taskStatus: CurrentRealizationOverview["teams"][number]["tasks"][number]["status"];
   updatedAt: string;
 };
+
+export type PendingPhotoReview = {
+  teamId: string;
+  teamName: string;
+  stationId: string;
+  stationName: string;
+  stationDescription: string;
+  photoUrl: string;
+  submittedAt: string;
+};
+
+function normalizePendingPhotoReviews(raw: unknown): PendingPhotoReview[] {
+  return asArray(raw).map((value) => {
+    const item = asRecord(value);
+    return {
+      teamId: asString(item.teamId ?? item.team_id),
+      teamName: asString(item.teamName ?? item.team_name),
+      stationId: asString(item.stationId ?? item.station_id),
+      stationName: asString(item.stationName ?? item.station_name),
+      stationDescription: asString(item.stationDescription ?? item.station_description),
+      photoUrl: asString(item.photoUrl ?? item.photo_url),
+      submittedAt: asString(item.submittedAt ?? item.submitted_at),
+    };
+  });
+}
 
 export const currentRealizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -305,6 +334,14 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Realization"],
     }),
+    getPendingPhotoReviews: build.query<
+      PendingPhotoReview[],
+      { realizationId?: string } | void
+    >({
+      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/photo-reviews"),
+      transformResponse: (response: unknown) => normalizePendingPhotoReviews(response),
+      providesTags: ["Realization"],
+    }),
   }),
 });
 
@@ -318,4 +355,5 @@ export const {
   useResetCurrentRealizationTeamTaskMutation,
   useCompleteCurrentRealizationTeamTaskMutation,
   useFailCurrentRealizationTeamTaskMutation,
+  useGetPendingPhotoReviewsQuery,
 } = currentRealizationApi;

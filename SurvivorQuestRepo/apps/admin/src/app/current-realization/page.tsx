@@ -10,6 +10,7 @@ import { useGetScenariosQuery } from "@/features/scenario/api/scenario.api";
 import type { Realization } from "@/features/realizations/types/realization";
 import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
 import { EditRealizationPanel } from "@/features/realizations/components/edit-realization-panel";
+import { CurrentRealizationPhotoReviewsPanel } from "@/features/current-realization/components/current-realization-photo-reviews-panel";
 import {
   useGetCurrentRealizationOverviewQuery,
   useFinishCurrentRealizationMutation,
@@ -630,6 +631,11 @@ export default function CurrentRealizationPage() {
               </div>
             </div>
 
+            <CurrentRealizationPhotoReviewsPanel
+              selectedRealizationId={selectedRealizationArg?.realizationId}
+              canManageTasks={canManageCurrentRealization}
+            />
+
             <CurrentRealizationTeamsMap
               realization={overview.realization}
               teams={overview.teams}
@@ -664,8 +670,20 @@ export default function CurrentRealizationPage() {
                           <p>
                             <span className="text-zinc-500">Kolor:</span> {team.color || "-"}
                           </p>
-                          <p>
-                            <span className="text-zinc-500">Flaga:</span> {team.badgeKey || team.badgeImageUrl || "-"}
+                          <p className="flex items-center gap-1.5">
+                            <span className="text-zinc-500">Flaga:</span>
+                            {team.badgeKey ? (
+                              team.badgeKey
+                            ) : team.badgeImageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={team.badgeImageUrl}
+                                alt="Zdjęcie drużyny"
+                                className="h-5 w-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              "-"
+                            )}
                           </p>
                           <p>
                             <span className="text-zinc-500">Lokalizacja:</span>{" "}
@@ -706,7 +724,20 @@ export default function CurrentRealizationPage() {
                             <td className="px-3 py-2 text-zinc-300">#{team.slotNumber}</td>
                             <td className="px-3 py-2 font-medium text-zinc-100">{team.name || "-"}</td>
                             <td className="px-3 py-2 text-zinc-300">{team.color || "-"}</td>
-                            <td className="px-3 py-2 text-zinc-300">{team.badgeKey || team.badgeImageUrl || "-"}</td>
+                            <td className="px-3 py-2 text-zinc-300">
+                              {team.badgeKey ? (
+                                team.badgeKey
+                              ) : team.badgeImageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={team.badgeImageUrl}
+                                  alt="Zdjęcie drużyny"
+                                  className="h-6 w-6 rounded-full object-cover"
+                                />
+                              ) : (
+                                "-"
+                              )}
+                            </td>
                             <td className="px-3 py-2 font-semibold text-amber-300">{team.points}</td>
                             <td className="px-3 py-2 text-zinc-300">{team.taskStats.done}/{team.taskStats.total}</td>
                             <td className="px-3 py-2 text-zinc-300">{renderTeamStatusLabel(team.status)}</td>
@@ -818,6 +849,7 @@ export default function CurrentRealizationPage() {
           realization={editingRealization}
           scenarios={scenarios ?? []}
           stations={stations ?? []}
+          realizations={realizations ?? []}
           userEmail={meData?.user.email}
           onSaved={setEditingRealization}
           onClose={() => setEditingRealization(null)}

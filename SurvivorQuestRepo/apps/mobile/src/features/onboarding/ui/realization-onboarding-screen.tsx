@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { resolveUiLanguage, type UiLanguage } from "../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS, getTeamColors } from "../model/constants";
+import { EXPEDITION_THEME, TEAM_COLORS, getTeamColors } from "../model/constants";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -27,6 +27,7 @@ import {
   type TeamColor,
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
+import { PhotoCaptureOverlay } from "../../../shared/ui/photo-capture-overlay";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
@@ -77,6 +78,7 @@ type MobileJoinResponse = {
     name: string | null;
     color: string | null;
     badgeKey: string | null;
+    badgeImageUrl: string | null;
     points: number;
   };
 };
@@ -115,6 +117,7 @@ type MobileSelectTeamResponse = {
     name: string | null;
     color: string | null;
     badgeKey: string | null;
+    badgeImageUrl: string | null;
     points: number;
   };
   reassignment?: {
@@ -147,6 +150,7 @@ type MobileSessionStateResponse = {
     slotNumber: number;
     color: string | null;
     badgeKey: string | null;
+    badgeImageUrl: string | null;
   };
 };
 
@@ -381,7 +385,11 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Customizacja drużyny",
       teamNamePlaceholder: "Nazwa drużyny",
       teamColorLabel: "Kolor drużyny",
-      teamIconLabel: "Ikona drużyny",
+      selfieLabel: "Selfie drużyny",
+      takeSelfie: "Zrób selfie",
+      retakeSelfie: "Zrób ponownie",
+      selfieOverlayTitle: "Zrób selfie drużyny",
+      selfieOverlaySubtitle: "To zdjęcie będzie widoczne jako identyfikator waszej drużyny.",
       startAction: "Start!",
       startingAction: "Uruchamianie...",
     },
@@ -500,7 +508,11 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Team customization",
       teamNamePlaceholder: "Team name",
       teamColorLabel: "Team color",
-      teamIconLabel: "Team icon",
+      selfieLabel: "Team selfie",
+      takeSelfie: "Take a selfie",
+      retakeSelfie: "Retake",
+      selfieOverlayTitle: "Take your team selfie",
+      selfieOverlaySubtitle: "This photo will be shown as your team's identifier.",
       startAction: "Start!",
       startingAction: "Starting...",
     },
@@ -621,7 +633,11 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Налаштування команди",
       teamNamePlaceholder: "Назва команди",
       teamColorLabel: "Колір команди",
-      teamIconLabel: "Іконка команди",
+      selfieLabel: "Селфі команди",
+      takeSelfie: "Зробити селфі",
+      retakeSelfie: "Зробити ще раз",
+      selfieOverlayTitle: "Зробіть селфі команди",
+      selfieOverlaySubtitle: "Це фото буде відображатися як ідентифікатор вашої команди.",
       startAction: "Старт!",
       startingAction: "Запуск...",
     },
@@ -741,7 +757,11 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Настройка команды",
       teamNamePlaceholder: "Название команды",
       teamColorLabel: "Цвет команды",
-      teamIconLabel: "Иконка команды",
+      selfieLabel: "Селфи команды",
+      takeSelfie: "Сделать селфи",
+      retakeSelfie: "Сделать ещё раз",
+      selfieOverlayTitle: "Сделайте селфи команды",
+      selfieOverlaySubtitle: "Это фото будет отображаться как идентификатор вашей команды.",
       startAction: "Старт!",
       startingAction: "Запуск...",
     },
@@ -1127,18 +1147,68 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   return data as T;
 }
 
+function buildSelfieFormDataPart(fileUri: string) {
+  const fileName = fileUri.split("/").pop() || "selfie.jpg";
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  const mimeType = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+  return { uri: fileUri, name: fileName, type: mimeType } as unknown as Blob;
+}
+
+async function requestMobileApiUploadSelfie(baseUrl: string, sessionToken: string, fileUri: string) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = "/api/mobile/team/selfie";
+  const baseHasApiSuffix = normalizedBaseUrl.endsWith("/api");
+  const requestPath = baseHasApiSuffix ? normalizedPath.slice(4) : normalizedPath;
+  const requestUrl = `${normalizedBaseUrl}${requestPath}`;
+
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    timeoutController.abort();
+  }, MOBILE_API_REQUEST_TIMEOUT_MS);
+
+  const formData = new FormData();
+  formData.append("sessionToken", sessionToken);
+  formData.append("file", buildSelfieFormDataPart(fileUri));
+
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, {
+      method: "POST",
+      body: formData,
+      signal: timeoutController.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`${REQUEST_TIMEOUT_ERROR_PREFIX}${baseUrl}`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const data = (await response.json().catch(() => ({}))) as { teamId: string; url: string } & MobileApiError;
+
+  if (!response.ok) {
+    const errorMessage =
+      (typeof data.message === "string" && data.message.trim()) ||
+      (typeof data.error?.message === "string" && data.error.message.trim()) ||
+      null;
+    throw new Error(
+      `HTTP ${response.status} [${requestUrl}]${errorMessage ? ` ${errorMessage}` : ""}`,
+    );
+  }
+
+  return data;
+}
+
 function isTeamColor(value: string | null): value is TeamColor {
   return TEAM_COLORS.some((color) => color.key === value);
 }
 
 const DEFAULT_TEAM_COLOR: TeamColor = "amber";
-const DEFAULT_TEAM_ICON = "🦊";
 const DEFAULT_TEAM_COLOR_INDEX = Math.max(
   TEAM_COLORS.findIndex((color) => color.key === DEFAULT_TEAM_COLOR),
-  0,
-);
-const DEFAULT_TEAM_ICON_INDEX = Math.max(
-  TEAM_ICONS.indexOf(DEFAULT_TEAM_ICON),
   0,
 );
 
@@ -1146,18 +1216,17 @@ function getDefaultTeamCustomization(slotNumber: number | null | undefined) {
   const slotOffset = Math.max((slotNumber ?? 1) - 1, 0);
   return {
     color: TEAM_COLORS[(DEFAULT_TEAM_COLOR_INDEX + slotOffset) % TEAM_COLORS.length].key,
-    icon: TEAM_ICONS[(DEFAULT_TEAM_ICON_INDEX + slotOffset) % TEAM_ICONS.length],
   };
 }
 
-function hasCompleteTeamCustomization<T extends { name: string | null; color: string | null; badgeKey: string | null }>(
+function hasCompleteTeamCustomization<T extends { name: string | null; color: string | null; badgeImageUrl: string | null }>(
   team: T,
-): team is T & { name: string; color: TeamColor; badgeKey: string } {
+): team is T & { name: string; color: TeamColor; badgeImageUrl: string } {
   return Boolean(
     team.name?.trim() &&
       isTeamColor(team.color) &&
-      typeof team.badgeKey === "string" &&
-      TEAM_ICONS.includes(team.badgeKey),
+      typeof team.badgeImageUrl === "string" &&
+      team.badgeImageUrl.trim().length > 0,
   );
 }
 
@@ -1249,7 +1318,10 @@ export function RealizationOnboardingScreen({
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("");
   const [teamColor, setTeamColor] = useState<TeamColor>(DEFAULT_TEAM_COLOR);
-  const [teamIcon, setTeamIcon] = useState(DEFAULT_TEAM_ICON);
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
+  const [isSelfieOverlayOpen, setIsSelfieOverlayOpen] = useState(false);
+  const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
+  const [selfieUploadError, setSelfieUploadError] = useState<string | null>(null);
   const [customizationBlockMessage, setCustomizationBlockMessage] =
     useState<string | null>(null);
   const [customizationOccupancy, setCustomizationOccupancy] = useState(() =>
@@ -1353,10 +1425,10 @@ export function RealizationOnboardingScreen({
       }
 
       if (
-        typeof state.team.badgeKey === "string" &&
-        TEAM_ICONS.includes(state.team.badgeKey)
+        typeof state.team.badgeImageUrl === "string" &&
+        state.team.badgeImageUrl.trim()
       ) {
-        setTeamIcon(state.team.badgeKey);
+        setSelfieUrl(state.team.badgeImageUrl);
       }
     }
   }, [apiBaseUrl, selectedLanguage, selectedTeam, sessionToken]);
@@ -1567,14 +1639,15 @@ export function RealizationOnboardingScreen({
       selectedLanguage?: RealizationLanguage;
       slotNumber?: number | null;
       color?: TeamColor;
-      icon?: string;
+      badgeImageUrl?: string | null;
     },
   ) {
     const effectiveApiBaseUrl = options && "apiBaseUrl" in options ? options.apiBaseUrl ?? null : apiBaseUrl;
     const effectiveRealization = options && "realization" in options ? options.realization : activeRealization;
     const effectiveRealizationCode = options?.realizationCode ?? realizationCode;
     const effectiveTeamColor = options?.color ?? teamColor;
-    const effectiveTeamIcon = options?.icon ?? teamIcon;
+    const effectiveTeamIcon =
+      (options && "badgeImageUrl" in options ? options.badgeImageUrl : selfieUrl) ?? "";
     const effectiveSelectedColor = teamColors.find((color) => color.key === effectiveTeamColor) ?? selectedColor;
     const normalizedStatus = normalizeRealizationStatus(effectiveRealization?.status);
     const awaitingAdminStart = normalizedStatus === "planned" && Boolean(effectiveApiBaseUrl);
@@ -1837,11 +1910,11 @@ export function RealizationOnboardingScreen({
         setTeamColor(defaultCustomization.color);
       }
 
-      if (typeof join.team.badgeKey === "string" && TEAM_ICONS.includes(join.team.badgeKey)) {
-        setTeamIcon(join.team.badgeKey);
-      } else {
-        setTeamIcon(defaultCustomization.icon);
-      }
+      setSelfieUrl(
+        typeof join.team.badgeImageUrl === "string" && join.team.badgeImageUrl.trim()
+          ? join.team.badgeImageUrl
+          : null,
+      );
 
       if (hasCompleteTeamCustomization(join.team)) {
         completeOnboarding(join.sessionToken, join.team.name.trim(), {
@@ -1851,7 +1924,7 @@ export function RealizationOnboardingScreen({
           selectedLanguage: normalizedRealization.selectedLanguage,
           slotNumber: join.team.slotNumber,
           color: join.team.color,
-          icon: join.team.badgeKey,
+          badgeImageUrl: join.team.badgeImageUrl,
         });
         return;
       }
@@ -1907,11 +1980,11 @@ export function RealizationOnboardingScreen({
         setTeamColor(defaultCustomization.color);
       }
 
-      if (typeof result.team.badgeKey === "string" && TEAM_ICONS.includes(result.team.badgeKey)) {
-        setTeamIcon(result.team.badgeKey);
-      } else {
-        setTeamIcon(defaultCustomization.icon);
-      }
+      setSelfieUrl(
+        typeof result.team.badgeImageUrl === "string" && result.team.badgeImageUrl.trim()
+          ? result.team.badgeImageUrl
+          : null,
+      );
 
       const reassignmentMessage =
         result.reassignment?.replacedExistingAssignment === true
@@ -1958,7 +2031,6 @@ export function RealizationOnboardingScreen({
           sessionToken,
           name: trimmedName,
           color: teamColor,
-          badgeKey: teamIcon,
         }),
       });
 
@@ -1989,10 +2061,8 @@ export function RealizationOnboardingScreen({
 
   const persistLiveCustomization = useCallback(
     async (input: {
-      nextColor?: TeamColor;
-      nextIcon?: string;
+      nextColor: TeamColor;
       previousColor: TeamColor;
-      previousIcon: string;
     }) => {
       if (!sessionToken || !apiBaseUrl) {
         return;
@@ -2009,12 +2079,7 @@ export function RealizationOnboardingScreen({
             method: "POST",
             body: JSON.stringify({
               sessionToken,
-              ...(typeof input.nextColor !== "undefined"
-                ? { color: input.nextColor }
-                : {}),
-              ...(typeof input.nextIcon !== "undefined"
-                ? { badgeKey: input.nextIcon }
-                : {}),
+              color: input.nextColor,
             }),
           },
         );
@@ -2033,7 +2098,6 @@ export function RealizationOnboardingScreen({
         }
 
         setTeamColor(input.previousColor);
-        setTeamIcon(input.previousIcon);
         setSaveFeedback(text.liveSaveFailedMessage(getErrorMessage(error, text)), "error");
         await refreshCustomizationState().catch(() => undefined);
       }
@@ -2043,7 +2107,6 @@ export function RealizationOnboardingScreen({
 
   const handleTeamColorChange = useCallback((value: TeamColor) => {
     const previousColor = teamColor;
-    const previousIcon = teamIcon;
     const occupiedBy = customizationOccupancy.colors[value];
     if (
       typeof occupiedBy === "number" &&
@@ -2061,7 +2124,6 @@ export function RealizationOnboardingScreen({
     void persistLiveCustomization({
       nextColor: value,
       previousColor,
-      previousIcon,
     });
   }, [
     customizationOccupancy.colors,
@@ -2069,41 +2131,39 @@ export function RealizationOnboardingScreen({
     selectedTeam,
     setSaveFeedback,
     teamColor,
-    teamIcon,
     text,
   ]);
 
-  const handleTeamIconChange = useCallback((value: string) => {
-    const previousColor = teamColor;
-    const previousIcon = teamIcon;
-    const occupiedBy = customizationOccupancy.icons[value];
-    if (
-      typeof occupiedBy === "number" &&
-      (!selectedTeam || occupiedBy !== selectedTeam)
-    ) {
-      setCustomizationBlockMessage(
-        text.iconTakenMessage(occupiedBy),
-      );
-      return;
-    }
+  const handleOpenSelfieCapture = useCallback(() => {
+    setSelfieUploadError(null);
+    setIsSelfieOverlayOpen(true);
+  }, []);
 
-    setTeamIcon(value);
-    setCustomizationBlockMessage(null);
-    setSaveFeedback(null, null);
-    void persistLiveCustomization({
-      nextIcon: value,
-      previousColor,
-      previousIcon,
-    });
-  }, [
-    customizationOccupancy.icons,
-    persistLiveCustomization,
-    selectedTeam,
-    setSaveFeedback,
-    teamColor,
-    teamIcon,
-    text,
-  ]);
+  const handleCloseSelfieCapture = useCallback(() => {
+    setIsSelfieOverlayOpen(false);
+  }, []);
+
+  const handleSelfieCaptured = useCallback(
+    async (fileUri: string) => {
+      if (!sessionToken || !apiBaseUrl) {
+        setSelfieUploadError(text.saveRequiresSession);
+        return;
+      }
+
+      setIsUploadingSelfie(true);
+      setSelfieUploadError(null);
+      try {
+        const result = await requestMobileApiUploadSelfie(apiBaseUrl, sessionToken, fileUri);
+        setSelfieUrl(result.url);
+        setIsSelfieOverlayOpen(false);
+      } catch (error) {
+        setSelfieUploadError(getErrorMessage(error, text));
+      } finally {
+        setIsUploadingSelfie(false);
+      }
+    },
+    [apiBaseUrl, sessionToken, text],
+  );
 
   const canSaveCustomization = Boolean(selectedTeam) && !isSaving;
 
@@ -2713,7 +2773,7 @@ export function RealizationOnboardingScreen({
               selectedTeam={selectedTeam}
               teamName={teamName}
               teamColor={teamColor}
-              teamIcon={teamIcon}
+              selfiePreviewUri={selfieUrl}
               teamColors={teamColors}
               selectedColor={selectedColor}
               bannerTextColor={bannerTextColor}
@@ -2724,12 +2784,12 @@ export function RealizationOnboardingScreen({
               isSaving={isSaving}
               canSave={canSaveCustomization}
               occupiedColors={customizationOccupancy.colors}
-              occupiedIcons={customizationOccupancy.icons}
               blockMessage={customizationBlockMessage}
+              selfieUploadError={selfieUploadError}
               text={text.teamCustomizationText}
               onTeamNameChange={handleTeamNameChange}
               onTeamColorChange={handleTeamColorChange}
-              onTeamIconChange={handleTeamIconChange}
+              onOpenSelfieCapture={handleOpenSelfieCapture}
               onSave={onSaveCustomization}
             />
           )}
@@ -2897,6 +2957,17 @@ export function RealizationOnboardingScreen({
           </View>
         </View>
       </Modal>
+
+      <PhotoCaptureOverlay
+        visible={isSelfieOverlayOpen}
+        title={text.teamCustomizationText.selfieOverlayTitle}
+        subtitle={text.teamCustomizationText.selfieOverlaySubtitle}
+        facing="front"
+        isUploading={isUploadingSelfie}
+        uploadError={selfieUploadError}
+        onClose={handleCloseSelfieCapture}
+        onCaptured={handleSelfieCaptured}
+      />
     </View>
   );
 }

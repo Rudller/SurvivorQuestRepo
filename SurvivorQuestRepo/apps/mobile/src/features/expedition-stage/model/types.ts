@@ -49,6 +49,8 @@ export type ExpeditionSessionState = {
     contactPhone?: string;
     contactEmail?: string;
     logoUrl?: string;
+    hideMap: boolean;
+    mapImageUrl?: string;
     type?: string;
     language?: RealizationLanguage;
     customLanguage?: string;
@@ -75,6 +77,7 @@ export type ExpeditionSessionState = {
     name: string | null;
     color: string | null;
     badgeKey: string | null;
+    badgeImageUrl: string | null;
     points: number;
     lastLocation: PlayerLocation | null;
   };
@@ -119,7 +122,8 @@ export type ExpeditionStationType =
   | "boggle"
   | "mini-sudoku"
   | "matching"
-  | "strong-password";
+  | "strong-password"
+  | "photo-task";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
@@ -143,6 +147,7 @@ export type ExpeditionRealizationStation = {
   completionCodeLength?: number;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  completionStopwatchEnabled?: boolean;
   color?: string;
   quiz?: ExpeditionStationQuiz;
   latitude?: number;
@@ -248,6 +253,8 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       contactPhone: undefined,
       contactEmail: undefined,
       logoUrl: undefined,
+      hideMap: false,
+      mapImageUrl: undefined,
       type: undefined,
       language: session.realization?.language,
       customLanguage: session.realization?.customLanguage,
@@ -295,6 +302,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       name: session.team.name || text.teamLabel,
       color: session.team.colorKey,
       badgeKey: session.team.icon,
+      badgeImageUrl: null,
       points: 0,
       lastLocation: null,
     },

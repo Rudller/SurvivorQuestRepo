@@ -17,6 +17,7 @@ export const STATION_TYPES: StationType[] = [
   'mini-sudoku',
   'matching',
   'strong-password',
+  'photo-task',
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;

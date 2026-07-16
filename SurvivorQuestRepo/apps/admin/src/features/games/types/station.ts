@@ -14,7 +14,8 @@ export type StationType =
   | "boggle"
   | "mini-sudoku"
   | "matching"
-  | "strong-password";
+  | "strong-password"
+  | "photo-task";
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
@@ -53,6 +54,7 @@ export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "mini-sudoku", label: "Mini Sudoku" },
   { value: "matching", label: "Dopasowywanie" },
   { value: "strong-password", label: "Mocne hasło" },
+  { value: "photo-task", label: "Zadanie fotograficzne" },
 ];
 
 export type Station = {
@@ -69,6 +71,7 @@ export type Station = {
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
+  completionStopwatchEnabled: boolean;
   color: string;
   latitude?: number;
   longitude?: number;

@@ -4,7 +4,7 @@ import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 
 export type QuizOutcomePopup = {
-  variant: "success" | "failed" | "timeout";
+  variant: "success" | "failed" | "timeout" | "pending";
   message: string;
 };
 
@@ -12,6 +12,7 @@ type QuizOutcomePopupPanelText = {
   outcomePassed: string;
   outcomeTimedOut: string;
   outcomeFailed: string;
+  outcomePending: string;
   backToMapNow: string;
   backToMap: string;
 };
@@ -39,6 +40,7 @@ export function QuizOutcomePopupPanel({
   }
 
   const isTimeoutOutcomePopup = popup.variant === "timeout";
+  const isPendingOutcomePopup = popup.variant === "pending";
   const quizOutcomeTitle = (() => {
     if (popup.variant === "success") {
       return text.outcomePassed;
@@ -46,12 +48,15 @@ export function QuizOutcomePopupPanel({
     if (isTimeoutOutcomePopup) {
       return text.outcomeTimedOut;
     }
+    if (isPendingOutcomePopup) {
+      return text.outcomePending;
+    }
     return text.outcomeFailed;
   })();
   const quizOutcomeAccent =
     popup.variant === "success"
       ? { border: "rgba(16, 185, 129, 0.55)", bg: "rgba(16, 185, 129, 0.18)", text: "#6ee7b7", icon: "✓" }
-      : isTimeoutOutcomePopup
+      : isTimeoutOutcomePopup || isPendingOutcomePopup
         ? { border: "rgba(245, 158, 11, 0.55)", bg: "rgba(245, 158, 11, 0.16)", text: "#fcd34d", icon: "⏳" }
         : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
   const quizOutcomeButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
@@ -148,7 +153,7 @@ export function QuizOutcomePopupPanel({
             backgroundColor:
               popup.variant === "success"
                 ? "#059669"
-                : isTimeoutOutcomePopup
+                : isTimeoutOutcomePopup || isPendingOutcomePopup
                   ? "#b45309"
                   : "#dc2626",
           }}

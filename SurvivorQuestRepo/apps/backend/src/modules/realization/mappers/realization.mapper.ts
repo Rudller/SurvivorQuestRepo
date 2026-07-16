@@ -132,6 +132,8 @@ export function buildRealizationEntity(input: {
     instructors: unknown;
     type: PrismaRealizationType;
     logoUrl: string | null;
+    hideMap: boolean;
+    mapImageUrl: string | null;
     offerPdfUrl: string | null;
     offerPdfName: string | null;
     scenarioId: string;
@@ -178,6 +180,8 @@ export function buildRealizationEntity(input: {
       : [],
     type: fromPrismaRealizationType(realization.type),
     logoUrl: realization.logoUrl || undefined,
+    hideMap: realization.hideMap,
+    mapImageUrl: realization.mapImageUrl || undefined,
     offerPdfUrl: realization.offerPdfUrl || undefined,
     offerPdfName: realization.offerPdfName || undefined,
     scenarioId: realization.scenarioId,

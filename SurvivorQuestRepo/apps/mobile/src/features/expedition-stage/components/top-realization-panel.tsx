@@ -12,6 +12,7 @@ type TopRealizationPanelProps = {
   teamColorHex: string;
   teamColorLabel: string;
   teamIcon: string;
+  teamBadgeImageUrl?: string | null;
   points: number;
   languageFlag?: string;
   showLanguageButton?: boolean;
@@ -104,6 +105,7 @@ export function TopRealizationPanel({
   teamColorHex,
   teamColorLabel,
   teamIcon,
+  teamBadgeImageUrl,
   points,
   languageFlag,
   showLanguageButton = false,
@@ -203,8 +205,12 @@ export function TopRealizationPanel({
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", columnGap: contentGap }}>
-              <View className="h-full items-center justify-center rounded-md" style={{ width: "16.666%", backgroundColor: iconBackground }}>
-                <Text style={{ fontSize: teamIconFontSize }}>{teamIcon}</Text>
+              <View className="h-full items-center justify-center overflow-hidden rounded-md" style={{ width: "16.666%", backgroundColor: iconBackground }}>
+                {teamBadgeImageUrl ? (
+                  <Image source={{ uri: teamBadgeImageUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                ) : (
+                  <Text style={{ fontSize: teamIconFontSize }}>{teamIcon}</Text>
+                )}
               </View>
               <View className="flex-1">
                 <Text className="font-extrabold" style={{ color: cardTextColor, fontSize: teamNameFontSize }} numberOfLines={1}>

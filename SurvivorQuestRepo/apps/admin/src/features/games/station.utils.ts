@@ -32,6 +32,7 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   "mini-sudoku": "#ef4444",
   matching: "#22c55e",
   "strong-password": "#f43f5e",
+  "photo-task": "#84cc16",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -72,6 +73,8 @@ const MINI_SUDOKU_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest uzupełnić mini Sudoku tak, aby liczby nie powtarzały się w wierszach i kolumnach.";
 const MATCHING_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.";
+const PHOTO_TASK_DEFAULT_STATION_DESCRIPTION =
+  "Np. „Znajdź młotek i zrób jego zdjęcie”. To pole jest jedyną instrukcją, którą zobaczy gracz.";
 const QUIZ_SECRET_FALLBACK_ANSWERS = ["A", "B", "C"] as const;
 const MATCHING_PAIR_DELIMITER = "->";
 
@@ -123,6 +126,9 @@ export function resolveDefaultStationDescription(stationType: StationType) {
   if (stationType === "matching") {
     return MATCHING_DEFAULT_STATION_DESCRIPTION;
   }
+  if (stationType === "photo-task") {
+    return PHOTO_TASK_DEFAULT_STATION_DESCRIPTION;
+  }
 
   return DEFAULT_STATION_DESCRIPTION;
 }
@@ -141,7 +147,8 @@ export function isKnownDefaultStationDescription(value: string) {
     normalized === MEMORY_DEFAULT_STATION_DESCRIPTION ||
     normalized === SIMON_DEFAULT_STATION_DESCRIPTION ||
     normalized === MINI_SUDOKU_DEFAULT_STATION_DESCRIPTION ||
-    normalized === MATCHING_DEFAULT_STATION_DESCRIPTION
+    normalized === MATCHING_DEFAULT_STATION_DESCRIPTION ||
+    normalized === PHOTO_TASK_DEFAULT_STATION_DESCRIPTION
   );
 }
 

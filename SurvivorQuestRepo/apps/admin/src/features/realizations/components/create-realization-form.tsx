@@ -23,6 +23,7 @@ import { useUploadStationAudioMutation } from "@/features/games/api/station.api"
 import {
   useCreateRealizationMutation,
   useUploadRealizationLogoMutation,
+  useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
 } from "../api/realization.api";
 import {
@@ -32,7 +33,9 @@ import {
   toRealizationStationDraft,
 } from "./realization-stations-editor";
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
+import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import {
+  getDistinctUsedAssets,
   getStatusLabel,
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
@@ -41,6 +44,7 @@ import {
 interface CreateRealizationFormProps {
   scenarios: Scenario[];
   stations: Station[];
+  realizations: Realization[];
   userEmail?: string;
   onClose: () => void;
   onSaved?: (realization: Realization) => void;
@@ -65,9 +69,10 @@ function CalendarInputIcon() {
   );
 }
 
-export function CreateRealizationForm({ scenarios, stations, userEmail, onClose, onSaved }: CreateRealizationFormProps) {
+export function CreateRealizationForm({ scenarios, stations, realizations, userEmail, onClose, onSaved }: CreateRealizationFormProps) {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
+  const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
   const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
 
@@ -84,6 +89,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [instructorInput, setInstructorInput] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [logoInputMode, setLogoInputMode] = useState<"upload" | "existing">("upload");
+  const [hideMap, setHideMap] = useState(false);
+  const [mapImageFile, setMapImageFile] = useState<File | null>(null);
+  const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
+  const [mapImageInputMode, setMapImageInputMode] = useState<"upload" | "existing">("upload");
   const [offerPdfFile, setOfferPdfFile] = useState<File | null>(null);
   const [offerPdfName, setOfferPdfName] = useState<string | undefined>();
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
@@ -175,7 +186,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
   const [scenarioStations, setScenarioStations] = useState(() => [] as ReturnType<typeof mapScenarioStations>);
   const positionsCount = scenarioStations.length;
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const isBusy = isCreating || isUploadingLogo || isUploadingOffer || isUploadingStationAudio;
+  const isBusy = isCreating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !companyName.trim();
   const isScenarioInvalid = submitAttempted && !selectedScenarioId;
@@ -202,6 +213,18 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
     () => (logoFile ? URL.createObjectURL(logoFile) : undefined),
     [logoFile],
   );
+  const mapImagePreviewUrl = useMemo(
+    () => (mapImageFile ? URL.createObjectURL(mapImageFile) : undefined),
+    [mapImageFile],
+  );
+  const usedLogoOptions = useMemo(
+    () => getDistinctUsedAssets(realizations, "logoUrl"),
+    [realizations],
+  );
+  const usedMapImageOptions = useMemo(
+    () => getDistinctUsedAssets(realizations, "mapImageUrl"),
+    [realizations],
+  );
 
   useEffect(() => {
     return () => {
@@ -210,6 +233,14 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
       }
     };
   }, [logoPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (mapImagePreviewUrl) {
+        URL.revokeObjectURL(mapImagePreviewUrl);
+      }
+    };
+  }, [mapImagePreviewUrl]);
 
   function addInstructor() {
     const name = instructorInput.trim();
@@ -309,13 +340,19 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
         const normalizedDurationMinutes = Math.max(1, Math.round(durationMinutes) || 120);
 
         try {
-          let logoUrl: string | undefined;
+          let finalLogoUrl = logoUrl;
           let offerPdfUrl: string | undefined;
           let nextOfferPdfName: string | undefined;
 
           if (logoFile) {
             const uploadedLogo = await uploadRealizationLogo(logoFile).unwrap();
-            logoUrl = uploadedLogo.url;
+            finalLogoUrl = uploadedLogo.url;
+          }
+
+          let finalMapImageUrl = mapImageUrl;
+          if (mapImageFile) {
+            const uploadedMapImage = await uploadRealizationMapImage(mapImageFile).unwrap();
+            finalMapImageUrl = uploadedMapImage.url;
           }
 
           if (offerPdfFile) {
@@ -336,7 +373,9 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
             contactEmail: normalizedContactEmail,
             instructors,
             type: selectedType,
-            logoUrl,
+            logoUrl: finalLogoUrl,
+            hideMap,
+            mapImageUrl: finalMapImageUrl,
             offerPdfUrl,
             offerPdfName: nextOfferPdfName,
             scenarioId: fallbackScenarioId,
@@ -376,6 +415,12 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           setShowLeaderboardOnFinish(true);
           setTeamStationNumberingEnabled(true);
           setLogoFile(null);
+          setLogoUrl(undefined);
+          setLogoInputMode("upload");
+          setHideMap(false);
+          setMapImageFile(null);
+          setMapImageUrl(undefined);
+          setMapImageInputMode("upload");
           setOfferPdfFile(null);
           setOfferPdfName(undefined);
           setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
@@ -535,28 +580,72 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
 
           <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
-            {logoPreviewUrl && (
+            {(logoPreviewUrl ?? logoUrl) && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoPreviewUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
+              <img src={logoPreviewUrl ?? logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
             )}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) {
-                  return;
-                }
+            {usedLogoOptions.length > 0 && (
+              <div className="flex justify-center">
+                <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                  {(
+                    [
+                      { value: "upload", label: "Prześlij nowy plik" },
+                      { value: "existing", label: "Wybierz z już użytych" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setLogoInputMode(option.value)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                        logoInputMode === option.value
+                          ? "bg-amber-400 text-zinc-950"
+                          : "text-zinc-300 hover:text-zinc-100"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {logoInputMode === "existing" && usedLogoOptions.length > 0 ? (
+              <UploadedAssetPicker
+                options={usedLogoOptions}
+                selectedUrl={logoUrl}
+                onSelect={(url) => {
+                  setLogoUrl(url);
+                  setLogoFile(null);
+                }}
+              />
+            ) : (
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    return;
+                  }
 
-                setLogoFile(file);
-                setFormError(null);
-                event.currentTarget.value = "";
-              }}
-              className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
-            />
+                  setLogoFile(file);
+                  setLogoUrl(undefined);
+                  setFormError(null);
+                  event.currentTarget.value = "";
+                }}
+                className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+              />
+            )}
             {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
-            {logoFile && (
-              <button type="button" onClick={() => setLogoFile(null)} className="text-xs text-red-400 hover:text-red-300">
+            {(logoFile || logoUrl) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLogoFile(null);
+                  setLogoUrl(undefined);
+                }}
+                className="text-xs text-red-400 hover:text-red-300"
+              >
                 Usuń logo
               </button>
             )}
@@ -644,6 +733,98 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
               />
               Spadek punktów w grach czasowych
             </label>
+
+            <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={hideMap}
+                onChange={(event) => setHideMap(event.target.checked)}
+                className="h-4 w-4 accent-amber-400"
+              />
+              Ukryj mapę
+            </label>
+
+            {hideMap && (
+              <div className="space-y-1.5 md:col-span-2">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Grafika zamiast mapy</span>
+                {(mapImagePreviewUrl ?? mapImageUrl) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mapImagePreviewUrl ?? mapImageUrl}
+                    alt="Grafika mapy"
+                    className="mb-2 h-24 w-full rounded-lg border border-zinc-700 object-cover"
+                  />
+                )}
+                {usedMapImageOptions.length > 0 && (
+                  <div className="flex justify-center">
+                    <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                      {(
+                        [
+                          { value: "upload", label: "Prześlij nowy plik" },
+                          { value: "existing", label: "Wybierz z już użytych" },
+                        ] as const
+                      ).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setMapImageInputMode(option.value)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                            mapImageInputMode === option.value
+                              ? "bg-amber-400 text-zinc-950"
+                              : "text-zinc-300 hover:text-zinc-100"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {mapImageInputMode === "existing" && usedMapImageOptions.length > 0 ? (
+                  <UploadedAssetPicker
+                    options={usedMapImageOptions}
+                    selectedUrl={mapImageUrl}
+                    onSelect={(url) => {
+                      setMapImageUrl(url);
+                      setMapImageFile(null);
+                    }}
+                  />
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) {
+                        return;
+                      }
+
+                      setMapImageFile(file);
+                      setMapImageUrl(undefined);
+                      setFormError(null);
+                      event.currentTarget.value = "";
+                    }}
+                    className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+                  />
+                )}
+                <p className="text-xs text-zinc-500">
+                  Jeśli nie dodasz grafiki, zostanie użyte domyślne logo SurvivorQuest.
+                </p>
+                {isUploadingMapImage && <p className="text-xs text-amber-300">Przesyłanie grafiki...</p>}
+                {(mapImageFile || mapImageUrl) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMapImageFile(null);
+                      setMapImageUrl(undefined);
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300"
+                  >
+                    Usuń grafikę
+                  </button>
+                )}
+              </div>
+            )}
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
@@ -860,7 +1041,7 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           >
             {isCreating
               ? "Dodawanie..."
-              : isUploadingLogo || isUploadingOffer || isUploadingStationAudio
+              : isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio
                 ? "Przesyłanie plików..."
                 : "Dodaj realizację"}
           </button>
@@ -918,6 +1099,10 @@ export function CreateRealizationForm({ scenarios, stations, userEmail, onClose,
           </p>
           <p>
             <span className="text-zinc-500">Spadek punktów w grach czasowych:</span> {timedStationPointsDecayEnabled ? "Tak" : "Nie"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Mapa:</span>{" "}
+            {hideMap ? "Ukryta (grafika statyczna)" : "Widoczna (interaktywna)"}
           </p>
           <p>
             <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}

@@ -15,6 +15,7 @@ type StationDto = {
   completionCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
+  completionStopwatchEnabled?: boolean | null;
   color?: string | null;
   quiz?:
     | {
@@ -46,6 +47,7 @@ type CreateStationPayload = {
   completionCode?: string;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  completionStopwatchEnabled?: boolean;
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -63,6 +65,7 @@ type UpdateStationPayload = {
   completionCode?: string;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
+  completionStopwatchEnabled?: boolean;
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -144,6 +147,7 @@ function normalizeStation(station: StationDto): Station {
       station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
+    completionStopwatchEnabled: station.completionStopwatchEnabled === true,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)

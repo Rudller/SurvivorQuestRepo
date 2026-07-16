@@ -23,9 +23,11 @@ import { useUploadStationAudioMutation } from "@/features/games/api/station.api"
 import {
   useUpdateRealizationMutation,
   useUploadRealizationLogoMutation,
+  useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
 } from "../api/realization.api";
 import {
+  getDistinctUsedAssets,
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
 } from "../realization.utils";
@@ -36,11 +38,13 @@ import {
   toRealizationStationDraft,
 } from "./realization-stations-editor";
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
+import { UploadedAssetPicker } from "./uploaded-asset-picker";
 
 interface EditRealizationPanelProps {
   realization: Realization;
   scenarios: Scenario[];
   stations: Station[];
+  realizations: Realization[];
   userEmail?: string;
   onClose: () => void;
   onSaved?: (realization: Realization) => void;
@@ -69,12 +73,14 @@ export function EditRealizationPanel({
   realization,
   scenarios,
   stations,
+  realizations,
   userEmail,
   onClose,
   onSaved,
 }: EditRealizationPanelProps) {
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
+  const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
   const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
 
@@ -83,6 +89,9 @@ export function EditRealizationPanel({
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const [instructorInput, setInstructorInput] = useState("");
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
+  const [logoInputMode, setLogoInputMode] = useState<"upload" | "existing">("upload");
+  const [pendingMapImageFile, setPendingMapImageFile] = useState<File | null>(null);
+  const [mapImageInputMode, setMapImageInputMode] = useState<"upload" | "existing">("upload");
   const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
   const initialLanguageSelection = useMemo(
@@ -103,6 +112,8 @@ export function EditRealizationPanel({
     instructors: realization.instructors ?? [],
     type: realization.type as RealizationType,
     logoUrl: realization.logoUrl,
+    hideMap: realization.hideMap ?? false,
+    mapImageUrl: realization.mapImageUrl,
     offerPdfUrl: realization.offerPdfUrl,
     offerPdfName: realization.offerPdfName,
     scenarioId: realization.scenarioTemplateId ?? realization.scenarioId,
@@ -205,7 +216,7 @@ export function EditRealizationPanel({
   const [customLanguageInput, setCustomLanguageInput] = useState(initialLanguageSelection.customLanguage);
   const positionsCount = scenarioStations.length;
   const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const isBusy = isUpdating || isUploadingLogo || isUploadingOffer || isUploadingStationAudio;
+  const isBusy = isUpdating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !editValues.companyName.trim();
   const isScenarioInvalid = submitAttempted && !editValues.scenarioId;
@@ -232,6 +243,18 @@ export function EditRealizationPanel({
     () => (pendingLogoFile ? URL.createObjectURL(pendingLogoFile) : undefined),
     [pendingLogoFile],
   );
+  const pendingMapImagePreviewUrl = useMemo(
+    () => (pendingMapImageFile ? URL.createObjectURL(pendingMapImageFile) : undefined),
+    [pendingMapImageFile],
+  );
+  const usedLogoOptions = useMemo(
+    () => getDistinctUsedAssets(realizations, "logoUrl"),
+    [realizations],
+  );
+  const usedMapImageOptions = useMemo(
+    () => getDistinctUsedAssets(realizations, "mapImageUrl"),
+    [realizations],
+  );
 
   useEffect(() => {
     return () => {
@@ -240,6 +263,14 @@ export function EditRealizationPanel({
       }
     };
   }, [pendingLogoPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingMapImagePreviewUrl) {
+        URL.revokeObjectURL(pendingMapImagePreviewUrl);
+      }
+    };
+  }, [pendingMapImagePreviewUrl]);
 
   function addInstructor() {
     const name = instructorInput.trim();
@@ -395,6 +426,12 @@ export function EditRealizationPanel({
                   nextLogoUrl = uploadedLogo.url;
                 }
 
+                let nextMapImageUrl = editValues.mapImageUrl;
+                if (pendingMapImageFile) {
+                  const uploadedMapImage = await uploadRealizationMapImage(pendingMapImageFile).unwrap();
+                  nextMapImageUrl = uploadedMapImage.url;
+                }
+
                 if (pendingOfferPdfFile) {
                   const uploadedOffer = await uploadRealizationOffer(pendingOfferPdfFile).unwrap();
                   nextOfferPdfUrl = uploadedOffer.url;
@@ -415,6 +452,8 @@ export function EditRealizationPanel({
                   instructors: editValues.instructors,
                   type: editValues.type,
                   logoUrl: nextLogoUrl,
+                  hideMap: editValues.hideMap,
+                  mapImageUrl: nextMapImageUrl,
                   offerPdfUrl: nextOfferPdfUrl,
                   offerPdfName: nextOfferPdfName,
                   scenarioId: fallbackScenarioId,
@@ -617,21 +656,57 @@ export function EditRealizationPanel({
                       className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain"
                     />
                   )}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) {
-                        return;
-                      }
+                  {usedLogoOptions.length > 0 && (
+                    <div className="flex justify-center">
+                      <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                        {(
+                          [
+                            { value: "upload", label: "Prześlij nowy plik" },
+                            { value: "existing", label: "Wybierz z już użytych" },
+                          ] as const
+                        ).map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setLogoInputMode(option.value)}
+                            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                              logoInputMode === option.value
+                                ? "bg-amber-400 text-zinc-950"
+                                : "text-zinc-300 hover:text-zinc-100"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {logoInputMode === "existing" && usedLogoOptions.length > 0 ? (
+                    <UploadedAssetPicker
+                      options={usedLogoOptions}
+                      selectedUrl={editValues.logoUrl}
+                      onSelect={(url) => {
+                        setPendingLogoFile(null);
+                        setEditValues((prev) => ({ ...prev, logoUrl: url }));
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) {
+                          return;
+                        }
 
-                      setPendingLogoFile(file);
-                      setEditError(null);
-                      event.currentTarget.value = "";
-                    }}
-                    className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
-                  />
+                        setPendingLogoFile(file);
+                        setEditError(null);
+                        event.currentTarget.value = "";
+                      }}
+                      className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+                    />
+                  )}
                   {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
                   {(pendingLogoFile || editValues.logoUrl) && (
                     <button
@@ -793,6 +868,102 @@ export function EditRealizationPanel({
                     />
                     Spadek punktów w grach czasowych
                   </label>
+
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.hideMap}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          hideMap: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Ukryj mapę
+                  </label>
+
+                  {editValues.hideMap && (
+                    <div className="col-span-2 space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Grafika zamiast mapy</span>
+                      {(pendingMapImagePreviewUrl || editValues.mapImageUrl) && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={pendingMapImagePreviewUrl ?? editValues.mapImageUrl}
+                          alt="Grafika mapy"
+                          className="mb-2 h-24 w-full rounded-lg border border-zinc-700 object-cover"
+                        />
+                      )}
+                      {usedMapImageOptions.length > 0 && (
+                        <div className="flex justify-center">
+                          <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                            {(
+                              [
+                                { value: "upload", label: "Prześlij nowy plik" },
+                                { value: "existing", label: "Wybierz z już użytych" },
+                              ] as const
+                            ).map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setMapImageInputMode(option.value)}
+                                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                                  mapImageInputMode === option.value
+                                    ? "bg-amber-400 text-zinc-950"
+                                    : "text-zinc-300 hover:text-zinc-100"
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {mapImageInputMode === "existing" && usedMapImageOptions.length > 0 ? (
+                        <UploadedAssetPicker
+                          options={usedMapImageOptions}
+                          selectedUrl={editValues.mapImageUrl}
+                          onSelect={(url) => {
+                            setPendingMapImageFile(null);
+                            setEditValues((prev) => ({ ...prev, mapImageUrl: url }));
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (!file) {
+                              return;
+                            }
+
+                            setPendingMapImageFile(file);
+                            setEditError(null);
+                            event.currentTarget.value = "";
+                          }}
+                          className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+                        />
+                      )}
+                      <p className="text-xs text-zinc-500">
+                        Jeśli nie dodasz grafiki, zostanie użyte domyślne logo SurvivorQuest.
+                      </p>
+                      {isUploadingMapImage && <p className="text-xs text-amber-300">Przesyłanie grafiki...</p>}
+                      {(pendingMapImageFile || editValues.mapImageUrl) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingMapImageFile(null);
+                            setEditValues((prev) => ({ ...prev, mapImageUrl: undefined }));
+                          }}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Usuń grafikę
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
@@ -1003,6 +1174,10 @@ export function EditRealizationPanel({
               <p>
                 <span className="text-zinc-500">Spadek punktów w grach czasowych:</span>{" "}
                 {editValues.timedStationPointsDecayEnabled ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Mapa:</span>{" "}
+                {editValues.hideMap ? "Ukryta (grafika statyczna)" : "Widoczna (interaktywna)"}
               </p>
               <p>
                 <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}

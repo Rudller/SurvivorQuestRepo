@@ -859,6 +859,7 @@ describe('MobileService station payload mapper', () => {
       timeLimitSeconds: 60,
       challengeDifficultyMode: 'admin',
       challengeDifficulty: 'medium',
+      completionStopwatchEnabled: false,
       color: '#06b6d4',
       quiz: {
         question: 'Pytanie bazowe',

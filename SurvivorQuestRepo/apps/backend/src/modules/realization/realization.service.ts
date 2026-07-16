@@ -27,6 +27,7 @@ import {
   type ScenarioEntity,
 } from '../scenario/scenario.service';
 import { StationService, type StationEntity } from '../station/station.service';
+import { StationStorageService } from '../station/station-storage.service';
 import { RealizationJoinCodeService } from './domain/realization.join-code';
 import {
   normalizeScenarioStationDrafts,
@@ -61,6 +62,7 @@ export class RealizationService {
     private readonly prisma: PrismaService,
     private readonly scenarioService: ScenarioService,
     private readonly stationService: StationService,
+    private readonly stationStorageService: StationStorageService,
   ) {}
 
   async listRealizations() {
@@ -109,6 +111,8 @@ export class RealizationService {
         instructors: validated.instructors,
         type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
+        hideMap: validated.hideMap,
+        mapImageUrl: validated.mapImageUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: clonedScenario.id,
@@ -231,6 +235,8 @@ export class RealizationService {
         instructors: validated.instructors,
         type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
+        hideMap: validated.hideMap,
+        mapImageUrl: validated.mapImageUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: scenario.id,
@@ -274,6 +280,31 @@ export class RealizationService {
   translateStation(payload: TranslateRealizationStationDto) {
     void payload;
     throw new BadRequestException('Auto-translate is not implemented yet.');
+  }
+
+  async listMediaLibrary() {
+    const [logos, mapImages] = await Promise.all([
+      this.stationStorageService.listObjectsByPrefix('realizations/logos'),
+      this.stationStorageService.listObjectsByPrefix('realizations/map-images'),
+    ]);
+
+    return { logos, mapImages };
+  }
+
+  async deleteMediaAsset(url: string) {
+    await this.prisma.realization.updateMany({
+      where: { logoUrl: url },
+      data: { logoUrl: null },
+    });
+    await this.prisma.realization.updateMany({
+      where: { mapImageUrl: url },
+      data: { mapImageUrl: null },
+    });
+
+    const key = this.stationStorageService.getObjectKeyFromUrl(url);
+    if (key) {
+      await this.stationStorageService.deleteObject(key);
+    }
   }
 
   private async syncScenarioStations(

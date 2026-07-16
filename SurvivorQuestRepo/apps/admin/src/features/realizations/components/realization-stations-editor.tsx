@@ -123,6 +123,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     completionCode: "",
     challengeDifficultyMode: "admin",
     challengeDifficulty: "medium",
+    completionStopwatchEnabled: false,
     color: STATION_TYPE_DEFAULT_COLOR["quiz"],
     quiz: {
       question: "",
@@ -236,6 +237,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     completionCode: station.completionCode ?? "",
     challengeDifficultyMode: station.challengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty,
+    completionStopwatchEnabled: station.completionStopwatchEnabled,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? station.color! : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz: station.quiz
         ? {
@@ -287,6 +289,8 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     challengeDifficulty: supportsChallengeDifficulty(station.type)
       ? station.challengeDifficulty ?? "medium"
       : "medium",
+    completionStopwatchEnabled:
+      Math.round(station.timeLimitSeconds) === 0 ? station.completionStopwatchEnabled ?? false : false,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color) ? station.color : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz:
       isQuizStationType(station.type) && station.quiz
@@ -1879,6 +1883,18 @@ export function RealizationStationsEditor({
                         <p className="text-xs text-red-300">Limit czasu musi być w zakresie 0-600 sekund.</p>
                       ) : null}
                     </div>
+                    {station.timeLimitSeconds === 0 ? (
+                      <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                        <input
+                          type="checkbox"
+                          checked={station.completionStopwatchEnabled ?? false}
+                          onChange={(event) =>
+                            updateStation(stationIndex, { completionStopwatchEnabled: event.target.checked })
+                          }
+                        />
+                        Pokaż stoper czasu wykonania (dla graczy i organizatora)
+                      </label>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">

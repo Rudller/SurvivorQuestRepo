@@ -16,7 +16,8 @@ export type StationTestType =
   | "boggle"
   | "mini-sudoku"
   | "matching"
-  | "strong-password";
+  | "strong-password"
+  | "photo-task";
 
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
@@ -27,6 +28,7 @@ export type StationTestViewModel = {
   completionCodeLength?: number;
   challengeDifficultyMode?: "admin" | "player";
   challengeDifficulty?: ChallengeDifficulty;
+  completionStopwatchEnabled?: boolean;
   name: string;
   typeLabel: string;
   description: string;
@@ -60,6 +62,7 @@ export type StationPreviewOverlayProps = {
   onClose: () => void;
   onRequestClose?: () => void;
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
+  onSubmitPhotoTask?: (stationId: string, fileUri: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;
   onTimeExpired?: (stationId: string) => void;

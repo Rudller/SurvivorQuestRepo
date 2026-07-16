@@ -32,6 +32,23 @@ function renderTaskStatusLabel(status: TeamTaskStatus) {
   return "Do zrobienia";
 }
 
+function formatDurationLabel(startedAt: string | null, finishedAt: string | null) {
+  if (!startedAt || !finishedAt) {
+    return "-";
+  }
+
+  const startedMs = new Date(startedAt).getTime();
+  const finishedMs = new Date(finishedAt).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(finishedMs) || finishedMs < startedMs) {
+    return "-";
+  }
+
+  const totalSeconds = Math.round((finishedMs - startedMs) / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function resolveTaskStatusClassName(status: TeamTaskStatus) {
   if (status === "done") {
     return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
@@ -70,8 +87,10 @@ export function CurrentRealizationTeamTasksPanel({
         fallbackOrder: index,
         stationName: station.stationName || station.stationId,
         defaultPoints: station.defaultPoints,
+        completionStopwatchEnabled: station.completionStopwatchEnabled,
         status: task?.status ?? "todo",
         pointsAwarded: task?.pointsAwarded ?? 0,
+        startedAt: task?.startedAt ?? null,
         finishedAt: task?.finishedAt ?? null,
       };
     }).sort((left, right) => {
@@ -172,6 +191,7 @@ export function CurrentRealizationTeamTasksPanel({
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Domyślne pkt</th>
                     <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ukończono</th>
+                    <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Czas wykonania</th>
                     {canManageTasks ? (
                       <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
                     ) : null}
@@ -197,6 +217,11 @@ export function CurrentRealizationTeamTasksPanel({
                         <td className="px-3 py-2 text-zinc-300">{task.defaultPoints}</td>
                         <td className="px-3 py-2 text-zinc-400">
                           {task.finishedAt ? new Date(task.finishedAt).toLocaleString("pl-PL") : "-"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-400">
+                          {task.completionStopwatchEnabled
+                            ? formatDurationLabel(task.startedAt, task.finishedAt)
+                            : "-"}
                         </td>
                         {canManageTasks ? (
                           <td className="px-3 py-2">

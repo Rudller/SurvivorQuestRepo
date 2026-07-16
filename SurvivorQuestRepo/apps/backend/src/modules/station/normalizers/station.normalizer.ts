@@ -19,12 +19,22 @@ import type {
   StationQuiz,
 } from '../domain/station.types';
 
-function normalizeChallengeDifficultyMode(value: StationDraftInput['challengeDifficultyMode']): ChallengeDifficultyMode {
+function normalizeChallengeDifficultyMode(
+  value: StationDraftInput['challengeDifficultyMode'],
+): ChallengeDifficultyMode {
   return value === 'player' ? 'player' : 'admin';
 }
 
-function normalizeChallengeDifficulty(value: StationDraftInput['challengeDifficulty']): ChallengeDifficulty {
+function normalizeChallengeDifficulty(
+  value: StationDraftInput['challengeDifficulty'],
+): ChallengeDifficulty {
   return value === 'easy' || value === 'hard' ? value : 'medium';
+}
+
+function normalizeCompletionStopwatchEnabled(
+  value: StationDraftInput['completionStopwatchEnabled'],
+): boolean {
+  return value === true;
 }
 
 function resolveImageUrl(imageUrl: string | undefined, seed: string) {
@@ -153,8 +163,15 @@ export function normalizeStationDraft(
     completionCode: normalizedCompletionCode,
     quiz: normalizedQuiz,
     translations: input.translations,
-    challengeDifficultyMode: normalizeChallengeDifficultyMode(input.challengeDifficultyMode),
-    challengeDifficulty: normalizeChallengeDifficulty(input.challengeDifficulty),
+    challengeDifficultyMode: normalizeChallengeDifficultyMode(
+      input.challengeDifficultyMode,
+    ),
+    challengeDifficulty: normalizeChallengeDifficulty(
+      input.challengeDifficulty,
+    ),
+    completionStopwatchEnabled: normalizeCompletionStopwatchEnabled(
+      input.completionStopwatchEnabled,
+    ),
     latitude:
       typeof input.latitude === 'number' && Number.isFinite(input.latitude)
         ? input.latitude
@@ -163,7 +180,9 @@ export function normalizeStationDraft(
       typeof input.longitude === 'number' && Number.isFinite(input.longitude)
         ? input.longitude
         : undefined,
-    color: /^#[0-9a-fA-F]{6}$/.test(input.color ?? '') ? input.color! : '#f59e0b',
+    color: /^#[0-9a-fA-F]{6}$/.test(input.color ?? '')
+      ? input.color!
+      : '#f59e0b',
     sourceTemplateId: input.sourceTemplateId?.trim() || undefined,
   };
 }

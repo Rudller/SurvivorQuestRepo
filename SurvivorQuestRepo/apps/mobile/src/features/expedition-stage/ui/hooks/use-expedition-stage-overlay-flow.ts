@@ -36,6 +36,7 @@ type UseExpeditionStageOverlayFlowArgs = {
   text: OverlayFlowText;
   startStationTask: (stationId: string, startedAt?: string) => Promise<string | null>;
   completeStationTask: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
+  submitTaskPhoto: (stationId: string, fileUri: string) => Promise<string | null>;
   failStationTask: (stationId: string, reason?: string, startedAt?: string) => Promise<string | null>;
   setSelectedStationId: (stationId: string | null) => void;
   setActionError: Dispatch<SetStateAction<string | null>>;
@@ -57,6 +58,7 @@ export function useExpeditionStageOverlayFlow({
   text,
   startStationTask,
   completeStationTask,
+  submitTaskPhoto,
   failStationTask,
   setSelectedStationId,
   setActionError,
@@ -419,6 +421,28 @@ export function useExpeditionStageOverlayFlow({
     ],
   );
 
+  const handleSubmitPhotoTask = useCallback(
+    async (stationId: string, fileUri: string) => {
+      setActionError(null);
+      setActionMessage(null);
+
+      const locationError = await ensureLocationRequirement();
+      if (locationError) {
+        setActionError(locationError);
+        return locationError;
+      }
+
+      const result = await submitTaskPhoto(stationId, fileUri);
+      if (result) {
+        setActionError(result);
+        return result;
+      }
+
+      return null;
+    },
+    [ensureLocationRequirement, setActionError, setActionMessage, submitTaskPhoto],
+  );
+
   const handleRequestCloseActiveStation = useCallback(() => {
     if (!activeStationTest) {
       setActiveStationTestId(null);
@@ -612,6 +636,7 @@ export function useExpeditionStageOverlayFlow({
     handlePreviewOutcomePopup,
     handleStartStationTestTask,
     handleCompleteStationTestTask,
+    handleSubmitPhotoTask,
     handleRequestCloseActiveStation,
     handleTimeStationExpired,
     handleQuizFailed,

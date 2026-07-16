@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { GalleryModule } from './modules/gallery/gallery.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { RealizationModule } from './modules/realization/realization.module';
 import { ScenarioModule } from './modules/scenario/scenario.module';
@@ -28,6 +29,7 @@ import { UsersModule } from './modules/users/users.module';
     ScenarioModule,
     RealizationModule,
     MobileModule,
+    GalleryModule,
   ],
   controllers: [AppController],
   providers: [

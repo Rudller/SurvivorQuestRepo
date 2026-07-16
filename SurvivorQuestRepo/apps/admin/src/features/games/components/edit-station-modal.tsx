@@ -163,6 +163,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     quizAudioUrl: station.quiz?.audioUrl ?? "",
     challengeDifficultyMode: station.challengeDifficultyMode as ChallengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty as ChallengeDifficulty,
+    completionStopwatchEnabled: station.completionStopwatchEnabled,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
@@ -304,6 +305,10 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   challengeDifficulty: supportsChallengeDifficulty(editValues.type)
                     ? editValues.challengeDifficulty
                     : "medium",
+                  completionStopwatchEnabled:
+                    clampTimeLimitSeconds(editValues.timeLimitSeconds) === 0
+                      ? editValues.completionStopwatchEnabled
+                      : false,
                   latitude: nextLatitude,
                   longitude: nextLongitude,
                 }).unwrap();
@@ -701,12 +706,14 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             ) : null}
 
             <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
+              <span className="text-xs uppercase tracking-wider text-zinc-400">
+                {editValues.type === "photo-task" ? "Polecenie (co należy sfotografować)" : "Opis"}
+              </span>
               <textarea
                 value={editValues.description}
                 onChange={(event) => setEditValues((prev) => ({ ...prev, description: event.target.value }))}
                 rows={4}
-                placeholder="Opis stanowiska"
+                placeholder={editValues.type === "photo-task" ? "Np. Znajdź młotek i zrób jego zdjęcie" : "Opis stanowiska"}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
@@ -876,6 +883,18 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 />
                 <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
               </div>
+              {editValues.timeLimitSeconds === 0 ? (
+                <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={editValues.completionStopwatchEnabled}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({ ...prev, completionStopwatchEnabled: event.target.checked }))
+                    }
+                  />
+                  Pokaż stoper czasu wykonania (dla graczy i organizatora)
+                </label>
+              ) : null}
             </div>
 
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">

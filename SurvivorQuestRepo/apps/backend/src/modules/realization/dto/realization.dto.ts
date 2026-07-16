@@ -44,6 +44,8 @@ export type CreateRealizationDto = {
   instructors?: unknown;
   type?: RealizationType;
   logoUrl?: string;
+  hideMap?: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId?: string;
@@ -229,6 +231,8 @@ export function validateRealizationPayload(
     instructors,
     type: payload.type,
     logoUrl: payload.logoUrl?.trim() || undefined,
+    hideMap: payload.hideMap === true,
+    mapImageUrl: payload.mapImageUrl?.trim() || undefined,
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,
     scenarioId,

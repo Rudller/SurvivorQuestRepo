@@ -35,6 +35,12 @@ enum StationType {
   MINI_SUDOKU
   MATCHING
   STRONG_PASSWORD
+  PHOTO_TASK
+}
+
+enum TeamPhotoKind {
+  TEAM_SELFIE
+  TASK_PROOF
 }
 
 enum RealizationStatus {
@@ -121,6 +127,7 @@ model Station {
   translations     Json?
   challengeDifficultyMode String             @default("admin")
   challengeDifficulty String                 @default("medium")
+  completionStopwatchEnabled Boolean       @default(false)
   color            String             @default("#f59e0b")
   latitude         Float?
   longitude        Float?
@@ -133,6 +140,7 @@ model Station {
   derivedStations  Station[]          @relation("StationTemplate")
   scenarioStations ScenarioStation[]
   taskProgresses   TeamTaskProgress[]
+  photos           TeamPhoto[]
 }
 
 model Scenario {
@@ -178,6 +186,8 @@ model Realization {
   instructors         Json?
   type                RealizationType
   logoUrl             String?
+  hideMap             Boolean            @default(false)
+  mapImageUrl         String?
   offerPdfUrl         String?
   offerPdfName        String?
   scenarioId          String
@@ -202,6 +212,7 @@ model Realization {
   teamAssignments     TeamAssignment[]
   teamTaskProgresses  TeamTaskProgress[]
   eventLogs           EventLog[]
+  photos              TeamPhoto[]
 }
 
 model Team {
@@ -226,6 +237,7 @@ model Team {
   assignments        TeamAssignment[]
   taskProgresses     TeamTaskProgress[]
   eventLogs          EventLog[]
+  photos             TeamPhoto[]
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -267,6 +279,24 @@ model TeamTaskProgress {
 
   @@unique([realizationId, teamId, stationId])
   @@index([teamId])
+  @@index([stationId])
+}
+
+model TeamPhoto {
+  id            String        @id @default(uuid())
+  realizationId String
+  teamId        String
+  stationId     String?
+  kind          TeamPhotoKind
+  objectKey     String
+  url           String
+  createdAt     DateTime      @default(now())
+  realization   Realization   @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team          Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  station       Station?      @relation(fields: [stationId], references: [id], onDelete: SetNull)
+
+  @@index([realizationId, createdAt])
+  @@index([teamId, kind])
   @@index([stationId])
 }
 

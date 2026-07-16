@@ -12,6 +12,7 @@ import {
   TaskStatus,
   TeamStatus,
 } from '@prisma/client';
+import type { Express } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   getOpaqueTokenCandidates,
@@ -26,6 +27,7 @@ import {
   type RealizationStatus,
 } from '../realization/realization.service';
 import { StationService, type StationEntity } from '../station/station.service';
+import { StationStorageService } from '../station/station-storage.service';
 import {
   buildDeterministicStationQrNonce,
   buildStationQrEntryUrl,
@@ -135,6 +137,7 @@ export class MobileService {
     private readonly prisma: PrismaService,
     private readonly realizationService: RealizationService,
     private readonly stationService: StationService,
+    private readonly stationStorageService: StationStorageService,
   ) {}
 
   async getMobileBootstrap() {
@@ -237,6 +240,7 @@ export class MobileService {
           name: existingAssignment.team.name,
           color: existingAssignment.team.color,
           badgeKey: normalizeTeamBadgeKey(existingAssignment.team.badgeKey),
+          badgeImageUrl: existingAssignment.team.badgeImageUrl,
           points: existingAssignment.team.points,
         },
         customizationOccupancy,
@@ -346,6 +350,7 @@ export class MobileService {
         name: selectedTeam.name,
         color: selectedTeam.color,
         badgeKey: normalizeTeamBadgeKey(selectedTeam.badgeKey),
+        badgeImageUrl: selectedTeam.badgeImageUrl,
         points: selectedTeam.points,
       },
       customizationOccupancy,
@@ -432,6 +437,8 @@ export class MobileService {
         contactPhone: realization.contactPhone,
         contactEmail: realization.contactEmail,
         logoUrl: realization.logoUrl,
+        hideMap: realization.hideMap,
+        mapImageUrl: realization.mapImageUrl,
         type: realization.type,
         teamCount: realization.teamCount,
         peopleCount: realization.peopleCount,
@@ -461,6 +468,7 @@ export class MobileService {
         name: team.name,
         color: team.color,
         badgeKey: normalizeTeamBadgeKey(team.badgeKey),
+        badgeImageUrl: team.badgeImageUrl,
         points: team.points,
         lastLocation: this.toLastLocation(team),
       },
@@ -480,7 +488,6 @@ export class MobileService {
     name: string;
     color: string;
     badgeKey?: string;
-    badgeImageUrl?: string;
   }) {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
@@ -521,7 +528,6 @@ export class MobileService {
     if (team.color !== color) changedFields.push('color');
 
     const nextBadgeKey = normalizeTeamBadgeKey(input.badgeKey);
-    const nextBadgeImageUrl = input.badgeImageUrl?.trim() || null;
     if (
       nextBadgeKey &&
       peers.some(
@@ -531,10 +537,7 @@ export class MobileService {
       throw new ConflictException('Team icon already taken');
     }
 
-    if (
-      normalizedCurrentBadgeKey !== nextBadgeKey ||
-      team.badgeImageUrl !== nextBadgeImageUrl
-    ) {
+    if (normalizedCurrentBadgeKey !== nextBadgeKey) {
       changedFields.push('badge');
     }
 
@@ -545,7 +548,6 @@ export class MobileService {
           name: teamName,
           color,
           badgeKey: nextBadgeKey,
-          badgeImageUrl: nextBadgeImageUrl,
           status: TeamStatus.ACTIVE,
         },
       });
@@ -571,6 +573,168 @@ export class MobileService {
       badgeKey: nextBadgeKey,
       changedFields,
       customizationOccupancy,
+    };
+  }
+
+  async uploadTeamSelfie(input: {
+    sessionToken: string;
+    file: Express.Multer.File;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+
+    const uploaded = await this.stationStorageService.uploadTeamSelfie(
+      input.file,
+      { realizationId: realization.id, teamId: team.id },
+    );
+
+    const previousSelfie = await this.prisma.teamPhoto.findFirst({
+      where: { teamId: team.id, kind: 'TEAM_SELFIE' },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.teamPhoto.deleteMany({
+        where: { teamId: team.id, kind: 'TEAM_SELFIE' },
+      }),
+      this.prisma.teamPhoto.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          kind: 'TEAM_SELFIE',
+          objectKey: uploaded.key,
+          url: uploaded.url,
+        },
+      }),
+      this.prisma.team.update({
+        where: { id: team.id },
+        data: { badgeImageUrl: uploaded.url },
+      }),
+    ]);
+
+    if (previousSelfie) {
+      const previousKey = this.stationStorageService.getObjectKeyFromUrl(
+        previousSelfie.url,
+      );
+      if (previousKey) {
+        await this.stationStorageService.deleteObject(previousKey);
+      }
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: assignment.deviceId,
+      eventType: 'team_profile_updated',
+      payload: { changedFields: ['selfie'] },
+    });
+
+    return { teamId: team.id, url: uploaded.url };
+  }
+
+  async uploadTeamTaskPhoto(input: {
+    sessionToken: string;
+    stationId: string;
+    file: Express.Multer.File;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
+
+    if (!realization.stationIds.includes(input.stationId)) {
+      throw new BadRequestException(
+        'Station not available in this realization',
+      );
+    }
+
+    const station = await this.stationService.findStationById(
+      input.stationId,
+    );
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
+
+    if (station.type !== 'photo-task') {
+      throw new BadRequestException(
+        'This station does not accept photo submissions',
+      );
+    }
+
+    this.assertLocationRequirementSatisfied(realization, team);
+
+    const existingProgress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+    });
+
+    if (existingProgress?.status === TaskStatus.DONE) {
+      throw new ConflictException('Task already completed');
+    }
+
+    const uploaded = await this.stationStorageService.uploadTeamTaskPhoto(
+      input.file,
+      {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+      },
+    );
+
+    await this.prisma.teamPhoto.create({
+      data: {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        kind: 'TASK_PROOF',
+        objectKey: uploaded.key,
+        url: uploaded.url,
+      },
+    });
+
+    await this.prisma.teamTaskProgress.upsert({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+      create: {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        status: TaskStatus.IN_PROGRESS,
+        startedAt: new Date(),
+      },
+      update: {
+        status: TaskStatus.IN_PROGRESS,
+      },
+    });
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: assignment.deviceId,
+      eventType: 'task_photo_submitted',
+      payload: { stationId: input.stationId },
+    });
+
+    return {
+      teamId: team.id,
+      stationId: input.stationId,
+      url: uploaded.url,
+      taskStatus: 'in-progress' as const,
     };
   }
 
@@ -738,6 +902,7 @@ export class MobileService {
         name: requestedTeam.name,
         color: requestedTeam.color,
         badgeKey: normalizeTeamBadgeKey(requestedTeam.badgeKey),
+        badgeImageUrl: requestedTeam.badgeImageUrl,
         points: requestedTeam.points,
       },
       customizationOccupancy,
@@ -954,6 +1119,12 @@ export class MobileService {
     const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
       throw new NotFoundException('Station not found');
+    }
+
+    if (station.type === 'photo-task') {
+      throw new BadRequestException(
+        'This station only accepts photo submissions',
+      );
     }
 
     const startedAt = parseMobileTaskTimestamp(input.startedAt, new Date());
@@ -1724,6 +1895,7 @@ export class MobileService {
           stationNumber,
           status: this.fromTaskStatus(progress?.status, isFailed) || 'todo',
           pointsAwarded: progress?.pointsAwarded || 0,
+          startedAt: progress?.startedAt?.toISOString() || null,
           finishedAt: progress?.finishedAt?.toISOString() || null,
         };
       });
@@ -2319,6 +2491,71 @@ export class MobileService {
     };
   }
 
+  async listPendingPhotoReviews(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    const [photos, progresses, teams, stations] = await Promise.all([
+      this.prisma.teamPhoto.findMany({
+        where: { realizationId: realization.id, kind: 'TASK_PROOF' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.teamTaskProgress.findMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.team.findMany({
+        where: { realizationId: realization.id },
+      }),
+      this.stationService.findStationsByIds(realization.stationIds),
+    ]);
+
+    const progressByKey = new Map(
+      progresses.map((progress) => [
+        `${progress.teamId}:${progress.stationId}`,
+        progress,
+      ]),
+    );
+    const teamById = new Map(teams.map((team) => [team.id, team]));
+    const stationById = new Map(stations.map((station) => [station.id, station]));
+
+    const latestPhotoByKey = new Map<string, (typeof photos)[number]>();
+    for (const photo of photos) {
+      if (!photo.stationId) {
+        continue;
+      }
+      const key = `${photo.teamId}:${photo.stationId}`;
+      if (!latestPhotoByKey.has(key)) {
+        latestPhotoByKey.set(key, photo);
+      }
+    }
+
+    const pending = Array.from(latestPhotoByKey.values()).filter((photo) => {
+      const progress = progressByKey.get(`${photo.teamId}:${photo.stationId}`);
+      return progress?.status === TaskStatus.IN_PROGRESS;
+    });
+
+    return pending
+      .map((photo) => {
+        const team = teamById.get(photo.teamId);
+        const station = stationById.get(photo.stationId as string);
+        if (!team || !station) {
+          return null;
+        }
+
+        return {
+          teamId: team.id,
+          teamName: team.name || `Drużyna ${team.slotNumber}`,
+          stationId: station.id,
+          stationName: station.name,
+          stationDescription: station.description,
+          photoUrl: photo.url,
+          submittedAt: photo.createdAt.toISOString(),
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+  }
+
   private async resolveMobileAdminRealizationOrThrow(realizationId: string) {
     const requestedId = realizationId.trim();
     const realizations = await this.getRealizationsView();
@@ -2579,6 +2816,7 @@ export class MobileService {
       timeLimitSeconds: station.timeLimitSeconds,
       challengeDifficultyMode: station.challengeDifficultyMode,
       challengeDifficulty: station.challengeDifficulty,
+      completionStopwatchEnabled: station.completionStopwatchEnabled,
       completionCodeInputMode: resolveCompletionCodeInputMode(
         station.completionCode,
       ),
@@ -2658,6 +2896,7 @@ export class MobileService {
       stationName: station?.name ?? `Stanowisko ${stationId}`,
       stationType: station?.type ?? 'quiz',
       defaultPoints: station?.points ?? 0,
+      completionStopwatchEnabled: station?.completionStopwatchEnabled ?? false,
       latitude:
         typeof station?.latitude === 'number' && Number.isFinite(station.latitude)
           ? station.latitude

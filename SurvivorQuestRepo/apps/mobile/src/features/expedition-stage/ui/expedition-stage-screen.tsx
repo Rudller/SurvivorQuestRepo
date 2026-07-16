@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -36,6 +36,7 @@ import {
 } from "../model/types";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { ExpeditionStageOverlayLayer } from "./expedition-stage-overlay-layer";
+import { QuizOutcomePopupPanel } from "../components/station-overlays/station-panels/quiz-outcome-popup-panel";
 import { ExpeditionStageOverlayProvider, ExpeditionStageSessionProvider } from "./expedition-stage-context";
 import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
 import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
@@ -90,6 +91,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeCaesar: string;
     stationTypeMatching: string;
     stationTypeStrongPassword: string;
+    stationTypePhotoTask: string;
     stationTypeQuiz: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
@@ -113,6 +115,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskMarkedFailed: string;
     taskTimeExpired: string;
     loadingMap: string;
+    mapImageAccessibilityLabel: string;
     realizationPrefix: string;
     tasks: string;
     testMenu: string;
@@ -133,6 +136,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeCaesar: "Szyfr Cezara",
     stationTypeMatching: "Łączenie par",
     stationTypeStrongPassword: "Mocne hasło",
+    stationTypePhotoTask: "Zadanie fotograficzne",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
@@ -156,6 +160,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskMarkedFailed: "Zadanie zostało oznaczone jako niezaliczone.",
     taskTimeExpired: "Czas na ukończenie zadania się skończył. Zadanie nie zostało zaliczone.",
     loadingMap: "Ładowanie mapy...",
+    mapImageAccessibilityLabel: "Mapa wydarzenia",
     realizationPrefix: "Realizacja",
     tasks: "Zadania",
     testMenu: "Menu testowe",
@@ -175,6 +180,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeCaesar: "Caesar cipher",
     stationTypeMatching: "Matching pairs",
     stationTypeStrongPassword: "Strong password",
+    stationTypePhotoTask: "Photo task",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
@@ -198,6 +204,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskMarkedFailed: "The task was marked as failed.",
     taskTimeExpired: "Time to complete the task has expired. The task was not completed.",
     loadingMap: "Loading map...",
+    mapImageAccessibilityLabel: "Event map",
     realizationPrefix: "Realization",
     tasks: "Tasks",
     testMenu: "Test menu",
@@ -217,6 +224,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeCaesar: "Шифр Цезаря",
     stationTypeMatching: "Поєднання пар",
     stationTypeStrongPassword: "Надійний пароль",
+    stationTypePhotoTask: "Фотозавдання",
     stationTypeQuiz: "Вікторина",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
@@ -240,6 +248,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskMarkedFailed: "Завдання позначено як незараховане.",
     taskTimeExpired: "Час на виконання завдання вичерпано. Завдання не зараховано.",
     loadingMap: "Завантаження мапи...",
+    mapImageAccessibilityLabel: "Мапа події",
     realizationPrefix: "Реалізація",
     tasks: "Завдання",
     testMenu: "Тестове меню",
@@ -259,6 +268,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeCaesar: "Шифр Цезаря",
     stationTypeMatching: "Сопоставление пар",
     stationTypeStrongPassword: "Надёжный пароль",
+    stationTypePhotoTask: "Фотозадание",
     stationTypeQuiz: "Викторина",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
@@ -282,6 +292,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskMarkedFailed: "Задание отмечено как незачтённое.",
     taskTimeExpired: "Время на выполнение задания истекло. Задание не зачтено.",
     loadingMap: "Загрузка карты...",
+    mapImageAccessibilityLabel: "Карта события",
     realizationPrefix: "Реализация",
     tasks: "Задания",
     testMenu: "Тестовое меню",
@@ -390,6 +401,9 @@ const PIN_ICON_SVGS = {
   ),
   matching: buildPinIconSvg('<path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" x2="16" y1="12" y2="12" />'),
   "strong-password": buildPinIconSvg('<path d="M7 11V8a5 5 0 0 1 10 0v3" /><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M12 15v2" />'),
+  "photo-task": buildPinIconSvg(
+    '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" />',
+  ),
 } as const;
 
 function resolveStationVisual(stationType: ExpeditionStationType | undefined, status: ExpeditionTaskStatus) {
@@ -455,6 +469,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
 
   if (stationType === "strong-password") {
     return { icon: PIN_ICON_SVGS["strong-password"], color: "#f43f5e" };
+  }
+
+  if (stationType === "photo-task") {
+    return { icon: PIN_ICON_SVGS["photo-task"], color: "#84cc16" };
   }
 
   if (stationType === "audio-quiz") {
@@ -543,6 +561,7 @@ function resolveStationTypeLabel(
     | "stationTypeCaesar"
     | "stationTypeMatching"
     | "stationTypeStrongPassword"
+    | "stationTypePhotoTask"
     | "stationTypeQuiz"
   >,
 ) {
@@ -606,6 +625,10 @@ function resolveStationTypeLabel(
     return text.stationTypeStrongPassword;
   }
 
+  if (stationType === "photo-task") {
+    return text.stationTypePhotoTask;
+  }
+
   return text.stationTypeQuiz;
 }
 
@@ -629,7 +652,13 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
 }
 
 function normalizeStationType(stationType?: ExpeditionStationType): StationTestType {
-  if (stationType && (isInteractiveQuizStationType(stationType) || stationType === "time" || stationType === "points")) {
+  if (
+    stationType &&
+    (isInteractiveQuizStationType(stationType) ||
+      stationType === "time" ||
+      stationType === "points" ||
+      stationType === "photo-task")
+  ) {
     return stationType;
   }
 
@@ -725,6 +754,7 @@ export function ExpeditionStageScreen({
   const tasksChevronSize = adaptiveLayout.s(16, 14, 20);
   const mapControlButtonSize = adaptiveLayout.hit(isTabletLayout ? 50 : 44);
   const mapControlTopOffset = adaptiveLayout.s(isTabletLayout ? 232 : 154, 146, 244);
+  const isAnyStationOverlayOpenRef = useRef(false);
   const {
     sessionState,
     isLoading,
@@ -734,10 +764,14 @@ export function ExpeditionStageScreen({
     sessionInvalidReason,
     startStationTask,
     completeStationTask,
+    submitTaskPhoto,
     failStationTask,
     syncTeamLocation,
     resolveStationQrToken,
-  } = useExpeditionSession(session);
+    globalTaskOutcomePopup,
+    dismissCurrentGlobalTaskOutcome,
+    globalOutcomePanelText,
+  } = useExpeditionSession(session, isAnyStationOverlayOpenRef);
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -1014,6 +1048,7 @@ export function ExpeditionStageScreen({
                 completionCodeLength: stationCatalog.completionCodeLength,
                 challengeDifficultyMode: stationCatalog.challengeDifficultyMode,
                 challengeDifficulty: stationCatalog.challengeDifficulty,
+                completionStopwatchEnabled: stationCatalog.completionStopwatchEnabled,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
@@ -1068,6 +1103,7 @@ export function ExpeditionStageScreen({
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
   const teamName = sessionState.team.name?.trim() || session.team.name || text.teamDefaultName;
   const teamIcon = session.team.icon.trim().length > 0 ? session.team.icon : "🏁";
+  const teamBadgeImageUrl = sessionState.team.badgeImageUrl;
   const selectedLanguage =
     session.selectedLanguage ??
     sessionState.realization.selectedLanguage ??
@@ -1176,6 +1212,7 @@ export function ExpeditionStageScreen({
     },
     startStationTask,
     completeStationTask,
+    submitTaskPhoto,
     failStationTask,
     setSelectedStationId,
     setActionError,
@@ -1184,6 +1221,10 @@ export function ExpeditionStageScreen({
     isInvalidCompletionCodeError,
     isTaskAlreadyCompletedError,
   });
+
+  useEffect(() => {
+    isAnyStationOverlayOpenRef.current = Boolean(overlayFlow.activeStationTestId);
+  }, [overlayFlow.activeStationTestId]);
 
   const qrFlow = useExpeditionStageQrFlow({
     isSessionEnded,
@@ -1284,6 +1325,19 @@ export function ExpeditionStageScreen({
               {text.loadingMap}
             </Text>
           </View>
+        ) : sessionState.realization.hideMap ? (
+          <View style={StyleSheet.absoluteFillObject}>
+            <Image
+              source={
+                sessionState.realization.mapImageUrl
+                  ? { uri: sessionState.realization.mapImageUrl }
+                  : require("../../../../assets/survivor_icon_512.png")
+              }
+              resizeMode="cover"
+              style={{ width: "100%", height: "100%" }}
+              accessibilityLabel={text.mapImageAccessibilityLabel}
+            />
+          </View>
         ) : (
           <ExpeditionMap
             centerCoordinate={mapCenterCoordinate}
@@ -1299,22 +1353,24 @@ export function ExpeditionStageScreen({
         )}
       </View>
 
-      <View className="absolute left-3" style={{ top: insets.top + mapControlTopOffset }}>
-        <Pressable
-          className="items-center justify-center rounded-full border active:opacity-90"
-          disabled={!mapPlayerLocation}
-          style={{
-            width: mapControlButtonSize,
-            height: mapControlButtonSize,
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panel,
-            opacity: mapPlayerLocation ? 1 : 0.44,
-          }}
-          onPress={() => setCenterPlayerSignal((value) => value + 1)}
-        >
-          <CenterPlayerIcon color={EXPEDITION_THEME.accentStrong} size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)} />
-        </Pressable>
-      </View>
+      {!sessionState.realization.hideMap && (
+        <View className="absolute left-3" style={{ top: insets.top + mapControlTopOffset }}>
+          <Pressable
+            className="items-center justify-center rounded-full border active:opacity-90"
+            disabled={!mapPlayerLocation}
+            style={{
+              width: mapControlButtonSize,
+              height: mapControlButtonSize,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+              opacity: mapPlayerLocation ? 1 : 0.44,
+            }}
+            onPress={() => setCenterPlayerSignal((value) => value + 1)}
+          >
+            <CenterPlayerIcon color={EXPEDITION_THEME.accentStrong} size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)} />
+          </Pressable>
+        </View>
+      )}
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
@@ -1331,6 +1387,7 @@ export function ExpeditionStageScreen({
             teamColorHex={teamColorHex}
             teamColorLabel={teamColorLabel}
             teamIcon={teamIcon}
+            teamBadgeImageUrl={teamBadgeImageUrl}
             points={sessionState.team.points}
             languageFlag={currentLanguageFlag}
             showLanguageButton={hasMultipleLanguageOptions}
@@ -1547,6 +1604,14 @@ export function ExpeditionStageScreen({
           timedTaskAlertCloseAndFail: text.timedTaskAlertCloseAndFail,
         }}
         onExitRealization={onExitRealization}
+      />
+
+      <QuizOutcomePopupPanel
+        popup={globalTaskOutcomePopup}
+        timeoutSecondsLeft={null}
+        isLightTheme={isLightTheme}
+        onClose={dismissCurrentGlobalTaskOutcome}
+        text={globalOutcomePanelText}
       />
 
       <Modal

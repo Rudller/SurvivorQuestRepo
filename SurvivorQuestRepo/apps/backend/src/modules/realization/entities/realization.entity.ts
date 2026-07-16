@@ -42,6 +42,8 @@ export type RealizationEntity = {
   instructors: string[];
   type: RealizationType;
   logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
@@ -82,6 +84,7 @@ export type ScenarioStationDraftPayload = {
   translations?: StationTranslations;
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
+  completionStopwatchEnabled?: boolean;
   color?: string;
   latitude?: number;
   longitude?: number;
@@ -101,6 +104,8 @@ export type ValidatedRealizationPayload = {
   instructors: string[];
   type: RealizationType;
   logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;

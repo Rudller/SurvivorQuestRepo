@@ -196,6 +196,8 @@ export type Realization = {
   instructors: string[];
   type: RealizationType;
   logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
@@ -236,6 +238,7 @@ export type RealizationStationDraft = {
   translations?: Station["translations"];
   challengeDifficultyMode?: Station["challengeDifficultyMode"];
   challengeDifficulty?: Station["challengeDifficulty"];
+  completionStopwatchEnabled?: Station["completionStopwatchEnabled"];
   color: string;
   latitude?: number;
   longitude?: number;

@@ -106,6 +106,24 @@ export function getApiConnectionLabel() {
   return getConfiguredApiUrl();
 }
 
+const PRODUCTION_API_HOSTNAME = "survivorquest.pl";
+
+export function isProductionApiUrl(apiUrl: string) {
+  try {
+    const hostname = new URL(apiUrl).hostname.toLowerCase();
+    return (
+      hostname === PRODUCTION_API_HOSTNAME ||
+      hostname.endsWith(`.${PRODUCTION_API_HOSTNAME}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getApiEnvironmentLabel() {
+  return isProductionApiUrl(getConfiguredApiUrl()) ? "PRODUKCJA" : "TEST/DEV";
+}
+
 export function getConfiguredApiUrl() {
   return readStoredApiUrl() || normalizeApiUrl(getDefaultApiUrl()) || DEFAULT_BACKEND_API_URL;
 }

@@ -20,6 +20,7 @@ export type CurrentRealizationOverview = {
       stationName: string;
       stationType: string;
       defaultPoints: number;
+      completionStopwatchEnabled: boolean;
       latitude: number | null;
       longitude: number | null;
     }>;
@@ -48,6 +49,7 @@ export type CurrentRealizationOverview = {
       stationNumber?: number;
       status: CurrentTeamTaskStatus;
       pointsAwarded: number;
+      startedAt: string | null;
       finishedAt: string | null;
     }>;
     updatedAt: string;

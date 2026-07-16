@@ -1,4 +1,4 @@
-import type { RealizationStatus } from "./types/realization";
+import type { Realization, RealizationStatus } from "./types/realization";
 
 export type RealizationSortField = "company" | "scheduledAt" | "status" | "createdAt";
 export type SortDirection = "asc" | "desc";
@@ -49,6 +49,46 @@ export function toIsoFromDateTimeLocal(value: string) {
 
 export function calculateRequiredDevices(teamCount: number) {
   return teamCount + 2;
+}
+
+export function getDistinctUsedAssets(
+  realizations: Realization[],
+  field: "logoUrl" | "mapImageUrl",
+): { url: string; label: string }[] {
+  const seenUrls = new Set<string>();
+  const options: { url: string; label: string }[] = [];
+
+  for (const realization of realizations) {
+    const url = realization[field]?.trim();
+    if (!url || seenUrls.has(url)) {
+      continue;
+    }
+
+    seenUrls.add(url);
+    options.push({ url, label: realization.companyName });
+  }
+
+  return options;
+}
+
+export function getAssetUsageMap(
+  realizations: Realization[],
+  field: "logoUrl" | "mapImageUrl",
+): Map<string, string[]> {
+  const usageByUrl = new Map<string, string[]>();
+
+  for (const realization of realizations) {
+    const url = realization[field]?.trim();
+    if (!url) {
+      continue;
+    }
+
+    const companies = usageByUrl.get(url) ?? [];
+    companies.push(realization.companyName);
+    usageByUrl.set(url, companies);
+  }
+
+  return usageByUrl;
 }
 
 export function readFileAsDataUrl(file: File): Promise<string> {

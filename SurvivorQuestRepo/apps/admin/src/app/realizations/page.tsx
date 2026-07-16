@@ -112,6 +112,7 @@ export default function RealizationsPage() {
           <CreateRealizationForm
             scenarios={scenarios ?? []}
             stations={stations ?? []}
+            realizations={realizations ?? []}
             userEmail={meData?.user.email}
             onSaved={(savedRealization) => setEditingRealization(savedRealization)}
             onClose={() => setIsCreatePanelOpen(false)}
@@ -122,6 +123,7 @@ export default function RealizationsPage() {
             realization={editingRealization}
             scenarios={scenarios ?? []}
             stations={stations ?? []}
+            realizations={realizations ?? []}
             userEmail={meData?.user.email}
             onSaved={setEditingRealization}
             onClose={() => setEditingRealization(null)}

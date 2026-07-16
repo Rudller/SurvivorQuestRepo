@@ -22,6 +22,7 @@ type StationDto = {
   completionCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
+  completionStopwatchEnabled?: boolean | null;
   color?: string | null;
   quiz?:
     | {
@@ -73,6 +74,8 @@ type RealizationDto = {
   instructors?: string[];
   type?: RealizationType;
   logoUrl?: string;
+  hideMap?: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
@@ -112,6 +115,8 @@ type CreateRealizationPayload = {
   instructors: string[];
   type: RealizationType;
   logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
@@ -144,6 +149,8 @@ type UpdateRealizationPayload = {
   instructors: string[];
   type: RealizationType;
   logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
@@ -165,6 +172,18 @@ type UpdateRealizationPayload = {
 type UploadRealizationAssetResponse = {
   key: string;
   url: string;
+};
+
+export type MediaAsset = {
+  key: string;
+  url: string;
+  size: number;
+  lastModifiedAt: string;
+};
+
+type MediaLibraryResponse = {
+  logos: MediaAsset[];
+  mapImages: MediaAsset[];
 };
 
 type MobileAdminRealizationOverview = {
@@ -262,6 +281,8 @@ function normalizeRealization(dto: RealizationDto): Realization {
     instructors,
     type: dto.type ?? "outdoor-games",
     logoUrl: dto.logoUrl,
+    hideMap: dto.hideMap === true,
+    mapImageUrl: dto.mapImageUrl,
     offerPdfUrl: dto.offerPdfUrl,
     offerPdfName: dto.offerPdfName,
     scenarioId: dto.scenarioId,
@@ -376,6 +397,7 @@ function normalizeStation(station: StationDto): Station {
       station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
+    completionStopwatchEnabled: station.completionStopwatchEnabled === true,
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
         ? normalizeStationQuiz({
@@ -474,6 +496,29 @@ export const realizationApi = baseApi.injectEndpoints({
         };
       },
     }),
+    uploadRealizationMapImage: build.mutation<UploadRealizationAssetResponse, File>({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath("/realizations/upload-map-image"),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
+    getMediaLibrary: build.query<MediaLibraryResponse, void>({
+      query: () => buildApiPath("/realizations/media-library"),
+      providesTags: ["MediaLibrary"],
+    }),
+    deleteMediaAsset: build.mutation<{ ok: true }, { url: string }>({
+      query: (body) => ({
+        url: buildApiPath("/realizations/media-library"),
+        method: "DELETE",
+        body,
+      }),
+      invalidatesTags: ["MediaLibrary", "Realization"],
+    }),
     uploadRealizationOffer: build.mutation<UploadRealizationAssetResponse, File>({
       query: (file) => {
         const formData = new FormData();
@@ -508,7 +553,10 @@ export const {
   useCreateRealizationMutation,
   useUpdateRealizationMutation,
   useUploadRealizationLogoMutation,
+  useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
+  useGetMediaLibraryQuery,
+  useDeleteMediaAssetMutation,
   useGetMobileAdminRealizationOverviewQuery,
   useGetRealizationStationQrsQuery,
 } = realizationApi;
