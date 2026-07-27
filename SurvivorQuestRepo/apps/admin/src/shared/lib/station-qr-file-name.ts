@@ -1,4 +1,4 @@
-function sanitizeFileNamePart(value: string, fallback: string) {
+export function sanitizeFileNamePart(value: string, fallback: string) {
   const normalized = value
     .trim()
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
@@ -12,6 +12,13 @@ export function buildStationQrFileName(realizationName: string, stationName: str
   const safeRealizationName = sanitizeFileNamePart(realizationName, "realizacja");
   const safeStationName = sanitizeFileNamePart(stationName, "stanowisko");
   return `${safeRealizationName} - ${safeStationName}.png`;
+}
+
+export function buildStationQrHuntCodeFileName(realizationName: string, stationName: string, code: string) {
+  const safeRealizationName = sanitizeFileNamePart(realizationName, "realizacja");
+  const safeStationName = sanitizeFileNamePart(stationName, "stanowisko");
+  const safeCode = sanitizeFileNamePart(code, "kod");
+  return `${safeRealizationName} - ${safeStationName} - ${safeCode}.png`;
 }
 
 export function buildStationQrArchiveFileName(realizationName: string) {

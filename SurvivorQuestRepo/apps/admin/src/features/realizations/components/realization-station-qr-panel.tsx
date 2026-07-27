@@ -5,7 +5,15 @@ import JSZip from "jszip";
 import QRCode from "qrcode";
 import { useGetRealizationStationQrsQuery } from "../api/realization.api";
 import type { Realization } from "../types/realization";
-import { buildStationQrArchiveFileName, buildStationQrFileName } from "@/shared/lib/station-qr-file-name";
+import {
+  buildStationQrArchiveFileName,
+  buildStationQrFileName,
+  buildStationQrHuntCodeFileName,
+} from "@/shared/lib/station-qr-file-name";
+import { addCaptionToQrImageDataUrl } from "@/shared/lib/qr-image-caption";
+import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
+
+const HUNT_CODE_QR_IMAGE_WIDTH = 180;
 
 type RealizationStationQrPanelProps = {
   realization: Realization;
@@ -24,6 +32,9 @@ function getStationTypeLabel(type: string) {
   }
   if (type === "hangman") {
     return "Wisielec";
+  }
+  if (type === "qr-hunt") {
+    return "Skanowanie kodów QR";
   }
   return "Quiz";
 }
@@ -45,41 +56,74 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     },
   );
   const [qrImagesByStationId, setQrImagesByStationId] = useState<Record<string, string>>({});
+  const [huntCodeImagesByStationId, setHuntCodeImagesByStationId] = useState<
+    Record<string, { code: string; qrImage: string; downloadableQrImage: string }[]>
+  >({});
   const [copiedStationId, setCopiedStationId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<QrImageLightboxImage | null>(null);
 
   useEffect(() => {
     if (!data) {
       setQrImagesByStationId({});
+      setHuntCodeImagesByStationId({});
       return;
     }
 
     let cancelled = false;
     setQrImagesByStationId({});
+    setHuntCodeImagesByStationId({});
 
     void Promise.all(
-      data.entries.map(async (entry) => [
-        entry.stationId,
-        await QRCode.toDataURL(entry.entryUrl, {
+      data.entries.map(async (entry) => {
+        const qrImage = await QRCode.toDataURL(entry.entryUrl, {
           margin: 1,
           width: 280,
           errorCorrectionLevel: "M",
-        }),
-      ]),
+        });
+
+        let huntCodeImages: { code: string; qrImage: string; downloadableQrImage: string }[] = [];
+        if (entry.stationType === "qr-hunt" && entry.qrScanCodes.length > 0) {
+          huntCodeImages = await Promise.all(
+            entry.qrScanCodes.map(async (code) => {
+              const codeQrImage = await QRCode.toDataURL(code, {
+                margin: 1,
+                width: HUNT_CODE_QR_IMAGE_WIDTH,
+                errorCorrectionLevel: "M",
+              });
+              let downloadableCodeQrImage = codeQrImage;
+              try {
+                downloadableCodeQrImage = await addCaptionToQrImageDataUrl(codeQrImage, code);
+              } catch {
+                // fallback to original QR without caption
+              }
+              return { code, qrImage: codeQrImage, downloadableQrImage: downloadableCodeQrImage };
+            }),
+          );
+        }
+
+        return [entry.stationId, qrImage, huntCodeImages] as const;
+      }),
     )
-      .then((items) => {
+      .then((itemsByStation) => {
         if (cancelled) {
           return;
         }
 
-        setQrImagesByStationId(Object.fromEntries(items));
+        setQrImagesByStationId(
+          Object.fromEntries(itemsByStation.map(([stationId, qrImage]) => [stationId, qrImage])),
+        );
+        setHuntCodeImagesByStationId(
+          Object.fromEntries(itemsByStation.map(([stationId, , huntCodeImages]) => [stationId, huntCodeImages])),
+        );
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
         setQrImagesByStationId({});
+        setHuntCodeImagesByStationId({});
       });
 
     return () => {
@@ -87,12 +131,6 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     };
   }, [data]);
 
-  const expiresLabel = useMemo(() => {
-    if (!data?.expiresAt) {
-      return null;
-    }
-    return new Date(data.expiresAt).toLocaleString("pl-PL");
-  }, [data?.expiresAt]);
   const completionCodeByStationId = useMemo(() => {
     return new Map(
       realization.scenarioStations
@@ -109,7 +147,20 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
       .map((entry) => ({ entry, qrImage: qrImagesByStationId[entry.stationId] }))
       .filter((item): item is { entry: (typeof data.entries)[number]; qrImage: string } => Boolean(item.qrImage));
   }, [data, qrImagesByStationId]);
-  const downloadableQrCount = downloadableEntries.length;
+  const downloadableHuntEntries = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    return data.entries.flatMap((entry) =>
+      (huntCodeImagesByStationId[entry.stationId] ?? []).map((huntImage) => ({
+        entry,
+        code: huntImage.code,
+        qrImage: huntImage.downloadableQrImage,
+      })),
+    );
+  }, [data, huntCodeImagesByStationId]);
+  const downloadableQrCount = downloadableEntries.length + downloadableHuntEntries.length;
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -130,7 +181,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     }
     setCopyError(null);
 
-    if (!downloadableEntries.length) {
+    if (!downloadableEntries.length && !downloadableHuntEntries.length) {
       setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
     }
@@ -143,10 +194,19 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
         anchor.click();
       }, index * 100);
     });
+
+    downloadableHuntEntries.forEach(({ entry, code, qrImage }, index) => {
+      window.setTimeout(() => {
+        const anchor = document.createElement("a");
+        anchor.href = qrImage;
+        anchor.download = buildStationQrHuntCodeFileName(realization.companyName, entry.stationName, code);
+        anchor.click();
+      }, (downloadableEntries.length + index) * 100);
+    });
   }
 
   async function handleDownloadQrZip() {
-    if (!downloadableEntries.length) {
+    if (!downloadableEntries.length && !downloadableHuntEntries.length) {
       setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
     }
@@ -158,8 +218,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
       const zip = new JSZip();
       const usedFileNameCounts = new Map<string, number>();
 
-      downloadableEntries.forEach(({ entry, qrImage }) => {
-        const baseFileName = buildStationQrFileName(realization.companyName, entry.stationName);
+      const addQrImageToZip = (baseFileName: string, qrImage: string) => {
         const fileNameCount = (usedFileNameCounts.get(baseFileName) ?? 0) + 1;
         usedFileNameCounts.set(baseFileName, fileNameCount);
         const fileName =
@@ -169,6 +228,17 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
           return;
         }
         zip.file(fileName, qrImage.slice(base64MarkerIndex + "base64,".length), { base64: true });
+      };
+
+      downloadableEntries.forEach(({ entry, qrImage }) => {
+        addQrImageToZip(buildStationQrFileName(realization.companyName, entry.stationName), qrImage);
+      });
+
+      downloadableHuntEntries.forEach(({ entry, code, qrImage }) => {
+        addQrImageToZip(
+          buildStationQrHuntCodeFileName(realization.companyName, entry.stationName, code),
+          qrImage,
+        );
       });
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -204,11 +274,9 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
               <h2 className="text-xl font-semibold text-zinc-100">Stałe kody QR stanowisk</h2>
               <p className="mt-1 text-sm text-zinc-400">{realization.companyName}</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Kody są stałe dla wejścia na stanowisko. Odświeżenie pobiera aktualne dane, bez tworzenia nowych kodów.
+                Kody są stałe dla wejścia na stanowisko i działają we wszystkich realizacjach korzystających z tego
+                samego stanowiska-szablonu. Odświeżenie pobiera aktualne dane, bez tworzenia nowych kodów.
               </p>
-              {expiresLabel ? (
-                <p className="mt-1 text-xs text-zinc-500">Ważne do: {expiresLabel}</p>
-              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -283,8 +351,21 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
 
                     <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
                       {qrImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={qrImage} alt={`QR ${entry.stationName}`} className="h-64 w-64 rounded-md bg-white p-1" />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLightboxImage({
+                              src: qrImage,
+                              alt: `QR ${entry.stationName}`,
+                              downloadFileName: fileName,
+                              caption: entry.stationName,
+                            })
+                          }
+                          className="cursor-zoom-in rounded-md transition hover:opacity-90"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qrImage} alt={`QR ${entry.stationName}`} className="h-64 w-64 rounded-md bg-white p-1" />
+                        </button>
                       ) : (
                         <p className="text-xs text-zinc-500">Renderowanie kodu...</p>
                       )}
@@ -312,6 +393,73 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                         </a>
                       ) : null}
                     </div>
+
+                    {entry.stationType === "qr-hunt" ? (
+                      <div className="mt-4 border-t border-zinc-800 pt-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                          Kody do zeskanowania ({entry.qrScanCodes.length})
+                        </p>
+                        {entry.qrScanCodes.length === 0 ? (
+                          <p className="mt-2 text-xs text-amber-300">
+                            Brak zdefiniowanych kodów QR dla tego stanowiska — dodaj je w edycji stanowiska.
+                          </p>
+                        ) : (
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {(huntCodeImagesByStationId[entry.stationId] ?? []).map((huntImage) => (
+                              <div
+                                key={huntImage.code}
+                                className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setLightboxImage({
+                                      src: huntImage.qrImage,
+                                      downloadSrc: huntImage.downloadableQrImage,
+                                      alt: `Kod QR ${huntImage.code}`,
+                                      downloadFileName: buildStationQrHuntCodeFileName(
+                                        realization.companyName,
+                                        entry.stationName,
+                                        huntImage.code,
+                                      ),
+                                      caption: huntImage.code,
+                                    })
+                                  }
+                                  className="cursor-zoom-in rounded-md transition hover:opacity-90"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={huntImage.qrImage}
+                                    alt={`Kod QR ${huntImage.code}`}
+                                    className="h-28 w-28 rounded-md bg-white p-1"
+                                  />
+                                </button>
+                                <p
+                                  className="w-full truncate text-center text-[10px] text-zinc-400"
+                                  title={huntImage.code}
+                                >
+                                  {huntImage.code}
+                                </p>
+                                <a
+                                  href={huntImage.downloadableQrImage}
+                                  download={buildStationQrHuntCodeFileName(
+                                    realization.companyName,
+                                    entry.stationName,
+                                    huntImage.code,
+                                  )}
+                                  className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 transition hover:border-zinc-500"
+                                >
+                                  Pobierz PNG
+                                </a>
+                              </div>
+                            ))}
+                            {entry.qrScanCodes.length > (huntCodeImagesByStationId[entry.stationId]?.length ?? 0) ? (
+                              <p className="col-span-full text-xs text-zinc-500">Renderowanie kodów...</p>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
@@ -319,6 +467,8 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
           )}
         </div>
       </aside>
+
+      <QrImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
     </>
   );
 }

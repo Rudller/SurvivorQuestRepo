@@ -184,16 +184,14 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
 
 export type CurrentRealizationStationQrResponse = {
   realizationId: string;
-  issuedAt: string;
-  expiresAt: string;
-  tokenTtlSeconds: number;
   entries: Array<{
     stationId: string;
     stationName: string;
     stationType: StationType;
     completionCode: string | null;
-    qrToken: string;
+    qrEntryCode: string | null;
     entryUrl: string;
+    qrScanCodes: string[];
   }>;
 };
 
@@ -291,17 +289,9 @@ export const currentRealizationApi = baseApi.injectEndpoints({
     }),
     getCurrentRealizationStationQrs: build.query<
       CurrentRealizationStationQrResponse,
-      { realizationId?: string; ttlSeconds?: number } | void
+      { realizationId?: string } | void
     >({
-      query: (arg) => {
-        const realizationId = arg?.realizationId;
-        const ttlSeconds = arg?.ttlSeconds;
-        const suffix =
-          typeof ttlSeconds === "number" && Number.isFinite(ttlSeconds)
-            ? `?ttlSeconds=${Math.max(1, Math.round(ttlSeconds))}`
-            : "";
-        return toMobileAdminRealizationPath(realizationId, `/station-qr${suffix}`);
-      },
+      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/station-qr"),
     }),
     resetCurrentRealizationTeamTask: build.mutation<
       TeamTaskAdminMutationResponse,
