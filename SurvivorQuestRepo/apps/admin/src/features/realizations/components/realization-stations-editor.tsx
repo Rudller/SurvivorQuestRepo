@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { stationTypeOptions, type Station } from "@/features/games/types/station";
-import { useUploadStationImageMutation } from "@/features/games/api/station.api";
+import { useGetStationsQuery, useUploadStationImageMutation } from "@/features/games/api/station.api";
 import { filterStationCatalogItems, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
 import {
   clampTimeLimitSeconds,
@@ -121,6 +121,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     points: 100,
     timeLimitSeconds: 0,
     completionCode: "",
+    qrScanCodes: [],
     challengeDifficultyMode: "admin",
     challengeDifficulty: "medium",
     completionStopwatchEnabled: false,
@@ -235,6 +236,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    qrScanCodes: normalizeStationCategories(station.qrScanCodes),
     challengeDifficultyMode: station.challengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty,
     completionStopwatchEnabled: station.completionStopwatchEnabled,
@@ -283,6 +285,10 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
     completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
+    qrScanCodes:
+      station.type === "qr-hunt"
+        ? normalizeStationCategories(station.qrScanCodes).map((code) => code.toUpperCase())
+        : [],
     challengeDifficultyMode: supportsChallengeDifficulty(station.type)
       ? station.challengeDifficultyMode ?? "admin"
       : "admin",
@@ -366,6 +372,7 @@ export type RealizationStationValidation = {
   invalidCompletionCode: boolean;
   invalidQuiz: boolean;
   invalidCoordinates: boolean;
+  invalidQrScanCodes: boolean;
 };
 
 export function getRealizationStationValidation(station: RealizationStationDraft): RealizationStationValidation {
@@ -391,6 +398,8 @@ export function getRealizationStationValidation(station: RealizationStationDraft
     hasLatitude !== hasLongitude ||
     (hasLatitude && (station.latitude! < -90 || station.latitude! > 90)) ||
     (hasLongitude && (station.longitude! < -180 || station.longitude! > 180));
+  const invalidQrScanCodes =
+    station.type === "qr-hunt" && normalizeStationCategories(station.qrScanCodes).length === 0;
 
   return {
     missingName,
@@ -399,6 +408,7 @@ export function getRealizationStationValidation(station: RealizationStationDraft
     invalidCompletionCode,
     invalidQuiz,
     invalidCoordinates,
+    invalidQrScanCodes,
   };
 }
 
@@ -425,6 +435,16 @@ export function RealizationStationsEditor({
   const [stationSearchQuery, setStationSearchQuery] = useState("");
   const [selectedStationCategories, setSelectedStationCategories] = useState<string[]>([]);
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
+  const { data: allStations } = useGetStationsQuery();
+  const qrEntryCodeSuggestions = useMemo(() => {
+    const codes = new Set<string>();
+    for (const item of allStations ?? []) {
+      if (item.kind === "template" && item.qrEntryCode) {
+        codes.add(item.qrEntryCode);
+      }
+    }
+    return Array.from(codes);
+  }, [allStations]);
 
   const stationTypeLabelByValue = useMemo(
     () => new Map(stationTypeOptions.map((option) => [option.value, option.label])),
@@ -1402,6 +1422,35 @@ export function RealizationStationsEditor({
                     </label>
                   ) : null}
 
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+                    <div className="flex gap-2">
+                      <input
+                        value={station.qrEntryCode ?? ""}
+                        onChange={(event) => updateStation(stationIndex, { qrEntryCode: event.target.value.toUpperCase() })}
+                        list={`qr-entry-code-suggestions-${stationKey}`}
+                        placeholder="Brak kodu"
+                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                      <datalist id={`qr-entry-code-suggestions-${stationKey}`}>
+                        {qrEntryCodeSuggestions.map((code) => (
+                          <option key={code} value={code} />
+                        ))}
+                      </datalist>
+                      <button
+                        type="button"
+                        onClick={() => updateStation(stationIndex, { qrEntryCode: generateSampleCompletionCode(8, "letters") })}
+                        className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                      >
+                        Wygeneruj
+                      </button>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      Dotyczy tylko tej realizacji. Zmiana tutaj nie wpływa na stanowisko-szablon ani inne realizacje.
+                      Wybierz z podpowiedzi istniejący kod, aby ta sama naklejka QR pasowała też do tego stanowiska.
+                    </p>
+                  </label>
+
                   {isQuizStationType(station.type) ? (
                     <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-900/70 p-3">
                       <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
@@ -1896,6 +1945,33 @@ export function RealizationStationsEditor({
                       </label>
                     ) : null}
                   </div>
+
+                  {station.type === "qr-hunt" ? (
+                    <div className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Kody QR do zeskanowania</span>
+                      <textarea
+                        rows={4}
+                        value={(station.qrScanCodes ?? []).join("\n")}
+                        onChange={(event) =>
+                          updateStation(stationIndex, {
+                            qrScanCodes: event.target.value.split("\n").map((line) => line.trim()),
+                          })
+                        }
+                        placeholder={"Jeden kod na linię, np.\nSKRZYNKA-01\nDRZEWO-07"}
+                        className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                          showValidation && stationValidation.invalidQrScanCodes
+                            ? "border-red-500/70 focus:border-red-400/80"
+                            : "border-zinc-700 focus:border-amber-400/80"
+                        }`}
+                      />
+                      <p className="text-xs text-zinc-500">
+                        Drużyna musi zeskanować wszystkie kody, w dowolnej kolejności.
+                      </p>
+                      {showValidation && stationValidation.invalidQrScanCodes ? (
+                        <p className="text-xs text-red-300">Podaj co najmniej jeden kod QR.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">

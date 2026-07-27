@@ -1,11 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, type ClipboardEvent } from "react";
+import { useMemo, useState, type ClipboardEvent } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { ChallengeDifficulty, ChallengeDifficultyMode, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
-import { useCreateStationMutation, useUploadStationAudioMutation, useUploadStationImageMutation } from "../api/station.api";
+import {
+  useCreateStationMutation,
+  useGetStationsQuery,
+  useUploadStationAudioMutation,
+  useUploadStationImageMutation,
+} from "../api/station.api";
 import {
   imageModeOptions,
   type ImageInputMode,
@@ -18,6 +23,7 @@ import {
   isWordPuzzleStationType,
   isImageSupportedStationType,
   isValidCompletionCodeForMode,
+  parseQrScanCodesInput,
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
@@ -119,6 +125,16 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
+  const { data: allStations } = useGetStationsQuery();
+  const qrEntryCodeSuggestions = useMemo(() => {
+    const codes = new Set<string>();
+    for (const item of allStations ?? []) {
+      if (item.kind === "template" && item.qrEntryCode) {
+        codes.add(item.qrEntryCode);
+      }
+    }
+    return Array.from(codes);
+  }, [allStations]);
 
   const [name, setName] = useState("");
   const [type, setType] = useState<StationType>("quiz");
@@ -131,6 +147,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(0);
   const [completionCode, setCompletionCode] = useState("");
   const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>("letters");
+  const [qrEntryCode, setQrEntryCode] = useState("");
+  const [qrScanCodesInput, setQrScanCodesInput] = useState("");
   const [quizQuestion, setQuizQuestion] = useState("");
   const [quizAnswers, setQuizAnswers] = useState<string[]>(() => createEmptyQuizAnswers());
   const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
@@ -138,6 +156,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [challengeDifficultyMode, setChallengeDifficultyMode] = useState<ChallengeDifficultyMode>("admin");
   const [challengeDifficulty, setChallengeDifficulty] = useState<ChallengeDifficulty>("medium");
   const [completionStopwatchEnabled, setCompletionStopwatchEnabled] = useState(false);
+  const [fastestCompletionBonusPoints, setFastestCompletionBonusPoints] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
@@ -195,6 +214,11 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   ? "Dla trybu Cyfry kod musi mieć 3-32 znaki i zawierać tylko cyfry 0-9."
                   : "Dla stanowisk Na czas / Na punkty podaj kod (3-32 znaki: A-Z, 0-9, -).",
               );
+              return;
+            }
+
+            if (type === "qr-hunt" && parseQrScanCodesInput(qrScanCodesInput).length === 0) {
+              setFormError("Podaj co najmniej jeden kod QR.");
               return;
             }
 
@@ -264,6 +288,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 points,
                 timeLimitSeconds: clampTimeLimitSeconds(timeLimitSeconds),
                 completionCode: isCompletionCodeRequired(type) ? normalizeCompletionCode(completionCode) : undefined,
+                qrEntryCode: qrEntryCode.trim() ? qrEntryCode.trim().toUpperCase() : undefined,
+                qrScanCodes: type === "qr-hunt" ? parseQrScanCodesInput(qrScanCodesInput) : undefined,
                 quiz:
                   isQuizStationType(type) && quizConfig
                     ? { ...quizConfig, audioUrl: type === "audio-quiz" ? nextAudioUrl || undefined : undefined }
@@ -271,6 +297,10 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 challengeDifficultyMode: supportsChallengeDifficulty(type) ? challengeDifficultyMode : "admin",
                 challengeDifficulty: supportsChallengeDifficulty(type) ? challengeDifficulty : "medium",
                 completionStopwatchEnabled: clampTimeLimitSeconds(timeLimitSeconds) === 0 ? completionStopwatchEnabled : false,
+                fastestCompletionBonusPoints:
+                  clampTimeLimitSeconds(timeLimitSeconds) === 0 && completionStopwatchEnabled
+                    ? fastestCompletionBonusPoints
+                    : 0,
                 latitude: nextLatitude,
                 longitude: nextLongitude,
               }).unwrap();
@@ -284,6 +314,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setPoints(100);
               setTimeLimitSeconds(0);
               setCompletionCode("");
+              setQrEntryCode("");
+              setQrScanCodesInput("");
               setQuizQuestion("");
               setQuizAnswers(createEmptyQuizAnswers());
               setQuizCorrectAnswerIndex(0);
@@ -292,6 +324,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setChallengeDifficultyMode("admin");
               setChallengeDifficulty("medium");
               setCompletionStopwatchEnabled(false);
+              setFastestCompletionBonusPoints(0);
               setLatitude(undefined);
               setLongitude(undefined);
               setCreateImageMode("upload");
@@ -341,6 +374,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   setCompletionCode("");
                   setCompletionCodeMode("letters");
                 }
+                if (nextType !== "qr-hunt") {
+                  setQrScanCodesInput("");
+                }
                 if (nextType === "memory" && !quizQuestion.trim()) {
                   setQuizQuestion(MEMORY_SYSTEM_STATION_PROMPT);
                 }
@@ -352,6 +388,11 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 }
                 if (nextType === "strong-password" && !quizQuestion.trim()) {
                   setQuizQuestion(STRONG_PASSWORD_SYSTEM_STATION_PROMPT);
+                }
+                if (nextType === "photo-task") {
+                  setTimeLimitSeconds(0);
+                  setCompletionStopwatchEnabled(false);
+                  setFastestCompletionBonusPoints(0);
                 }
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -497,6 +538,49 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty. Kod mieszany będzie traktowany jak tryb literowy.</p>
               </label>
             ) : null}
+
+          <label className="space-y-1.5">
+            <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+            <div className="flex gap-2">
+              <input
+                value={qrEntryCode}
+                onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
+                list="qr-entry-code-suggestions"
+                placeholder="Zostaw puste, aby wygenerować automatycznie"
+                className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+              <datalist id="qr-entry-code-suggestions">
+                {qrEntryCodeSuggestions.map((code) => (
+                  <option key={code} value={code} />
+                ))}
+              </datalist>
+              <button
+                type="button"
+                onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+              >
+                Wygeneruj
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Zostaw puste, aby system wygenerował nowy losowy kod. Wybierz z podpowiedzi istniejący kod, aby ta sama
+              naklejka QR pasowała też do tego stanowiska.
+            </p>
+          </label>
+
+          {type === "qr-hunt" ? (
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Kody QR do zeskanowania</span>
+              <textarea
+                rows={4}
+                value={qrScanCodesInput}
+                onChange={(event) => setQrScanCodesInput(event.target.value)}
+                placeholder={"Jeden kod na linię, np.\nSKRZYNKA-01\nDRZEWO-07"}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+              <p className="text-xs text-zinc-500">Drużyna musi zeskanować wszystkie kody, w dowolnej kolejności.</p>
+            </label>
+          ) : null}
 
           {isQuizStationType(type) ? (
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
@@ -680,12 +764,22 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
 
           <label className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">
-              {type === "photo-task" ? "Polecenie (co należy sfotografować)" : "Opis (opcjonalny)"}
+              {type === "photo-task"
+                ? "Polecenie (co należy sfotografować)"
+                : type === "qr-hunt"
+                  ? "Wskazówka (gdzie szukać kodów QR)"
+                  : "Opis (opcjonalny)"}
             </span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder={type === "photo-task" ? "Np. Znajdź młotek i zrób jego zdjęcie" : "Krótki opis stanowiska"}
+              placeholder={
+                type === "photo-task"
+                  ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                  : type === "qr-hunt"
+                    ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                    : "Krótki opis stanowiska"
+              }
               rows={4}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             />
@@ -879,46 +973,76 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">Limit czasu</span>
-            <div
-              className={`space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 transition ${
-                timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"
-              }`}
-            >
-              <p className="text-lg font-semibold leading-none text-zinc-100">{formatTimeLimit(timeLimitSeconds)}</p>
-              <input
-                type="range"
-                min={0}
-                max={600}
-                step={15}
-                value={timeLimitSeconds}
-                onChange={(event) => setTimeLimitSeconds(clampTimeLimitSeconds(Number(event.target.value)))}
-                className="w-full accent-amber-400"
-              />
-              <input
-                type="number"
-                min={0}
-                max={600}
-                step={15}
-                value={timeLimitSeconds}
-                onChange={(event) => setTimeLimitSeconds(clampTimeLimitSeconds(Number(event.target.value)))}
-                placeholder="0 = brak limitu"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-              <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
-            </div>
-            {timeLimitSeconds === 0 ? (
-              <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+          {type !== "photo-task" ? (
+            <div className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Limit czasu</span>
+              <div
+                className={`space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 transition ${
+                  timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"
+                }`}
+              >
+                <p className="text-lg font-semibold leading-none text-zinc-100">{formatTimeLimit(timeLimitSeconds)}</p>
                 <input
-                  type="checkbox"
-                  checked={completionStopwatchEnabled}
-                  onChange={(event) => setCompletionStopwatchEnabled(event.target.checked)}
+                  type="range"
+                  min={0}
+                  max={600}
+                  step={15}
+                  value={timeLimitSeconds}
+                  onChange={(event) => setTimeLimitSeconds(clampTimeLimitSeconds(Number(event.target.value)))}
+                  className="w-full accent-amber-400"
                 />
-                Pokaż stoper czasu wykonania (dla graczy i organizatora)
-              </label>
-            ) : null}
-          </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={600}
+                  step={15}
+                  value={timeLimitSeconds}
+                  onChange={(event) => setTimeLimitSeconds(clampTimeLimitSeconds(Number(event.target.value)))}
+                  placeholder="0 = brak limitu"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
+              </div>
+              {timeLimitSeconds === 0 ? (
+                <>
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={completionStopwatchEnabled}
+                      onChange={(event) => {
+                        setCompletionStopwatchEnabled(event.target.checked);
+                        if (!event.target.checked) {
+                          setFastestCompletionBonusPoints(0);
+                        }
+                      }}
+                    />
+                    Pokaż stoper czasu wykonania (dla graczy i organizatora)
+                  </label>
+                  {completionStopwatchEnabled ? (
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase tracking-wider text-zinc-400">
+                        Bonus za najszybsze ukończenie
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={5}
+                        value={fastestCompletionBonusPoints}
+                        onChange={(event) =>
+                          setFastestCompletionBonusPoints(Math.max(0, Math.round(Number(event.target.value) || 0)))
+                        }
+                        placeholder="0 = brak bonusu"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                      <p className="text-xs text-zinc-500">
+                        Dodatkowe punkty dla pierwszej drużyny, która ukończy to stanowisko.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
             <div className="flex items-center justify-between gap-2">

@@ -13,9 +13,12 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  qrEntryCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
   completionStopwatchEnabled?: boolean | null;
+  fastestCompletionBonusPoints?: number | null;
+  qrScanCodes?: string[] | null;
   color?: string | null;
   quiz?:
     | {
@@ -45,9 +48,12 @@ type CreateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  qrEntryCode?: string;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
+  qrScanCodes?: string[];
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -63,9 +69,12 @@ type UpdateStationPayload = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  qrEntryCode?: string;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
+  qrScanCodes?: string[];
   quiz?: StationQuiz;
   latitude?: number;
   longitude?: number;
@@ -142,12 +151,18 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    qrEntryCode: station.qrEntryCode?.trim() || undefined,
     challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
     challengeDifficulty:
       station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
     completionStopwatchEnabled: station.completionStopwatchEnabled === true,
+    fastestCompletionBonusPoints:
+      Number.isFinite(station.fastestCompletionBonusPoints) && (station.fastestCompletionBonusPoints ?? -1) >= 0
+        ? Math.round(station.fastestCompletionBonusPoints as number)
+        : 0,
+    qrScanCodes: normalizeStationCategories(station.qrScanCodes),
     color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)

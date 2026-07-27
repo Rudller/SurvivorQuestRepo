@@ -15,7 +15,8 @@ export type StationType =
   | "mini-sudoku"
   | "matching"
   | "strong-password"
-  | "photo-task";
+  | "photo-task"
+  | "qr-hunt";
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
@@ -55,6 +56,7 @@ export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "matching", label: "Dopasowywanie" },
   { value: "strong-password", label: "Mocne hasło" },
   { value: "photo-task", label: "Zadanie fotograficzne" },
+  { value: "qr-hunt", label: "Skanowanie kodów QR" },
 ];
 
 export type Station = {
@@ -67,11 +69,14 @@ export type Station = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes: string[];
   quiz?: StationQuiz;
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
   completionStopwatchEnabled: boolean;
+  fastestCompletionBonusPoints: number;
   color: string;
   latitude?: number;
   longitude?: number;

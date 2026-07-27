@@ -1,13 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationType } from "../types/station";
 import { stationTypeOptions } from "../types/station";
 import {
   useUpdateStationMutation,
   useDeleteStationMutation,
+  useGetStationsQuery,
   useUploadStationAudioMutation,
   useUploadStationImageMutation,
 } from "../api/station.api";
@@ -23,6 +24,7 @@ import {
   isWordPuzzleStationType,
   isImageSupportedStationType,
   isValidCompletionCodeForMode,
+  parseQrScanCodesInput,
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
@@ -127,6 +129,16 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
+  const { data: allStations } = useGetStationsQuery();
+  const qrEntryCodeSuggestions = useMemo(() => {
+    const codes = new Set<string>();
+    for (const item of allStations ?? []) {
+      if (item.kind === "template" && item.qrEntryCode && item.id !== station.id) {
+        codes.add(item.qrEntryCode);
+      }
+    }
+    return Array.from(codes);
+  }, [allStations, station.id]);
 
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [editImageError, setEditImageError] = useState<string | null>(null);
@@ -140,6 +152,10 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [completionCodeMode, setCompletionCodeMode] = useState<CompletionCodeGeneratorMode>(
     resolveCompletionCodeGeneratorMode(station.completionCode ?? ""),
   );
+  const [qrScanCodesInput, setQrScanCodesInput] = useState(
+    (station.qrScanCodes ?? []).join("\n"),
+  );
+  const [qrEntryCode, setQrEntryCode] = useState("");
 
   const [editValues, setEditValues] = useState({
     name: station.name,
@@ -164,6 +180,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     challengeDifficultyMode: station.challengeDifficultyMode as ChallengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty as ChallengeDifficulty,
     completionStopwatchEnabled: station.completionStopwatchEnabled,
+    fastestCompletionBonusPoints: station.fastestCompletionBonusPoints,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
   });
@@ -234,6 +251,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 return;
               }
 
+              if (editValues.type === "qr-hunt" && parseQrScanCodesInput(qrScanCodesInput).length === 0) {
+                setEditFormError("Podaj co najmniej jeden kod QR.");
+                return;
+              }
+
               const quizConfig =
                 isQuizStationType(editValues.type)
                   ? normalizeStationQuizForType(editValues.type, {
@@ -288,10 +310,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   description: editValues.description.trim() || DEFAULT_STATION_DESCRIPTION,
                   imageUrl: isImageSupportedStationType(editValues.type) ? editValues.imageUrl.trim() || undefined : undefined,
                   points: editValues.points,
-                  timeLimitSeconds: clampTimeLimitSeconds(editValues.timeLimitSeconds),
+                  timeLimitSeconds:
+                    editValues.type === "photo-task" ? 0 : clampTimeLimitSeconds(editValues.timeLimitSeconds),
                   completionCode: isCompletionCodeRequired(editValues.type)
                     ? normalizeCompletionCode(editValues.completionCode)
                     : undefined,
+                  qrEntryCode: qrEntryCode.trim() ? qrEntryCode.trim().toUpperCase() : undefined,
+                  qrScanCodes: editValues.type === "qr-hunt" ? parseQrScanCodesInput(qrScanCodesInput) : undefined,
                   quiz:
                     isQuizStationType(editValues.type) && quizConfig
                       ? {
@@ -306,9 +331,15 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     ? editValues.challengeDifficulty
                     : "medium",
                   completionStopwatchEnabled:
-                    clampTimeLimitSeconds(editValues.timeLimitSeconds) === 0
+                    editValues.type !== "photo-task" && clampTimeLimitSeconds(editValues.timeLimitSeconds) === 0
                       ? editValues.completionStopwatchEnabled
                       : false,
+                  fastestCompletionBonusPoints:
+                    editValues.type !== "photo-task" &&
+                    clampTimeLimitSeconds(editValues.timeLimitSeconds) === 0 &&
+                    editValues.completionStopwatchEnabled
+                      ? editValues.fastestCompletionBonusPoints
+                      : 0,
                   latitude: nextLatitude,
                   longitude: nextLongitude,
                 }).unwrap();
@@ -334,8 +365,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               <select
                 value={editValues.type}
                 onChange={(event) => {
+                  const nextType = event.target.value as StationType;
+                  if (nextType !== "qr-hunt") {
+                    setQrScanCodesInput("");
+                  }
                   setEditValues((prev) => {
-                    const nextType = event.target.value as StationType;
                     return {
                       ...prev,
                       type: nextType,
@@ -350,6 +384,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                               : nextType === "strong-password" && !prev.quizQuestion.trim()
                                 ? STRONG_PASSWORD_SYSTEM_STATION_PROMPT
                           : prev.quizQuestion,
+                      timeLimitSeconds: nextType === "photo-task" ? 0 : prev.timeLimitSeconds,
+                      completionStopwatchEnabled:
+                        nextType === "photo-task" ? false : prev.completionStopwatchEnabled,
+                      fastestCompletionBonusPoints:
+                        nextType === "photo-task" ? 0 : prev.fastestCompletionBonusPoints,
                     };
                   });
                   if (!isCompletionCodeRequired(event.target.value as StationType)) {
@@ -505,6 +544,50 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   </button>
                 </div>
                 <p className="text-xs text-zinc-500">Wymagany dla stanowisk Na czas i Na punkty. Kod mieszany będzie traktowany jak tryb literowy.</p>
+              </label>
+            ) : null}
+
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+              <div className="flex gap-2">
+                <input
+                  value={qrEntryCode}
+                  onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
+                  list={`qr-entry-code-suggestions-${station.id}`}
+                  placeholder={station.qrEntryCode ?? "Brak kodu"}
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <datalist id={`qr-entry-code-suggestions-${station.id}`}>
+                  {qrEntryCodeSuggestions.map((code) => (
+                    <option key={code} value={code} />
+                  ))}
+                </datalist>
+                <button
+                  type="button"
+                  onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                >
+                  Wygeneruj
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Obecny kod: <span className="font-semibold text-zinc-300">{station.qrEntryCode ?? "brak"}</span>.
+                Zostaw puste, aby nie zmieniać. Wybierz z podpowiedzi istniejący kod, aby ta sama naklejka QR pasowała
+                też do tego stanowiska.
+              </p>
+            </label>
+
+            {editValues.type === "qr-hunt" ? (
+              <label className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Kody QR do zeskanowania</span>
+                <textarea
+                  rows={4}
+                  value={qrScanCodesInput}
+                  onChange={(event) => setQrScanCodesInput(event.target.value)}
+                  placeholder={"Jeden kod na linię, np.\nSKRZYNKA-01\nDRZEWO-07"}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <p className="text-xs text-zinc-500">Drużyna musi zeskanować wszystkie kody, w dowolnej kolejności.</p>
               </label>
             ) : null}
 
@@ -707,13 +790,23 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">
-                {editValues.type === "photo-task" ? "Polecenie (co należy sfotografować)" : "Opis"}
+                {editValues.type === "photo-task"
+                  ? "Polecenie (co należy sfotografować)"
+                  : editValues.type === "qr-hunt"
+                    ? "Wskazówka (gdzie szukać kodów QR)"
+                    : "Opis"}
               </span>
               <textarea
                 value={editValues.description}
                 onChange={(event) => setEditValues((prev) => ({ ...prev, description: event.target.value }))}
                 rows={4}
-                placeholder={editValues.type === "photo-task" ? "Np. Znajdź młotek i zrób jego zdjęcie" : "Opis stanowiska"}
+                placeholder={
+                  editValues.type === "photo-task"
+                    ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                    : editValues.type === "qr-hunt"
+                      ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                      : "Opis stanowiska"
+                }
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
@@ -852,50 +945,82 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               />
             </label>
 
-            <div className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Limit czasu</span>
-              <div
-                className={`space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 transition ${
-                  editValues.timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"
-                }`}
-              >
-                <p className="text-lg font-semibold leading-none text-zinc-100">
-                  {formatTimeLimit(editValues.timeLimitSeconds)}
-                </p>
-                <input
-                  type="range"
-                  min={0}
-                  max={600}
-                  step={15}
-                  value={editValues.timeLimitSeconds}
-                  onChange={(event) => setEditValues((prev) => ({ ...prev, timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) }))}
-                  className="w-full accent-amber-400"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={600}
-                  step={15}
-                  value={editValues.timeLimitSeconds}
-                  onChange={(event) => setEditValues((prev) => ({ ...prev, timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) }))}
-                  placeholder="0 = brak limitu"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-                <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
-              </div>
-              {editValues.timeLimitSeconds === 0 ? (
-                <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+            {editValues.type !== "photo-task" ? (
+              <div className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Limit czasu</span>
+                <div
+                  className={`space-y-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 transition ${
+                    editValues.timeLimitSeconds === 0 ? "opacity-60" : "opacity-100"
+                  }`}
+                >
+                  <p className="text-lg font-semibold leading-none text-zinc-100">
+                    {formatTimeLimit(editValues.timeLimitSeconds)}
+                  </p>
                   <input
-                    type="checkbox"
-                    checked={editValues.completionStopwatchEnabled}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({ ...prev, completionStopwatchEnabled: event.target.checked }))
-                    }
+                    type="range"
+                    min={0}
+                    max={600}
+                    step={15}
+                    value={editValues.timeLimitSeconds}
+                    onChange={(event) => setEditValues((prev) => ({ ...prev, timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) }))}
+                    className="w-full accent-amber-400"
                   />
-                  Pokaż stoper czasu wykonania (dla graczy i organizatora)
-                </label>
-              ) : null}
-            </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={600}
+                    step={15}
+                    value={editValues.timeLimitSeconds}
+                    onChange={(event) => setEditValues((prev) => ({ ...prev, timeLimitSeconds: clampTimeLimitSeconds(Number(event.target.value)) }))}
+                    placeholder="0 = brak limitu"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                  <p className="text-xs text-zinc-500">Zakres: 0-10:00 (co 15 sek). Ustaw 0, aby wyłączyć limit czasu.</p>
+                </div>
+                {editValues.timeLimitSeconds === 0 ? (
+                  <>
+                    <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={editValues.completionStopwatchEnabled}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            completionStopwatchEnabled: event.target.checked,
+                            fastestCompletionBonusPoints: event.target.checked ? prev.fastestCompletionBonusPoints : 0,
+                          }))
+                        }
+                      />
+                      Pokaż stoper czasu wykonania (dla graczy i organizatora)
+                    </label>
+                    {editValues.completionStopwatchEnabled ? (
+                      <div className="space-y-1">
+                        <label className="text-xs uppercase tracking-wider text-zinc-400">
+                          Bonus za najszybsze ukończenie
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={5}
+                          value={editValues.fastestCompletionBonusPoints}
+                          onChange={(event) =>
+                            setEditValues((prev) => ({
+                              ...prev,
+                              fastestCompletionBonusPoints: Math.max(0, Math.round(Number(event.target.value) || 0)),
+                            }))
+                          }
+                          placeholder="0 = brak bonusu"
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                        <p className="text-xs text-zinc-500">
+                          Dodatkowe punkty dla pierwszej drużyny, która ukończy to stanowisko.
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
               <div className="flex items-center justify-between gap-2">

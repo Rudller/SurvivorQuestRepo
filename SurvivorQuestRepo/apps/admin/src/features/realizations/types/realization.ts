@@ -234,6 +234,8 @@ export type RealizationStationDraft = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes?: Station["qrScanCodes"];
   quiz?: Station["quiz"];
   translations?: Station["translations"];
   challengeDifficultyMode?: Station["challengeDifficultyMode"];

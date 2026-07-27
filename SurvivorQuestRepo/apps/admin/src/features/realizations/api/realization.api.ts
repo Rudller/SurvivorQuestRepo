@@ -20,9 +20,12 @@ type StationDto = {
   points: number;
   timeLimitSeconds?: number;
   completionCode?: string | null;
+  qrEntryCode?: string | null;
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
   completionStopwatchEnabled?: boolean | null;
+  fastestCompletionBonusPoints?: number | null;
+  qrScanCodes?: string[] | null;
   color?: string | null;
   quiz?:
     | {
@@ -245,15 +248,13 @@ type MobileAdminRealizationOverview = {
 
 export type RealizationStationQrResponse = {
   realizationId: string;
-  issuedAt: string;
-  expiresAt: string;
-  tokenTtlSeconds: number;
   entries: Array<{
     stationId: string;
     stationName: string;
     stationType: StationType;
-    qrToken: string;
+    qrEntryCode: string | null;
     entryUrl: string;
+    qrScanCodes: string[];
   }>;
 };
 
@@ -392,12 +393,18 @@ function normalizeStation(station: StationDto): Station {
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
+    qrEntryCode: station.qrEntryCode?.trim() || undefined,
     challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
     challengeDifficulty:
       station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
     completionStopwatchEnabled: station.completionStopwatchEnabled === true,
+    fastestCompletionBonusPoints:
+      Number.isFinite(station.fastestCompletionBonusPoints) && (station.fastestCompletionBonusPoints ?? -1) >= 0
+        ? Math.round(station.fastestCompletionBonusPoints as number)
+        : 0,
+    qrScanCodes: normalizeStationCategories(station.qrScanCodes),
     quiz:
       station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
         ? normalizeStationQuiz({
@@ -535,15 +542,10 @@ export const realizationApi = baseApi.injectEndpoints({
     }),
     getRealizationStationQrs: build.query<
       RealizationStationQrResponse,
-      { realizationId: string; ttlSeconds?: number }
+      { realizationId: string }
     >({
-      query: ({ realizationId, ttlSeconds }) => {
-        const suffix =
-          typeof ttlSeconds === "number" && Number.isFinite(ttlSeconds)
-            ? `?ttlSeconds=${Math.max(1, Math.round(ttlSeconds))}`
-            : "";
-        return buildApiPath(`/mobile/admin/realizations/${realizationId}/station-qr${suffix}`);
-      },
+      query: ({ realizationId }) =>
+        buildApiPath(`/mobile/admin/realizations/${realizationId}/station-qr`),
     }),
   }),
 });

@@ -33,6 +33,7 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   matching: "#22c55e",
   "strong-password": "#f43f5e",
   "photo-task": "#84cc16",
+  "qr-hunt": "#0891b2",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -75,6 +76,8 @@ const MATCHING_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.";
 const PHOTO_TASK_DEFAULT_STATION_DESCRIPTION =
   "Np. „Znajdź młotek i zrób jego zdjęcie”. To pole jest jedyną instrukcją, którą zobaczy gracz.";
+const QR_HUNT_DEFAULT_STATION_DESCRIPTION =
+  "Np. „Kody znajdziesz przy wejściach do budynków na trasie”. To pole jest wskazówką, gdzie szukać kodów QR.";
 const QUIZ_SECRET_FALLBACK_ANSWERS = ["A", "B", "C"] as const;
 const MATCHING_PAIR_DELIMITER = "->";
 
@@ -129,6 +132,9 @@ export function resolveDefaultStationDescription(stationType: StationType) {
   if (stationType === "photo-task") {
     return PHOTO_TASK_DEFAULT_STATION_DESCRIPTION;
   }
+  if (stationType === "qr-hunt") {
+    return QR_HUNT_DEFAULT_STATION_DESCRIPTION;
+  }
 
   return DEFAULT_STATION_DESCRIPTION;
 }
@@ -148,7 +154,8 @@ export function isKnownDefaultStationDescription(value: string) {
     normalized === SIMON_DEFAULT_STATION_DESCRIPTION ||
     normalized === MINI_SUDOKU_DEFAULT_STATION_DESCRIPTION ||
     normalized === MATCHING_DEFAULT_STATION_DESCRIPTION ||
-    normalized === PHOTO_TASK_DEFAULT_STATION_DESCRIPTION
+    normalized === PHOTO_TASK_DEFAULT_STATION_DESCRIPTION ||
+    normalized === QR_HUNT_DEFAULT_STATION_DESCRIPTION
   );
 }
 
@@ -183,6 +190,23 @@ export function formatTimeLimit(seconds: number) {
   const remainingSeconds = seconds % 60;
   const paddedSeconds = String(remainingSeconds).padStart(2, "0");
   return `${minutes}:${paddedSeconds}`;
+}
+
+export function parseQrScanCodesInput(value: string): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+
+  for (const line of value.split("\n")) {
+    const normalized = line.trim().toUpperCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    codes.push(normalized);
+  }
+
+  return codes;
 }
 
 export function isCompletionCodeRequired(stationType: StationType) {
