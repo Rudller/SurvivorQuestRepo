@@ -20,18 +20,21 @@ const QUIZ_PRESTART_TEXT: Record<
     badgeWordle: string;
     badgeHangman: string;
     badgeLogicChallenge: string;
+    badgeQrHunt: string;
     badgeQuiz: string;
     titleTimed: string;
     titleAudioQuiz: string;
     titleWordle: string;
     titleHangman: string;
     titleLogicChallenge: string;
+    titleQrHunt: string;
     titleQuiz: string;
     descriptionTimed: string;
     descriptionAudioQuiz: string;
     descriptionWordle: string;
     descriptionHangman: string;
     descriptionLogicChallenge: string;
+    descriptionQrHunt: string;
     descriptionQuiz: string;
     pointsDecayWarning: (timeLimit: string, points: number) => string;
     chooseDifficulty: string;
@@ -60,18 +63,21 @@ const QUIZ_PRESTART_TEXT: Record<
     badgeWordle: "Wordle",
     badgeHangman: "Wisielec",
     badgeLogicChallenge: "Wyzwanie logiczne",
+    badgeQrHunt: "Skanowanie QR",
     badgeQuiz: "Quiz",
     titleTimed: "Za chwilę zostanie uruchomione zadanie czasowe",
     titleAudioQuiz: "Za chwilę zostanie uruchomiony quiz audio",
     titleWordle: "Za chwilę zostanie uruchomiony Wordle",
     titleHangman: "Za chwilę zostanie uruchomiony Wisielec",
     titleLogicChallenge: "Za chwilę zostanie uruchomione wyzwanie",
+    titleQrHunt: "Za chwilę rozpocznie się skanowanie kodów QR",
     titleQuiz: "Za chwilę zostanie uruchomiony quiz",
     descriptionTimed: "Przygotuj się. Po starcie od razu ruszy licznik czasu.",
     descriptionAudioQuiz: "Przygotuj się na odsłuchanie nagrania i wybór poprawnej odpowiedzi.",
     descriptionWordle: "Przygotuj się na odgadnięcie słowa.",
     descriptionHangman: "Przygotuj się na odgadnięcie hasła.",
     descriptionLogicChallenge: "Przygotuj się na krótkie zadanie interaktywne.",
+    descriptionQrHunt: "Znajdź i zeskanuj wszystkie kody QR ukryte w terenie.",
     descriptionQuiz: "Przygotuj się na odpowiedzenie na pytania.",
     pointsDecayWarning: (timeLimit, points) =>
       `Macie ${timeLimit} na wykonanie zadania. Każda sekunda odejmuje punkty z puli ${points}. Koniec czasu oznacza niezaliczone zadanie.`,
@@ -100,18 +106,21 @@ const QUIZ_PRESTART_TEXT: Record<
     badgeWordle: "Wordle",
     badgeHangman: "Hangman",
     badgeLogicChallenge: "Logic challenge",
+    badgeQrHunt: "QR scan hunt",
     badgeQuiz: "Quiz",
     titleTimed: "A timed task will start in a moment",
     titleAudioQuiz: "An audio quiz will start in a moment",
     titleWordle: "Wordle will start in a moment",
     titleHangman: "Hangman will start in a moment",
     titleLogicChallenge: "A challenge will start in a moment",
+    titleQrHunt: "QR code scanning will start in a moment",
     titleQuiz: "A quiz will start in a moment",
     descriptionTimed: "Get ready. The timer starts immediately after launch.",
     descriptionAudioQuiz: "Get ready to listen to a recording and choose the correct answer.",
     descriptionWordle: "Get ready to guess the word.",
     descriptionHangman: "Get ready to guess the phrase.",
     descriptionLogicChallenge: "Get ready for a short interactive task.",
+    descriptionQrHunt: "Find and scan all the QR codes hidden around the area.",
     descriptionQuiz: "Get ready to answer the questions.",
     pointsDecayWarning: (timeLimit, points) =>
       `You have ${timeLimit} to complete the task. Every second reduces the available ${points} points. Time running out means the task is failed.`,
@@ -140,18 +149,21 @@ const QUIZ_PRESTART_TEXT: Record<
     badgeWordle: "Wordle",
     badgeHangman: "Шибениця",
     badgeLogicChallenge: "Логічний виклик",
+    badgeQrHunt: "Пошук QR-кодів",
     badgeQuiz: "Вікторина",
     titleTimed: "Незабаром запуститься завдання на час",
     titleAudioQuiz: "Незабаром запуститься аудіо-вікторина",
     titleWordle: "Незабаром запуститься Wordle",
     titleHangman: "Незабаром запуститься Шибениця",
     titleLogicChallenge: "Незабаром запуститься випробування",
+    titleQrHunt: "Незабаром розпочнеться сканування QR-кодів",
     titleQuiz: "Незабаром запуститься вікторина",
     descriptionTimed: "Підготуйтеся. Після старту таймер запуститься одразу.",
     descriptionAudioQuiz: "Підготуйтеся прослухати запис і вибрати правильну відповідь.",
     descriptionWordle: "Підготуйтеся відгадати слово.",
     descriptionHangman: "Підготуйтеся відгадати фразу.",
     descriptionLogicChallenge: "Підготуйтеся до короткого інтерактивного завдання.",
+    descriptionQrHunt: "Знайдіть і відскануйте всі QR-коди, сховані на місцевості.",
     descriptionQuiz: "Підготуйтеся відповісти на запитання.",
     pointsDecayWarning: (timeLimit, points) =>
       `У вас є ${timeLimit} на виконання завдання. Кожна секунда зменшує пул у ${points} балів. Завершення часу означає незараховане завдання.`,
@@ -180,18 +192,21 @@ const QUIZ_PRESTART_TEXT: Record<
     badgeWordle: "Wordle",
     badgeHangman: "Виселица",
     badgeLogicChallenge: "Логическое испытание",
+    badgeQrHunt: "Поиск QR-кодов",
     badgeQuiz: "Викторина",
     titleTimed: "Скоро запустится задание на время",
     titleAudioQuiz: "Скоро запустится аудиовикторина",
     titleWordle: "Скоро запустится Wordle",
     titleHangman: "Скоро запустится Виселица",
     titleLogicChallenge: "Скоро запустится испытание",
+    titleQrHunt: "Скоро начнётся сканирование QR-кодов",
     titleQuiz: "Скоро запустится викторина",
     descriptionTimed: "Подготовьтесь. После старта таймер запустится сразу.",
     descriptionAudioQuiz: "Подготовьтесь прослушать запись и выбрать правильный ответ.",
     descriptionWordle: "Подготовьтесь отгадать слово.",
     descriptionHangman: "Подготовьтесь отгадать фразу.",
     descriptionLogicChallenge: "Подготовьтесь к короткому интерактивному заданию.",
+    descriptionQrHunt: "Найдите и отсканируйте все QR-коды, спрятанные на местности.",
     descriptionQuiz: "Подготовьтесь ответить на вопросы.",
     pointsDecayWarning: (timeLimit, points) =>
       `У вас есть ${timeLimit} на выполнение задания. Каждая секунда уменьшает пул в ${points} баллов. Истечение времени означает незачтенное задание.`,
@@ -294,6 +309,7 @@ export function QuizPrestartOverlay({
   } as const;
   const isLogicChallenge =
     stationType === "mastermind" ||
+    stationType === "strong-password" ||
     stationType === "anagram" ||
     stationType === "caesar-cipher" ||
     stationType === "memory" ||
@@ -302,8 +318,9 @@ export function QuizPrestartOverlay({
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
     stationType === "matching";
+  const isTimedStationType = stationType === "time" || stationType === "points";
   const prestartBadge =
-    stationType === "time"
+    isTimedStationType
       ? text.badgeTimed
       : stationType === "audio-quiz"
         ? text.badgeAudioQuiz
@@ -311,11 +328,13 @@ export function QuizPrestartOverlay({
         ? text.badgeWordle
       : stationType === "hangman"
           ? text.badgeHangman
+          : stationType === "qr-hunt"
+            ? text.badgeQrHunt
           : isLogicChallenge
             ? text.badgeLogicChallenge
           : text.badgeQuiz;
   const prestartTitle =
-    stationType === "time"
+    isTimedStationType
       ? text.titleTimed
       : stationType === "audio-quiz"
         ? text.titleAudioQuiz
@@ -323,11 +342,13 @@ export function QuizPrestartOverlay({
         ? text.titleWordle
       : stationType === "hangman"
           ? text.titleHangman
+          : stationType === "qr-hunt"
+            ? text.titleQrHunt
           : isLogicChallenge
             ? text.titleLogicChallenge
           : text.titleQuiz;
   const prestartDescription =
-    stationType === "time"
+    isTimedStationType
       ? text.descriptionTimed
       : stationType === "audio-quiz"
         ? text.descriptionAudioQuiz
@@ -335,6 +356,8 @@ export function QuizPrestartOverlay({
         ? text.descriptionWordle
       : stationType === "hangman"
           ? text.descriptionHangman
+          : stationType === "qr-hunt"
+            ? text.descriptionQrHunt
           : isLogicChallenge
             ? text.descriptionLogicChallenge
            : text.descriptionQuiz;

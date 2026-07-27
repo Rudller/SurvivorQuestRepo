@@ -263,12 +263,12 @@ export function CodeStationPanel({
                         {isDigitKey ? (
                           <View className="h-full w-full items-center justify-center">
                             <Text
-                              className="text-[30px] font-medium text-center"
+                              className="font-semibold text-center"
                               style={{
                                 color: EXPEDITION_THEME.textPrimary,
                                 textAlign: "center",
                                 fontVariant: ["tabular-nums"],
-                                fontSize: layout.isTablet ? 36 : 30,
+                                fontSize: layout.pinpadDigitFontSize,
                               }}
                             >
                               {label}
@@ -282,7 +282,7 @@ export function CodeStationPanel({
                           </View>
                       ) : (
                         <Text
-                          className={`${isSubmitKey ? "text-xl" : "text-base"} font-semibold text-center`}
+                          className="font-semibold text-center"
                           style={{
                             color: isSubmitKey
                               ? resolveActionLabelColor(isDisabled)
@@ -290,6 +290,7 @@ export function CodeStationPanel({
                             width: "100%",
                             textAlign: "center",
                             textAlignVertical: "center",
+                            fontSize: isSubmitKey ? layout.actionFontSize : layout.keyLabelFontSize,
                             }}
                           >
                             {label}
@@ -347,12 +348,12 @@ export function CodeStationPanel({
                   {isDigitKey ? (
                     <View className="h-full w-full items-center justify-center">
                       <Text
-                        className="text-[30px] font-medium text-center"
+                        className="font-semibold text-center"
                         style={{
                           color: EXPEDITION_THEME.textPrimary,
                           textAlign: "center",
                           fontVariant: ["tabular-nums"],
-                          fontSize: layout.isTablet ? 36 : 30,
+                          fontSize: layout.pinpadDigitFontSize,
                         }}
                       >
                         {label}
@@ -366,12 +367,13 @@ export function CodeStationPanel({
                     </View>
                   ) : (
                     <Text
-                      className={`${isSubmitKey ? "text-xl" : "text-base"} font-semibold text-center`}
+                      className="font-semibold text-center"
                       style={{
                         color: isSubmitKey ? resolveActionLabelColor(isDisabled) : EXPEDITION_THEME.textPrimary,
                         width: "100%",
                         textAlign: "center",
                         textAlignVertical: "center",
+                        fontSize: isSubmitKey ? layout.actionFontSize : layout.keyLabelFontSize,
                       }}
                     >
                       {label}
@@ -433,7 +435,7 @@ export function CodeStationPanel({
             >
               <Text
                 className="font-semibold text-center"
-                style={{ color: resolveActionLabelColor(isCodeActionDisabled), fontSize: layout.isTablet ? 16 : 13 }}
+                style={{ color: resolveActionLabelColor(isCodeActionDisabled), fontSize: layout.actionFontSize }}
                 numberOfLines={2}
               >
                 {isSubmittingCode ? text.submitting : text.submitCode}
@@ -487,7 +489,7 @@ export function CodeStationPanel({
                               color: isBackspaceKey
                                 ? resolveActionLabelColor(!canBackspaceAlphanumericCode)
                                 : EXPEDITION_THEME.textPrimary,
-                              fontSize: layout.isTablet ? 18 : 15,
+                              fontSize: layout.keyLabelFontSize,
                             }}
                           >
                             {label}
@@ -522,7 +524,7 @@ export function CodeStationPanel({
                   >
                     <Text
                       className="font-semibold"
-                      style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 15 }}
+                      style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.keyLabelFontSize }}
                     >
                       {key}
                     </Text>

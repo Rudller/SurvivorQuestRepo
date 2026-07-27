@@ -426,10 +426,10 @@ export function MatchingStationPanel({
   return (
     <View className="h-full w-full">
       <Text
-        className="text-center"
+        className="text-center font-semibold"
         style={{
-          color: EXPEDITION_THEME.textMuted,
-          fontSize: adaptiveLayout.fs(layout.isTablet ? 16 : 14, 13, 20),
+          color: EXPEDITION_THEME.textPrimary,
+          fontSize: layout.promptFontSize,
           lineHeight: adaptiveLayout.s(layout.isTablet ? 23 : 20, 18, 28),
         }}
       >

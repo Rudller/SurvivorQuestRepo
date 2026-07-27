@@ -133,7 +133,7 @@ export function HangmanStationPanel({
                 >
                   <Text
                     className="font-semibold"
-                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 21 : 13 }}
+                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.keyLabelFontSize }}
                   >
                     {letter}
                   </Text>

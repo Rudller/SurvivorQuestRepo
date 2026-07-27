@@ -17,7 +17,8 @@ export type StationTestType =
   | "mini-sudoku"
   | "matching"
   | "strong-password"
-  | "photo-task";
+  | "photo-task"
+  | "qr-hunt";
 
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
@@ -29,6 +30,9 @@ export type StationTestViewModel = {
   challengeDifficultyMode?: "admin" | "player";
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
+  qrScanRequiredCount?: number;
+  qrScanCompletedCount?: number;
   name: string;
   typeLabel: string;
   description: string;
@@ -43,6 +47,7 @@ export type StationTestViewModel = {
   status: ExpeditionTaskStatus;
   quizFailed?: boolean;
   startedAt: string | null;
+  fastestBonusPoints?: number;
 };
 
 export type StationTestMenuOverlayProps = {
@@ -63,6 +68,7 @@ export type StationPreviewOverlayProps = {
   onRequestClose?: () => void;
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
   onSubmitPhotoTask?: (stationId: string, fileUri: string) => Promise<string | null>;
+  onSubmitQrScan?: (stationId: string, code: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;
   onTimeExpired?: (stationId: string) => void;

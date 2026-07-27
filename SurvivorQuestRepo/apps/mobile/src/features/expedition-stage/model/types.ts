@@ -102,6 +102,8 @@ export type ExpeditionTask = {
   stationNumber?: number;
   status: ExpeditionTaskStatus;
   pointsAwarded: number;
+  fastestBonusPoints?: number;
+  qrScanCompletedCount?: number;
   startedAt: string | null;
   finishedAt: string | null;
 };
@@ -123,7 +125,8 @@ export type ExpeditionStationType =
   | "mini-sudoku"
   | "matching"
   | "strong-password"
-  | "photo-task";
+  | "photo-task"
+  | "qr-hunt";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
@@ -148,6 +151,8 @@ export type ExpeditionRealizationStation = {
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
+  qrScanRequiredCount?: number;
   color?: string;
   quiz?: ExpeditionStationQuiz;
   latitude?: number;

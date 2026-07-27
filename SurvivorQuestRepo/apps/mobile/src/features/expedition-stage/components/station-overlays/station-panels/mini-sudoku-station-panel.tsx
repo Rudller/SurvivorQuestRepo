@@ -325,12 +325,12 @@ function MiniSudokuStationPanelComponent({
               >
                 <View className="h-full w-full items-center justify-center">
                   <Text
+                    className="font-semibold"
                     style={{
                       color: EXPEDITION_THEME.textPrimary,
                       textAlign: "center",
                       fontVariant: ["tabular-nums"],
-                      fontSize: layout.isTablet ? 36 : 20,
-                      fontWeight: "500",
+                      fontSize: layout.pinpadDigitFontSize,
                     }}
                   >
                     {key}

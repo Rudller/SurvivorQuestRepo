@@ -301,7 +301,7 @@ export function QuizAudioPanel({
           ]}
         >
           <Text
-            className="text-center font-semibold"
+            className="text-center"
             style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.resultFontSize }}
           >
             {quizResult}

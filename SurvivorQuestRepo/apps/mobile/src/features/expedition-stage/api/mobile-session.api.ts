@@ -199,7 +199,8 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "mini-sudoku" ||
     value === "matching" ||
     value === "strong-password" ||
-    value === "photo-task"
+    value === "photo-task" ||
+    value === "qr-hunt"
   ) {
     return value;
   }
@@ -395,6 +396,18 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       completionStopwatchEnabled: asBoolean(
         station.completionStopwatchEnabled ?? station.completion_stopwatch_enabled,
       ),
+      fastestCompletionBonusPoints: Math.max(
+        0,
+        Math.round(
+          asNumber(station.fastestCompletionBonusPoints ?? station.fastest_completion_bonus_points, 0),
+        ),
+      ),
+      qrScanRequiredCount: (() => {
+        const value = Math.round(
+          asNumber(station.qrScanRequiredCount ?? station.qr_scan_required_count, 0),
+        );
+        return value > 0 ? value : undefined;
+      })(),
       quiz: normalizeStationQuiz(station.quiz ?? station.quiz_data),
       color: (() => {
         const value = asString(station.color);
@@ -429,6 +442,10 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       })(),
       status: normalizeTaskStatus(task.status),
       pointsAwarded: Math.max(0, Math.round(asNumber(task.pointsAwarded ?? task.points_awarded, 0))),
+      qrScanCompletedCount: Math.max(
+        0,
+        Math.round(asNumber(task.qrScanCompletedCount ?? task.qr_scan_completed_count, 0)),
+      ),
       startedAt: asString(task.startedAt ?? task.started_at) || null,
       finishedAt: asString(task.finishedAt ?? task.finished_at) || null,
     };
@@ -816,7 +833,14 @@ export async function postMobileCompleteTask(
   },
   options?: MobileApiRequestOptions,
 ) {
-  return requestMobileApi<{ teamId: string; stationId: string; pointsTotal: number; pointsAwarded: number; taskStatus: "done" }>(
+  return requestMobileApi<{
+    teamId: string;
+    stationId: string;
+    pointsTotal: number;
+    pointsAwarded: number;
+    fastestBonusPoints: number;
+    taskStatus: "done";
+  }>(
     apiBaseUrl,
     "/api/mobile/task/complete",
     {
@@ -828,6 +852,41 @@ export async function postMobileCompleteTask(
         startedAt: payload.startedAt,
         finishedAt: payload.finishedAt,
         challengeDifficulty: payload.challengeDifficulty,
+      }),
+      signal: options?.signal,
+    },
+  );
+}
+
+export async function postMobileSubmitQrScan(
+  apiBaseUrl: string,
+  payload: {
+    sessionToken: string;
+    stationId: string;
+    code: string;
+    scannedAt?: string;
+  },
+  options?: MobileApiRequestOptions,
+) {
+  return requestMobileApi<{
+    teamId: string;
+    stationId: string;
+    scannedCount: number;
+    requiredCount: number;
+    taskStatus: "in-progress" | "done" | "failed";
+    pointsAwarded?: number;
+    fastestBonusPoints?: number;
+    pointsTotal?: number;
+  }>(
+    apiBaseUrl,
+    "/api/mobile/task/scan-code",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        sessionToken: payload.sessionToken,
+        stationId: payload.stationId,
+        code: payload.code,
+        scannedAt: payload.scannedAt,
       }),
       signal: options?.signal,
     },

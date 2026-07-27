@@ -158,7 +158,7 @@ export function AnagramStationPanel({
           <View className="h-full w-full items-center justify-center">
             <Text
               className="font-semibold"
-              style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 20 : 18 }}
+              style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.keyLabelFontSize }}
             >
               ⌫
             </Text>

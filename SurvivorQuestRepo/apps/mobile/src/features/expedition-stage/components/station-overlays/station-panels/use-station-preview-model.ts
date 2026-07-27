@@ -251,6 +251,7 @@ export function buildStationPreviewModel({
   const isQuizStation = isQuizStationType(station.stationType);
   const requiresCode = station.stationType === "time" || station.stationType === "points";
   const requiresPhotoUpload = station.stationType === "photo-task";
+  const requiresQrScan = station.stationType === "qr-hunt";
   const isNumericCodeStation = requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
   const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
@@ -264,7 +265,7 @@ export function buildStationPreviewModel({
         ? Math.max(104, Math.round(viewportHeight * 0.14))
         : Math.max(72, Math.round(viewportHeight * 0.1));
     }
-    if (requiresCode || requiresPhotoUpload) {
+    if (requiresCode || requiresPhotoUpload || requiresQrScan) {
       return isTabletOverlay
         ? Math.max(128, Math.round(viewportHeight * 0.2))
         : Math.max(92, Math.round(viewportHeight * 0.14));
@@ -559,6 +560,7 @@ export function buildStationPreviewModel({
     isQuizStation,
     requiresCode,
     requiresPhotoUpload,
+    requiresQrScan,
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,

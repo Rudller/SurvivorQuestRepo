@@ -90,7 +90,7 @@ export function BoggleStationPanel({
 
   return (
     <View style={{ paddingTop: layout.isTablet ? 4 : 0 }}>
-      <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+      <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.promptFontSize }}>
         {text.instruction}
       </Text>
       <View style={{ marginTop: layout.isTablet ? 4 : 2 }}>
@@ -203,7 +203,7 @@ export function BoggleStationPanel({
         >
           <Text
             className="font-semibold"
-            style={{ color: resolveActionLabelColor(isActionDisabled || boggleInput.length === 0), fontSize: layout.isTablet ? 22 : 13 }}
+            style={{ color: resolveActionLabelColor(isActionDisabled || boggleInput.length === 0), fontSize: layout.keyLabelFontSize }}
           >
             ⌫
           </Text>

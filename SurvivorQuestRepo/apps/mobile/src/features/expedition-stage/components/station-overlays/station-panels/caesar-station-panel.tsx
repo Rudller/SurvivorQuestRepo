@@ -159,7 +159,7 @@ export function CaesarStationPanel({
                 onPress={() => onAppendCharacter(key)}
                 hitSlop={3}
               >
-                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.isTablet ? 18 : 15 }}>
+                <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.keyLabelFontSize }}>
                   {key}
                 </Text>
               </Pressable>
@@ -200,7 +200,7 @@ export function CaesarStationPanel({
           >
             <Text
               className="font-semibold"
-              style={{ color: resolveActionLabelColor(!canBackspace), fontSize: layout.isTablet ? 18 : 14 }}
+              style={{ color: resolveActionLabelColor(!canBackspace), fontSize: layout.keyLabelFontSize }}
             >
               ⌫
             </Text>

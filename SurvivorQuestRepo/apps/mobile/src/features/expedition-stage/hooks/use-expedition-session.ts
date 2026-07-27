@@ -12,6 +12,7 @@ import {
   postMobileStartTask,
   postMobileTeamLocation,
   postMobileUploadTaskPhoto,
+  postMobileSubmitQrScan,
 } from "../api/mobile-session.api";
 import {
   buildInitialSessionState,
@@ -77,6 +78,7 @@ const EXPEDITION_SESSION_TEXT = {
     requestTimedOut: "Przekroczono czas oczekiwania na odpowiedź serwera.",
     completeTaskFailed: "Nie udało się ukończyć zadania.",
     submitPhotoFailed: "Nie udało się wysłać zdjęcia.",
+    submitQrScanFailed: "Nie udało się wysłać zeskanowanego kodu.",
     noLocationServerResponse: "Brak odpowiedzi serwera dla lokalizacji.",
     sendLocationFailed: "Nie udało się wysłać lokalizacji.",
     failTaskFailed: "Nie udało się oznaczyć zadania jako niezaliczone.",
@@ -109,6 +111,7 @@ const EXPEDITION_SESSION_TEXT = {
     requestTimedOut: "Server response timeout exceeded.",
     completeTaskFailed: "Failed to complete the task.",
     submitPhotoFailed: "Failed to upload the photo.",
+    submitQrScanFailed: "Failed to submit the scanned code.",
     noLocationServerResponse: "No server response for location update.",
     sendLocationFailed: "Failed to send location.",
     failTaskFailed: "Failed to mark the task as failed.",
@@ -140,6 +143,7 @@ const EXPEDITION_SESSION_TEXT = {
     requestTimedOut: "Перевищено час очікування відповіді сервера.",
     completeTaskFailed: "Не вдалося завершити завдання.",
     submitPhotoFailed: "Не вдалося надіслати фото.",
+    submitQrScanFailed: "Не вдалося надіслати відсканований код.",
     noLocationServerResponse: "Немає відповіді сервера для оновлення локації.",
     sendLocationFailed: "Не вдалося надіслати локацію.",
     failTaskFailed: "Не вдалося позначити завдання як незараховане.",
@@ -172,6 +176,7 @@ const EXPEDITION_SESSION_TEXT = {
     requestTimedOut: "Превышено время ожидания ответа сервера.",
     completeTaskFailed: "Не удалось завершить задание.",
     submitPhotoFailed: "Не удалось отправить фото.",
+    submitQrScanFailed: "Не удалось отправить отсканированный код.",
     noLocationServerResponse: "Нет ответа сервера для обновления локации.",
     sendLocationFailed: "Не удалось отправить локацию.",
     failTaskFailed: "Не удалось отметить задание как незачтенное.",
@@ -523,6 +528,7 @@ type ApplyCompletedTaskStateArgs = {
   startedAt?: string;
   finishedAt: string;
   requireExistingTask: boolean;
+  fastestBonusPoints?: number;
 };
 
 export function applyCompletedTaskState({
@@ -531,6 +537,7 @@ export function applyCompletedTaskState({
   startedAt,
   finishedAt,
   requireExistingTask,
+  fastestBonusPoints = 0,
 }: ApplyCompletedTaskStateArgs): ExpeditionSessionState {
   const existingTask = current.tasks.find((task) => task.stationId === stationId);
   if (existingTask?.status === "done" || existingTask?.status === "failed") {
@@ -560,6 +567,7 @@ export function applyCompletedTaskState({
       ...task,
       status: nextStatus,
       pointsAwarded: awardedPoints,
+      fastestBonusPoints: fastestBonusPoints || undefined,
       startedAt: task.startedAt ?? effectiveStartedAt,
       finishedAt,
     };
@@ -574,7 +582,7 @@ export function applyCompletedTaskState({
     tasks: nextTasks,
       team: {
         ...current.team,
-      points: current.team.points + (nextStatus === "done" ? awardedPoints : 0),
+      points: current.team.points + (nextStatus === "done" ? awardedPoints + fastestBonusPoints : 0),
       },
     meta: {
       ...current.meta,
@@ -995,7 +1003,7 @@ export function useExpeditionSession(
       };
 
       try {
-        await runRequestWithRetry({
+        const completionResult = await runRequestWithRetry({
           request: (signal) =>
             postMobileCompleteTask(apiBaseUrl, {
               sessionToken: session.sessionToken,
@@ -1017,6 +1025,7 @@ export function useExpeditionSession(
             startedAt: effectiveStartedAt,
             finishedAt,
             requireExistingTask: true,
+            fastestBonusPoints: completionResult?.fastestBonusPoints ?? 0,
           });
         });
       } catch (error) {
@@ -1071,6 +1080,44 @@ export function useExpeditionSession(
         );
       } catch (error) {
         return getApiErrorMessage(error, text.submitPhotoFailed);
+      }
+
+      void refreshSessionState();
+      return null;
+    },
+    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+  );
+
+  const submitStationQrScan = useCallback(
+    async (stationId: string, code: string) => {
+      const normalizedStationId = stationId.trim();
+      const normalizedCode = code.trim();
+      if (!normalizedStationId || !normalizedCode) {
+        return text.invalidTaskData;
+      }
+
+      if (offlineMode) {
+        return text.submitQrScanFailed;
+      }
+
+      const apiBaseUrl = session.apiBaseUrl?.trim();
+      if (!apiBaseUrl) {
+        return text.missingApiConfig;
+      }
+
+      try {
+        await withRequestTimeout(
+          (signal) =>
+            postMobileSubmitQrScan(apiBaseUrl, {
+              sessionToken: session.sessionToken,
+              stationId: normalizedStationId,
+              code: normalizedCode,
+            }, { signal }),
+          MOBILE_REQUEST_TIMEOUT_MS,
+          text.requestTimedOut,
+        );
+      } catch (error) {
+        return getApiErrorMessage(error, text.submitQrScanFailed);
       }
 
       void refreshSessionState();
@@ -1321,6 +1368,7 @@ export function useExpeditionSession(
     startStationTask,
     completeStationTask,
     submitTaskPhoto,
+    submitStationQrScan,
     failStationTask,
     syncTeamLocation,
     resolveStationQrToken,

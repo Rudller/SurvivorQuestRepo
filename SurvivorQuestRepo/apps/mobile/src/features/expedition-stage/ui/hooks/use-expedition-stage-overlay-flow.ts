@@ -37,6 +37,7 @@ type UseExpeditionStageOverlayFlowArgs = {
   startStationTask: (stationId: string, startedAt?: string) => Promise<string | null>;
   completeStationTask: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
   submitTaskPhoto: (stationId: string, fileUri: string) => Promise<string | null>;
+  submitStationQrScan: (stationId: string, code: string) => Promise<string | null>;
   failStationTask: (stationId: string, reason?: string, startedAt?: string) => Promise<string | null>;
   setSelectedStationId: (stationId: string | null) => void;
   setActionError: Dispatch<SetStateAction<string | null>>;
@@ -59,6 +60,7 @@ export function useExpeditionStageOverlayFlow({
   startStationTask,
   completeStationTask,
   submitTaskPhoto,
+  submitStationQrScan,
   failStationTask,
   setSelectedStationId,
   setActionError,
@@ -250,11 +252,27 @@ export function useExpeditionStageOverlayFlow({
       const resolvedStationType = stationType ?? selectedStation?.stationType;
       const hasTimedLimit = Boolean(selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0);
 
-      if (isInteractiveQuizStationType(resolvedStationType)) {
+      if (resolvedStationType === "photo-task") {
+        // Backend never allows task/start for photo-task stations (they submit via task/photo
+        // instead), so this must always open directly regardless of any configured time limit.
+        setPendingQuizStartStationId(null);
+        setPendingTimeStartStationId(null);
+        setActiveStationTestId(stationId);
+      } else if (isInteractiveQuizStationType(resolvedStationType)) {
         setPendingQuizStartStationId(stationId);
         setPendingTimeStartStationId(null);
         setActiveStationTestId(null);
-      } else if (hasTimedLimit || resolvedStationType === "time") {
+      } else if (
+        hasTimedLimit ||
+        resolvedStationType === "time" ||
+        resolvedStationType === "points" ||
+        resolvedStationType === "qr-hunt"
+      ) {
+        // "time" and "points" already treat each other as equivalent for the
+        // prestart screen (see isTimedStationType in quiz-prestart.tsx), and
+        // qr-hunt has its own dedicated prestart copy — all three must always
+        // go through the Start tap so startedAt (and therefore the stopwatch)
+        // begins at station launch, not only when a time limit is configured.
         setPendingQuizStartStationId(null);
         setPendingTimeStartStationId(stationId);
         setActiveStationTestId(null);
@@ -441,6 +459,28 @@ export function useExpeditionStageOverlayFlow({
       return null;
     },
     [ensureLocationRequirement, setActionError, setActionMessage, submitTaskPhoto],
+  );
+
+  const handleSubmitQrScan = useCallback(
+    async (stationId: string, code: string) => {
+      setActionError(null);
+      setActionMessage(null);
+
+      const locationError = await ensureLocationRequirement();
+      if (locationError) {
+        setActionError(locationError);
+        return locationError;
+      }
+
+      const result = await submitStationQrScan(stationId, code);
+      if (result) {
+        setActionError(result);
+        return result;
+      }
+
+      return null;
+    },
+    [ensureLocationRequirement, setActionError, setActionMessage, submitStationQrScan],
   );
 
   const handleRequestCloseActiveStation = useCallback(() => {
@@ -637,6 +677,7 @@ export function useExpeditionStageOverlayFlow({
     handleStartStationTestTask,
     handleCompleteStationTestTask,
     handleSubmitPhotoTask,
+    handleSubmitQrScan,
     handleRequestCloseActiveStation,
     handleTimeStationExpired,
     handleQuizFailed,

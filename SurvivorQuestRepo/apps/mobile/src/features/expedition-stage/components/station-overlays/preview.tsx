@@ -3,13 +3,16 @@ import { Animated, Keyboard, Pressable, Text, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
+import { MOBILE_UX_TOKENS } from "../../../../shared/ui/ux-tokens";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
 import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
+import { useQrHuntScan, QrHuntProgressText } from "./station-panels/qr-hunt-station-panel";
+import { QrScannerOverlay } from "../qr-scanner-overlay";
 import type { MastermindAttempt } from "./station-panels/mastermind-station-panel";
 import { StationMediaPanel } from "./station-panels/station-media-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
-import { StationQuizTaskWrapper } from "./station-panels/shared-ui";
+import { StationQuizTaskWrapper, useStationPanelLayout } from "./station-panels/shared-ui";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
@@ -175,6 +178,7 @@ type StationPreviewText = {
   quizIncorrect: string;
   quizWrongPopup: string;
   quizSuccessPopup: string;
+  fastestBonusEarnedSuffix: (points: number) => string;
   hangmanEnterLetter: string;
   hangmanLetterAlreadyChecked: string;
   hangmanNoAttempts: (secret: string) => string;
@@ -254,6 +258,7 @@ type StationPreviewText = {
   anagramDisplayHint: string;
   executionTimerLabel: string;
   executionStopwatchLabel: string;
+  fastestBonusAvailableLabel: (points: number) => string;
   points: string;
   backToMapNow: string;
   backToMap: string;
@@ -304,6 +309,7 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   quizIncorrect: "Wrong answer",
   quizWrongPopup: "Incorrect answer was selected.",
   quizSuccessPopup: "Correct answer. Task passed.",
+  fastestBonusEarnedSuffix: (points) => `\n\n+${points} bonus points for being the fastest!`,
   hangmanEnterLetter: "Enter one letter.",
   hangmanLetterAlreadyChecked: "This letter has already been checked.",
   hangmanNoAttempts: (secret: string) => `No attempts left. Phrase: ${secret}`,
@@ -385,6 +391,7 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   anagramDisplayHint: "Jumbled text is displayed word by word, each in a separate row.",
   executionTimerLabel: "Time left to complete task",
   executionStopwatchLabel: "Time spent on task",
+  fastestBonusAvailableLabel: (points) => `+${points} pts bonus for being fastest`,
   points: "Points",
   backToMapNow: "Back to map now",
   backToMap: "Back to map",
@@ -435,6 +442,7 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   quizIncorrect: "Неправильна відповідь",
   quizWrongPopup: "Вибрано неправильну відповідь.",
   quizSuccessPopup: "Правильна відповідь. Завдання зараховано.",
+  fastestBonusEarnedSuffix: (points) => `\n\n+${points} бонусних балів за найшвидше виконання!`,
   hangmanEnterLetter: "Введіть одну літеру.",
   hangmanLetterAlreadyChecked: "Цю літеру вже перевіряли.",
   hangmanNoAttempts: (secret: string) => `Спроб не залишилося. Фраза: ${secret}`,
@@ -518,6 +526,7 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
     "Перемішаний текст відображається слово за словом, кожне в окремому рядку.",
   executionTimerLabel: "Час до завершення завдання",
   executionStopwatchLabel: "Час виконання завдання",
+  fastestBonusAvailableLabel: (points) => `+${points} балів бонусу за найшвидше виконання`,
   points: "Бали",
   backToMapNow: "Повернутися до мапи зараз",
   backToMap: "Повернутися до мапи",
@@ -568,6 +577,7 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   quizIncorrect: "Неправильный ответ",
   quizWrongPopup: "Выбран неправильный ответ.",
   quizSuccessPopup: "Правильный ответ. Задание зачтено.",
+  fastestBonusEarnedSuffix: (points) => `\n\n+${points} бонусных баллов за самое быстрое выполнение!`,
   hangmanEnterLetter: "Введите одну букву.",
   hangmanLetterAlreadyChecked: "Эта буква уже проверялась.",
   hangmanNoAttempts: (secret: string) => `Попыток не осталось. Фраза: ${secret}`,
@@ -651,6 +661,7 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
     "Перемешанный текст отображается слово за словом, каждое в отдельной строке.",
   executionTimerLabel: "Время до завершения задания",
   executionStopwatchLabel: "Время выполнения задания",
+  fastestBonusAvailableLabel: (points) => `+${points} баллов бонуса за самое быстрое выполнение`,
   points: "Баллы",
   backToMapNow: "Вернуться к карте сейчас",
   backToMap: "Вернуться к карте",
@@ -702,6 +713,7 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     quizIncorrect: "Zła odpowiedź",
     quizWrongPopup: "Wybrano nieprawidłową odpowiedź.",
     quizSuccessPopup: "Poprawna odpowiedź. Zadanie zaliczone.",
+    fastestBonusEarnedSuffix: (points) => `\n\n+${points} pkt bonusu za bycie najszybszym!`,
     hangmanEnterLetter: "Wpisz jedną literę.",
     hangmanLetterAlreadyChecked: "Ta litera była już sprawdzana.",
     hangmanNoAttempts: (secret: string) => `Brak prób. Hasło: ${secret}`,
@@ -785,6 +797,7 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
       "Rozsypanka jest wyświetlana wyraz po wyrazie, a każdy wyraz znajduje się w osobnym wierszu.",
     executionTimerLabel: "Czas do ukończenia zadania",
     executionStopwatchLabel: "Czas wykonania zadania",
+    fastestBonusAvailableLabel: (points) => `+${points} pkt bonusu za najszybsze wykonanie`,
     points: "Punkty",
     backToMapNow: "Wróć do mapy teraz",
     backToMap: "Wróć do mapy",
@@ -801,6 +814,7 @@ export function StationPreviewOverlay({
   onRequestClose,
   onCompleteTask,
   onSubmitPhotoTask,
+  onSubmitQrScan,
   onQuizFailed,
   onQuizPassed,
   onTimeExpired,
@@ -809,6 +823,7 @@ export function StationPreviewOverlay({
   onDebugOutcomePreviewConsumed,
 }: StationPreviewOverlayProps) {
   const adaptiveLayout = useAdaptiveLayout();
+  const stationPanelLayout = useStationPanelLayout();
   const uiLanguage = useUiLanguage();
   const text = STATION_PREVIEW_TEXT[uiLanguage];
   const { height: viewportHeight, width: viewportWidth } = adaptiveLayout;
@@ -990,7 +1005,11 @@ export function StationPreviewOverlay({
       stationSeenBefore && previousStatus !== "failed" && previousStatus !== "done" && currentStatus === "failed";
 
     if (transitionedToDone && quizOutcomePopup?.variant !== "success") {
-      showQuizOutcomePopup("success", resolveSuccessOutcomeMessage(displayedStation, text));
+      const baseMessage = resolveSuccessOutcomeMessage(displayedStation, text);
+      const bonusSuffix = displayedStation.fastestBonusPoints
+        ? text.fastestBonusEarnedSuffix(displayedStation.fastestBonusPoints)
+        : "";
+      showQuizOutcomePopup("success", `${baseMessage}${bonusSuffix}`);
       return;
     }
 
@@ -1415,6 +1434,7 @@ export function StationPreviewOverlay({
   const photoTaskCapture = usePhotoTaskCapture(displayedStation, onSubmitPhotoTask, () => {
     showQuizOutcomePopup("pending", text.pendingReviewPopupMessage);
   });
+  const qrHuntScan = useQrHuntScan(displayedStation, onSubmitQrScan);
 
   if (!isOverlayMounted || !displayedStation) {
     return null;
@@ -1465,6 +1485,7 @@ export function StationPreviewOverlay({
     isQuizStation,
     requiresCode,
     requiresPhotoUpload,
+    requiresQrScan,
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,
@@ -2321,7 +2342,7 @@ export function StationPreviewOverlay({
                     stationType={station.stationType}
                     viewportHeight={viewportHeight}
                     stationMediaHeight={stationMediaHeight}
-                    requiresCode={requiresCode || requiresPhotoUpload}
+                    requiresCode={requiresCode || requiresPhotoUpload || requiresQrScan}
                     isNumericCodeStation={isNumericCodeStation}
                     renderedStationMedia={renderedStationMedia}
                     shouldShowQuizFallbackGraphic={shouldShowQuizFallbackGraphic}
@@ -2390,10 +2411,10 @@ export function StationPreviewOverlay({
                   style={{ marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16), rowGap: adaptiveLayout.s(6, 4, 10) }}
                 >
                   <Text
-                    className="text-center font-semibold"
+                    className="text-center"
                     style={{
                       color: EXPEDITION_THEME.textPrimary,
-                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 18 : 13, 12, 22),
+                      fontSize: stationPanelLayout.descriptionFontSize,
                       lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 28),
                     }}
                   >
@@ -2408,6 +2429,51 @@ export function StationPreviewOverlay({
                 </View>
               ) : null}
 
+              {requiresQrScan ? (
+                <View
+                  className="items-center"
+                  style={{ marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16), rowGap: adaptiveLayout.s(10, 8, 14) }}
+                >
+                  <QrHuntProgressText
+                    text={qrHuntScan.text}
+                    requiredCount={qrHuntScan.requiredCount}
+                    scannedCount={qrHuntScan.scannedCount}
+                    isDone={station.status === "done"}
+                  />
+                  {qrHuntScan.canScan ? (
+                    <Pressable
+                      className="items-center justify-center rounded-xl active:opacity-90"
+                      style={{
+                        backgroundColor: EXPEDITION_THEME.accent,
+                        minHeight: stationPanelLayout.actionMinHeight,
+                        paddingHorizontal: adaptiveLayout.s(24, 16, 32),
+                        opacity: qrHuntScan.isSubmitting ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                      }}
+                      onPress={qrHuntScan.openScanner}
+                      disabled={qrHuntScan.isSubmitting}
+                    >
+                      <Text
+                        className="font-semibold"
+                        style={{
+                          color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                          fontSize: stationPanelLayout.actionFontSize,
+                        }}
+                      >
+                        {qrHuntScan.scannedCount > 0 ? qrHuntScan.text.scanNextCode : qrHuntScan.text.scanCode}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {qrHuntScan.submitError ? (
+                    <Text
+                      className="text-center"
+                      style={{ color: EXPEDITION_THEME.danger, fontSize: stationPanelLayout.resultFontSize }}
+                    >
+                      {qrHuntScan.submitError}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
               {requiresCode ? (
                 <View
                   className="px-1"
@@ -2418,7 +2484,7 @@ export function StationPreviewOverlay({
                     style={{
                       color: EXPEDITION_THEME.textMuted,
                       textAlign: "justify",
-                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 18 : 12, 11, 22),
+                      fontSize: stationPanelLayout.descriptionFontSize,
                       lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
                     }}
                   >
@@ -2434,7 +2500,7 @@ export function StationPreviewOverlay({
                   ellipsizeMode="tail"
                   style={{
                     color: EXPEDITION_THEME.textMuted,
-                    fontSize: adaptiveLayout.fs(isTabletOverlay ? 16 : 11, 10, 20),
+                    fontSize: stationPanelLayout.descriptionFontSize,
                     lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                   }}
                 >
@@ -2511,8 +2577,18 @@ export function StationPreviewOverlay({
               {shouldShowExecutionTimer ? (
                 <View className="items-center px-4 py-2">
                   <Animated.Text
-                    className={`text-center ${isNumericCodeStation ? "text-5xl" : "text-6xl"} font-extrabold`}
-                    style={[{ color: timerTextColor }, timerPulseStyle]}
+                    className="text-center font-extrabold"
+                    style={[
+                      {
+                        color: timerTextColor,
+                        fontSize: adaptiveLayout.fs(
+                          isTabletOverlay ? (isNumericCodeStation ? 40 : 50) : isNumericCodeStation ? 30 : 36,
+                          26,
+                          58,
+                        ),
+                      },
+                      timerPulseStyle,
+                    ]}
                   >
                     {executionTimeLabel}
                   </Animated.Text>
@@ -2522,6 +2598,14 @@ export function StationPreviewOverlay({
                   >
                     {isCompletionStopwatchActive ? text.executionStopwatchLabel : text.executionTimerLabel}
                   </Text>
+                  {isCompletionStopwatchActive && (displayedStation.fastestCompletionBonusPoints ?? 0) > 0 ? (
+                    <Text
+                      className="mt-0.5 text-center text-[10px] font-semibold"
+                      style={{ color: EXPEDITION_THEME.accent }}
+                    >
+                      {text.fastestBonusAvailableLabel(displayedStation.fastestCompletionBonusPoints ?? 0)}
+                    </Text>
+                  ) : null}
                 </View>
               ) : null}
               <View className="flex-1 items-end">
@@ -2595,6 +2679,14 @@ export function StationPreviewOverlay({
           backToMap: text.backToMap,
         }}
       />
+      {requiresQrScan ? (
+        <QrScannerOverlay
+          visible={qrHuntScan.isScannerOpen}
+          isResolving={qrHuntScan.isSubmitting}
+          onClose={qrHuntScan.closeScanner}
+          onDetected={qrHuntScan.handleDetected}
+        />
+      ) : null}
     </Animated.View>
   );
 }

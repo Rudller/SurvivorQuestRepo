@@ -427,7 +427,7 @@ export function WordleInteractionPanel({
                      className="font-semibold"
                      style={{
                        color: resolveWordleLetterColor(keyStateByLetter.get(key)),
-                       fontSize: layout.isTablet ? 18 : 16,
+                       fontSize: layout.keyLabelFontSize,
                      }}
                    >
                      {key}

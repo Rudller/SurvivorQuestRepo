@@ -92,6 +92,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeMatching: string;
     stationTypeStrongPassword: string;
     stationTypePhotoTask: string;
+    stationTypeQrHunt: string;
     stationTypeQuiz: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
@@ -137,6 +138,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeMatching: "Łączenie par",
     stationTypeStrongPassword: "Mocne hasło",
     stationTypePhotoTask: "Zadanie fotograficzne",
+    stationTypeQrHunt: "Skanowanie QR",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
@@ -181,6 +183,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeMatching: "Matching pairs",
     stationTypeStrongPassword: "Strong password",
     stationTypePhotoTask: "Photo task",
+    stationTypeQrHunt: "QR scan hunt",
     stationTypeQuiz: "Quiz",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
@@ -225,6 +228,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeMatching: "Поєднання пар",
     stationTypeStrongPassword: "Надійний пароль",
     stationTypePhotoTask: "Фотозавдання",
+    stationTypeQrHunt: "Пошук QR-кодів",
     stationTypeQuiz: "Вікторина",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
@@ -269,6 +273,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeMatching: "Сопоставление пар",
     stationTypeStrongPassword: "Надёжный пароль",
     stationTypePhotoTask: "Фотозадание",
+    stationTypeQrHunt: "Поиск QR-кодов",
     stationTypeQuiz: "Викторина",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
@@ -404,6 +409,9 @@ const PIN_ICON_SVGS = {
   "photo-task": buildPinIconSvg(
     '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" />',
   ),
+  "qr-hunt": buildPinIconSvg(
+    '<rect width="5" height="5" x="3" y="3" rx="1" /><rect width="5" height="5" x="16" y="3" rx="1" /><rect width="5" height="5" x="3" y="16" rx="1" /><path d="M21 16h-3a2 2 0 0 0-2 2v3" /><path d="M21 21v.01" /><path d="M12 7v3a2 2 0 0 1-2 2H7" /><path d="M3 12h.01" /><path d="M12 3h.01" /><path d="M12 16v.01" /><path d="M16 12h1" /><path d="M21 12v.01" /><path d="M12 21v-1" />',
+  ),
 } as const;
 
 function resolveStationVisual(stationType: ExpeditionStationType | undefined, status: ExpeditionTaskStatus) {
@@ -473,6 +481,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
 
   if (stationType === "photo-task") {
     return { icon: PIN_ICON_SVGS["photo-task"], color: "#84cc16" };
+  }
+
+  if (stationType === "qr-hunt") {
+    return { icon: PIN_ICON_SVGS["qr-hunt"], color: "#0891b2" };
   }
 
   if (stationType === "audio-quiz") {
@@ -562,6 +574,7 @@ function resolveStationTypeLabel(
     | "stationTypeMatching"
     | "stationTypeStrongPassword"
     | "stationTypePhotoTask"
+    | "stationTypeQrHunt"
     | "stationTypeQuiz"
   >,
 ) {
@@ -629,6 +642,10 @@ function resolveStationTypeLabel(
     return text.stationTypePhotoTask;
   }
 
+  if (stationType === "qr-hunt") {
+    return text.stationTypeQrHunt;
+  }
+
   return text.stationTypeQuiz;
 }
 
@@ -657,7 +674,8 @@ function normalizeStationType(stationType?: ExpeditionStationType): StationTestT
     (isInteractiveQuizStationType(stationType) ||
       stationType === "time" ||
       stationType === "points" ||
-      stationType === "photo-task")
+      stationType === "photo-task" ||
+      stationType === "qr-hunt")
   ) {
     return stationType;
   }
@@ -765,6 +783,7 @@ export function ExpeditionStageScreen({
     startStationTask,
     completeStationTask,
     submitTaskPhoto,
+    submitStationQrScan,
     failStationTask,
     syncTeamLocation,
     resolveStationQrToken,
@@ -1049,6 +1068,9 @@ export function ExpeditionStageScreen({
                 challengeDifficultyMode: stationCatalog.challengeDifficultyMode,
                 challengeDifficulty: stationCatalog.challengeDifficulty,
                 completionStopwatchEnabled: stationCatalog.completionStopwatchEnabled,
+                fastestCompletionBonusPoints: stationCatalog.fastestCompletionBonusPoints,
+                qrScanRequiredCount: stationCatalog.qrScanRequiredCount,
+                qrScanCompletedCount: task?.qrScanCompletedCount,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
@@ -1057,6 +1079,7 @@ export function ExpeditionStageScreen({
                 status: task?.status ?? "todo",
                 quizFailed: (task?.status ?? "todo") === "failed",
                 startedAt: task?.startedAt ?? null,
+                fastestBonusPoints: task?.fastestBonusPoints,
               } satisfies StationTestViewModel;
             })
           : sessionState.tasks.map((task) => {
@@ -1084,6 +1107,8 @@ export function ExpeditionStageScreen({
                 status: task.status,
                 quizFailed: task.status === "failed",
                 startedAt: task.startedAt,
+                fastestBonusPoints: task.fastestBonusPoints,
+                qrScanCompletedCount: task.qrScanCompletedCount,
               } satisfies StationTestViewModel;
             });
 
@@ -1213,6 +1238,7 @@ export function ExpeditionStageScreen({
     startStationTask,
     completeStationTask,
     submitTaskPhoto,
+    submitStationQrScan,
     failStationTask,
     setSelectedStationId,
     setActionError,

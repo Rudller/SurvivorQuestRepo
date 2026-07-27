@@ -84,6 +84,7 @@ export function ExpeditionStageOverlayLayer({
         onRequestClose={overlayFlow.handleRequestCloseActiveStation}
         onCompleteTask={overlayFlow.handleCompleteStationTestTask}
         onSubmitPhotoTask={overlayFlow.handleSubmitPhotoTask}
+        onSubmitQrScan={overlayFlow.handleSubmitQrScan}
         onQuizFailed={overlayFlow.handleQuizFailed}
         onTimeExpired={overlayFlow.handleTimeStationExpired}
         timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}

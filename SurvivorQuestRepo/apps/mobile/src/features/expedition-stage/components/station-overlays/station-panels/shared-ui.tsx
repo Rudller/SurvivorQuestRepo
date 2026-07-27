@@ -12,6 +12,11 @@ type AttemptsIndicatorProps = {
   align?: "left" | "center";
 };
 
+// Font-weight vocabulary shared across station panels:
+// - no class / "font-normal"        -> body role: description/result text
+// - "font-semibold"                 -> emphasis role: prompt, action buttons, keyboard keys (incl. pinpad digits), result-with-emphasis
+// - "font-bold"                     -> reserved for already-consistent out-of-scope elements (wordle cells, difficulty option labels)
+// - "font-extrabold" / "font-black" -> display role: large standalone numbers/icons (points value, countdown timer, outcome popup)
 export function useStationPanelLayout() {
   const adaptiveLayout = useAdaptiveLayout();
   const isTablet = adaptiveLayout.isTablet;
@@ -23,6 +28,10 @@ export function useStationPanelLayout() {
     actionFontSize: adaptiveLayout.fs(isTablet ? 16 : 11, 10, 19),
     actionMinHeight: adaptiveLayout.s(isTablet ? 54 : 34, 32, 58),
     resultFontSize: adaptiveLayout.fs(isTablet ? 14 : 10, 10, 16),
+    promptFontSize: adaptiveLayout.fs(isTablet ? 21 : 13, 12, 25),
+    descriptionFontSize: adaptiveLayout.fs(isTablet ? 17 : 12, 11, 21),
+    keyLabelFontSize: adaptiveLayout.fs(isTablet ? 20 : 14, 12, 24),
+    pinpadDigitFontSize: adaptiveLayout.fs(isTablet ? 36 : 30, 26, 42),
     attemptDotSize: adaptiveLayout.s(isTablet ? 10 : 6, 5, 14),
     attemptRowGap: adaptiveLayout.s(isTablet ? 10 : 6, 4, 12),
     attemptDotGap: adaptiveLayout.s(isTablet ? 8 : 4, 3, 10),
@@ -102,6 +111,7 @@ export function StationQuizTaskWrapper({
   footer,
 }: StationQuizTaskWrapperProps) {
   const adaptiveLayout = useAdaptiveLayout();
+  const { promptFontSize } = useStationPanelLayout();
   const errorMessage = error ? (
     <Text
       className="mt-2 text-center"
@@ -125,7 +135,7 @@ export function StationQuizTaskWrapper({
             className="font-semibold"
             style={{
               color: EXPEDITION_THEME.textPrimary,
-              fontSize: adaptiveLayout.fs(isTabletOverlay ? 21 : 13, 12, 25),
+              fontSize: promptFontSize,
               paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
               paddingTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
             }}

@@ -211,7 +211,7 @@ export function MastermindStationPanel({
               className="font-semibold"
               style={{
                 color: symbol ? EXPEDITION_THEME.textPrimary : EXPEDITION_THEME.textSubtle,
-                fontSize: layout.isTablet ? 22 : 14,
+                fontSize: layout.keyLabelFontSize,
               }}
             >
               {symbol || "•"}
@@ -275,7 +275,7 @@ export function MastermindStationPanel({
               className="font-semibold"
               style={{
                 color: EXPEDITION_THEME.textPrimary,
-                fontSize: layout.isTablet ? 22 : 14,
+                fontSize: layout.keyLabelFontSize,
                 textAlign: "center",
                 textAlignVertical: "center",
                 includeFontPadding: false,
@@ -302,7 +302,7 @@ export function MastermindStationPanel({
             className="font-semibold"
             style={{
               color: resolveActionLabelColor(!canBackspace),
-              fontSize: layout.isTablet ? 22 : 14,
+              fontSize: layout.keyLabelFontSize,
               textAlign: "center",
               textAlignVertical: "center",
               includeFontPadding: false,
