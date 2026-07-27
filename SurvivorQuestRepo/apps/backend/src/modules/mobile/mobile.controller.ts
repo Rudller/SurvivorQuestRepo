@@ -5,7 +5,6 @@ import {
   Get,
   Param,
   Post,
-  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -263,6 +262,18 @@ export class MobileController {
     });
   }
 
+  @Post('task/scan-code')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async submitMobileStationQrScan(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.mobileService.submitStationQrScan({
+      sessionToken: requireString(payload, 'sessionToken'),
+      stationId: requireString(payload, 'stationId'),
+      code: requireString(payload, 'code'),
+      scannedAt: optionalString(payload, 'scannedAt'),
+    });
+  }
+
   @Post('station/resolve-qr')
   @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
   async resolveMobileStationQr(@Body() rawPayload: unknown) {
@@ -319,14 +330,8 @@ export class MobileController {
   @Get('admin/realizations/current/station-qr')
   @AdminOrInstructor()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
-  async getMobileAdminCurrentRealizationStationQrs(
-    @Query('ttlSeconds') ttlSeconds?: string,
-  ) {
-    const ttlCandidate =
-      typeof ttlSeconds === 'string' && ttlSeconds.trim().length > 0
-        ? Number(ttlSeconds)
-        : undefined;
-    return this.mobileService.getMobileAdminStationQrs('current', ttlCandidate);
+  async getMobileAdminCurrentRealizationStationQrs() {
+    return this.mobileService.getMobileAdminStationQrs('current');
   }
 
   @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/reset')
@@ -439,16 +444,8 @@ export class MobileController {
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getMobileAdminRealizationStationQrs(
     @Param('realizationId') realizationId: string,
-    @Query('ttlSeconds') ttlSeconds?: string,
   ) {
-    const ttlCandidate =
-      typeof ttlSeconds === 'string' && ttlSeconds.trim().length > 0
-        ? Number(ttlSeconds)
-        : undefined;
-    return this.mobileService.getMobileAdminStationQrs(
-      realizationId,
-      ttlCandidate,
-    );
+    return this.mobileService.getMobileAdminStationQrs(realizationId);
   }
 
   @Get('admin/realizations/:realizationId/photo-reviews')

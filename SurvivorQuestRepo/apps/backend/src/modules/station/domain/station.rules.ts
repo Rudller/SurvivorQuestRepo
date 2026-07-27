@@ -18,6 +18,7 @@ export const STATION_TYPES: StationType[] = [
   'matching',
   'strong-password',
   'photo-task',
+  'qr-hunt',
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;
@@ -69,6 +70,10 @@ export function isWordPuzzleStationType(stationType: StationType) {
 
 export function isMatchingStationType(stationType: StationType) {
   return stationType === 'matching';
+}
+
+export function isQrHuntStationType(stationType: StationType) {
+  return stationType === 'qr-hunt';
 }
 
 export function normalizeMatchingAnswer(value: string) {

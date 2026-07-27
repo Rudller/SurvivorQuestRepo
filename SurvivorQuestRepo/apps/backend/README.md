@@ -118,7 +118,6 @@ Najwazniejsze zmienne:
 - `CORS_ALLOW_ALL_DEV_ORIGINS` - opcjonalnie `true` tylko lokalnie, aby dopuscic dowolny origin w dev bez allowlisty
 - `AUTH_COOKIE_SAME_SITE` - `lax` / `strict` / `none`
 - `AUTH_COOKIE_SECURE` - `true` dla HTTPS, `false` dla lokalnego HTTP
-- `STATION_QR_SECRET` - sekret HMAC do podpisywania tokenow QR stanowisk (min. 32 znaki)
 - `JOIN_CODE_PEPPER` - pepper do generowania kodow dolaczenia realizacji (min. 32 znaki)
 - `JOIN_CODE_LEGACY_PEPPER` - opcjonalny poprzedni pepper do odczytu starszych kodow po rotacji
 - `MOBILE_QR_ENTRY_BASE_URL` - bazowy deeplink/URL kodowany do QR (domyslnie `sq://station-entry`)

@@ -28,6 +28,7 @@ const STATION_TYPES: StationType[] = [
   'matching',
   'strong-password',
   'photo-task',
+  'qr-hunt',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =
@@ -101,10 +102,13 @@ export type CreateStationDto = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes?: string[];
   quiz?: StationQuiz;
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
   color?: string;
   latitude?: number;
   longitude?: number;
@@ -214,6 +218,39 @@ function ensureStationCategories(value: unknown): string[] | undefined {
   return categories;
 }
 
+function ensureStationQrScanCodes(value: unknown, type: StationType): string[] {
+  if (type !== 'qr-hunt') {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const seen = new Set<string>();
+  const codes: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const normalized = item.trim().toUpperCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    codes.push(normalized);
+  }
+
+  if (codes.length === 0) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return codes;
+}
+
 function ensureCompletionCode(
   value: unknown,
   type: StationType,
@@ -227,6 +264,23 @@ function ensureCompletionCode(
   }
 
   const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return normalized;
+}
+
+function ensureQrEntryCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    return undefined;
+  }
+
   if (!/^[A-Z0-9-]{3,32}$/.test(normalized)) {
     throw new BadRequestException('Invalid payload');
   }
@@ -318,6 +372,8 @@ function ensureStationBody(payload: unknown): CreateStationDto {
     timeLimitSeconds:
       typeof body.timeLimitSeconds === 'number' ? body.timeLimitSeconds : NaN,
     completionCode: ensureCompletionCode(body.completionCode, type),
+    qrEntryCode: ensureQrEntryCode(body.qrEntryCode),
+    qrScanCodes: ensureStationQrScanCodes(body.qrScanCodes, type),
     quiz: ensureStationQuiz(body.quiz, type),
     challengeDifficultyMode:
       body.challengeDifficultyMode === 'player' ? 'player' : 'admin',
@@ -326,6 +382,11 @@ function ensureStationBody(payload: unknown): CreateStationDto {
         ? body.challengeDifficulty
         : 'medium',
     completionStopwatchEnabled: body.completionStopwatchEnabled === true,
+    fastestCompletionBonusPoints:
+      body.completionStopwatchEnabled === true &&
+      Number.isFinite(Number(body.fastestCompletionBonusPoints))
+        ? Math.max(0, Math.round(Number(body.fastestCompletionBonusPoints)))
+        : 0,
     color: /^#[0-9a-fA-F]{6}$/.test(String(body.color ?? ''))
       ? String(body.color)
       : undefined,
@@ -387,10 +448,13 @@ export function toCreateStationEntity(
     timeLimitSeconds: parsedTimeLimitSeconds,
     categories: dto.categories ?? [],
     completionCode: dto.completionCode,
+    qrEntryCode: dto.qrEntryCode,
+    qrScanCodes: dto.qrScanCodes ?? [],
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
     completionStopwatchEnabled: dto.completionStopwatchEnabled ?? false,
+    fastestCompletionBonusPoints: dto.fastestCompletionBonusPoints ?? 0,
     color: dto.color ?? '#f59e0b',
     latitude: dto.latitude,
     longitude: dto.longitude,
@@ -414,10 +478,13 @@ export function toUpdateStationEntity(
     timeLimitSeconds: parsedTimeLimitSeconds,
     categories: dto.categories ?? current.categories,
     completionCode: dto.completionCode,
+    qrEntryCode: dto.qrEntryCode || current.qrEntryCode,
+    qrScanCodes: dto.qrScanCodes ?? current.qrScanCodes,
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
     completionStopwatchEnabled: dto.completionStopwatchEnabled ?? false,
+    fastestCompletionBonusPoints: dto.fastestCompletionBonusPoints ?? 0,
     color: dto.color ?? current.color,
     latitude: dto.latitude,
     longitude: dto.longitude,
@@ -438,10 +505,12 @@ export function toStationDraftInput(
     timeLimitSeconds: parsedTimeLimitSeconds,
     categories: dto.categories,
     completionCode: dto.completionCode,
+    qrScanCodes: dto.qrScanCodes,
     quiz: dto.quiz,
     challengeDifficultyMode: dto.challengeDifficultyMode,
     challengeDifficulty: dto.challengeDifficulty,
     completionStopwatchEnabled: dto.completionStopwatchEnabled,
+    fastestCompletionBonusPoints: dto.fastestCompletionBonusPoints,
     latitude: dto.latitude,
     longitude: dto.longitude,
   };

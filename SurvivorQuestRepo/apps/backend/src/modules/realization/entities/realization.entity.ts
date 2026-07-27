@@ -80,6 +80,8 @@ export type ScenarioStationDraftPayload = {
   points?: number;
   timeLimitSeconds?: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes?: string[];
   quiz?: StationQuiz;
   translations?: StationTranslations;
   challengeDifficultyMode?: 'admin' | 'player';

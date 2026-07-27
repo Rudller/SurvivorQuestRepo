@@ -15,7 +15,8 @@ export type StationType =
   | 'mini-sudoku'
   | 'matching'
   | 'strong-password'
-  | 'photo-task';
+  | 'photo-task'
+  | 'qr-hunt';
 
 export type ChallengeDifficultyMode = 'admin' | 'player';
 export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
@@ -55,11 +56,14 @@ export type StationEntity = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes: string[];
   quiz?: StationQuiz;
   translations?: StationTranslations;
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
   completionStopwatchEnabled: boolean;
+  fastestCompletionBonusPoints: number;
   color: string;
   latitude?: number;
   longitude?: number;
@@ -81,11 +85,14 @@ export type StationDraftInput = {
   points: number;
   timeLimitSeconds: number;
   completionCode?: string;
+  qrEntryCode?: string;
+  qrScanCodes?: string[];
   quiz?: StationQuiz;
   translations?: StationTranslations;
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  fastestCompletionBonusPoints?: number;
   color?: string;
   latitude?: number;
   longitude?: number;

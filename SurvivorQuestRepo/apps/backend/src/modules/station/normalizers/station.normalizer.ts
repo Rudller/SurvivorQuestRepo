@@ -37,6 +37,18 @@ function normalizeCompletionStopwatchEnabled(
   return value === true;
 }
 
+function normalizeFastestCompletionBonusPoints(
+  value: StationDraftInput['fastestCompletionBonusPoints'],
+  completionStopwatchEnabled: boolean,
+): number {
+  if (!completionStopwatchEnabled) {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+}
+
 function resolveImageUrl(imageUrl: string | undefined, seed: string) {
   return imageUrl?.trim() || buildStationFallbackImage(seed);
 }
@@ -125,6 +137,34 @@ function normalizeStationQuiz(
   };
 }
 
+function normalizeQrScanCodes(
+  codes: StationDraftInput['qrScanCodes'],
+  stationType: StationDraftInput['type'],
+): string[] {
+  if (stationType !== 'qr-hunt') {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const code of codes ?? []) {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  if (normalized.length === 0) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return normalized;
+}
+
 function normalizeCompletionCode(
   completionCode: string | undefined,
   stationType: StationDraftInput['type'],
@@ -134,6 +174,19 @@ function normalizeCompletionCode(
   }
 
   const normalized = completionCode?.trim().toUpperCase() ?? '';
+  if (!COMPLETION_CODE_REGEX.test(normalized)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return normalized;
+}
+
+function normalizeQrEntryCode(qrEntryCode: string | undefined) {
+  const normalized = qrEntryCode?.trim().toUpperCase() ?? '';
+  if (!normalized) {
+    return undefined;
+  }
+
   if (!COMPLETION_CODE_REGEX.test(normalized)) {
     throw new BadRequestException('Invalid payload');
   }
@@ -151,6 +204,10 @@ export function normalizeStationDraft(
     input.type,
   );
   const normalizedQuiz = normalizeStationQuiz(input.quiz, input.type);
+  const normalizedCompletionStopwatchEnabled =
+    input.type === 'photo-task'
+      ? false
+      : normalizeCompletionStopwatchEnabled(input.completionStopwatchEnabled);
 
   return {
     name: normalizedName,
@@ -159,8 +216,11 @@ export function normalizeStationDraft(
     description: input.description.trim() || DEFAULT_STATION_DESCRIPTION,
     imageUrl: resolveImageUrl(input.imageUrl, normalizedName || currentId),
     points: Math.round(input.points),
-    timeLimitSeconds: Math.round(input.timeLimitSeconds),
+    timeLimitSeconds:
+      input.type === 'photo-task' ? 0 : Math.round(input.timeLimitSeconds),
     completionCode: normalizedCompletionCode,
+    qrEntryCode: normalizeQrEntryCode(input.qrEntryCode),
+    qrScanCodes: normalizeQrScanCodes(input.qrScanCodes, input.type),
     quiz: normalizedQuiz,
     translations: input.translations,
     challengeDifficultyMode: normalizeChallengeDifficultyMode(
@@ -169,8 +229,10 @@ export function normalizeStationDraft(
     challengeDifficulty: normalizeChallengeDifficulty(
       input.challengeDifficulty,
     ),
-    completionStopwatchEnabled: normalizeCompletionStopwatchEnabled(
-      input.completionStopwatchEnabled,
+    completionStopwatchEnabled: normalizedCompletionStopwatchEnabled,
+    fastestCompletionBonusPoints: normalizeFastestCompletionBonusPoints(
+      input.fastestCompletionBonusPoints,
+      normalizedCompletionStopwatchEnabled,
     ),
     latitude:
       typeof input.latitude === 'number' && Number.isFinite(input.latitude)

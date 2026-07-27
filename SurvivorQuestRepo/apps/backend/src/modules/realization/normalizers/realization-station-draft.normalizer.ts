@@ -97,6 +97,8 @@ export function normalizeScenarioStationDrafts(
         completionCode: requiresCompletionCode
           ? normalizedCompletionCode
           : undefined,
+        qrEntryCode: draft.qrEntryCode,
+        qrScanCodes: draft.qrScanCodes,
         quiz: draft.quiz,
         translations: draft.translations,
         challengeDifficultyMode: normalizeChallengeDifficultyMode(

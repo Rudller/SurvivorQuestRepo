@@ -36,6 +36,7 @@ enum StationType {
   MATCHING
   STRONG_PASSWORD
   PHOTO_TASK
+  QR_HUNT
 }
 
 enum TeamPhotoKind {
@@ -123,11 +124,14 @@ model Station {
   points           Int
   timeLimitSeconds Int                @default(0)
   completionCode   String?
+  qrEntryCode      String?
+  qrScanCodes      String[]           @default([])
   quizData         Json?
   translations     Json?
   challengeDifficultyMode String             @default("admin")
   challengeDifficulty String                 @default("medium")
   completionStopwatchEnabled Boolean       @default(false)
+  fastestCompletionBonusPoints Int         @default(0)
   color            String             @default("#f59e0b")
   latitude         Float?
   longitude        Float?
@@ -141,6 +145,9 @@ model Station {
   scenarioStations ScenarioStation[]
   taskProgresses   TeamTaskProgress[]
   photos           TeamPhoto[]
+  stationScans     TeamStationScan[]
+
+  @@unique([realizationId, qrEntryCode])
 }
 
 model Scenario {
@@ -213,6 +220,7 @@ model Realization {
   teamTaskProgresses  TeamTaskProgress[]
   eventLogs           EventLog[]
   photos              TeamPhoto[]
+  stationScans        TeamStationScan[]
 }
 
 model Team {
@@ -238,6 +246,7 @@ model Team {
   taskProgresses     TeamTaskProgress[]
   eventLogs          EventLog[]
   photos             TeamPhoto[]
+  stationScans       TeamStationScan[]
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -298,6 +307,21 @@ model TeamPhoto {
   @@index([realizationId, createdAt])
   @@index([teamId, kind])
   @@index([stationId])
+}
+
+model TeamStationScan {
+  id            String      @id @default(uuid())
+  realizationId String
+  teamId        String
+  stationId     String
+  code          String
+  scannedAt     DateTime    @default(now())
+  realization   Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team          Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  station       Station     @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([realizationId, teamId, stationId, code])
+  @@index([realizationId, teamId, stationId])
 }
 
 model EventLog {

@@ -386,8 +386,14 @@ describe('MobileService task scoring', () => {
     const prisma = {
       teamTaskProgress: {
         findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn(),
         create: jest.fn(),
+        upsert: jest.fn(),
+      },
+      teamStationScan: {
+        create: jest.fn(),
+        count: jest.fn(),
       },
       team: {
         update: jest.fn(),
@@ -603,6 +609,331 @@ describe('MobileService task scoring', () => {
         }),
       }),
     });
+  });
+
+  function mockBonusEligibleCompletion(
+    prisma: ReturnType<typeof createService>['prisma'],
+    stationService: ReturnType<typeof createService>['stationService'],
+    service: ReturnType<typeof createService>['service'],
+    overrides: {
+      completionStopwatchEnabled?: boolean;
+      timeLimitSeconds?: number;
+      fastestCompletionBonusPoints?: number;
+      otherTeamAlreadyDone?: boolean;
+    } = {},
+  ) {
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'boggle',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: overrides.timeLimitSeconds ?? 0,
+      completionStopwatchEnabled: overrides.completionStopwatchEnabled ?? true,
+      fastestCompletionBonusPoints: overrides.fastestCompletionBonusPoints ?? 15,
+    });
+    prisma.teamTaskProgress.findUnique.mockResolvedValue(null);
+    prisma.teamTaskProgress.findFirst.mockResolvedValue(
+      overrides.otherTeamAlreadyDone ? { id: 'other-progress' } : null,
+    );
+  }
+
+  it('awards the fastest-completion bonus to the first team completing a stopwatch station', async () => {
+    const { service, prisma, stationService } = createService();
+    mockBonusEligibleCompletion(prisma, stationService, service);
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.teamTaskProgress.findFirst).toHaveBeenCalledWith({
+      where: {
+        realizationId: 'realization-1',
+        stationId: 'station-1',
+        status: TaskStatus.DONE,
+        teamId: { not: 'team-1' },
+      },
+      select: { id: true },
+    });
+    expect(result.fastestBonusPoints).toBe(15);
+    expect(result.pointsAwarded).toBe(65);
+    expect(prisma.teamTaskProgress.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pointsAwarded: 65 }) }),
+    );
+  });
+
+  it('does not award the bonus to the second team completing the same stopwatch station', async () => {
+    const { service, prisma, stationService } = createService();
+    mockBonusEligibleCompletion(prisma, stationService, service, { otherTeamAlreadyDone: true });
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(result.fastestBonusPoints).toBe(0);
+    expect(result.pointsAwarded).toBe(50);
+  });
+
+  it('does not award the bonus when completionStopwatchEnabled is false', async () => {
+    const { service, prisma, stationService } = createService();
+    mockBonusEligibleCompletion(prisma, stationService, service, { completionStopwatchEnabled: false });
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.teamTaskProgress.findFirst).not.toHaveBeenCalled();
+    expect(result.fastestBonusPoints).toBe(0);
+    expect(result.pointsAwarded).toBe(50);
+  });
+
+  it('does not award the bonus when fastestCompletionBonusPoints is 0', async () => {
+    const { service, prisma, stationService } = createService();
+    mockBonusEligibleCompletion(prisma, stationService, service, { fastestCompletionBonusPoints: 0 });
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.teamTaskProgress.findFirst).not.toHaveBeenCalled();
+    expect(result.fastestBonusPoints).toBe(0);
+    expect(result.pointsAwarded).toBe(50);
+  });
+
+  it('does not award the bonus when timeLimitSeconds > 0 even if completionStopwatchEnabled is true', async () => {
+    const { service, prisma, stationService } = createService();
+    mockBonusEligibleCompletion(prisma, stationService, service, { timeLimitSeconds: 30 });
+
+    const result = await service.completeMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.teamTaskProgress.findFirst).not.toHaveBeenCalled();
+    expect(result.fastestBonusPoints).toBe(0);
+    expect(result.pointsAwarded).toBe(50);
+  });
+
+  function mockQrHuntStation(
+    prisma: ReturnType<typeof createService>['prisma'],
+    stationService: ReturnType<typeof createService>['stationService'],
+    service: ReturnType<typeof createService>['service'],
+    overrides: {
+      qrScanCodes?: string[];
+      existingProgress?: { id: string; status: TaskStatus; startedAt: Date | null } | null;
+      scannedCountAfterInsert?: number;
+    } = {},
+  ) {
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'qr-hunt',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: 0,
+      completionStopwatchEnabled: false,
+      fastestCompletionBonusPoints: 0,
+      qrScanCodes: overrides.qrScanCodes ?? ['CODE-A', 'CODE-B'],
+    });
+
+    prisma.teamTaskProgress.findUnique.mockResolvedValue(
+      overrides.existingProgress === undefined ? null : overrides.existingProgress,
+    );
+    prisma.teamStationScan.create.mockResolvedValue({});
+    prisma.teamTaskProgress.upsert.mockResolvedValue({
+      id: 'progress-1',
+      startedAt: overrides.existingProgress?.startedAt ?? new Date('2026-05-10T10:00:00.000Z'),
+    });
+    prisma.teamStationScan.count.mockResolvedValue(overrides.scannedCountAfterInsert ?? 1);
+  }
+
+  it('records the first valid QR scan and keeps the task in progress', async () => {
+    const { service, prisma, stationService } = createService();
+    mockQrHuntStation(prisma, stationService, service, { scannedCountAfterInsert: 1 });
+
+    const result = await service.submitStationQrScan({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+      code: 'code-a',
+    });
+
+    expect(prisma.teamStationScan.create).toHaveBeenCalledWith({
+      data: {
+        realizationId: 'realization-1',
+        teamId: 'team-1',
+        stationId: 'station-1',
+        code: 'CODE-A',
+      },
+    });
+    expect(result.taskStatus).toBe('in-progress');
+    expect(result.scannedCount).toBe(1);
+    expect(result.requiredCount).toBe(2);
+    expect(prisma.teamTaskProgress.update).not.toHaveBeenCalled();
+  });
+
+  it('treats re-scanning an already-scanned code as an idempotent no-op', async () => {
+    const { service, prisma, stationService } = createService();
+    mockQrHuntStation(prisma, stationService, service, { scannedCountAfterInsert: 1 });
+    prisma.teamStationScan.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['realizationId', 'teamId', 'stationId', 'code'] },
+      }),
+    );
+
+    const result = await service.submitStationQrScan({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+      code: 'CODE-A',
+    });
+
+    expect(result.taskStatus).toBe('in-progress');
+    expect(result.scannedCount).toBe(1);
+  });
+
+  it('rejects a QR code that is not configured for the station', async () => {
+    const { service, prisma, stationService } = createService();
+    mockQrHuntStation(prisma, stationService, service);
+
+    await expect(
+      service.submitStationQrScan({
+        sessionToken: 'session-token',
+        stationId: 'station-1',
+        code: 'WRONG-CODE',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.teamStationScan.create).not.toHaveBeenCalled();
+  });
+
+  it('completes a QR-hunt task once the last required code is scanned', async () => {
+    const { service, prisma, stationService } = createService();
+    mockQrHuntStation(prisma, stationService, service, {
+      qrScanCodes: ['CODE-A'],
+      scannedCountAfterInsert: 1,
+    });
+
+    const result = await service.submitStationQrScan({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+      code: 'CODE-A',
+    });
+
+    expect(result.taskStatus).toBe('done');
+    expect(result.pointsAwarded).toBe(50);
+    expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
+      where: { id: 'progress-1' },
+      data: expect.objectContaining({ status: TaskStatus.DONE, pointsAwarded: 50 }),
+    });
+  });
+
+  it('rejects task/complete calls made directly against a qr-hunt station', async () => {
+    const { service, prisma, stationService } = createService();
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'qr-hunt',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: 0,
+      qrScanCodes: ['CODE-A'],
+    });
+
+    await expect(
+      service.completeMobileTask({
+        sessionToken: 'session-token',
+        stationId: 'station-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.teamTaskProgress.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects task/scan-code calls made against a non-qr-hunt station', async () => {
+    const { service, stationService } = createService();
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'quiz',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: 0,
+    });
+
+    await expect(
+      service.submitStationQrScan({
+        sessionToken: 'session-token',
+        stationId: 'station-1',
+        code: 'CODE-A',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('requires a location update before starting tasks when realization requires location', async () => {
@@ -893,5 +1224,189 @@ describe('MobileService station payload mapper', () => {
       correctAnswerIndex: 2,
       audioUrl: 'https://example.com/base-audio.mp3',
     });
+  });
+});
+
+describe('MobileService admin station QR export', () => {
+  function createService() {
+    const prisma = {
+      realization: {
+        findMany: jest.fn(),
+      },
+    };
+
+    const realizationService = {
+      listRealizations: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      realizationService as never,
+      {} as never,
+    );
+    return { service, prisma, realizationService };
+  }
+
+  it('includes qrScanCodes for qr-hunt stations and an empty array for other types', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        introText: null,
+        gameRules: null,
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        locationRequired: true,
+        joinCode: 'JOIN01',
+        teamCount: 2,
+        stationIds: ['station-qr-hunt', 'station-quiz'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        scenarioStations: [
+          {
+            id: 'station-qr-hunt',
+            name: 'Polowanie na kody',
+            type: 'qr-hunt',
+            completionCode: null,
+            qrEntryCode: 'K3M9QXZ7',
+            qrScanCodes: ['SKRZYNKA-01', 'SKRZYNKA-02'],
+          },
+          {
+            id: 'station-quiz',
+            name: 'Quiz',
+            type: 'quiz',
+            completionCode: null,
+            qrEntryCode: 'AB3K9XQ2',
+            qrScanCodes: [],
+          },
+        ],
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      { id: 'realization-1', locationRequired: true },
+    ]);
+
+    const result = await service.getMobileAdminStationQrs('realization-1');
+
+    const qrHuntEntry = result.entries.find(
+      (entry) => entry.stationId === 'station-qr-hunt',
+    );
+    const quizEntry = result.entries.find(
+      (entry) => entry.stationId === 'station-quiz',
+    );
+
+    expect(qrHuntEntry?.qrScanCodes).toEqual(['SKRZYNKA-01', 'SKRZYNKA-02']);
+    expect(quizEntry?.qrScanCodes).toEqual([]);
+    expect(qrHuntEntry?.qrEntryCode).toBe('K3M9QXZ7');
+    expect(qrHuntEntry?.entryUrl).toContain('K3M9QXZ7');
+    expect(quizEntry?.qrEntryCode).toBe('AB3K9XQ2');
+  });
+});
+
+describe('MobileService resolveMobileStationQr', () => {
+  function createService() {
+    const prisma = {
+      teamTaskProgress: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      eventLog: {
+        create: jest.fn(),
+      },
+    };
+    const stationService = {
+      findStationByRealizationAndQrEntryCode: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      stationService as never,
+    );
+
+    return { service, prisma, stationService };
+  }
+
+  function stubSession(service: MobileService, realizationId: string) {
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: { id: 'team-1' },
+      realization: {
+        id: realizationId,
+        language: 'polish',
+        customLanguage: null,
+        locationRequired: false,
+      },
+    });
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'getFailedTaskStationIds')
+      .mockResolvedValue(new Set());
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('resolves a station when the code matches one in the device realization', async () => {
+    const { service, stationService } = createService();
+    stubSession(service, 'realization-1');
+
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'quiz',
+      name: 'Stanowisko',
+    });
+
+    const result = await service.resolveMobileStationQr({
+      sessionToken: 'session-token',
+      token: 'k3m9qxz7',
+    });
+
+    expect(
+      stationService.findStationByRealizationAndQrEntryCode,
+    ).toHaveBeenCalledWith('realization-1', 'K3M9QXZ7');
+    expect(result.station.id).toBe('station-1');
+  });
+
+  it('rejects a code that does not belong to any station in the device realization', async () => {
+    const { service, stationService } = createService();
+    stubSession(service, 'realization-2');
+
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(
+      null,
+    );
+
+    await expect(
+      service.resolveMobileStationQr({
+        sessionToken: 'session-token',
+        token: 'K3M9QXZ7',
+      }),
+    ).rejects.toThrow('Station not found');
+
+    expect(
+      stationService.findStationByRealizationAndQrEntryCode,
+    ).toHaveBeenCalledWith('realization-2', 'K3M9QXZ7');
+  });
+
+  it('rejects an empty code', async () => {
+    const { service, stationService } = createService();
+    stubSession(service, 'realization-1');
+
+    await expect(
+      service.resolveMobileStationQr({
+        sessionToken: 'session-token',
+        token: '   ',
+      }),
+    ).rejects.toThrow('Invalid payload');
+
+    expect(
+      stationService.findStationByRealizationAndQrEntryCode,
+    ).not.toHaveBeenCalled();
   });
 });

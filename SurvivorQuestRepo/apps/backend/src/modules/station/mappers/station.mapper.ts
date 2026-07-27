@@ -42,6 +42,7 @@ export function toPrismaStationType(type: StationType) {
   if (type === 'mini-sudoku') return PrismaStationType.MINI_SUDOKU;
   if (type === 'strong-password') return PrismaStationType.STRONG_PASSWORD;
   if (type === 'photo-task') return PrismaStationType.PHOTO_TASK;
+  if (type === 'qr-hunt') return PrismaStationType.QR_HUNT;
   return PrismaStationType.MATCHING;
 }
 
@@ -62,6 +63,7 @@ function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.MINI_SUDOKU) return 'mini-sudoku';
   if (type === PrismaStationType.STRONG_PASSWORD) return 'strong-password';
   if (type === PrismaStationType.PHOTO_TASK) return 'photo-task';
+  if (type === PrismaStationType.QR_HUNT) return 'qr-hunt';
   return 'matching';
 }
 
@@ -271,11 +273,14 @@ export function mapStation(input: {
   points: number;
   timeLimitSeconds: number;
   completionCode: string | null;
+  qrEntryCode: string | null;
+  qrScanCodes: string[] | null;
   quizData: Prisma.JsonValue | null;
   translations: Prisma.JsonValue | null;
   challengeDifficultyMode: string;
   challengeDifficulty: string;
   completionStopwatchEnabled: boolean;
+  fastestCompletionBonusPoints: number;
   color: string;
   latitude: number | null;
   longitude: number | null;
@@ -297,6 +302,8 @@ export function mapStation(input: {
     points: input.points,
     timeLimitSeconds: input.timeLimitSeconds,
     completionCode: input.completionCode || undefined,
+    qrEntryCode: input.qrEntryCode || undefined,
+    qrScanCodes: normalizeStationCategories(input.qrScanCodes),
     quiz: parseStationQuizData(input.quizData),
     translations: parseStationTranslationsData(input.translations),
     challengeDifficultyMode:
@@ -307,6 +314,10 @@ export function mapStation(input: {
         ? input.challengeDifficulty
         : 'medium',
     completionStopwatchEnabled: input.completionStopwatchEnabled === true,
+    fastestCompletionBonusPoints: Math.max(
+      0,
+      Math.round(input.fastestCompletionBonusPoints ?? 0),
+    ),
     color: input.color || '#f59e0b',
     latitude: typeof input.latitude === 'number' ? input.latitude : undefined,
     longitude:

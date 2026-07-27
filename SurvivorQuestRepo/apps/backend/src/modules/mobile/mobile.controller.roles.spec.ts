@@ -73,7 +73,6 @@ describe('MobileController admin endpoint roles', () => {
     );
     expect(mobileService.getMobileAdminStationQrs).toHaveBeenCalledWith(
       'current',
-      undefined,
     );
   });
 

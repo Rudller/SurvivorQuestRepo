@@ -18,10 +18,7 @@ import {
   getOpaqueTokenCandidates,
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
-import {
-  signStationQrToken,
-  verifyStationQrToken,
-} from '../../shared/lib/station-qr-token';
+import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
 import {
   RealizationService,
   type RealizationStatus,
@@ -29,16 +26,11 @@ import {
 import { StationService, type StationEntity } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
 import {
-  buildDeterministicStationQrNonce,
   buildStationQrEntryUrl,
-  getStationQrSecret,
   isCodeProtectedStationType,
   isTimedStartRequiredStationType,
   parseCompletionCode,
   resolveCompletionCodeInputMode,
-  resolveStaticStationQrWindow,
-  resolveStationQrTtlSeconds,
-  toStationQrRejectedMessage,
 } from './domain/mobile-station.helpers';
 import {
   resolveLocalizedStationPresentation,
@@ -94,15 +86,6 @@ function hasTimedPointsDecay(input: {
   return (
     isTimedPointsDecayEnabled(input) &&
     Math.max(0, Math.round(input.timeLimitSeconds)) > 0
-  );
-}
-
-function isUniqueConstraintError(
-  error: unknown,
-): error is Prisma.PrismaClientKnownRequestError {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
   );
 }
 
@@ -376,6 +359,20 @@ export class MobileService {
       realizationId: realization.id,
       teamId: team.id,
     });
+    const stationScans = await this.prisma.teamStationScan.findMany({
+      where: {
+        realizationId: realization.id,
+        teamId: team.id,
+      },
+      select: { stationId: true },
+    });
+    const scanCountByStationId = new Map<string, number>();
+    for (const scan of stationScans) {
+      scanCountByStationId.set(
+        scan.stationId,
+        (scanCountByStationId.get(scan.stationId) ?? 0) + 1,
+      );
+    }
 
     const orderedStationIds = this.resolveTeamStationOrder(
       realization.stationIds,
@@ -398,6 +395,7 @@ export class MobileService {
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
+        qrScanCompletedCount: scanCountByStationId.get(stationId) ?? 0,
       };
     });
 
@@ -735,6 +733,218 @@ export class MobileService {
       stationId: input.stationId,
       url: uploaded.url,
       taskStatus: 'in-progress' as const,
+    };
+  }
+
+  async submitStationQrScan(input: {
+    sessionToken: string;
+    stationId: string;
+    code: string;
+    scannedAt?: string;
+  }) {
+    const { assignment, team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
+    await this.assertGameplayAllowed({
+      realization,
+      teamId: team.id,
+    });
+
+    if (!realization.stationIds.includes(input.stationId)) {
+      throw new BadRequestException(
+        'Station not available in this realization',
+      );
+    }
+
+    const station = await this.stationService.findStationById(
+      input.stationId,
+    );
+    if (!station || station.realizationId !== realization.id) {
+      throw new NotFoundException('Station not found');
+    }
+
+    if (station.type !== 'qr-hunt') {
+      throw new BadRequestException(
+        'This station does not accept QR code submissions',
+      );
+    }
+
+    this.assertLocationRequirementSatisfied(realization, team);
+
+    const existingProgress = await this.prisma.teamTaskProgress.findUnique({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+    });
+
+    if (existingProgress?.status === TaskStatus.DONE) {
+      throw new ConflictException('Task already completed');
+    }
+
+    const normalizedCode = input.code.trim().toUpperCase();
+    if (!normalizedCode || !station.qrScanCodes.includes(normalizedCode)) {
+      throw new BadRequestException({
+        code: 'INVALID_QR_CODE',
+        message: 'This code does not belong to this station',
+      });
+    }
+
+    try {
+      await this.prisma.teamStationScan.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+          code: normalizedCode,
+        },
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+      // Already scanned this exact code before — idempotent no-op, not an
+      // error for the player (they may have scanned the same sticker twice).
+    }
+
+    const progress = await this.prisma.teamTaskProgress.upsert({
+      where: {
+        realizationId_teamId_stationId: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: input.stationId,
+        },
+      },
+      create: {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        status: TaskStatus.IN_PROGRESS,
+        startedAt: new Date(),
+      },
+      update: {
+        status: TaskStatus.IN_PROGRESS,
+      },
+    });
+
+    const scannedCount = await this.prisma.teamStationScan.count({
+      where: {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+      },
+    });
+    const requiredCount = station.qrScanCodes.length;
+
+    if (scannedCount < requiredCount) {
+      await this.emitEvent({
+        realizationId: realization.id,
+        teamId: team.id,
+        actorType: EventActorType.MOBILE_DEVICE,
+        actorId: assignment.deviceId,
+        eventType: 'task_qr_scanned',
+        payload: {
+          stationId: input.stationId,
+          code: normalizedCode,
+          scannedCount,
+          requiredCount,
+        },
+      });
+
+      return {
+        teamId: team.id,
+        stationId: input.stationId,
+        scannedCount,
+        requiredCount,
+        taskStatus: 'in-progress' as const,
+      };
+    }
+
+    // Last required code just scanned — finalize completion, respecting the
+    // same time-limit-expired failure path as completeMobileTask.
+    const startedAtSource = progress.startedAt?.toISOString() || null;
+    const finishedAt = parseMobileTaskTimestamp(input.scannedAt, new Date());
+    const finishedAtIso = finishedAt.toISOString();
+    const shouldApplyTimedPointsDecay = hasTimedPointsDecay({
+      timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
+      timeLimitSeconds: station.timeLimitSeconds,
+    });
+    const elapsedSeconds = Math.max(
+      0,
+      Math.round(
+        (finishedAt.getTime() -
+          new Date(startedAtSource || finishedAtIso).getTime()) /
+          1000,
+      ),
+    );
+
+    if (
+      shouldApplyTimedPointsDecay &&
+      elapsedSeconds >= Math.max(0, Math.round(station.timeLimitSeconds))
+    ) {
+      await this.markMobileTaskFailed({
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        stationType: station.type,
+        progress,
+        actorId: assignment.deviceId,
+        reason: 'time_limit_expired',
+        startedAtSource,
+        finishedAt,
+        finishedAtIso,
+        scoring: {
+          mode: 'time-linear-expired',
+          basePoints: station.points,
+          timeLimitSeconds: station.timeLimitSeconds,
+          elapsedSeconds,
+        },
+      });
+
+      const pointsTotal = await this.recalculateTeamPoints(
+        team.id,
+        realization.id,
+      );
+
+      return {
+        teamId: team.id,
+        stationId: input.stationId,
+        scannedCount,
+        requiredCount,
+        pointsTotal,
+        pointsAwarded: 0,
+        fastestBonusPoints: 0,
+        taskStatus: 'failed' as const,
+      };
+    }
+
+    const { awardedPoints, fastestBonusPoints, pointsTotal } =
+      await this.finalizeMobileTaskCompletion({
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        station,
+        actorId: assignment.deviceId,
+        existingProgress: progress,
+        startedAtSource,
+        finishedAt,
+        finishedAtIso,
+        shouldApplyTimedPointsDecay,
+        elapsedSeconds,
+      });
+
+    return {
+      teamId: team.id,
+      stationId: input.stationId,
+      scannedCount,
+      requiredCount,
+      pointsTotal,
+      pointsAwarded: awardedPoints,
+      fastestBonusPoints,
+      taskStatus: 'done' as const,
     };
   }
 
@@ -1242,6 +1452,12 @@ export class MobileService {
       throw new NotFoundException('Station not found');
     }
 
+    if (station.type === 'qr-hunt') {
+      throw new BadRequestException(
+        'This station only accepts QR code submissions',
+      );
+    }
+
     const existingProgress = await this.prisma.teamTaskProgress.findUnique({
       where: {
         realizationId_teamId_stationId: {
@@ -1322,15 +1538,104 @@ export class MobileService {
         stationId: input.stationId,
         pointsTotal,
         pointsAwarded: 0,
+        fastestBonusPoints: 0,
         taskStatus: 'failed' as const,
       };
     }
 
+    const { awardedPoints, fastestBonusPoints, pointsTotal } =
+      await this.finalizeMobileTaskCompletion({
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: input.stationId,
+        station,
+        actorId: assignment.deviceId,
+        existingProgress,
+        startedAtSource,
+        finishedAt,
+        finishedAtIso,
+        shouldApplyTimedPointsDecay,
+        elapsedSeconds,
+        challengeDifficulty: input.challengeDifficulty,
+      });
+
+    return {
+      teamId: team.id,
+      stationId: input.stationId,
+      pointsTotal,
+      pointsAwarded: awardedPoints,
+      fastestBonusPoints,
+      taskStatus: 'done' as const,
+    };
+  }
+
+  // Shared completion/scoring logic for every way a task can reach "all
+  // requirements met right now": the typed-completion-code flow in
+  // completeMobileTask, and (once every required code is scanned) the
+  // QR-hunt flow in submitStationQrScan. Callers are responsible for their
+  // own pre-conditions (already-done check, completion-code validation,
+  // the time-limit-expired failure branch) since those differ per entry path.
+  private async finalizeMobileTaskCompletion(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+    station: StationEntity;
+    actorId: string;
+    existingProgress: { id: string; startedAt: Date | null } | null;
+    startedAtSource: string | null;
+    finishedAt: Date;
+    finishedAtIso: string;
+    shouldApplyTimedPointsDecay: boolean;
+    elapsedSeconds: number;
+    challengeDifficulty?: string;
+  }) {
+    const {
+      realizationId,
+      teamId,
+      stationId,
+      station,
+      actorId,
+      existingProgress,
+      startedAtSource,
+      finishedAt,
+      finishedAtIso,
+      shouldApplyTimedPointsDecay,
+      elapsedSeconds,
+      challengeDifficulty,
+    } = input;
+
+    // Fastest-completion bonus: only for no-time-limit stations with the stopwatch
+    // display explicitly enabled by the admin. The eligibility check below is not
+    // wrapped in a transaction (same accepted race window as the STATION_IN_USE
+    // check in startMobileTask) — disproportionate to add locking for a small-scale
+    // live-hosted team game.
+    const isBonusEligibleStation =
+      station.completionStopwatchEnabled === true &&
+      station.timeLimitSeconds <= 0 &&
+      station.fastestCompletionBonusPoints > 0;
+
+    let fastestBonusPoints = 0;
+    if (isBonusEligibleStation) {
+      const otherTeamAlreadyDone = await this.prisma.teamTaskProgress.findFirst({
+        where: {
+          realizationId,
+          stationId,
+          status: TaskStatus.DONE,
+          teamId: { not: teamId },
+        },
+        select: { id: true },
+      });
+
+      if (!otherTeamAlreadyDone) {
+        fastestBonusPoints = station.fastestCompletionBonusPoints;
+      }
+    }
+
     const difficultyMultiplier =
       station.type === 'strong-password' || station.type === 'mastermind'
-        ? input.challengeDifficulty === 'easy'
+        ? challengeDifficulty === 'easy'
           ? 0.5
-          : input.challengeDifficulty === 'hard'
+          : challengeDifficulty === 'hard'
             ? 1.5
             : 1
         : 1;
@@ -1343,7 +1648,9 @@ export class MobileService {
           finishedAtIso,
         })
       : Math.max(0, Math.round(station.points));
-    const awardedPoints = Math.max(0, Math.round(baseAwardedPoints * difficultyMultiplier));
+    const awardedPoints =
+      Math.max(0, Math.round(baseAwardedPoints * difficultyMultiplier)) +
+      fastestBonusPoints;
 
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
@@ -1362,9 +1669,9 @@ export class MobileService {
     } else {
       await this.prisma.teamTaskProgress.create({
         data: {
-          realizationId: realization.id,
-          teamId: team.id,
-          stationId: input.stationId,
+          realizationId,
+          teamId,
+          stationId,
           status: TaskStatus.DONE,
           pointsAwarded: awardedPoints,
           startedAt: startedAtSource ? new Date(startedAtSource) : null,
@@ -1380,24 +1687,26 @@ export class MobileService {
           basePoints: station.points,
           timeLimitSeconds: station.timeLimitSeconds,
           elapsedSeconds,
-          difficulty: input.challengeDifficulty,
+          difficulty: challengeDifficulty,
           difficultyMultiplier,
+          fastestBonusPoints,
         }
       : {
           mode: 'fixed',
           basePoints: station.points,
-          difficulty: input.challengeDifficulty,
+          difficulty: challengeDifficulty,
           difficultyMultiplier,
+          fastestBonusPoints,
         };
 
     await this.emitEvent({
-      realizationId: realization.id,
-      teamId: team.id,
+      realizationId,
+      teamId,
       actorType: EventActorType.MOBILE_DEVICE,
-      actorId: assignment.deviceId,
+      actorId,
       eventType: 'task_completed',
       payload: {
-        stationId: input.stationId,
+        stationId,
         stationType: station.type,
         pointsAwarded: awardedPoints,
         startedAt: startedAtSource,
@@ -1406,18 +1715,9 @@ export class MobileService {
       },
     });
 
-    const pointsTotal = await this.recalculateTeamPoints(
-      team.id,
-      realization.id,
-    );
+    const pointsTotal = await this.recalculateTeamPoints(teamId, realizationId);
 
-    return {
-      teamId: team.id,
-      stationId: input.stationId,
-      pointsTotal,
-      pointsAwarded: awardedPoints,
-      taskStatus: 'done' as const,
-    };
+    return { awardedPoints, fastestBonusPoints, pointsTotal };
   }
 
   async failMobileTask(input: {
@@ -1609,46 +1909,32 @@ export class MobileService {
     });
   }
 
-  async getMobileAdminStationQrs(realizationId: string, ttlSeconds?: number) {
+  async getMobileAdminStationQrs(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
-    resolveStationQrTtlSeconds(ttlSeconds);
-    const stationQrSecret = getStationQrSecret();
-    const { issuedAtMs, expiresAtMs, tokenTtlSeconds } =
-      resolveStaticStationQrWindow(realization.createdAt);
     const stationById = new Map(
       realization.scenarioStations.map((station) => [station.id, station]),
     );
 
     return {
       realizationId: realization.id,
-      issuedAt: new Date(issuedAtMs).toISOString(),
-      expiresAt: new Date(expiresAtMs).toISOString(),
-      tokenTtlSeconds,
       entries: realization.stationIds.map((stationId) => {
         const station = stationById.get(stationId);
-        const qrToken = signStationQrToken(
-          {
-            realizationId: realization.id,
-            stationId,
-            issuedAtMs,
-            expiresAtMs,
-            nonce: buildDeterministicStationQrNonce(
-              realization.id,
-              stationId,
-              stationQrSecret,
-            ),
-          },
-          stationQrSecret,
-        );
+        const qrEntryCode = station?.qrEntryCode ?? null;
 
         return {
           stationId,
           stationName: station?.name || `Station ${stationId}`,
           stationType: station?.type || 'quiz',
           completionCode: station?.completionCode?.trim() || null,
-          qrToken,
-          entryUrl: buildStationQrEntryUrl(qrToken),
+          qrEntryCode,
+          entryUrl: buildStationQrEntryUrl(qrEntryCode ?? ''),
+          qrScanCodes:
+            station?.type === 'qr-hunt' && Array.isArray(station.qrScanCodes)
+              ? station.qrScanCodes.filter(
+                  (code) => typeof code === 'string' && code.trim().length > 0,
+                )
+              : [],
         };
       }),
     };
@@ -1671,78 +1957,26 @@ export class MobileService {
       realization,
       teamId: team.id,
     });
-    const normalizedToken = input.token?.trim();
-    if (!normalizedToken) {
+    const normalizedCode = input.token?.trim().toUpperCase();
+    if (!normalizedCode) {
       throw new BadRequestException('Invalid payload');
     }
 
     this.assertLocationRequirementSatisfied(realization, team);
 
-    const verified = verifyStationQrToken(
-      normalizedToken,
-      getStationQrSecret(),
-    );
-    if (!verified.ok) {
-      await this.emitEvent({
-        realizationId: realization.id,
-        teamId: team.id,
-        actorType: EventActorType.MOBILE_DEVICE,
-        actorId: assignment.deviceId,
-        eventType: 'station_qr_rejected',
-        payload: { reason: verified.reason },
-      });
-      throw new BadRequestException(
-        toStationQrRejectedMessage(verified.reason),
+    const station =
+      await this.stationService.findStationByRealizationAndQrEntryCode(
+        realization.id,
+        normalizedCode,
       );
-    }
-
-    if (verified.payload.realizationId !== realization.id) {
+    if (!station) {
       await this.emitEvent({
         realizationId: realization.id,
         teamId: team.id,
         actorType: EventActorType.MOBILE_DEVICE,
         actorId: assignment.deviceId,
         eventType: 'station_qr_rejected',
-        payload: {
-          reason: 'realization_mismatch',
-          stationId: verified.payload.stationId,
-          qrRealizationId: verified.payload.realizationId,
-        },
-      });
-      throw new BadRequestException('QR is not valid for this realization');
-    }
-
-    if (!realization.stationIds.includes(verified.payload.stationId)) {
-      await this.emitEvent({
-        realizationId: realization.id,
-        teamId: team.id,
-        actorType: EventActorType.MOBILE_DEVICE,
-        actorId: assignment.deviceId,
-        eventType: 'station_qr_rejected',
-        payload: {
-          reason: 'station_not_in_realization',
-          stationId: verified.payload.stationId,
-        },
-      });
-      throw new BadRequestException(
-        'Station from QR is not available in this realization',
-      );
-    }
-
-    const station = await this.stationService.findStationById(
-      verified.payload.stationId,
-    );
-    if (!station || station.realizationId !== realization.id) {
-      await this.emitEvent({
-        realizationId: realization.id,
-        teamId: team.id,
-        actorType: EventActorType.MOBILE_DEVICE,
-        actorId: assignment.deviceId,
-        eventType: 'station_qr_rejected',
-        payload: {
-          reason: 'station_not_found',
-          stationId: verified.payload.stationId,
-        },
+        payload: { reason: 'code_not_found' },
       });
       throw new NotFoundException('Station not found');
     }
@@ -1770,7 +2004,6 @@ export class MobileService {
       payload: {
         stationId: station.id,
         stationType: station.type,
-        expiresAt: new Date(verified.payload.exp).toISOString(),
       },
     });
 
@@ -1787,10 +2020,6 @@ export class MobileService {
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
-      },
-      qr: {
-        issuedAt: new Date(verified.payload.iat).toISOString(),
-        expiresAt: new Date(verified.payload.exp).toISOString(),
       },
     };
   }
@@ -2817,6 +3046,9 @@ export class MobileService {
       challengeDifficultyMode: station.challengeDifficultyMode,
       challengeDifficulty: station.challengeDifficulty,
       completionStopwatchEnabled: station.completionStopwatchEnabled,
+      fastestCompletionBonusPoints: station.fastestCompletionBonusPoints,
+      qrScanRequiredCount:
+        station.type === 'qr-hunt' ? station.qrScanCodes.length : undefined,
       completionCodeInputMode: resolveCompletionCodeInputMode(
         station.completionCode,
       ),
@@ -2897,6 +3129,7 @@ export class MobileService {
       stationType: station?.type ?? 'quiz',
       defaultPoints: station?.points ?? 0,
       completionStopwatchEnabled: station?.completionStopwatchEnabled ?? false,
+      fastestCompletionBonusPoints: station?.fastestCompletionBonusPoints ?? 0,
       latitude:
         typeof station?.latitude === 'number' && Number.isFinite(station.latitude)
           ? station.latitude
