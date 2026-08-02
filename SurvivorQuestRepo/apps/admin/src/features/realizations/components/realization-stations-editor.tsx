@@ -289,6 +289,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     points: Math.round(station.points),
     timeLimitSeconds: Math.round(station.timeLimitSeconds),
     completionCode: isCompletionCodeRequired(station.type) ? normalizeCompletionCode(station.completionCode ?? "") : undefined,
+    qrEntryCode: station.qrEntryCode?.trim().toUpperCase() || undefined,
     qrScanCodes:
       station.type === "qr-hunt"
         ? normalizeStationCategories(station.qrScanCodes).map((code) => code.toUpperCase())
