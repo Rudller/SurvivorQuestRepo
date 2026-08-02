@@ -56,6 +56,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     },
   );
   const [qrImagesByStationId, setQrImagesByStationId] = useState<Record<string, string>>({});
+  const [downloadableQrImagesByStationId, setDownloadableQrImagesByStationId] = useState<Record<string, string>>({});
   const [huntCodeImagesByStationId, setHuntCodeImagesByStationId] = useState<
     Record<string, { code: string; qrImage: string; downloadableQrImage: string }[]>
   >({});
@@ -67,12 +68,14 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
   useEffect(() => {
     if (!data) {
       setQrImagesByStationId({});
+      setDownloadableQrImagesByStationId({});
       setHuntCodeImagesByStationId({});
       return;
     }
 
     let cancelled = false;
     setQrImagesByStationId({});
+    setDownloadableQrImagesByStationId({});
     setHuntCodeImagesByStationId({});
 
     void Promise.all(
@@ -82,6 +85,12 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
           width: 280,
           errorCorrectionLevel: "M",
         });
+        let downloadableQrImage = qrImage;
+        try {
+          downloadableQrImage = await addCaptionToQrImageDataUrl(qrImage, entry.stationName);
+        } catch {
+          // fallback to original QR without caption
+        }
 
         let huntCodeImages: { code: string; qrImage: string; downloadableQrImage: string }[] = [];
         if (entry.stationType === "qr-hunt" && entry.qrScanCodes.length > 0) {
@@ -103,7 +112,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
           );
         }
 
-        return [entry.stationId, qrImage, huntCodeImages] as const;
+        return [entry.stationId, qrImage, downloadableQrImage, huntCodeImages] as const;
       }),
     )
       .then((itemsByStation) => {
@@ -114,8 +123,11 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
         setQrImagesByStationId(
           Object.fromEntries(itemsByStation.map(([stationId, qrImage]) => [stationId, qrImage])),
         );
+        setDownloadableQrImagesByStationId(
+          Object.fromEntries(itemsByStation.map(([stationId, , downloadableQrImage]) => [stationId, downloadableQrImage])),
+        );
         setHuntCodeImagesByStationId(
-          Object.fromEntries(itemsByStation.map(([stationId, , huntCodeImages]) => [stationId, huntCodeImages])),
+          Object.fromEntries(itemsByStation.map(([stationId, , , huntCodeImages]) => [stationId, huntCodeImages])),
         );
       })
       .catch(() => {
@@ -123,6 +135,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
           return;
         }
         setQrImagesByStationId({});
+        setDownloadableQrImagesByStationId({});
         setHuntCodeImagesByStationId({});
       });
 
@@ -144,9 +157,9 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     }
 
     return data.entries
-      .map((entry) => ({ entry, qrImage: qrImagesByStationId[entry.stationId] }))
+      .map((entry) => ({ entry, qrImage: downloadableQrImagesByStationId[entry.stationId] }))
       .filter((item): item is { entry: (typeof data.entries)[number]; qrImage: string } => Boolean(item.qrImage));
-  }, [data, qrImagesByStationId]);
+  }, [data, downloadableQrImagesByStationId]);
   const downloadableHuntEntries = useMemo(() => {
     if (!data) {
       return [];
@@ -331,6 +344,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {data.entries.map((entry) => {
                 const qrImage = qrImagesByStationId[entry.stationId];
+                const downloadableQrImage = downloadableQrImagesByStationId[entry.stationId];
                 const fileName = buildStationQrFileName(realization.companyName, entry.stationName);
                 const completionCode = completionCodeByStationId.get(entry.stationId);
 
@@ -356,6 +370,7 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                           onClick={() =>
                             setLightboxImage({
                               src: qrImage,
+                              downloadSrc: downloadableQrImage ?? qrImage,
                               alt: `QR ${entry.stationName}`,
                               downloadFileName: fileName,
                               caption: entry.stationName,
@@ -383,9 +398,9 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                       >
                         {copiedStationId === entry.stationId ? "Skopiowano" : "Kopiuj link"}
                       </button>
-                      {qrImage ? (
+                      {downloadableQrImage ? (
                         <a
-                          href={qrImage}
+                          href={downloadableQrImage}
                           download={fileName}
                           className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
                         >
