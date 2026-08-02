@@ -14,6 +14,7 @@ import {
   blendHexColors,
   formatRemainingTimeLabel,
   isGuessableHangmanCharacter,
+  normalizeOpenAnswer,
   normalizePuzzleText,
   normalizePuzzleWord,
   normalizeWordleSecret,
@@ -51,7 +52,8 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
-    stationType === "strong-password"
+    stationType === "strong-password" ||
+    stationType === "open-quiz"
   );
 }
 
@@ -145,6 +147,8 @@ type UseStationPreviewModelArgs = {
   simonInput: string[];
   rebusInput: string;
   rebusAttempts: number;
+  openQuizInput: string;
+  openQuizAttempts: number;
   boggleInput: string;
   boggleAttempts: number;
   miniSudokuValues: string[];
@@ -164,6 +168,7 @@ type UseStationPreviewModelArgs = {
   isSubmittingMemory: boolean;
   isSubmittingSimon: boolean;
   isSubmittingRebus: boolean;
+  isSubmittingOpenQuiz: boolean;
   isSubmittingBoggle: boolean;
   isSubmittingMiniSudoku: boolean;
   isSubmittingMatching: boolean;
@@ -205,6 +210,8 @@ export function buildStationPreviewModel({
   simonInput,
   rebusInput,
   rebusAttempts,
+  openQuizInput,
+  openQuizAttempts,
   boggleInput,
   boggleAttempts,
   miniSudokuValues,
@@ -224,6 +231,7 @@ export function buildStationPreviewModel({
   isSubmittingMemory,
   isSubmittingSimon,
   isSubmittingRebus,
+  isSubmittingOpenQuiz,
   isSubmittingBoggle,
   isSubmittingMiniSudoku,
   isSubmittingMatching,
@@ -244,6 +252,7 @@ export function buildStationPreviewModel({
   const isMemoryStation = station.stationType === "memory";
   const isSimonStation = station.stationType === "simon";
   const isRebusStation = station.stationType === "rebus";
+  const isOpenQuizStation = station.stationType === "open-quiz";
   const isBoggleStation = station.stationType === "boggle";
   const isMiniSudokuStation = station.stationType === "mini-sudoku";
   const isMatchingStation = station.stationType === "matching";
@@ -433,6 +442,12 @@ export function buildStationPreviewModel({
   const rebusAnswer = isRebusStation ? normalizePuzzleText(puzzleSourceAnswer || station.name || "SURVIVOR") : "";
   const normalizedRebusInput = normalizePuzzleText(rebusInput);
   const rebusAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - rebusAttempts);
+  const openQuizAnswer = isOpenQuizStation ? normalizeOpenAnswer(puzzleSourceAnswer) : "";
+  const openQuizAcceptedAnswers = isOpenQuizStation
+    ? (station.quizAcceptedAnswers ?? []).map((answer) => normalizeOpenAnswer(answer))
+    : [];
+  const normalizedOpenQuizInput = normalizeOpenAnswer(openQuizInput);
+  const openQuizAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - openQuizAttempts);
   const boggleTargetWord = isBoggleStation ? resolveBoggleTarget(station) : "";
   const boggleBoardLetters = isBoggleStation ? resolveBoggleBoard(station, boggleTargetWord || "TEAM") : [];
   const boggleMaxInputLength = Math.max(3, Array.from(boggleTargetWord || "TEAM").length);
@@ -554,6 +569,7 @@ export function buildStationPreviewModel({
     isMemoryStation,
     isSimonStation,
     isRebusStation,
+    isOpenQuizStation,
     isBoggleStation,
     isMiniSudokuStation,
     isMatchingStation,
@@ -610,6 +626,10 @@ export function buildStationPreviewModel({
     rebusAnswer,
     normalizedRebusInput,
     rebusAttemptsLeft,
+    openQuizAnswer,
+    openQuizAcceptedAnswers,
+    normalizedOpenQuizInput,
+    openQuizAttemptsLeft,
     boggleTargetWord,
     boggleBoardLetters,
     boggleMaxInputLength,

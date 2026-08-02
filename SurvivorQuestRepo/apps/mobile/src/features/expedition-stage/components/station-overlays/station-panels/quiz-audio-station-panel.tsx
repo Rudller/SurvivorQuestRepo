@@ -121,6 +121,9 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
   if (station.stationType === "audio-quiz") {
     return station.quizQuestion?.trim() || text.audioQuizFallback;
   }
+  if (station.stationType === "open-quiz") {
+    return station.quizQuestion?.trim() || text.classicQuizFallback;
+  }
   if (station.stationType === "wordle") {
     return text.wordleFallback(wordleLength);
   }

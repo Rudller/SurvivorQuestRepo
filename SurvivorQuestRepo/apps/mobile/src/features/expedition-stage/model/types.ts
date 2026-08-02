@@ -67,6 +67,7 @@ export type ExpeditionSessionState = {
     showLeaderboardOnFinish: boolean;
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
+    hideTaskList: boolean;
     scheduledAt: string;
     durationMinutes: number;
     stations: ExpeditionRealizationStation[];
@@ -126,7 +127,8 @@ export type ExpeditionStationType =
   | "matching"
   | "strong-password"
   | "photo-task"
-  | "qr-hunt";
+  | "qr-hunt"
+  | "open-quiz";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
@@ -136,6 +138,7 @@ export type ExpeditionStationQuiz = {
   answers: [string, string, string, string];
   correctAnswerIndex: number;
   audioUrl?: string;
+  acceptedAnswers?: string[];
 };
 
 export type ExpeditionRealizationStation = {
@@ -282,6 +285,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
         true,
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: session.realization?.timedStationPointsDecayEnabled ?? false,
+      hideTaskList: session.realization?.hideTaskList ?? false,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:
         typeof session.realization?.durationMinutes === "number" &&

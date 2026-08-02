@@ -18,7 +18,8 @@ export type StationTestType =
   | "matching"
   | "strong-password"
   | "photo-task"
-  | "qr-hunt";
+  | "qr-hunt"
+  | "open-quiz";
 
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
@@ -44,6 +45,7 @@ export type StationTestViewModel = {
   quizAnswers?: [string, string, string, string];
   quizCorrectAnswerIndex?: number;
   quizAudioUrl?: string;
+  quizAcceptedAnswers?: string[];
   status: ExpeditionTaskStatus;
   quizFailed?: boolean;
   startedAt: string | null;

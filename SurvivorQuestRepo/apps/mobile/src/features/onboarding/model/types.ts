@@ -143,6 +143,7 @@ export type OnboardingRealizationSummary = {
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
   timedStationPointsDecayEnabled?: boolean;
+  hideTaskList?: boolean;
   introText?: string;
   gameRules?: string;
 };

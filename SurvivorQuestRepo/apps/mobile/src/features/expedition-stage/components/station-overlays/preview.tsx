@@ -82,6 +82,9 @@ function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: Stati
   if (station.stationType === "rebus") {
     return text.rebusSolvedPopup;
   }
+  if (station.stationType === "open-quiz") {
+    return text.openQuizSolvedPopup;
+  }
   if (station.stationType === "boggle") {
     return text.boggleSolvedPopup;
   }
@@ -121,6 +124,9 @@ function resolveFailureOutcomeMessage(station: StationTestViewModel, text: Stati
   }
   if (station.stationType === "rebus") {
     return text.rebusFailedPopup;
+  }
+  if (station.stationType === "open-quiz") {
+    return text.openQuizFailedPopup;
   }
   if (station.stationType === "boggle") {
     return text.boggleFailedPopup;
@@ -223,6 +229,12 @@ type StationPreviewText = {
   rebusIncorrect: string;
   rebusSolved: string;
   rebusSolvedPopup: string;
+  openQuizEnter: string;
+  openQuizNoAttempts: (answer: string) => string;
+  openQuizFailedPopup: string;
+  openQuizIncorrect: string;
+  openQuizSolved: string;
+  openQuizSolvedPopup: string;
   boggleEnterMin: string;
   boggleMaxLength: (max: number) => string;
   boggleNoAttempts: (target: string) => string;
@@ -355,6 +367,12 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   rebusIncorrect: "Incorrect. Try again.",
   rebusSolved: "Great! Rebus solved.",
   rebusSolvedPopup: "Rebus solved correctly.",
+  openQuizEnter: "Enter your answer.",
+  openQuizNoAttempts: (answer: string) => `No attempts left. Correct answer: ${answer}`,
+  openQuizFailedPopup: "Failed to answer the question.",
+  openQuizIncorrect: "Incorrect. Try again.",
+  openQuizSolved: "Great! Correct answer.",
+  openQuizSolvedPopup: "Correct answer. Task passed.",
   boggleEnterMin: "Enter a word (minimum 3 letters).",
   boggleMaxLength: (max: number) => `The word can have up to ${max} letters.`,
   boggleNoAttempts: (target: string) => `No attempts left. Target word: ${target}`,
@@ -489,6 +507,12 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   rebusIncorrect: "Неправильно. Спробуйте ще раз.",
   rebusSolved: "Чудово! Ребус розв'язано.",
   rebusSolvedPopup: "Ребус розв'язано правильно.",
+  openQuizEnter: "Введіть відповідь.",
+  openQuizNoAttempts: (answer: string) => `Спроб не залишилося. Правильна відповідь: ${answer}`,
+  openQuizFailedPopup: "Не вдалося відповісти на питання.",
+  openQuizIncorrect: "Неправильно. Спробуйте ще раз.",
+  openQuizSolved: "Чудово! Правильна відповідь.",
+  openQuizSolvedPopup: "Правильна відповідь. Завдання зараховано.",
   boggleEnterMin: "Введіть слово (мінімум 3 літери).",
   boggleMaxLength: (max: number) => `Слово може містити максимум ${max} літер.`,
   boggleNoAttempts: (target: string) => `Спроб не залишилося. Цільове слово: ${target}`,
@@ -624,6 +648,12 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   rebusIncorrect: "Неправильно. Попробуйте ещё раз.",
   rebusSolved: "Отлично! Ребус решен.",
   rebusSolvedPopup: "Ребус решен правильно.",
+  openQuizEnter: "Введите ответ.",
+  openQuizNoAttempts: (answer: string) => `Попыток не осталось. Правильный ответ: ${answer}`,
+  openQuizFailedPopup: "Не удалось ответить на вопрос.",
+  openQuizIncorrect: "Неправильно. Попробуйте ещё раз.",
+  openQuizSolved: "Отлично! Правильный ответ.",
+  openQuizSolvedPopup: "Правильный ответ. Задание зачтено.",
   boggleEnterMin: "Введите слово (минимум 3 буквы).",
   boggleMaxLength: (max: number) => `Слово может содержать максимум ${max} букв.`,
   boggleNoAttempts: (target: string) => `Попыток не осталось. Целевое слово: ${target}`,
@@ -760,6 +790,12 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     rebusIncorrect: "Niepoprawnie. Spróbuj ponownie.",
     rebusSolved: "Brawo! Rebus rozwiązany.",
     rebusSolvedPopup: "Rebus rozwiązany poprawnie.",
+    openQuizEnter: "Wpisz odpowiedź.",
+    openQuizNoAttempts: (answer: string) => `Brak prób. Poprawna odpowiedź: ${answer}`,
+    openQuizFailedPopup: "Nie udało się odpowiedzieć na pytanie.",
+    openQuizIncorrect: "Niepoprawnie. Spróbuj ponownie.",
+    openQuizSolved: "Brawo! Poprawna odpowiedź.",
+    openQuizSolvedPopup: "Poprawna odpowiedź. Zadanie zaliczone.",
     boggleEnterMin: "Wpisz słowo (minimum 3 litery).",
     boggleMaxLength: (max: number) => `Słowo może mieć maksymalnie ${max} liter.`,
     boggleNoAttempts: (target: string) => `Brak prób. Szukane słowo: ${target}`,
@@ -863,6 +899,9 @@ export function StationPreviewOverlay({
   const [rebusInput, setRebusInput] = useState("");
   const [rebusAttempts, setRebusAttempts] = useState(0);
   const [rebusResult, setRebusResult] = useState<string | null>(null);
+  const [openQuizInput, setOpenQuizInput] = useState("");
+  const [openQuizAttempts, setOpenQuizAttempts] = useState(0);
+  const [openQuizResult, setOpenQuizResult] = useState<string | null>(null);
   const [boggleInput, setBoggleInput] = useState("");
   const [boggleSelectedCellPath, setBoggleSelectedCellPath] = useState<number[]>([]);
   const [boggleAttempts, setBoggleAttempts] = useState(0);
@@ -888,6 +927,7 @@ export function StationPreviewOverlay({
   const [isSubmittingMemory, setIsSubmittingMemory] = useState(false);
   const [isSubmittingSimon, setIsSubmittingSimon] = useState(false);
   const [isSubmittingRebus, setIsSubmittingRebus] = useState(false);
+  const [isSubmittingOpenQuiz, setIsSubmittingOpenQuiz] = useState(false);
   const [isSubmittingBoggle, setIsSubmittingBoggle] = useState(false);
   const [isSubmittingMiniSudoku, setIsSubmittingMiniSudoku] = useState(false);
   const [isSubmittingMatching, setIsSubmittingMatching] = useState(false);
@@ -1220,6 +1260,9 @@ export function StationPreviewOverlay({
     setRebusInput,
     setRebusAttempts,
     setRebusResult,
+    setOpenQuizInput,
+    setOpenQuizAttempts,
+    setOpenQuizResult,
     setBoggleInput,
     setBoggleSelectedCellPath,
     setBoggleAttempts,
@@ -1243,6 +1286,7 @@ export function StationPreviewOverlay({
     setIsSubmittingMemory,
     setIsSubmittingSimon,
     setIsSubmittingRebus,
+    setIsSubmittingOpenQuiz,
     setIsSubmittingBoggle,
     setIsSubmittingMiniSudoku,
     setIsSubmittingMatching,
@@ -1380,6 +1424,7 @@ export function StationPreviewOverlay({
       miniSudoku: isSubmittingMiniSudoku,
       matching: isSubmittingMatching,
       strongPassword: false,
+      openQuiz: isSubmittingOpenQuiz,
     },
     onQuizFailed,
     onTimeExpired,
@@ -1479,6 +1524,7 @@ export function StationPreviewOverlay({
     isMemoryStation,
     isSimonStation,
     isRebusStation,
+    isOpenQuizStation,
     isBoggleStation,
     isMiniSudokuStation,
     isMatchingStation,
@@ -1531,6 +1577,10 @@ export function StationPreviewOverlay({
     rebusAnswer,
     normalizedRebusInput,
     rebusAttemptsLeft,
+    openQuizAnswer,
+    openQuizAcceptedAnswers,
+    normalizedOpenQuizInput,
+    openQuizAttemptsLeft,
     boggleTargetWord,
     boggleBoardLetters,
     boggleMaxInputLength,
@@ -1592,6 +1642,8 @@ export function StationPreviewOverlay({
     simonInput,
     rebusInput,
     rebusAttempts,
+    openQuizInput,
+    openQuizAttempts,
     boggleInput,
     boggleAttempts,
     miniSudokuValues,
@@ -1611,6 +1663,7 @@ export function StationPreviewOverlay({
     isSubmittingMemory,
     isSubmittingSimon,
     isSubmittingRebus,
+    isSubmittingOpenQuiz,
     isSubmittingBoggle,
     isSubmittingMiniSudoku,
     isSubmittingMatching,
@@ -1634,6 +1687,8 @@ export function StationPreviewOverlay({
     handleMemoryCardPress,
     handleSimonPress,
     submitRebus,
+    submitOpenQuiz,
+    handleOpenQuizInputChange,
     submitBoggle,
     selectBoggleBoardCell,
     backspaceBoggleInput,
@@ -1668,6 +1723,7 @@ export function StationPreviewOverlay({
     isMemoryStation,
     isSimonStation,
     isRebusStation,
+    isOpenQuizStation,
     isBoggleStation,
     isMiniSudokuStation,
     isMatchingStation,
@@ -1731,6 +1787,12 @@ export function StationPreviewOverlay({
     rebusAttemptsLeft,
     rebusAttempts,
     isSubmittingRebus,
+    normalizedOpenQuizInput,
+    openQuizAnswer,
+    openQuizAcceptedAnswers,
+    openQuizAttemptsLeft,
+    openQuizAttempts,
+    isSubmittingOpenQuiz,
     normalizedBoggleInput,
     boggleInput,
     boggleMaxInputLength,
@@ -1805,6 +1867,10 @@ export function StationPreviewOverlay({
     setRebusAttempts,
     setRebusResult,
     setIsSubmittingRebus,
+    setOpenQuizInput,
+    setOpenQuizAttempts,
+    setOpenQuizResult,
+    setIsSubmittingOpenQuiz,
     setBoggleInput,
     setBoggleSelectedCellPath,
     setBoggleAttempts,
@@ -1874,6 +1940,12 @@ export function StationPreviewOverlay({
       rebusIncorrect: text.rebusIncorrect,
       rebusSolved: text.rebusSolved,
       rebusSolvedPopup: text.rebusSolvedPopup,
+      openQuizEnter: text.openQuizEnter,
+      openQuizNoAttempts: text.openQuizNoAttempts,
+      openQuizFailedPopup: text.openQuizFailedPopup,
+      openQuizIncorrect: text.openQuizIncorrect,
+      openQuizSolved: text.openQuizSolved,
+      openQuizSolvedPopup: text.openQuizSolvedPopup,
       boggleEnterMin: text.boggleEnterMin,
       boggleMaxLength: text.boggleMaxLength,
       boggleNoAttempts: text.boggleNoAttempts,
@@ -2241,6 +2313,19 @@ export function StationPreviewOverlay({
           void submitRebus();
         },
       },
+    openQuizStationPanelProps: {
+      openQuizAttemptsLeft,
+      openQuizInput,
+      openQuizResult,
+      isActionDisabled: isInteractiveLocked || isSubmittingOpenQuiz || openQuizAttemptsLeft <= 0,
+      isSubmittingOpenQuiz,
+      onChangeInput: (value) => {
+        handleOpenQuizInputChange(value);
+      },
+      onSubmit: () => {
+        void submitOpenQuiz();
+      },
+    },
     strongPasswordStationPanelProps: {
       stationId: station.stationId,
       configuredDifficulty: station.challengeDifficulty ?? "medium",

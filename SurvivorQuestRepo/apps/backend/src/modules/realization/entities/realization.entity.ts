@@ -63,6 +63,7 @@ export type RealizationEntity = {
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -120,6 +121,7 @@ export type ValidatedRealizationPayload = {
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

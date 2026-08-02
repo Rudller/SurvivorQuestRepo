@@ -31,6 +31,7 @@ import { PhotoCaptureOverlay } from "../../../shared/ui/photo-capture-overlay";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
+import { APP_VERSION, compareSemver } from "../../../shared/app-version";
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -53,6 +54,7 @@ type MobileBootstrapRealization = {
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
   timedStationPointsDecayEnabled?: boolean;
+  hideTaskList?: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -61,6 +63,7 @@ type MobileBootstrapResponse = {
   serverTime: string;
   teamColors: string[];
   badgeKeys: string[];
+  latestAppVersion?: string | null;
   realizations: MobileBootstrapRealization[];
 };
 
@@ -188,6 +191,8 @@ type OnboardingUiText = {
   serverLabel: string;
   statusLabel: string;
   apiStatusValue: Record<ApiConnectionStatus, string>;
+  versionLabel: string;
+  updateAvailableLabel: string;
   quickSelectLabel: string;
   localPresetLabel: string;
   productionPresetLabel: string;
@@ -295,6 +300,8 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       disconnected: "brak połączenia",
       "config-missing": "brak konfiguracji",
     },
+    versionLabel: "Wersja",
+    updateAvailableLabel: "Dostępna nowa wersja",
     quickSelectLabel: "Szybki wybór",
     localPresetLabel: "Lokalna baza testowa",
     productionPresetLabel: "Produkcja",
@@ -423,6 +430,8 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       disconnected: "disconnected",
       "config-missing": "missing config",
     },
+    versionLabel: "Version",
+    updateAvailableLabel: "New version available",
     quickSelectLabel: "Quick select",
     localPresetLabel: "Local test backend",
     productionPresetLabel: "Production",
@@ -546,6 +555,8 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       disconnected: "немає зʼєднання",
       "config-missing": "немає конфігурації",
     },
+    versionLabel: "Версія",
+    updateAvailableLabel: "Доступна нова версія",
     quickSelectLabel: "Швидкий вибір",
     localPresetLabel: "Локовий тестовий сервер",
     productionPresetLabel: "Продакшн",
@@ -671,6 +682,8 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       disconnected: "нет соединения",
       "config-missing": "нет конфигурации",
     },
+    versionLabel: "Версия",
+    updateAvailableLabel: "Доступна новая версия",
     quickSelectLabel: "Быстрый выбор",
     localPresetLabel: "Локовый тестовый сервер",
     productionPresetLabel: "Продакшн",
@@ -1311,9 +1324,14 @@ export function RealizationOnboardingScreen({
     const candidates = resolveApiBaseUrlCandidates();
     return candidates.length > 0 ? candidates[0] : null;
   });
+  const [latestAppVersion, setLatestAppVersion] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<RealizationLanguage>("polish");
   const uiLanguage = useMemo(() => resolveUiLanguage(selectedLanguage), [selectedLanguage]);
   const text = ONBOARDING_UI_TEXT[uiLanguage];
+  const isUpdateAvailable = useMemo(
+    () => latestAppVersion != null && compareSemver(APP_VERSION, latestAppVersion) < 0,
+    [latestAppVersion],
+  );
 
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("");
@@ -1566,12 +1584,13 @@ export function RealizationOnboardingScreen({
         setApiConnectionTarget(candidate);
 
         try {
-          await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
+          const bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
 
           if (!isCancelled) {
             setApiConnectionStatus("connected");
             setApiBaseUrlDraft(candidate);
             setApiConfigFeedback(null, null);
+            setLatestAppVersion(bootstrap.latestAppVersion ?? null);
             void rememberSuccessfulApiBaseUrl(candidate);
           }
           return;
@@ -1688,6 +1707,7 @@ export function RealizationOnboardingScreen({
               effectiveRealization.showLeaderboard !== false,
             timedStationPointsDecayEnabled:
               effectiveRealization.timedStationPointsDecayEnabled ?? false,
+            hideTaskList: effectiveRealization.hideTaskList ?? false,
             introText: effectiveRealization.introText?.trim() || undefined,
             gameRules: effectiveRealization.gameRules?.trim() || undefined,
           }
@@ -1834,6 +1854,7 @@ export function RealizationOnboardingScreen({
       setApiConnectionStatus("connected");
       setApiConnectionTarget(resolvedBaseUrl);
       setApiBaseUrlDraft(resolvedBaseUrl);
+      setLatestAppVersion(bootstrap.latestAppVersion ?? null);
       void rememberSuccessfulApiBaseUrl(resolvedBaseUrl);
 
       const join = await requestMobileApi<MobileJoinResponse>(resolvedBaseUrl, "/api/mobile/session/join", {
@@ -2457,6 +2478,14 @@ export function RealizationOnboardingScreen({
                     {text.statusLabel}: {text.apiStatusValue[apiConnectionStatus]}
                   </Text>
                 </View>
+                <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textSubtle }}>
+                  {text.versionLabel}: v{APP_VERSION}
+                </Text>
+                {isUpdateAvailable ? (
+                  <Text className="mt-0.5 text-xs font-medium" style={{ color: EXPEDITION_THEME.danger }}>
+                    {text.updateAvailableLabel}
+                  </Text>
+                ) : null}
                 {apiConfigMessage ? (
                   <Text
                     className="mt-2 text-xs"

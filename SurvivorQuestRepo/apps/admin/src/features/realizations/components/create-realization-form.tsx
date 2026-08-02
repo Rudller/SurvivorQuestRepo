@@ -116,6 +116,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [showLeaderboardOnFinish, setShowLeaderboardOnFinish] = useState(true);
   const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [timedStationPointsDecayEnabled, setTimedStationPointsDecayEnabled] = useState(false);
+  const [hideTaskList, setHideTaskList] = useState(false);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
@@ -410,6 +411,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 showLeaderboardOnFinish,
                 teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled,
+                hideTaskList,
                 status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -749,6 +751,16 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               />
               Spadek punktów w grach czasowych
             </label>
+
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                checked={hideTaskList}
+                onChange={(event) => setHideTaskList(event.target.checked)}
+                className="h-4 w-4 accent-amber-400"
+              />
+              Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
+            </label>
           </FormSection>
 
           <FormSection title="Mapa">
@@ -1023,6 +1035,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               </p>
               <p>
                 <span className="text-zinc-500">Spadek punktów w grach czasowych:</span> {timedStationPointsDecayEnabled ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Lista zadań (mobile):</span> {hideTaskList ? "Ukryta" : "Widoczna"}
               </p>
               <p>
                 <span className="text-zinc-500">Mapa:</span>{" "}

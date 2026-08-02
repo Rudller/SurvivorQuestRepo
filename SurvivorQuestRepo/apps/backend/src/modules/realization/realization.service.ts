@@ -136,6 +136,7 @@ export class RealizationService {
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
+        hideTaskList: validated.hideTaskList,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -251,6 +252,7 @@ export class RealizationService {
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
+        hideTaskList: validated.hideTaskList,
         status: toPrismaRealizationStatus(
           resolveRealizationStatus(
             validated.status,

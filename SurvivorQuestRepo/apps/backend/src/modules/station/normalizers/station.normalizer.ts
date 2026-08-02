@@ -8,6 +8,7 @@ import {
   QUIZ_ANSWER_COUNT,
   isCompletionCodeRequiredStationType,
   isMatchingStationType,
+  isOpenQuizStationType,
   isQuizDataStationType,
   isWordPuzzleStationType,
   normalizeMatchingAnswer,
@@ -96,6 +97,42 @@ function normalizeStationQuiz(
       question,
       answers: [question, 'A', 'B', 'C'],
       correctAnswerIndex: 0,
+    };
+  }
+
+  if (isOpenQuizStationType(stationType)) {
+    const correctAnswer = quiz.answers?.[0]?.trim();
+    if (
+      typeof question !== 'string' ||
+      !question ||
+      typeof correctAnswer !== 'string' ||
+      !correctAnswer
+    ) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const seenAcceptedAnswers = new Set<string>([correctAnswer.toLowerCase()]);
+    const acceptedAnswers: string[] = [];
+    for (const rawAnswer of quiz.acceptedAnswers ?? []) {
+      const trimmed = rawAnswer?.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const key = trimmed.toLowerCase();
+      if (seenAcceptedAnswers.has(key)) {
+        continue;
+      }
+
+      seenAcceptedAnswers.add(key);
+      acceptedAnswers.push(trimmed);
+    }
+
+    return {
+      question,
+      answers: [correctAnswer, 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
     };
   }
 

@@ -43,6 +43,7 @@ export function toPrismaStationType(type: StationType) {
   if (type === 'strong-password') return PrismaStationType.STRONG_PASSWORD;
   if (type === 'photo-task') return PrismaStationType.PHOTO_TASK;
   if (type === 'qr-hunt') return PrismaStationType.QR_HUNT;
+  if (type === 'open-quiz') return PrismaStationType.OPEN_QUIZ;
   return PrismaStationType.MATCHING;
 }
 
@@ -64,6 +65,7 @@ function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.STRONG_PASSWORD) return 'strong-password';
   if (type === PrismaStationType.PHOTO_TASK) return 'photo-task';
   if (type === PrismaStationType.QR_HUNT) return 'qr-hunt';
+  if (type === PrismaStationType.OPEN_QUIZ) return 'open-quiz';
   return 'matching';
 }
 
@@ -77,6 +79,9 @@ export function toPrismaStationQuizData(quiz: StationQuiz | undefined) {
     answers: quiz.answers,
     correctAnswerIndex: quiz.correctAnswerIndex,
     ...(quiz.audioUrl ? { audioUrl: quiz.audioUrl } : {}),
+    ...(quiz.acceptedAnswers?.length
+      ? { acceptedAnswers: quiz.acceptedAnswers }
+      : {}),
   } as Prisma.InputJsonValue;
 }
 
@@ -92,6 +97,7 @@ function parseStationQuizData(
   const answers = payload.answers;
   const correctAnswerIndex = payload.correctAnswerIndex;
   const audioUrl = payload.audioUrl;
+  const acceptedAnswers = payload.acceptedAnswers;
 
   if (
     typeof question !== 'string' ||
@@ -121,6 +127,12 @@ function parseStationQuizData(
     typeof audioUrl === 'string' && audioUrl.trim()
       ? audioUrl.trim()
       : undefined;
+  const normalizedAcceptedAnswers = Array.isArray(acceptedAnswers)
+    ? acceptedAnswers.filter(
+        (answer): answer is string =>
+          typeof answer === 'string' && answer.trim().length > 0,
+      )
+    : undefined;
 
   return {
     question: normalizedQuestion,
@@ -132,6 +144,9 @@ function parseStationQuizData(
     ],
     correctAnswerIndex: normalizedCorrectAnswerIndex,
     audioUrl: normalizedAudioUrl,
+    ...(normalizedAcceptedAnswers?.length
+      ? { acceptedAnswers: normalizedAcceptedAnswers }
+      : {}),
   };
 }
 
@@ -165,6 +180,9 @@ export function toPrismaStationTranslationsData(
         answers: value.quiz.answers,
         correctAnswerIndex: value.quiz.correctAnswerIndex,
         ...(value.quiz.audioUrl ? { audioUrl: value.quiz.audioUrl } : {}),
+        ...(value.quiz.acceptedAnswers?.length
+          ? { acceptedAnswers: value.quiz.acceptedAnswers }
+          : {}),
       } as Prisma.InputJsonValue;
     }
 

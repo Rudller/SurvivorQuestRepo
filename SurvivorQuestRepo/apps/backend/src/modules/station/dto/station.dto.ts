@@ -29,6 +29,7 @@ const STATION_TYPES: StationType[] = [
   'strong-password',
   'photo-task',
   'qr-hunt',
+  'open-quiz',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =
@@ -53,8 +54,13 @@ function isQuizDataStationType(type: StationType) {
     type === 'boggle' ||
     type === 'mini-sudoku' ||
     type === 'matching' ||
-    type === 'strong-password'
+    type === 'strong-password' ||
+    type === 'open-quiz'
   );
+}
+
+function isOpenQuizStationType(type: StationType) {
+  return type === 'open-quiz';
 }
 
 function isWordPuzzleStationType(type: StationType) {
@@ -308,6 +314,46 @@ function ensureStationQuiz(
       question,
       answers: [question, 'A', 'B', 'C'],
       correctAnswerIndex: 0,
+    };
+  }
+
+  if (isOpenQuizStationType(type)) {
+    const correctAnswer = ensureTrimmedString(
+      Array.isArray(quiz.answers) ? quiz.answers[0] : undefined,
+    );
+
+    const seenAcceptedAnswers = new Set<string>([correctAnswer.toLowerCase()]);
+    const acceptedAnswers: string[] = [];
+    if (quiz.acceptedAnswers !== undefined) {
+      if (!Array.isArray(quiz.acceptedAnswers)) {
+        throw new BadRequestException('Invalid payload');
+      }
+
+      for (const item of quiz.acceptedAnswers) {
+        if (typeof item !== 'string') {
+          throw new BadRequestException('Invalid payload');
+        }
+
+        const trimmed = item.trim();
+        if (!trimmed) {
+          continue;
+        }
+
+        const key = trimmed.toLowerCase();
+        if (seenAcceptedAnswers.has(key)) {
+          continue;
+        }
+
+        seenAcceptedAnswers.add(key);
+        acceptedAnswers.push(trimmed);
+      }
+    }
+
+    return {
+      question,
+      answers: [correctAnswer, 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
     };
   }
 

@@ -200,7 +200,8 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "matching" ||
     value === "strong-password" ||
     value === "photo-task" ||
-    value === "qr-hunt"
+    value === "qr-hunt" ||
+    value === "open-quiz"
   ) {
     return value;
   }
@@ -285,11 +286,16 @@ function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["qui
     return undefined;
   }
 
+  const acceptedAnswers = asArray(parsed.acceptedAnswers ?? parsed.accepted_answers)
+    .map((item) => asString(item).trim())
+    .filter((item) => item.length > 0);
+
   return {
     question,
     answers: [answers[0], answers[1], answers[2], answers[3]],
     correctAnswerIndex,
     audioUrl: asString(parsed.audioUrl ?? parsed.audio_url).trim() || undefined,
+    ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
   };
 }
 
@@ -554,6 +560,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         realization.timedStationPointsDecayEnabled ?? realization.timed_station_points_decay_enabled,
         false,
       ),
+      hideTaskList: asBoolean(realization.hideTaskList ?? realization.hide_task_list),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
        durationMinutes:
          Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,

@@ -14,6 +14,7 @@ import {
   isQuizStationType,
   isWordPuzzleStationType,
   isMatchingStationType,
+  isOpenQuizStationType,
   isImageSupportedStationType,
   formatTimeLimit,
   handleImageFile,
@@ -163,6 +164,7 @@ function cloneStationTranslations(translations: Station["translations"] | undefi
               answers: [...value.quiz.answers],
               correctAnswerIndex: value.quiz.correctAnswerIndex,
               audioUrl: value.quiz.audioUrl,
+              acceptedAnswers: value.quiz.acceptedAnswers ? [...value.quiz.acceptedAnswers] : undefined,
             }
           : undefined,
       };
@@ -212,6 +214,7 @@ function normalizeStationTranslations(
                 answers: toQuizAnswersTuple(normalizedQuiz.answers),
                 correctAnswerIndex: normalizedQuiz.correctAnswerIndex,
                 audioUrl: normalizedQuiz.audioUrl,
+                acceptedAnswers: normalizedQuiz.acceptedAnswers,
               }
             : undefined,
         };
@@ -254,6 +257,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
             answers: toQuizAnswersTuple(station.quiz.answers),
             correctAnswerIndex: station.quiz.correctAnswerIndex,
             audioUrl: station.quiz.audioUrl ?? "",
+            acceptedAnswers: station.quiz.acceptedAnswers,
           }
       : {
           question:
@@ -305,6 +309,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
             answers: station.quiz.answers,
             correctAnswerIndex: station.quiz.correctAnswerIndex,
             audioUrl: station.quiz.audioUrl,
+            acceptedAnswers: station.quiz.acceptedAnswers,
           }) ?? undefined
         : undefined,
     translations: normalizeStationTranslations(station.translations, station.type),
@@ -1180,6 +1185,7 @@ export function RealizationStationsEditor({
                                     answers: existingQuiz?.answers ?? createEmptyQuizAnswers(),
                                     correctAnswerIndex: existingQuiz?.correctAnswerIndex ?? 0,
                                     audioUrl: existingQuiz?.audioUrl ?? "",
+                                    acceptedAnswers: existingQuiz?.acceptedAnswers,
                                   }
                                   : station.quiz,
                           });
@@ -1529,6 +1535,7 @@ export function RealizationStationsEditor({
                                       answers: selectedStationQuizAnswers,
                                       correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                       audioUrl: event.target.value,
+                                      acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
                                     },
                                   })
                                 }
@@ -1574,6 +1581,7 @@ export function RealizationStationsEditor({
                                   answers: selectedStationQuizAnswers,
                                   correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                   audioUrl: selectedStationQuiz?.audioUrl,
+                                  acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
                                 },
                               })
                             }
@@ -1597,6 +1605,7 @@ export function RealizationStationsEditor({
                                   answers: selectedStationQuizAnswers,
                                   correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                   audioUrl: selectedStationQuiz?.audioUrl,
+                                  acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
                                 },
                               })
                             }
@@ -1607,7 +1616,7 @@ export function RealizationStationsEditor({
                         </div>
                       ) : null}
 
-                      {!isWordPuzzleStationType(station.type) && !isMatchingStationType(station.type) ? (
+                      {!isWordPuzzleStationType(station.type) && !isMatchingStationType(station.type) && !isOpenQuizStationType(station.type) ? (
                         <div className="space-y-2">
                           {selectedStationQuizAnswers.map((answer, answerIndex) => (
                             <label
@@ -1653,6 +1662,55 @@ export function RealizationStationsEditor({
                               />
                             </label>
                           ))}
+                        </div>
+                      ) : null}
+                      {isOpenQuizStationType(station.type) ? (
+                        <div className="space-y-3">
+                          <label className="space-y-1.5">
+                            <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
+                            <input
+                              value={selectedStationQuizAnswers[0] ?? ""}
+                              onChange={(event) =>
+                                updateStationForSelectedLanguage(stationIndex, {
+                                  quiz: {
+                                    question: selectedStationQuiz?.question ?? "",
+                                    answers: [event.target.value, ...selectedStationQuizAnswers.slice(1)],
+                                    correctAnswerIndex: 0,
+                                    audioUrl: selectedStationQuiz?.audioUrl,
+                                    acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
+                                  },
+                                })
+                              }
+                              placeholder="Wpisz poprawną odpowiedź"
+                              className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                                shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                  ? "border-red-500/70 focus:border-red-400/80"
+                                  : "border-zinc-700 focus:border-amber-400/80"
+                              }`}
+                            />
+                          </label>
+                          <label className="space-y-1.5">
+                            <span className="text-xs uppercase tracking-wider text-zinc-400">
+                              Dodatkowe akceptowane odpowiedzi (opcjonalnie)
+                            </span>
+                            <textarea
+                              rows={3}
+                              value={(selectedStationQuiz?.acceptedAnswers ?? []).join("\n")}
+                              onChange={(event) =>
+                                updateStationForSelectedLanguage(stationIndex, {
+                                  quiz: {
+                                    question: selectedStationQuiz?.question ?? "",
+                                    answers: selectedStationQuizAnswers,
+                                    correctAnswerIndex: 0,
+                                    audioUrl: selectedStationQuiz?.audioUrl,
+                                    acceptedAnswers: event.target.value.split("\n").map((line) => line.trim()),
+                                  },
+                                })
+                              }
+                              placeholder={"Jedna odpowiedź na linię, np.\nWarszawa\nstolica Polski"}
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                            />
+                          </label>
                         </div>
                       ) : null}
                       {isMatchingStationType(station.type) ? (

@@ -17,7 +17,8 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
-    stationType === "strong-password"
+    stationType === "strong-password" ||
+    stationType === "open-quiz"
   );
 }
 
@@ -39,6 +40,7 @@ type UseStationTimeoutOutcomeArgs = {
     miniSudoku: boolean;
     matching: boolean;
     strongPassword?: boolean;
+    openQuiz?: boolean;
   };
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onTimeExpired?: (stationId: string) => void;
@@ -146,6 +148,7 @@ export function useStationTimeoutOutcome({
     const isMiniSudokuPending = station.stationType === "mini-sudoku" && pendingByType.miniSudoku;
     const isMatchingPending = station.stationType === "matching" && pendingByType.matching;
     const isStrongPasswordPending = station.stationType === "strong-password" && pendingByType.strongPassword;
+    const isOpenQuizPending = station.stationType === "open-quiz" && pendingByType.openQuiz;
     if (
       isQuizAnswerPending ||
       isWordlePending ||
@@ -160,6 +163,7 @@ export function useStationTimeoutOutcome({
       isMiniSudokuPending ||
       isMatchingPending ||
       isStrongPasswordPending ||
+      isOpenQuizPending ||
       timeoutPopupShownRef.current
     ) {
       return;

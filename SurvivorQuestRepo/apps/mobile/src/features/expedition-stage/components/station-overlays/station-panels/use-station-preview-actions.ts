@@ -15,6 +15,7 @@ import {
   handleMastermindAddSymbol,
   handleMastermindInputChange,
   handleMiniSudokuChangeCellController,
+  handleOpenQuizInputChangeController,
   handleRebusInputChangeController,
   handleSimonPressController,
   selectBoggleBoardCellController,
@@ -25,6 +26,7 @@ import {
   submitMatchingPairController,
   submitMastermindGuessController,
   submitMiniSudokuController,
+  submitOpenQuizAnswerController,
   submitQuizAnswerController,
   submitRebusController,
   submitVerificationCodeController,
@@ -63,6 +65,7 @@ type UseStationPreviewActionsArgs = {
   isMemoryStation: boolean;
   isSimonStation: boolean;
   isRebusStation: boolean;
+  isOpenQuizStation: boolean;
   isBoggleStation: boolean;
   isMiniSudokuStation: boolean;
   isMatchingStation: boolean;
@@ -126,6 +129,12 @@ type UseStationPreviewActionsArgs = {
   rebusAttemptsLeft: number;
   rebusAttempts: number;
   isSubmittingRebus: boolean;
+  normalizedOpenQuizInput: string;
+  openQuizAnswer: string;
+  openQuizAcceptedAnswers: string[];
+  openQuizAttemptsLeft: number;
+  openQuizAttempts: number;
+  isSubmittingOpenQuiz: boolean;
   normalizedBoggleInput: string;
   boggleInput: string;
   boggleMaxInputLength: number;
@@ -200,6 +209,10 @@ type UseStationPreviewActionsArgs = {
   setRebusAttempts: Dispatch<SetStateAction<number>>;
   setRebusResult: Dispatch<SetStateAction<string | null>>;
   setIsSubmittingRebus: Dispatch<SetStateAction<boolean>>;
+  setOpenQuizInput: Dispatch<SetStateAction<string>>;
+  setOpenQuizAttempts: Dispatch<SetStateAction<number>>;
+  setOpenQuizResult: Dispatch<SetStateAction<string | null>>;
+  setIsSubmittingOpenQuiz: Dispatch<SetStateAction<boolean>>;
   setBoggleInput: Dispatch<SetStateAction<string>>;
   setBoggleSelectedCellPath: Dispatch<SetStateAction<number[]>>;
   setBoggleAttempts: Dispatch<SetStateAction<number>>;
@@ -269,6 +282,12 @@ type UseStationPreviewActionsArgs = {
     rebusIncorrect: string;
     rebusSolved: string;
     rebusSolvedPopup: string;
+    openQuizEnter: string;
+    openQuizNoAttempts: (answer: string) => string;
+    openQuizFailedPopup: string;
+    openQuizIncorrect: string;
+    openQuizSolved: string;
+    openQuizSolvedPopup: string;
     boggleEnterMin: string;
     boggleMaxLength: (max: number) => string;
     boggleNoAttempts: (target: string) => string;
@@ -636,6 +655,47 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
     });
   };
 
+  const submitOpenQuiz = async () => {
+    await submitOpenQuizAnswerController({
+      isOpenQuizStation: args.isOpenQuizStation,
+      normalizedOpenQuizInput: args.normalizedOpenQuizInput,
+      openQuizAnswer: args.openQuizAnswer,
+      openQuizAcceptedAnswers: args.openQuizAcceptedAnswers,
+      isInteractiveLocked: args.isInteractiveLocked,
+      isSubmittingOpenQuiz: args.isSubmittingOpenQuiz,
+      openQuizAttemptsLeft: args.openQuizAttemptsLeft,
+      openQuizAttempts: args.openQuizAttempts,
+      stationId: args.stationId,
+      startedAt: args.startedAt,
+      onCompleteTask: args.onCompleteTask,
+      onQuizFailed: args.onQuizFailed,
+      onQuizPassed: args.onQuizPassed,
+      showQuizOutcomePopup: args.showQuizOutcomePopup,
+      setQuizSubmitError: args.setQuizSubmitError,
+      setOpenQuizAttempts: args.setOpenQuizAttempts,
+      setOpenQuizResult: args.setOpenQuizResult,
+      setIsSubmittingOpenQuiz: args.setIsSubmittingOpenQuiz,
+      onSubmitError: handleQuizSubmitError,
+      text: {
+        openQuizEnter: args.text.openQuizEnter,
+        openQuizNoAttempts: args.text.openQuizNoAttempts,
+        openQuizFailedPopup: args.text.openQuizFailedPopup,
+        openQuizIncorrect: args.text.openQuizIncorrect,
+        openQuizSolved: args.text.openQuizSolved,
+        openQuizSolvedPopup: args.text.openQuizSolvedPopup,
+      },
+    });
+  };
+
+  const handleOpenQuizInputChange = (value: string) => {
+    handleOpenQuizInputChangeController({
+      value,
+      setOpenQuizInput: args.setOpenQuizInput,
+      setOpenQuizResult: args.setOpenQuizResult,
+      setQuizSubmitError: args.setQuizSubmitError,
+    });
+  };
+
   const submitBoggle = async () => {
     await submitBoggleController({
       isBoggleStation: args.isBoggleStation,
@@ -892,6 +952,8 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
     handleMemoryCardPress,
     handleSimonPress,
     submitRebus,
+    submitOpenQuiz,
+    handleOpenQuizInputChange,
     submitBoggle,
     selectBoggleBoardCell,
     backspaceBoggleInput,

@@ -130,6 +130,7 @@ export class MobileService {
       serverTime: new Date().toISOString(),
       teamColors: TEAM_COLORS,
       badgeKeys: BADGE_KEYS,
+      latestAppVersion: process.env.MOBILE_APP_LATEST_VERSION ?? null,
       realizations: realizations.map((realization) => {
         const languageContext = resolveRealizationLanguageContext({
           language: realization.language,
@@ -159,6 +160,7 @@ export class MobileService {
           teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
           timedStationPointsDecayEnabled:
             realization.timedStationPointsDecayEnabled,
+          hideTaskList: realization.hideTaskList,
           teamCount: realization.teamCount,
           stationIds: realization.stationIds,
           createdAt: realization.createdAt,
@@ -454,6 +456,7 @@ export class MobileService {
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           realization.timedStationPointsDecayEnabled,
+        hideTaskList: realization.hideTaskList,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         stations: realization.scenarioStations.map((station) =>
@@ -2176,6 +2179,7 @@ export class MobileService {
         showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
         showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
+        hideTaskList: realization.hideTaskList,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
         stationIds: realization.stationIds,
@@ -2811,6 +2815,7 @@ export class MobileService {
         showLeaderboardOnFinish: true,
         teamStationNumberingEnabled: true,
         timedStationPointsDecayEnabled: true,
+        hideTaskList: true,
       },
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
@@ -2851,6 +2856,8 @@ export class MobileService {
         rowById.get(item.id)?.timedStationPointsDecayEnabled ??
         item.timedStationPointsDecayEnabled ??
         false,
+      hideTaskList:
+        rowById.get(item.id)?.hideTaskList ?? item.hideTaskList ?? false,
       joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
@@ -3061,6 +3068,9 @@ export class MobileService {
               answers: localized.quiz.answers,
               correctAnswerIndex: localized.quiz.correctAnswerIndex,
               ...(quizAudioUrl ? { audioUrl: quizAudioUrl } : {}),
+              ...(localized.quiz.acceptedAnswers?.length
+                ? { acceptedAnswers: localized.quiz.acceptedAnswers }
+                : {}),
             }
           : undefined,
       color: station.color,

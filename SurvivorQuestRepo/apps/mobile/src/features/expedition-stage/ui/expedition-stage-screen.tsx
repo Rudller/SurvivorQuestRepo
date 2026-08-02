@@ -94,6 +94,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypePhotoTask: string;
     stationTypeQrHunt: string;
     stationTypeQuiz: string;
+    stationTypeOpenQuiz: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
     openScannerFailed: string;
@@ -140,6 +141,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypePhotoTask: "Zadanie fotograficzne",
     stationTypeQrHunt: "Skanowanie QR",
     stationTypeQuiz: "Quiz",
+    stationTypeOpenQuiz: "Pytanie otwarte",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
     openScannerFailed: "Nie udało się otworzyć skanera.",
@@ -185,6 +187,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypePhotoTask: "Photo task",
     stationTypeQrHunt: "QR scan hunt",
     stationTypeQuiz: "Quiz",
+    stationTypeOpenQuiz: "Open question",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
     openScannerFailed: "Failed to open scanner.",
@@ -230,6 +233,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypePhotoTask: "Фотозавдання",
     stationTypeQrHunt: "Пошук QR-кодів",
     stationTypeQuiz: "Вікторина",
+    stationTypeOpenQuiz: "Відкрите питання",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
     openScannerFailed: "Не вдалося відкрити сканер.",
@@ -275,6 +279,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypePhotoTask: "Фотозадание",
     stationTypeQrHunt: "Поиск QR-кодов",
     stationTypeQuiz: "Викторина",
+    stationTypeOpenQuiz: "Открытый вопрос",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
     openScannerFailed: "Не удалось открыть сканер.",
@@ -491,6 +496,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
     return { icon: PIN_ICON_SVGS["audio-quiz"], color: "#06b6d4" };
   }
 
+  if (stationType === "open-quiz") {
+    return { icon: PIN_ICON_SVGS.quiz, color: "#eab308" };
+  }
+
   return stationType === "quiz"
     ? { icon: PIN_ICON_SVGS.quiz, color: "#f59e0b" }
     : DEFAULT_STATION_PIN_CUSTOMIZATION;
@@ -576,6 +585,7 @@ function resolveStationTypeLabel(
     | "stationTypePhotoTask"
     | "stationTypeQrHunt"
     | "stationTypeQuiz"
+    | "stationTypeOpenQuiz"
   >,
 ) {
   if (stationType === "time") {
@@ -646,6 +656,10 @@ function resolveStationTypeLabel(
     return text.stationTypeQrHunt;
   }
 
+  if (stationType === "open-quiz") {
+    return text.stationTypeOpenQuiz;
+  }
+
   return text.stationTypeQuiz;
 }
 
@@ -664,7 +678,8 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
-    stationType === "strong-password"
+    stationType === "strong-password" ||
+    stationType === "open-quiz"
   );
 }
 
@@ -1076,6 +1091,7 @@ export function ExpeditionStageScreen({
                 quizAnswers: stationCatalog.quiz?.answers,
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 quizAudioUrl: stationCatalog.quiz?.audioUrl,
+                quizAcceptedAnswers: stationCatalog.quiz?.acceptedAnswers,
                 status: task?.status ?? "todo",
                 quizFailed: (task?.status ?? "todo") === "failed",
                 startedAt: task?.startedAt ?? null,
@@ -1425,6 +1441,7 @@ export function ExpeditionStageScreen({
 
         <View className="mt-2 w-full items-end">
           <View style={{ width: tasksPanelWidth }}>
+          {!sessionState.realization.hideTaskList && (
           <Pressable
             className="rounded-2xl border active:opacity-90"
             style={{
@@ -1554,6 +1571,7 @@ export function ExpeditionStageScreen({
               </Animated.View>
             )}
           </Pressable>
+          )}
 
           {shouldShowTopLeaderboard ? (
             <View className="mt-2">

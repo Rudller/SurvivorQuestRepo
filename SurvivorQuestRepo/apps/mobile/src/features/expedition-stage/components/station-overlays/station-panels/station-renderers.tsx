@@ -9,6 +9,7 @@ import { MatchingMediaSection } from "./matching-station-panel";
 import { MastermindMediaSection, MastermindStationPanel } from "./mastermind-station-panel";
 import { MemoryMediaSection } from "./memory-station-panel";
 import { MiniSudokuMediaSection } from "./mini-sudoku-station-panel";
+import { OpenQuizStationPanel } from "./open-quiz-station-panel";
 import { QuizAudioPanel } from "./quiz-audio-station-panel";
 import { RebusStationPanel } from "./rebus-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
@@ -64,6 +65,7 @@ type BuildQuizStationRendererByTypeArgs = {
   caesarStationPanelProps: ComponentProps<typeof CaesarStationPanel>;
   rebusStationPanelProps: ComponentProps<typeof RebusStationPanel>;
   strongPasswordStationPanelProps: ComponentProps<typeof StrongPasswordStationPanel>;
+  openQuizStationPanelProps: ComponentProps<typeof OpenQuizStationPanel>;
 };
 
 export function buildQuizStationRendererByType({
@@ -75,6 +77,7 @@ export function buildQuizStationRendererByType({
   caesarStationPanelProps,
   rebusStationPanelProps,
   strongPasswordStationPanelProps,
+  openQuizStationPanelProps,
 }: BuildQuizStationRendererByTypeArgs): StationRendererByType {
   return {
     quiz: () => <QuizAudioPanel {...quizAudioPanelSharedProps} isAudioQuizStation={false} />,
@@ -86,5 +89,6 @@ export function buildQuizStationRendererByType({
     "caesar-cipher": () => <CaesarStationPanel {...caesarStationPanelProps} />,
     rebus: () => <RebusStationPanel {...rebusStationPanelProps} />,
     "strong-password": () => <StrongPasswordStationPanel {...strongPasswordStationPanelProps} />,
+    "open-quiz": () => <OpenQuizStationPanel {...openQuizStationPanelProps} />,
   };
 }

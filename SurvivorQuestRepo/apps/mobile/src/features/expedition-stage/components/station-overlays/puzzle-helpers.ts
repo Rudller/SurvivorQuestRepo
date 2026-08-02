@@ -376,6 +376,25 @@ export function normalizePuzzleText(value: string) {
   return value.toUpperCase().replace(/\s+/g, " ").trim();
 }
 
+const POLISH_DIACRITIC_FOLD_MAP: Record<string, string> = {
+  Ą: "A",
+  Ć: "C",
+  Ę: "E",
+  Ł: "L",
+  Ń: "N",
+  Ó: "O",
+  Ś: "S",
+  Ź: "Z",
+  Ż: "Z",
+};
+
+export function normalizeOpenAnswer(value: string) {
+  return normalizePuzzleText(value)
+    .split("")
+    .map((character) => POLISH_DIACRITIC_FOLD_MAP[character] ?? character)
+    .join("");
+}
+
 export function normalizePuzzleWord(value: string) {
   return normalizeWordleSecret(value);
 }

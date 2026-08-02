@@ -217,6 +217,7 @@ export type Realization = {
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;

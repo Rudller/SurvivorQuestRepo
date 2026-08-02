@@ -19,6 +19,7 @@ export const STATION_TYPES: StationType[] = [
   'strong-password',
   'photo-task',
   'qr-hunt',
+  'open-quiz',
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;
@@ -48,7 +49,8 @@ export function isQuizDataStationType(stationType: StationType) {
     stationType === 'boggle' ||
     stationType === 'mini-sudoku' ||
     stationType === 'matching' ||
-    stationType === 'strong-password'
+    stationType === 'strong-password' ||
+    stationType === 'open-quiz'
   );
 }
 
@@ -74,6 +76,10 @@ export function isMatchingStationType(stationType: StationType) {
 
 export function isQrHuntStationType(stationType: StationType) {
   return stationType === 'qr-hunt';
+}
+
+export function isOpenQuizStationType(stationType: StationType) {
+  return stationType === 'open-quiz';
 }
 
 export function normalizeMatchingAnswer(value: string) {

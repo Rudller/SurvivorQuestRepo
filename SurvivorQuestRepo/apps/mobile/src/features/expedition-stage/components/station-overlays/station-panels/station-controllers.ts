@@ -49,7 +49,8 @@ type PuzzleSubmitLockScope =
   | "simon"
   | "boggle"
   | "mini-sudoku"
-  | "matching";
+  | "matching"
+  | "open-quiz";
 
 const activePuzzleSubmitLocks = new Set<string>();
 
@@ -1139,6 +1140,138 @@ export function handleRebusInputChangeController({
 }: HandleRebusInputChangeControllerArgs) {
   setRebusInput(value);
   setRebusResult(null);
+  setQuizSubmitError(null);
+}
+
+type SubmitOpenQuizAnswerControllerArgs = {
+  isOpenQuizStation: boolean;
+  normalizedOpenQuizInput: string;
+  openQuizAnswer: string;
+  openQuizAcceptedAnswers: string[];
+  isInteractiveLocked: boolean;
+  isSubmittingOpenQuiz: boolean;
+  openQuizAttemptsLeft: number;
+  openQuizAttempts: number;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setQuizSubmitError: NullableStringStateSetter;
+  setOpenQuizAttempts: Dispatch<SetStateAction<number>>;
+  setOpenQuizResult: NullableStringStateSetter;
+  setIsSubmittingOpenQuiz: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    openQuizEnter: string;
+    openQuizNoAttempts: (answer: string) => string;
+    openQuizFailedPopup: string;
+    openQuizIncorrect: string;
+    openQuizSolved: string;
+    openQuizSolvedPopup: string;
+  };
+};
+
+export async function submitOpenQuizAnswerController({
+  isOpenQuizStation,
+  normalizedOpenQuizInput,
+  openQuizAnswer,
+  openQuizAcceptedAnswers,
+  isInteractiveLocked,
+  isSubmittingOpenQuiz,
+  openQuizAttemptsLeft,
+  openQuizAttempts,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setQuizSubmitError,
+  setOpenQuizAttempts,
+  setOpenQuizResult,
+  setIsSubmittingOpenQuiz,
+  onSubmitError,
+  text,
+}: SubmitOpenQuizAnswerControllerArgs) {
+  if (!isOpenQuizStation) {
+    return;
+  }
+
+  if (!normalizedOpenQuizInput) {
+    setOpenQuizResult(text.openQuizEnter);
+    return;
+  }
+
+  if (isInteractiveLocked || isSubmittingOpenQuiz || openQuizAttemptsLeft <= 0) {
+    return;
+  }
+
+  setQuizSubmitError(null);
+  const isCorrect =
+    normalizedOpenQuizInput === openQuizAnswer ||
+    openQuizAcceptedAnswers.includes(normalizedOpenQuizInput);
+  if (!isCorrect) {
+    const nextAttempts = openQuizAttempts + 1;
+    setOpenQuizAttempts(nextAttempts);
+    if (nextAttempts >= TEXT_PUZZLE_MAX_ATTEMPTS) {
+      setOpenQuizResult(text.openQuizNoAttempts(openQuizAnswer));
+      onQuizFailed?.(stationId, "quiz_incorrect_answer");
+      showQuizOutcomePopup("failed", text.openQuizFailedPopup);
+      return;
+    }
+
+    setOpenQuizResult(text.openQuizIncorrect);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setOpenQuizResult(text.openQuizSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.openQuizSolvedPopup);
+    return;
+  }
+
+  const submitLockKey = tryAcquirePuzzleSubmitLock("open-quiz", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
+  setIsSubmittingOpenQuiz(true);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingOpenQuiz(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setOpenQuizResult(text.openQuizSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.openQuizSolvedPopup);
+}
+
+type HandleOpenQuizInputChangeControllerArgs = {
+  value: string;
+  setOpenQuizInput: StringStateSetter;
+  setOpenQuizResult: NullableStringStateSetter;
+  setQuizSubmitError: NullableStringStateSetter;
+};
+
+export function handleOpenQuizInputChangeController({
+  value,
+  setOpenQuizInput,
+  setOpenQuizResult,
+  setQuizSubmitError,
+}: HandleOpenQuizInputChangeControllerArgs) {
+  setOpenQuizInput(value);
+  setOpenQuizResult(null);
   setQuizSubmitError(null);
 }
 

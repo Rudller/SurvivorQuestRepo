@@ -53,6 +53,9 @@ type UseStationOverlayResetArgs = {
   setRebusInput: Dispatch<SetStateAction<string>>;
   setRebusAttempts: Dispatch<SetStateAction<number>>;
   setRebusResult: Dispatch<SetStateAction<string | null>>;
+  setOpenQuizInput: Dispatch<SetStateAction<string>>;
+  setOpenQuizAttempts: Dispatch<SetStateAction<number>>;
+  setOpenQuizResult: Dispatch<SetStateAction<string | null>>;
   setBoggleInput: Dispatch<SetStateAction<string>>;
   setBoggleSelectedCellPath: Dispatch<SetStateAction<number[]>>;
   setBoggleAttempts: Dispatch<SetStateAction<number>>;
@@ -76,6 +79,7 @@ type UseStationOverlayResetArgs = {
   setIsSubmittingMemory: Dispatch<SetStateAction<boolean>>;
   setIsSubmittingSimon: Dispatch<SetStateAction<boolean>>;
   setIsSubmittingRebus: Dispatch<SetStateAction<boolean>>;
+  setIsSubmittingOpenQuiz: Dispatch<SetStateAction<boolean>>;
   setIsSubmittingBoggle: Dispatch<SetStateAction<boolean>>;
   setIsSubmittingMiniSudoku: Dispatch<SetStateAction<boolean>>;
   setIsSubmittingMatching: Dispatch<SetStateAction<boolean>>;
@@ -131,6 +135,9 @@ export function useStationOverlayReset({
   setRebusInput,
   setRebusAttempts,
   setRebusResult,
+  setOpenQuizInput,
+  setOpenQuizAttempts,
+  setOpenQuizResult,
   setBoggleInput,
   setBoggleSelectedCellPath,
   setBoggleAttempts,
@@ -154,6 +161,7 @@ export function useStationOverlayReset({
   setIsSubmittingMemory,
   setIsSubmittingSimon,
   setIsSubmittingRebus,
+  setIsSubmittingOpenQuiz,
   setIsSubmittingBoggle,
   setIsSubmittingMiniSudoku,
   setIsSubmittingMatching,
@@ -202,6 +210,9 @@ export function useStationOverlayReset({
     setRebusInput("");
     setRebusAttempts(0);
     setRebusResult(null);
+    setOpenQuizInput("");
+    setOpenQuizAttempts(0);
+    setOpenQuizResult(null);
     setBoggleInput("");
     setBoggleSelectedCellPath([]);
     setBoggleAttempts(0);
@@ -230,6 +241,7 @@ export function useStationOverlayReset({
     setIsSubmittingMemory(false);
     setIsSubmittingSimon(false);
     setIsSubmittingRebus(false);
+    setIsSubmittingOpenQuiz(false);
     setIsSubmittingBoggle(false);
     setIsSubmittingMiniSudoku(false);
     setIsSubmittingMatching(false);

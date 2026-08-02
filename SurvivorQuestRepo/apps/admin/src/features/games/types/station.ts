@@ -16,7 +16,8 @@ export type StationType =
   | "matching"
   | "strong-password"
   | "photo-task"
-  | "qr-hunt";
+  | "qr-hunt"
+  | "open-quiz";
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
@@ -26,6 +27,7 @@ export type StationQuiz = {
   answers: string[];
   correctAnswerIndex: number;
   audioUrl?: string;
+  acceptedAnswers?: string[];
 };
 
 export type StationTranslation = {
@@ -57,6 +59,7 @@ export const stationTypeOptions: { value: StationType; label: string }[] = [
   { value: "strong-password", label: "Mocne hasło" },
   { value: "photo-task", label: "Zadanie fotograficzne" },
   { value: "qr-hunt", label: "Skanowanie kodów QR" },
+  { value: "open-quiz", label: "Quiz – pytanie otwarte" },
 ];
 
 export type Station = {

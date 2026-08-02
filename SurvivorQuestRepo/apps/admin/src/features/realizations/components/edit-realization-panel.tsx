@@ -136,6 +136,7 @@ export function EditRealizationPanel({
       realization.showLeaderboardOnFinish ?? realization.showLeaderboard,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
+    hideTaskList: realization.hideTaskList ?? false,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
@@ -477,6 +478,7 @@ export function EditRealizationPanel({
                 showLeaderboardOnFinish: editValues.showLeaderboardOnFinish,
                 teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled: editValues.timedStationPointsDecayEnabled,
+                hideTaskList: editValues.hideTaskList,
                 status: editValues.status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -832,6 +834,21 @@ export function EditRealizationPanel({
               />
               Spadek punktów w grach czasowych
             </label>
+
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                checked={editValues.hideTaskList}
+                onChange={(event) =>
+                  setEditValues((prev) => ({
+                    ...prev,
+                    hideTaskList: event.target.checked,
+                  }))
+                }
+                className="h-4 w-4 accent-amber-400"
+              />
+              Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
+            </label>
           </FormSection>
 
           <FormSection title="Mapa">
@@ -1118,6 +1135,9 @@ export function EditRealizationPanel({
               <p>
                 <span className="text-zinc-500">Spadek punktów w grach czasowych:</span>{" "}
                 {editValues.timedStationPointsDecayEnabled ? "Tak" : "Nie"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Lista zadań (mobile):</span> {editValues.hideTaskList ? "Ukryta" : "Widoczna"}
               </p>
               <p>
                 <span className="text-zinc-500">Mapa:</span>{" "}

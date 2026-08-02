@@ -34,6 +34,7 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   "strong-password": "#f43f5e",
   "photo-task": "#84cc16",
   "qr-hunt": "#0891b2",
+  "open-quiz": "#eab308",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -78,6 +79,8 @@ const PHOTO_TASK_DEFAULT_STATION_DESCRIPTION =
   "Np. „Znajdź młotek i zrób jego zdjęcie”. To pole jest jedyną instrukcją, którą zobaczy gracz.";
 const QR_HUNT_DEFAULT_STATION_DESCRIPTION =
   "Np. „Kody znajdziesz przy wejściach do budynków na trasie”. To pole jest wskazówką, gdzie szukać kodów QR.";
+const OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION =
+  "Twoim zadaniem jest odpowiedzieć na pytanie, wpisując odpowiedź samodzielnie (bez podpowiedzi w postaci gotowych opcji).";
 const QUIZ_SECRET_FALLBACK_ANSWERS = ["A", "B", "C"] as const;
 const MATCHING_PAIR_DELIMITER = "->";
 
@@ -135,6 +138,9 @@ export function resolveDefaultStationDescription(stationType: StationType) {
   if (stationType === "qr-hunt") {
     return QR_HUNT_DEFAULT_STATION_DESCRIPTION;
   }
+  if (stationType === "open-quiz") {
+    return OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION;
+  }
 
   return DEFAULT_STATION_DESCRIPTION;
 }
@@ -155,7 +161,8 @@ export function isKnownDefaultStationDescription(value: string) {
     normalized === MINI_SUDOKU_DEFAULT_STATION_DESCRIPTION ||
     normalized === MATCHING_DEFAULT_STATION_DESCRIPTION ||
     normalized === PHOTO_TASK_DEFAULT_STATION_DESCRIPTION ||
-    normalized === QR_HUNT_DEFAULT_STATION_DESCRIPTION
+    normalized === QR_HUNT_DEFAULT_STATION_DESCRIPTION ||
+    normalized === OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION
   );
 }
 
@@ -209,6 +216,28 @@ export function parseQrScanCodesInput(value: string): string[] {
   return codes;
 }
 
+export function parseAcceptedAnswersInput(value: string): string[] {
+  const seen = new Set<string>();
+  const answers: string[] = [];
+
+  for (const line of value.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    answers.push(trimmed);
+  }
+
+  return answers;
+}
+
 export function isCompletionCodeRequired(stationType: StationType) {
   return stationType === "time" || stationType === "points";
 }
@@ -228,8 +257,13 @@ export function isQuizStationType(stationType: StationType) {
     stationType === "boggle" ||
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
-    stationType === "strong-password"
+    stationType === "strong-password" ||
+    stationType === "open-quiz"
   );
+}
+
+export function isOpenQuizStationType(stationType: StationType) {
+  return stationType === "open-quiz";
 }
 
 export function isWordPuzzleStationType(stationType: StationType) {
@@ -379,6 +413,15 @@ export function getQuizLikeStationCopy(stationType: StationType) {
         answersHint: "Uzupełnij 4 pary w formacie lewa -> prawa.",
         validationMessage: "Dopasowywanie wymaga placeholdera technicznego i 4 pełnych par.",
       };
+    case "open-quiz":
+      return {
+        sectionTitle: "Pytanie otwarte",
+        questionLabel: "Pytanie",
+        questionPlaceholder: "Wpisz pytanie otwarte",
+        answersHint:
+          "Podaj poprawną odpowiedź. Wielkość liter i polskie znaki diakrytyczne nie mają znaczenia. Możesz dodać dodatkowe akceptowane warianty odpowiedzi.",
+        validationMessage: "Pytanie otwarte wymaga treści pytania i poprawnej odpowiedzi.",
+      };
     case "quiz":
     default:
       return {
@@ -400,6 +443,7 @@ export type StationQuizInput = {
   answers: string[];
   correctAnswerIndex: number;
   audioUrl?: string;
+  acceptedAnswers?: string[];
 };
 
 export type MatchingPairInput = {
@@ -446,6 +490,28 @@ function normalizeMatchingPairAnswers(answers: string[]) {
   });
 }
 
+function normalizeAcceptedAnswers(acceptedAnswers: string[] | undefined, correctAnswer: string) {
+  const seen = new Set<string>([correctAnswer.toLowerCase()]);
+  const normalized: string[] = [];
+
+  for (const answer of acceptedAnswers ?? []) {
+    const trimmed = answer.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
 export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | null {
   const question = input.question.trim();
   const answers = input.answers.map((answer) => answer.trim());
@@ -464,11 +530,14 @@ export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | nul
     return null;
   }
 
+  const acceptedAnswers = normalizeAcceptedAnswers(input.acceptedAnswers, answers[correctAnswerIndex]);
+
   return {
     question,
     answers,
     correctAnswerIndex,
     audioUrl: audioUrl || undefined,
+    ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
   };
 }
 
@@ -514,6 +583,15 @@ export function normalizeStationQuizForType(stationType: StationType, input: Sta
       ...input,
       question: nextQuestion,
       answers: [nextQuestion, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
+  if (isOpenQuizStationType(stationType)) {
+    const correctAnswer = (input.answers[0] ?? "").trim();
+    return normalizeStationQuiz({
+      ...input,
+      answers: [correctAnswer, ...QUIZ_SECRET_FALLBACK_ANSWERS],
       correctAnswerIndex: 0,
     });
   }

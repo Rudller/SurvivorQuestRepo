@@ -26,6 +26,7 @@ type StationDto = {
         answers?: string[];
         correctAnswerIndex?: number;
         audioUrl?: string;
+        acceptedAnswers?: string[];
       }
     | null;
   latitude?: number | null;
@@ -171,6 +172,7 @@ function normalizeStation(station: StationDto): Station {
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
             audioUrl: station.quiz.audioUrl,
+            acceptedAnswers: station.quiz.acceptedAnswers,
           }) ?? undefined
         : undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,

@@ -16,7 +16,8 @@ export type StationType =
   | 'matching'
   | 'strong-password'
   | 'photo-task'
-  | 'qr-hunt';
+  | 'qr-hunt'
+  | 'open-quiz';
 
 export type ChallengeDifficultyMode = 'admin' | 'player';
 export type ChallengeDifficulty = 'easy' | 'medium' | 'hard';
@@ -26,6 +27,7 @@ export type StationQuiz = {
   answers: [string, string, string, string];
   correctAnswerIndex: number;
   audioUrl?: string;
+  acceptedAnswers?: string[];
 };
 
 export type StationTranslation = {

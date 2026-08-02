@@ -60,6 +60,7 @@ export type CreateRealizationDto = {
   showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
+  hideTaskList?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
 };
@@ -232,6 +233,7 @@ export function validateRealizationPayload(
     type: payload.type,
     logoUrl: payload.logoUrl?.trim() || undefined,
     hideMap: payload.hideMap === true,
+    hideTaskList: payload.hideTaskList === true,
     mapImageUrl: payload.mapImageUrl?.trim() || undefined,
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,

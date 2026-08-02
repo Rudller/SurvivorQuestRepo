@@ -151,6 +151,7 @@ export function buildRealizationEntity(input: {
     showLeaderboardOnFinish: boolean;
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
+    hideTaskList: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     createdAt: Date;
@@ -201,6 +202,7 @@ export function buildRealizationEntity(input: {
     showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
+    hideTaskList: realization.hideTaskList,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),

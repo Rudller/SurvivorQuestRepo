@@ -35,6 +35,7 @@ function createSessionState(): ExpeditionSessionState {
       showLeaderboardOnFinish: true,
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: true,
+      hideTaskList: false,
       scheduledAt: "2026-05-10T00:00:00.000Z",
       durationMinutes: 120,
       stations: [

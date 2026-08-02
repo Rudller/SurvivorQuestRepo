@@ -98,6 +98,7 @@ type RealizationDto = {
   showLeaderboardOnFinish?: boolean;
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
+  hideTaskList?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -132,6 +133,7 @@ type CreateRealizationPayload = {
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -166,6 +168,7 @@ type UpdateRealizationPayload = {
   showLeaderboardOnFinish: boolean;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -325,6 +328,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
       typeof dto.teamStationNumberingEnabled === "boolean" ? dto.teamStationNumberingEnabled : true,
     timedStationPointsDecayEnabled:
       typeof dto.timedStationPointsDecayEnabled === "boolean" ? dto.timedStationPointsDecayEnabled : false,
+    hideTaskList: dto.hideTaskList === true,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,
