@@ -239,6 +239,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     points: station.points,
     timeLimitSeconds: station.timeLimitSeconds,
     completionCode: station.completionCode ?? "",
+    qrEntryCode: station.qrEntryCode ?? "",
     qrScanCodes: normalizeStationCategories(station.qrScanCodes),
     challengeDifficultyMode: station.challengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty,
