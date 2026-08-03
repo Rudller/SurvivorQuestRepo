@@ -1162,7 +1162,9 @@ export function StationPreviewOverlay({
           current.startedAt === stationProp.startedAt &&
           current.quizFailed === stationProp.quizFailed &&
           current.timeLimitSeconds === stationProp.timeLimitSeconds &&
-          current.points === stationProp.points
+          current.points === stationProp.points &&
+          current.qrScanCompletedCount === stationProp.qrScanCompletedCount &&
+          current.qrScanRequiredCount === stationProp.qrScanRequiredCount
         ) {
           return current;
         }
@@ -1195,6 +1197,8 @@ export function StationPreviewOverlay({
     stationProp,
     stationProp?.points,
     stationProp?.quizFailed,
+    stationProp?.qrScanCompletedCount,
+    stationProp?.qrScanRequiredCount,
     stationProp?.startedAt,
     stationProp?.stationId,
     stationProp?.status,

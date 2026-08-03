@@ -5,6 +5,7 @@ import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import type { StationTestViewModel } from "../types";
 import { useStationPanelLayout } from "./shared-ui";
+import { useQrScanFeedbackSound } from "./use-qr-scan-feedback-sound";
 
 type QrHuntText = {
   scanCode: string;
@@ -65,6 +66,7 @@ export function useQrHuntScan(
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const feedbackSound = useQrScanFeedbackSound();
 
   const isDone = station?.status === "done";
   const isFailed = station?.status === "failed";
@@ -83,10 +85,12 @@ export function useQrHuntScan(
     setIsSubmitting(false);
 
     if (error) {
+      feedbackSound.playIncorrect();
       setSubmitError(error);
       return;
     }
 
+    feedbackSound.playCorrect();
     setIsScannerOpen(false);
     onSubmitSuccess?.();
   }
