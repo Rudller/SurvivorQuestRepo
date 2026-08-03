@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
@@ -33,6 +33,7 @@ export default function HomePage() {
     skip: !meData,
   });
   const taskCounts = getTaskCounts();
+  const [nowTimestamp] = useState(() => Date.now());
 
   const nearestRealization = useMemo(() => {
     if (!realizations?.length) {
@@ -43,12 +44,11 @@ export default function HomePage() {
       (left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
     );
 
-    const nowTimestamp = Date.now();
     return (
       sortedByDate.find((realization) => new Date(realization.scheduledAt).getTime() >= nowTimestamp) ||
       sortedByDate[0]
     );
-  }, [realizations]);
+  }, [realizations, nowTimestamp]);
 
   const nearestStations = nearestRealization
     ? nearestRealization.scenarioStations.length > 0

@@ -248,3 +248,40 @@ export type RealizationStationDraft = {
   pendingAudioFile?: File | null;
   pendingAudioLanguage?: RealizationLanguage;
 };
+
+export type RealizationExportRealizationData = {
+  companyName: string;
+  location?: string;
+  language: RealizationLanguage;
+  customLanguage?: string;
+  introText?: string;
+  gameRules?: string;
+  contactPerson: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  instructors: string[];
+  type: RealizationType;
+  logoUrl?: string;
+  hideMap: boolean;
+  mapImageUrl?: string;
+  offerPdfUrl?: string;
+  offerPdfName?: string;
+  teamCount: number;
+  peopleCount: number;
+  durationMinutes: number;
+  showLeaderboard: boolean;
+  showLeaderboardDuringGame: boolean;
+  showLeaderboardOnFinish: boolean;
+  teamStationNumberingEnabled: boolean;
+  timedStationPointsDecayEnabled: boolean;
+  hideTaskList: boolean;
+  status: RealizationStatus;
+  scheduledAt: string;
+};
+
+export type RealizationExportFile = {
+  schemaVersion: 1;
+  exportedAt: string;
+  realization: RealizationExportRealizationData;
+  scenarioStations: RealizationStationDraft[];
+};

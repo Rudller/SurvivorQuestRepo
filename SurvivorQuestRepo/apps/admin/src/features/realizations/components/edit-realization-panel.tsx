@@ -44,6 +44,7 @@ import {
 } from "./realization-stations-editor";
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
+import { geocodeLocation } from "../realization-geocoding";
 
 interface EditRealizationPanelProps {
   realization: Realization;
@@ -104,6 +105,7 @@ export function EditRealizationPanel({
   const [mapImageInputMode, setMapImageInputMode] = useState<"upload" | "existing">("upload");
   const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
+  const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const initialLanguageSelection = useMemo(
     () => parseRealizationLanguageSelection(realization.language, realization.customLanguage),
     [realization.customLanguage, realization.language],
@@ -306,6 +308,16 @@ export function EditRealizationPanel({
       ...current,
       instructors: current.instructors.filter((name) => name !== nameToRemove),
     }));
+  }
+
+  async function handleLocationBlur() {
+    const trimmedLocation = editValues.location.trim();
+    if (!trimmedLocation) {
+      return;
+    }
+
+    const geocoded = await geocodeLocation(trimmedLocation);
+    setLocationSuggestedCenter(geocoded);
   }
 
   function openScheduledAtPicker() {
@@ -603,6 +615,7 @@ export function EditRealizationPanel({
                 <input
                   value={editValues.location}
                   onChange={(event) => setEditValues((prev) => ({ ...prev, location: event.target.value }))}
+                  onBlur={handleLocationBlur}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                 />
               </label>
@@ -1010,6 +1023,7 @@ export function EditRealizationPanel({
                   onChange={setScenarioStations}
                   showValidation={submitAttempted}
                   selectedLanguages={selectedLanguages}
+                  suggestedCenter={locationSuggestedCenter}
                 />
                 {isScenarioStationsEmpty ? (
                   <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>

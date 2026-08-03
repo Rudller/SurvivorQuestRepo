@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   Realization,
+  RealizationExportFile,
   RealizationLanguage,
   RealizationStationDraft,
   RealizationStatus,
   RealizationType,
 } from "../types/realization";
+import { parseRealizationExportFile } from "../realization-export";
+import { geocodeLocation } from "../realization-geocoding";
 import {
   formatRealizationLanguageSummary,
   getRealizationLanguageFlag,
@@ -106,6 +109,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [mapImageUrl, setMapImageUrl] = useState<string | undefined>(undefined);
   const [mapImageInputMode, setMapImageInputMode] = useState<"upload" | "existing">("upload");
   const [offerPdfFile, setOfferPdfFile] = useState<File | null>(null);
+  const [offerPdfUrl, setOfferPdfUrl] = useState<string | undefined>(undefined);
   const [offerPdfName, setOfferPdfName] = useState<string | undefined>();
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
@@ -121,7 +125,20 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleLocationBlur() {
+    const trimmedLocation = location.trim();
+    if (!trimmedLocation) {
+      return;
+    }
+
+    const geocoded = await geocodeLocation(trimmedLocation);
+    setLocationSuggestedCenter(geocoded);
+  }
 
   const scenarioById = useMemo(
     () => new Map(scenarios.map((s) => [s.id, s])),
@@ -272,6 +289,81 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setInstructors((current) => current.filter((name) => name !== nameToRemove));
   }
 
+  function applyImportedData(data: RealizationExportFile) {
+    const importedLanguageSelection = parseRealizationLanguageSelection(
+      data.realization.language,
+      data.realization.customLanguage,
+    );
+
+    setCompanyName(data.realization.companyName);
+    setLocation(data.realization.location ?? "");
+    setContactPerson(data.realization.contactPerson);
+    setContactPhone(data.realization.contactPhone ?? "");
+    setContactEmail(data.realization.contactEmail ?? "");
+    setSelectedLanguages(importedLanguageSelection.selectedLanguages);
+    setCustomLanguage(importedLanguageSelection.customLanguage);
+    setIntroText(data.realization.introText ?? "");
+    setGameRules(data.realization.gameRules ?? "");
+    setInstructors(data.realization.instructors);
+    setInstructorInput("");
+    setSelectedType(data.realization.type);
+    setLogoFile(null);
+    setLogoUrl(data.realization.logoUrl);
+    setLogoInputMode("upload");
+    setHideMap(data.realization.hideMap);
+    setMapImageFile(null);
+    setMapImageUrl(data.realization.mapImageUrl);
+    setMapImageInputMode("upload");
+    setOfferPdfFile(null);
+    setOfferPdfUrl(data.realization.offerPdfUrl);
+    setOfferPdfName(data.realization.offerPdfName);
+    setOfferPdfError(null);
+    setSelectedScenarioId("");
+    setTeamCount(data.realization.teamCount);
+    setPeopleCount(data.realization.peopleCount);
+    setDurationMinutes(data.realization.durationMinutes);
+    setShowLeaderboardDuringGame(data.realization.showLeaderboardDuringGame);
+    setShowLeaderboardOnFinish(data.realization.showLeaderboardOnFinish);
+    setTeamStationNumberingEnabled(data.realization.teamStationNumberingEnabled);
+    setTimedStationPointsDecayEnabled(data.realization.timedStationPointsDecayEnabled);
+    setHideTaskList(data.realization.hideTaskList);
+    setStatus(data.realization.status);
+    setScheduledAt(toDateTimeLocalValue(data.realization.scheduledAt));
+    setScenarioStations(data.scenarioStations);
+    setLocationSuggestedCenter(null);
+    setFormError(null);
+    setSubmitAttempted(false);
+  }
+
+  async function handleImportFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const raw = JSON.parse(await file.text());
+      const parsed = parseRealizationExportFile(raw);
+      if (!parsed) {
+        setImportError("Niepoprawny plik JSON realizacji.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        "Wgranie tego pliku nadpisze wszystkie obecnie wypełnione pola formularza. Kontynuować?",
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      setImportError(null);
+      applyImportedData(parsed);
+    } catch {
+      setImportError("Nie udało się odczytać pliku JSON.");
+    }
+  }
+
   function openScheduledAtPicker() {
     const input = scheduledAtInputRef.current;
     if (!input) {
@@ -300,14 +392,36 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
           <div>
             <h2 className="text-xl font-semibold text-zinc-100">Nowa realizacja</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
-          >
-            Zamknij
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => importFileInputRef.current?.click()}
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+            >
+              Importuj z JSON
+            </button>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept="application/json"
+              onChange={handleImportFileSelected}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+            >
+              Zamknij
+            </button>
+          </div>
         </div>
+
+        {importError && (
+          <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+            {importError}
+          </div>
+        )}
 
         <form
           className="sq-form min-w-0 space-y-4 overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
@@ -364,8 +478,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
             try {
               let finalLogoUrl = logoUrl;
-              let offerPdfUrl: string | undefined;
-              let nextOfferPdfName: string | undefined;
+              let finalOfferPdfUrl = offerPdfUrl;
+              let nextOfferPdfName = offerPdfName;
 
               if (logoFile) {
                 const uploadedLogo = await uploadRealizationLogo(logoFile).unwrap();
@@ -380,7 +494,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
               if (offerPdfFile) {
                 const uploadedOffer = await uploadRealizationOffer(offerPdfFile).unwrap();
-                offerPdfUrl = uploadedOffer.url;
+                finalOfferPdfUrl = uploadedOffer.url;
                 nextOfferPdfName = offerPdfFile.name;
               }
 
@@ -399,7 +513,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 logoUrl: finalLogoUrl,
                 hideMap,
                 mapImageUrl: finalMapImageUrl,
-                offerPdfUrl,
+                offerPdfUrl: finalOfferPdfUrl,
                 offerPdfName: nextOfferPdfName,
                 scenarioId: fallbackScenarioId,
                 teamCount: normalizedTeamCount,
@@ -446,6 +560,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setMapImageUrl(undefined);
               setMapImageInputMode("upload");
               setOfferPdfFile(null);
+              setOfferPdfUrl(undefined);
               setOfferPdfName(undefined);
               setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
               setScenarioStations([]);
@@ -539,6 +654,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 <input
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
+                  onBlur={handleLocationBlur}
                   placeholder="np. Warszawa, Pole Mokotowskie"
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                 />
@@ -913,6 +1029,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   onChange={setScenarioStations}
                   showValidation={submitAttempted}
                   selectedLanguages={selectedLanguages}
+                  suggestedCenter={locationSuggestedCenter}
                 />
                 {isScenarioStationsEmpty ? (
                   <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
@@ -950,11 +1067,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               />
               {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
               {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
-              {offerPdfFile && (
+              {(offerPdfFile || offerPdfUrl) && (
                 <button
                   type="button"
                   onClick={() => {
                     setOfferPdfFile(null);
+                    setOfferPdfUrl(undefined);
                     setOfferPdfName(undefined);
                     setOfferPdfError(null);
                   }}

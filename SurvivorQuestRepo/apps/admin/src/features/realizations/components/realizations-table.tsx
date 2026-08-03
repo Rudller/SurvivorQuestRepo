@@ -13,6 +13,7 @@ import {
   type RealizationSortField,
   type SortDirection,
 } from "../realization.utils";
+import { downloadRealizationExport } from "../realization-export";
 
 interface RealizationsTableProps {
   realizations: Realization[];
@@ -231,6 +232,13 @@ export function RealizationsTable({
                               Edytuj
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => downloadRealizationExport(realization)}
+                            className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                          >
+                            Pobierz JSON
+                          </button>
                         </div>
                       </td>
                     </tr>

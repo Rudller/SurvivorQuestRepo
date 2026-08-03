@@ -139,5 +139,3 @@ export default function RealizationsPage() {
     </AdminShell>
   );
 }
-
-

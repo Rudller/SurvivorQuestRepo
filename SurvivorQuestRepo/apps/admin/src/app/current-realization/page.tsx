@@ -370,9 +370,11 @@ export default function CurrentRealizationPage() {
     }
   }, [isMeError, meError, router]);
 
-  useEffect(() => {
+  const [visibleLogCountRealizationId, setVisibleLogCountRealizationId] = useState(overview?.realization.id);
+  if (overview?.realization.id !== visibleLogCountRealizationId) {
+    setVisibleLogCountRealizationId(overview?.realization.id);
     setVisibleLogCount(20);
-  }, [overview?.realization.id]);
+  }
 
   if (isMeLoading) {
     return <main className="p-8">Sprawdzanie sesji...</main>;

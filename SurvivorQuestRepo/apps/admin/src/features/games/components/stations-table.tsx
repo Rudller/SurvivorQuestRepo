@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Station } from "../types/station";
 import {
   getStationTypeLabel,
@@ -101,13 +101,17 @@ export function StationsTable({
   const collapsedCategorySet = useMemo(() => new Set(collapsedCategories), [collapsedCategories]);
   const hasFilters = searchQuery.trim().length > 0 || selectedCategories.length > 0;
 
-  useEffect(() => {
-    const availableCategories = new Set(groupedGames.map((group) => group.category));
-    setCollapsedCategories((current) => {
-      const next = current.filter((category) => availableCategories.has(category));
-      return next.length === current.length ? current : next;
-    });
-  }, [groupedGames]);
+  const availableCategorySet = useMemo(
+    () => new Set(groupedGames.map((group) => group.category)),
+    [groupedGames],
+  );
+  const prunedCollapsedCategories = useMemo(
+    () => collapsedCategories.filter((category) => availableCategorySet.has(category)),
+    [collapsedCategories, availableCategorySet],
+  );
+  if (prunedCollapsedCategories.length !== collapsedCategories.length) {
+    setCollapsedCategories(prunedCollapsedCategories);
+  }
 
   function toggleCategoryFilter(category: string) {
     setSelectedCategories((current) =>

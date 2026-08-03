@@ -64,6 +64,7 @@ interface RealizationStationsEditorProps {
   onChange: (stations: RealizationStationDraft[]) => void;
   showValidation?: boolean;
   selectedLanguages?: RealizationLanguage[];
+  suggestedCenter?: { latitude: number; longitude: number } | null;
 }
 
 const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
@@ -424,6 +425,7 @@ export function RealizationStationsEditor({
   onChange,
   showValidation = false,
   selectedLanguages,
+  suggestedCenter,
 }: RealizationStationsEditorProps) {
   const [expandedStationIndex, setExpandedStationIndex] = useState<number | null>(null);
   const [stationImageModes, setStationImageModes] = useState<Record<string, ImageInputMode>>({});
@@ -535,50 +537,32 @@ export function RealizationStationsEditor({
     [stationCategoryCounts],
   );
 
-  useEffect(() => {
-    setExpandedStationIndex((current) => {
-      if (current === null) {
-        return null;
-      }
+  // `activeExpandedStationIndex` (above) already treats an out-of-range `expandedStationIndex`
+  // as null for rendering, so no separate effect is needed to clamp it when `stations` shrinks.
 
-      return current < stations.length ? current : null;
-    });
-  }, [stations.length]);
-
-  useEffect(() => {
-    if (!availableLanguages.includes(baseLanguage)) {
-      const fallbackLanguage = availableLanguages[0];
-      setBaseLanguage(
-        fallbackLanguage === "polish" ||
-          fallbackLanguage === "english" ||
-          fallbackLanguage === "ukrainian" ||
-          fallbackLanguage === "russian" ||
-          fallbackLanguage === "other"
-          ? fallbackLanguage
-          : "polish",
-      );
-    }
-  }, [availableLanguages, baseLanguage]);
-
-  useEffect(() => {
-    if (!editableLanguages.includes(editingLanguage)) {
-      setEditingLanguage(baseLanguage);
-    }
-  }, [baseLanguage, editableLanguages, editingLanguage]);
-
-  useEffect(() => {
-    if (activeExpandedStationIndex === null) {
-      return;
-    }
-
-    const isExpandedStationVisible = filteredStationEntries.some(
-      (entry) => entry.index === activeExpandedStationIndex,
+  if (!availableLanguages.includes(baseLanguage)) {
+    const fallbackLanguage = availableLanguages[0];
+    setBaseLanguage(
+      fallbackLanguage === "polish" ||
+        fallbackLanguage === "english" ||
+        fallbackLanguage === "ukrainian" ||
+        fallbackLanguage === "russian" ||
+        fallbackLanguage === "other"
+        ? fallbackLanguage
+        : "polish",
     );
+  }
 
-    if (!isExpandedStationVisible) {
-      setExpandedStationIndex(null);
-    }
-  }, [activeExpandedStationIndex, filteredStationEntries]);
+  if (!editableLanguages.includes(editingLanguage)) {
+    setEditingLanguage(baseLanguage);
+  }
+
+  const isActiveExpandedStationVisible =
+    activeExpandedStationIndex === null ||
+    filteredStationEntries.some((entry) => entry.index === activeExpandedStationIndex);
+  if (!isActiveExpandedStationVisible) {
+    setExpandedStationIndex(null);
+  }
 
   function updateStation(index: number, patch: Partial<RealizationStationDraft>) {
     onChange(stations.map((station, currentIndex) => (currentIndex === index ? { ...station, ...patch } : station)));
@@ -651,6 +635,13 @@ export function RealizationStationsEditor({
   function getStationKey(index: number, station: RealizationStationDraft) {
     return station.id ?? `new-${index}`;
   }
+
+  useEffect(() => {
+    for (const { station, index: stationIndex } of filteredStationEntries) {
+      const stationKey = getStationKey(stationIndex, station);
+      colorCommitCallbackRef.current.set(stationKey, (v: string) => updateStation(stationIndex, { color: v }));
+    }
+  });
 
   function setStationImageMode(stationKey: string, mode: ImageInputMode) {
     setStationImageModes((current) => ({ ...current, [stationKey]: mode }));
@@ -1038,7 +1029,6 @@ export function RealizationStationsEditor({
       <div className="space-y-3">
         {filteredStationEntries.map(({ station, index: stationIndex }) => {
           const stationKey = getStationKey(stationIndex, station);
-          colorCommitCallbackRef.current.set(stationKey, (v: string) => updateStation(stationIndex, { color: v }));
           const imageMode = stationImageModes[stationKey] ?? "upload";
           const audioMode = stationAudioModes[stationKey] ?? "upload";
           const audioFile = station.pendingAudioFile ?? null;
@@ -2106,6 +2096,7 @@ export function RealizationStationsEditor({
                       latitude={station.latitude}
                       longitude={station.longitude}
                       recenterToken={recenterToken}
+                      suggestedCenter={suggestedCenter}
                       onPick={({ latitude, longitude }) => {
                         updateStation(stationIndex, { latitude, longitude });
                         setStationLocationError(stationKey, null);
