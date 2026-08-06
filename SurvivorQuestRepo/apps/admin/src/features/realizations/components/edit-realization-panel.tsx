@@ -313,6 +313,25 @@ export function EditRealizationPanel({
     };
   }, [pendingMapImagePreviewUrl]);
 
+  useEffect(() => {
+    const initialLocation = realization.location?.trim();
+    if (!initialLocation) {
+      return;
+    }
+
+    let cancelled = false;
+    void geocodeLocation(initialLocation).then((geocoded) => {
+      if (!cancelled) {
+        setLocationSuggestedCenter(geocoded);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realization.id]);
+
   function addInstructor() {
     const name = instructorInput.trim();
     if (!name) {

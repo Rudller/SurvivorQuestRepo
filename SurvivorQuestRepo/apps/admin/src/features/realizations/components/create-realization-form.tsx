@@ -361,7 +361,11 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setStatus(data.realization.status);
     setScheduledAt(toDateTimeLocalValue(data.realization.scheduledAt));
     setScenarioStations(data.scenarioStations);
+    const importedLocation = data.realization.location?.trim();
     setLocationSuggestedCenter(null);
+    if (importedLocation) {
+      void geocodeLocation(importedLocation).then(setLocationSuggestedCenter);
+    }
     setFormError(null);
     setSubmitAttempted(false);
     setActiveTab("basic");
