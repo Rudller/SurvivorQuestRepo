@@ -26,6 +26,7 @@ import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
 import { FormSection } from "@/shared/components/form-section";
 import { SummaryCard } from "@/shared/components/summary-card";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
+import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
 import type { Station } from "@/features/games/types/station";
 import { useUploadStationAudioMutation } from "@/features/games/api/station.api";
 import {
@@ -48,6 +49,11 @@ import {
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
 } from "../realization.utils";
+import {
+  REALIZATION_FORM_TAB_LABELS,
+  REALIZATION_FORM_TAB_ORDER,
+  type RealizationFormTabId,
+} from "../realization-form-tabs";
 
 interface CreateRealizationFormProps {
   scenarios: Scenario[];
@@ -66,6 +72,8 @@ const assetInputModeOptions = [
   { value: "upload", label: "Prześlij nowy plik" },
   { value: "existing", label: "Wybierz z już użytych" },
 ] as const;
+
+const CREATE_FORM_TAB_ORDER = REALIZATION_FORM_TAB_ORDER.filter((id) => id !== "history");
 
 function isPdfFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -89,6 +97,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
   const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
 
+  const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [companyName, setCompanyName] = useState("");
   const [location, setLocation] = useState("");
   const [contactPerson, setContactPerson] = useState("");
@@ -236,6 +245,28 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const isScheduledAtInvalid = submitAttempted && !scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(durationMinutes) || durationMinutes < 1);
   const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
+  const basicTabHasError =
+    isCompanyNameInvalid ||
+    isContactPersonInvalid ||
+    isContactChannelInvalid ||
+    isLanguageSelectionInvalid ||
+    isCustomLanguageInvalid ||
+    isScheduledAtInvalid ||
+    isDurationInvalid;
+  const scenarioTabHasError = isScenarioInvalid;
+  const stationsTabHasError = isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
+  const tabs: TabItem[] = CREATE_FORM_TAB_ORDER.map((id) => ({
+    id,
+    label: REALIZATION_FORM_TAB_LABELS[id],
+    hasError:
+      id === "basic"
+        ? basicTabHasError
+        : id === "scenario"
+          ? scenarioTabHasError
+          : id === "stations"
+            ? stationsTabHasError
+            : false,
+  }));
   const logoPreviewUrl = useMemo(
     () => (logoFile ? URL.createObjectURL(logoFile) : undefined),
     [logoFile],
@@ -333,6 +364,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setLocationSuggestedCenter(null);
     setFormError(null);
     setSubmitAttempted(false);
+    setActiveTab("basic");
   }
 
   async function handleImportFileSelected(event: ChangeEvent<HTMLInputElement>) {
@@ -387,69 +419,43 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
         onClick={onClose}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-3xl space-y-4 overflow-x-hidden overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-zinc-100">Nowa realizacja</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => importFileInputRef.current?.click()}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Importuj z JSON
-            </button>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept="application/json"
-              onChange={handleImportFileSelected}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Zamknij
-            </button>
-          </div>
-        </div>
-
-        {importError && (
-          <div className="rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-            {importError}
-          </div>
-        )}
-
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950 lg:w-1/2">
         <form
-          className="sq-form min-w-0 space-y-4 overflow-x-hidden rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+          className="sq-form flex h-full min-h-0 flex-col"
           onSubmit={async (event) => {
             event.preventDefault();
             setFormError(null);
             setSubmitAttempted(true);
-            const hasIncompleteFields =
+
+            const basicTabInvalid =
               !companyName.trim() ||
-              !selectedScenarioId ||
               !contactPerson.trim() ||
               (!contactPhone.trim() && !contactEmail.trim()) ||
               isRealizationLanguageSelectionInvalid(languageSelection) ||
               !scheduledAt ||
               !Number.isFinite(durationMinutes) ||
-              durationMinutes < 1 ||
-              scenarioStations.length === 0;
+              durationMinutes < 1;
+            const scenarioTabInvalid = !selectedScenarioId;
+            const stationsTabInvalid = scenarioStations.length === 0;
+            const hasIncompleteFields = basicTabInvalid || scenarioTabInvalid || stationsTabInvalid;
 
             if (hasInvalidScenarioStations) {
+              setActiveTab("stations");
               setFormError("Nie można zapisać realizacji: popraw dane stanowisk (nazwa/opis/punkty/kody/quiz).");
               return;
             }
 
-            if (
-              hasIncompleteFields &&
-              !window.confirm("Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?")
-            ) {
-              return;
+            if (hasIncompleteFields) {
+              const firstInvalidTab: RealizationFormTabId = basicTabInvalid
+                ? "basic"
+                : scenarioTabInvalid
+                  ? "scenario"
+                  : "stations";
+              setActiveTab(firstInvalidTab);
+
+              if (!window.confirm("Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?")) {
+                return;
+              }
             }
 
             const fallbackScenarioId =
@@ -565,463 +571,578 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
               setScenarioStations([]);
               setSubmitAttempted(false);
+              setActiveTab("basic");
               onClose();
             } catch (error) {
               setFormError(resolveApiErrorMessage(error) ?? "Nie udało się dodać realizacji.");
             }
           }}
         >
-          <FormSection title="Klient">
-            <label className="block space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa firmy</span>
-              <input
-                value={companyName}
-                onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Nazwa firmy"
-                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCompanyNameInvalid)}`}
-              />
-              {isCompanyNameInvalid ? <p className="text-xs text-red-300">Uzupełnij nazwę firmy.</p> : null}
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Typ realizacji</span>
-              <select
-                value={selectedType}
-                onChange={(event) => setSelectedType(event.target.value as RealizationType)}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+          <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 sm:px-6">
+            <h2 className="text-xl font-semibold text-zinc-100">Nowa realizacja</h2>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
               >
-                {realizationTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
-              <div
-                className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
-                  isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
-                }`}
-              >
-                {realizationLanguageOptions.map((option) => {
-                  const isChecked = selectedLanguagesSet.has(option.value);
-                  return (
-                    <label key={option.value} className="inline-flex items-center gap-2 text-sm text-zinc-200">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(event) => {
-                          setSelectedLanguages((current) => {
-                            if (event.target.checked) {
-                              return [...current, option.value].filter(
-                                (value, index, list) => list.indexOf(value) === index,
-                              );
-                            }
-                            return current.filter((value) => value !== option.value);
-                          });
-                        }}
-                        className="h-4 w-4 accent-amber-400"
-                      />
-                      <span>{getRealizationLanguageFlag(option.value)}</span>
-                      <span>{option.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {isLanguageSelectionInvalid ? (
-                <p className="text-xs text-red-300">Wybierz co najmniej jeden język realizacji.</p>
-              ) : null}
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {selectedLanguagesSet.has("other") && (
-                <label className="space-y-1.5 sm:col-span-2">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
-                  <input
-                    value={customLanguage}
-                    onChange={(event) => setCustomLanguage(event.target.value)}
-                    placeholder="Np. Hiszpański"
-                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCustomLanguageInvalid)}`}
-                  />
-                  {isCustomLanguageInvalid ? <p className="text-xs text-red-300">Wpisz własny język realizacji.</p> : null}
-                </label>
-              )}
-
-              <label className="space-y-1.5 sm:col-span-2">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
-                <input
-                  value={location}
-                  onChange={(event) => setLocation(event.target.value)}
-                  onBlur={handleLocationBlur}
-                  placeholder="np. Warszawa, Pole Mokotowskie"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Osoba kontaktowa</span>
-                <input
-                  value={contactPerson}
-                  onChange={(event) => setContactPerson(event.target.value)}
-                  placeholder="Imię i nazwisko"
-                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactPersonInvalid)}`}
-                />
-                {isContactPersonInvalid ? <p className="text-xs text-red-300">Uzupełnij osobę kontaktową.</p> : null}
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Telefon kontaktowy</span>
-                <input
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
-                  placeholder="+48 ..."
-                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
-                />
-              </label>
-
-              <label className="space-y-1.5 sm:col-span-2">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">E-mail kontaktowy</span>
-                <input
-                  type="email"
-                  value={contactEmail}
-                  onChange={(event) => setContactEmail(event.target.value)}
-                  placeholder="kontakt@firma.pl"
-                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
-                />
-                {isContactChannelInvalid ? <p className="text-xs text-red-300">Podaj telefon lub e-mail kontaktowy.</p> : null}
-              </label>
-            </div>
-
-            <div className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
-              {(logoPreviewUrl ?? logoUrl) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoPreviewUrl ?? logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
-              )}
-              {usedLogoOptions.length > 0 && (
-                <SegmentedToggle options={assetInputModeOptions} value={logoInputMode} onChange={setLogoInputMode} />
-              )}
-              {logoInputMode === "existing" && usedLogoOptions.length > 0 ? (
-                <UploadedAssetPicker
-                  options={usedLogoOptions}
-                  selectedUrl={logoUrl}
-                  onSelect={(url) => {
-                    setLogoUrl(url);
-                    setLogoFile(null);
-                  }}
-                />
-              ) : (
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) {
-                      return;
-                    }
-
-                    setLogoFile(file);
-                    setLogoUrl(undefined);
-                    setFormError(null);
-                    event.currentTarget.value = "";
-                  }}
-                  className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
-                />
-              )}
-              {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
-              {(logoFile || logoUrl) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLogoFile(null);
-                    setLogoUrl(undefined);
-                  }}
-                  className="text-xs text-red-400 hover:text-red-300"
-                >
-                  Usuń logo
-                </button>
-              )}
-            </div>
-          </FormSection>
-
-          <FormSection title="Instruktorzy">
-            <div className="flex gap-2">
+                Importuj z JSON
+              </button>
               <input
-                value={instructorInput}
-                onChange={(event) => setInstructorInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    addInstructor();
-                  }
-                }}
-                placeholder="Dodaj instruktora"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                ref={importFileInputRef}
+                type="file"
+                accept="application/json"
+                onChange={handleImportFileSelected}
+                className="hidden"
               />
               <button
                 type="button"
-                onClick={addInstructor}
-                className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-200 transition hover:border-zinc-500"
+                onClick={onClose}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
               >
-                Dodaj
+                Zamknij
+              </button>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="sq-button rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+              >
+                {isCreating
+                  ? "Dodawanie..."
+                  : isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio
+                    ? "Przesyłanie plików..."
+                    : "Dodaj realizację"}
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {instructors.map((instructor) => (
-                <span
-                  key={instructor}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200"
-                >
-                  {instructor}
-                  <button
-                    type="button"
-                    onClick={() => removeInstructor(instructor)}
-                    className="text-red-300 transition hover:text-red-200"
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-              {instructors.length === 0 && <p className="text-xs text-zinc-500">Brak dodanych instruktorów.</p>}
+          </div>
+
+          <TabStrip tabs={tabs} activeId={activeTab} onChange={(id) => setActiveTab(id as RealizationFormTabId)} className="px-4 sm:px-6" />
+
+          {importError && (
+            <div className="mx-4 mt-3 rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 sm:mx-6">
+              {importError}
             </div>
-          </FormSection>
+          )}
+          {formError && <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{formError}</p>}
 
-          <FormSection title="Harmonogram i status">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
-                <div className="relative">
-                  <input
-                    ref={scheduledAtInputRef}
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(event) => setScheduledAt(event.target.value)}
-                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={openScheduledAtPicker}
-                    aria-label="Otwórz kalendarz terminu realizacji"
-                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
-                  >
-                    <CalendarInputIcon />
-                  </button>
-                </div>
-                {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
-              </label>
+          <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+            {activeTab === "basic" && (
+              <>
+                <FormSection title="Klient">
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa firmy</span>
+                    <input
+                      value={companyName}
+                      onChange={(event) => setCompanyName(event.target.value)}
+                      placeholder="Nazwa firmy"
+                      className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCompanyNameInvalid)}`}
+                    />
+                    {isCompanyNameInvalid ? <p className="text-xs text-red-300">Uzupełnij nazwę firmy.</p> : null}
+                  </label>
 
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Status</span>
-                <select
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value as RealizationStatus)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                >
-                  <option value="planned">Zaplanowana</option>
-                  <option value="in-progress">W trakcie</option>
-                  <option value="done">Zrealizowana</option>
-                </select>
-              </label>
-            </div>
-          </FormSection>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Typ realizacji</span>
+                    <select
+                      value={selectedType}
+                      onChange={(event) => setSelectedType(event.target.value as RealizationType)}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    >
+                      {realizationTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-          <FormSection title="Ustawienia rozgrywki">
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={showLeaderboardDuringGame}
-                onChange={(event) => setShowLeaderboardDuringGame(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Pokaż leaderboard w trakcie gry (mobile)
-            </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
+                    <div
+                      className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
+                        isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
+                      }`}
+                    >
+                      {realizationLanguageOptions.map((option) => {
+                        const isChecked = selectedLanguagesSet.has(option.value);
+                        return (
+                          <label key={option.value} className="inline-flex items-center gap-2 text-sm text-zinc-200">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(event) => {
+                                setSelectedLanguages((current) => {
+                                  if (event.target.checked) {
+                                    return [...current, option.value].filter(
+                                      (value, index, list) => list.indexOf(value) === index,
+                                    );
+                                  }
+                                  return current.filter((value) => value !== option.value);
+                                });
+                              }}
+                              className="h-4 w-4 accent-amber-400"
+                            />
+                            <span>{getRealizationLanguageFlag(option.value)}</span>
+                            <span>{option.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {isLanguageSelectionInvalid ? (
+                      <p className="text-xs text-red-300">Wybierz co najmniej jeden język realizacji.</p>
+                    ) : null}
+                  </label>
 
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={showLeaderboardOnFinish}
-                onChange={(event) => setShowLeaderboardOnFinish(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Pokaż leaderboard na ekranie końcowym (mobile)
-            </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selectedLanguagesSet.has("other") && (
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
+                        <input
+                          value={customLanguage}
+                          onChange={(event) => setCustomLanguage(event.target.value)}
+                          placeholder="Np. Hiszpański"
+                          className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCustomLanguageInvalid)}`}
+                        />
+                        {isCustomLanguageInvalid ? <p className="text-xs text-red-300">Wpisz własny język realizacji.</p> : null}
+                      </label>
+                    )}
 
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={teamStationNumberingEnabled}
-                onChange={(event) => setTeamStationNumberingEnabled(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Numeracja stanowisk dla drużyn
-            </label>
+                    <label className="space-y-1.5 sm:col-span-2">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
+                      <input
+                        value={location}
+                        onChange={(event) => setLocation(event.target.value)}
+                        onBlur={handleLocationBlur}
+                        placeholder="np. Warszawa, Pole Mokotowskie"
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
 
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={timedStationPointsDecayEnabled}
-                onChange={(event) => setTimedStationPointsDecayEnabled(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Spadek punktów w grach czasowych
-            </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Osoba kontaktowa</span>
+                      <input
+                        value={contactPerson}
+                        onChange={(event) => setContactPerson(event.target.value)}
+                        placeholder="Imię i nazwisko"
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactPersonInvalid)}`}
+                      />
+                      {isContactPersonInvalid ? <p className="text-xs text-red-300">Uzupełnij osobę kontaktową.</p> : null}
+                    </label>
 
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={hideTaskList}
-                onChange={(event) => setHideTaskList(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
-            </label>
-          </FormSection>
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Telefon kontaktowy</span>
+                      <input
+                        value={contactPhone}
+                        onChange={(event) => setContactPhone(event.target.value)}
+                        placeholder="+48 ..."
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
+                      />
+                    </label>
 
-          <FormSection title="Mapa">
-            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="checkbox"
-                checked={hideMap}
-                onChange={(event) => setHideMap(event.target.checked)}
-                className="h-4 w-4 accent-amber-400"
-              />
-              Ukryj mapę
-            </label>
+                    <label className="space-y-1.5 sm:col-span-2">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">E-mail kontaktowy</span>
+                      <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(event) => setContactEmail(event.target.value)}
+                        placeholder="kontakt@firma.pl"
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
+                      />
+                      {isContactChannelInvalid ? <p className="text-xs text-red-300">Podaj telefon lub e-mail kontaktowy.</p> : null}
+                    </label>
+                  </div>
 
-            {hideMap && (
-              <div className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Grafika zamiast mapy</span>
-                {(mapImagePreviewUrl ?? mapImageUrl) && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={mapImagePreviewUrl ?? mapImageUrl}
-                    alt="Grafika mapy"
-                    className="mb-2 h-24 w-full rounded-lg border border-zinc-700 object-cover"
-                  />
-                )}
-                {usedMapImageOptions.length > 0 && (
-                  <SegmentedToggle options={assetInputModeOptions} value={mapImageInputMode} onChange={setMapImageInputMode} />
-                )}
-                {mapImageInputMode === "existing" && usedMapImageOptions.length > 0 ? (
-                  <UploadedAssetPicker
-                    options={usedMapImageOptions}
-                    selectedUrl={mapImageUrl}
-                    onSelect={(url) => {
-                      setMapImageUrl(url);
-                      setMapImageFile(null);
+                  <div className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
+                    {(logoPreviewUrl ?? logoUrl) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logoPreviewUrl ?? logoUrl} alt="Logo" className="mb-2 h-16 w-16 rounded-lg border border-zinc-700 object-contain" />
+                    )}
+                    {usedLogoOptions.length > 0 && (
+                      <SegmentedToggle options={assetInputModeOptions} value={logoInputMode} onChange={setLogoInputMode} />
+                    )}
+                    {logoInputMode === "existing" && usedLogoOptions.length > 0 ? (
+                      <UploadedAssetPicker
+                        options={usedLogoOptions}
+                        selectedUrl={logoUrl}
+                        onSelect={(url) => {
+                          setLogoUrl(url);
+                          setLogoFile(null);
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) {
+                            return;
+                          }
+
+                          setLogoFile(file);
+                          setLogoUrl(undefined);
+                          setFormError(null);
+                          event.currentTarget.value = "";
+                        }}
+                        className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+                      />
+                    )}
+                    {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
+                    {(logoFile || logoUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLogoFile(null);
+                          setLogoUrl(undefined);
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Usuń logo
+                      </button>
+                    )}
+                  </div>
+                </FormSection>
+
+                <FormSection title="Instruktorzy">
+                  <div className="flex gap-2">
+                    <input
+                      value={instructorInput}
+                      onChange={(event) => setInstructorInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addInstructor();
+                        }
+                      }}
+                      placeholder="Dodaj instruktora"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    <button
+                      type="button"
+                      onClick={addInstructor}
+                      className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-200 transition hover:border-zinc-500"
+                    >
+                      Dodaj
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {instructors.map((instructor) => (
+                      <span
+                        key={instructor}
+                        className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200"
+                      >
+                        {instructor}
+                        <button
+                          type="button"
+                          onClick={() => removeInstructor(instructor)}
+                          className="text-red-300 transition hover:text-red-200"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    {instructors.length === 0 && <p className="text-xs text-zinc-500">Brak dodanych instruktorów.</p>}
+                  </div>
+                </FormSection>
+
+                <FormSection title="Harmonogram i status">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
+                      <div className="relative">
+                        <input
+                          ref={scheduledAtInputRef}
+                          type="datetime-local"
+                          value={scheduledAt}
+                          onChange={(event) => setScheduledAt(event.target.value)}
+                          className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={openScheduledAtPicker}
+                          aria-label="Otwórz kalendarz terminu realizacji"
+                          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                        >
+                          <CalendarInputIcon />
+                        </button>
+                      </div>
+                      {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
+                    </label>
+
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Status</span>
+                      <select
+                        value={status}
+                        onChange={(event) => setStatus(event.target.value as RealizationStatus)}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      >
+                        <option value="planned">Zaplanowana</option>
+                        <option value="in-progress">W trakcie</option>
+                        <option value="done">Zrealizowana</option>
+                      </select>
+                    </label>
+                  </div>
+                </FormSection>
+
+                <FormSection title="Liczebność">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={teamCount}
+                        onChange={(event) => setTeamCount(Number(event.target.value))}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Osoby</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={peopleCount}
+                        onChange={(event) => setPeopleCount(Number(event.target.value))}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Czas trwania (min)</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={durationMinutes}
+                        onChange={(event) => setDurationMinutes(Number(event.target.value))}
+                        className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isDurationInvalid)}`}
+                      />
+                      {isDurationInvalid ? <p className="text-xs text-red-300">Czas trwania musi być większy od 0.</p> : null}
+                    </label>
+                  </div>
+                </FormSection>
+              </>
+            )}
+
+            {activeTab === "gameplay" && (
+              <>
+                <FormSection title="Ustawienia rozgrywki">
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={showLeaderboardDuringGame}
+                      onChange={(event) => setShowLeaderboardDuringGame(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż leaderboard w trakcie gry (mobile)
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={showLeaderboardOnFinish}
+                      onChange={(event) => setShowLeaderboardOnFinish(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż leaderboard na ekranie końcowym (mobile)
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={teamStationNumberingEnabled}
+                      onChange={(event) => setTeamStationNumberingEnabled(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Numeracja stanowisk dla drużyn
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={timedStationPointsDecayEnabled}
+                      onChange={(event) => setTimedStationPointsDecayEnabled(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Spadek punktów w grach czasowych
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={hideTaskList}
+                      onChange={(event) => setHideTaskList(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
+                  </label>
+                </FormSection>
+
+                <FormSection title="Mapa">
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={hideMap}
+                      onChange={(event) => setHideMap(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Ukryj mapę
+                  </label>
+
+                  {hideMap && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Grafika zamiast mapy</span>
+                      {(mapImagePreviewUrl ?? mapImageUrl) && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={mapImagePreviewUrl ?? mapImageUrl}
+                          alt="Grafika mapy"
+                          className="mb-2 h-24 w-full rounded-lg border border-zinc-700 object-cover"
+                        />
+                      )}
+                      {usedMapImageOptions.length > 0 && (
+                        <SegmentedToggle options={assetInputModeOptions} value={mapImageInputMode} onChange={setMapImageInputMode} />
+                      )}
+                      {mapImageInputMode === "existing" && usedMapImageOptions.length > 0 ? (
+                        <UploadedAssetPicker
+                          options={usedMapImageOptions}
+                          selectedUrl={mapImageUrl}
+                          onSelect={(url) => {
+                            setMapImageUrl(url);
+                            setMapImageFile(null);
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (!file) {
+                              return;
+                            }
+
+                            setMapImageFile(file);
+                            setMapImageUrl(undefined);
+                            setFormError(null);
+                            event.currentTarget.value = "";
+                          }}
+                          className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
+                        />
+                      )}
+                      <p className="text-xs text-zinc-500">
+                        Jeśli nie dodasz grafiki, zostanie użyte domyślne logo SurvivorQuest.
+                      </p>
+                      {isUploadingMapImage && <p className="text-xs text-amber-300">Przesyłanie grafiki...</p>}
+                      {(mapImageFile || mapImageUrl) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMapImageFile(null);
+                            setMapImageUrl(undefined);
+                          }}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Usuń grafikę
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </FormSection>
+              </>
+            )}
+
+            {activeTab === "scenario" && (
+              <FormSection title="Scenariusz i oferta">
+                <label className="block space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz (szablon)</span>
+                  <select
+                    value={selectedScenarioId}
+                    onChange={(event) => {
+                      const nextScenarioId = event.target.value;
+                      setSelectedScenarioId(nextScenarioId);
+                      setScenarioStations(mapScenarioStations(nextScenarioId));
                     }}
-                  />
-                ) : (
+                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}
+                  >
+                    <option value="">Wybierz scenariusz</option>
+                    {scenarios.filter((s) => !s.sourceTemplateId).map((scenario) => (
+                      <option key={scenario.id} value={scenario.id}>
+                        {scenario.name}
+                      </option>
+                    ))}
+                  </select>
+                  {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
+                </label>
+
+                <div className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
+                  {offerPdfName && <p className="mb-1 text-xs text-zinc-300">📄 {offerPdfName}</p>}
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="application/pdf"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (!file) {
                         return;
                       }
 
-                      setMapImageFile(file);
-                      setMapImageUrl(undefined);
+                      if (!isPdfFile(file)) {
+                        setOfferPdfFile(null);
+                        setOfferPdfName(undefined);
+                        setOfferPdfError("Niedozwolony format pliku. Wybierz plik PDF.");
+                        event.currentTarget.value = "";
+                        return;
+                      }
+
+                      setOfferPdfFile(file);
+                      setOfferPdfName(file.name);
+                      setOfferPdfError(null);
                       setFormError(null);
                       event.currentTarget.value = "";
                     }}
                     className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                   />
-                )}
-                <p className="text-xs text-zinc-500">
-                  Jeśli nie dodasz grafiki, zostanie użyte domyślne logo SurvivorQuest.
-                </p>
-                {isUploadingMapImage && <p className="text-xs text-amber-300">Przesyłanie grafiki...</p>}
-                {(mapImageFile || mapImageUrl) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMapImageFile(null);
-                      setMapImageUrl(undefined);
-                    }}
-                    className="text-xs text-red-400 hover:text-red-300"
-                  >
-                    Usuń grafikę
-                  </button>
-                )}
-              </div>
+                  {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
+                  {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
+                  {(offerPdfFile || offerPdfUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfferPdfFile(null);
+                        setOfferPdfUrl(undefined);
+                        setOfferPdfName(undefined);
+                        setOfferPdfError(null);
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      Usuń PDF
+                    </button>
+                  )}
+                </div>
+
+                <StyledMarkdownEditor
+                  label="Tekst wstępu"
+                  value={introText}
+                  onChange={setIntroText}
+                  placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                  rows={5}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
+                <StyledMarkdownEditor
+                  label="Zasady gry"
+                  value={gameRules}
+                  onChange={setGameRules}
+                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                  rows={8}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
+              </FormSection>
             )}
-          </FormSection>
 
-          <FormSection title="Liczebność">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={teamCount}
-                  onChange={(event) => setTeamCount(Number(event.target.value))}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Osoby</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={peopleCount}
-                  onChange={(event) => setPeopleCount(Number(event.target.value))}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Czas trwania (min)</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={durationMinutes}
-                  onChange={(event) => setDurationMinutes(Number(event.target.value))}
-                  className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isDurationInvalid)}`}
-                />
-                {isDurationInvalid ? <p className="text-xs text-red-300">Czas trwania musi być większy od 0.</p> : null}
-              </label>
-            </div>
-          </FormSection>
-
-          <FormSection title="Scenariusz i oferta">
-            <label className="block space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz (szablon)</span>
-              <select
-                value={selectedScenarioId}
-                onChange={(event) => {
-                  const nextScenarioId = event.target.value;
-                  setSelectedScenarioId(nextScenarioId);
-                  setScenarioStations(mapScenarioStations(nextScenarioId));
-                }}
-                className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}
-              >
-                <option value="">Wybierz scenariusz</option>
-                {scenarios.filter((s) => !s.sourceTemplateId).map((scenario) => (
-                  <option key={scenario.id} value={scenario.id}>
-                    {scenario.name}
-                  </option>
-                ))}
-              </select>
-              {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
-            </label>
-
-            <details
-              open
-              className={`rounded-lg border bg-zinc-950/60 p-3 ${
-                isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations) ? "border-red-500/60" : "border-zinc-800"
-              }`}
-            >
-              <summary className="cursor-pointer text-xs uppercase tracking-wider text-zinc-400">
-                Stanowiska realizacji ({scenarioStations.length}) • {selectedStationsPoints} pkt
-              </summary>
-              <div className="mt-3">
-                <p className="mb-2 text-xs text-zinc-500">
+            {activeTab === "stations" && (
+              <div className="space-y-2">
+                <p className="text-xs text-zinc-500">
                   Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
                 </p>
                 <RealizationStationsEditor
@@ -1035,166 +1156,82 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
                 ) : null}
               </div>
-            </details>
+            )}
 
-            <div className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
-              {offerPdfName && <p className="mb-1 text-xs text-zinc-300">📄 {offerPdfName}</p>}
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) {
-                    return;
-                  }
-
-                  if (!isPdfFile(file)) {
-                    setOfferPdfFile(null);
-                    setOfferPdfName(undefined);
-                    setOfferPdfError("Niedozwolony format pliku. Wybierz plik PDF.");
-                    event.currentTarget.value = "";
-                    return;
-                  }
-
-                  setOfferPdfFile(file);
-                  setOfferPdfName(file.name);
-                  setOfferPdfError(null);
-                  setFormError(null);
-                  event.currentTarget.value = "";
-                }}
-                className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
-              />
-              {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
-              {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
-              {(offerPdfFile || offerPdfUrl) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOfferPdfFile(null);
-                    setOfferPdfUrl(undefined);
-                    setOfferPdfName(undefined);
-                    setOfferPdfError(null);
-                  }}
-                  className="text-xs text-red-400 hover:text-red-300"
-                >
-                  Usuń PDF
-                </button>
-              )}
-            </div>
-
-            <StyledMarkdownEditor
-              label="Tekst wstępu"
-              value={introText}
-              onChange={setIntroText}
-              placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
-              rows={5}
-              helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-            />
-            <StyledMarkdownEditor
-              label="Zasady gry"
-              value={gameRules}
-              onChange={setGameRules}
-              placeholder="Wpisz zasady gry widoczne po Welcome screen."
-              rows={8}
-              helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-            />
-          </FormSection>
-
-          <SummaryCard title="Podsumowanie">
-            <div className="space-y-1.5 text-sm text-zinc-300">
-              <p>
-                <span className="text-zinc-500">Firma:</span> {companyName.trim() || "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Kontakt:</span> {contactPerson.trim() || "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Lokalizacja:</span> {location.trim() || "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Język realizacji:</span>{" "}
-                {formatRealizationLanguageSummary(languagePayload.language, languagePayload.customLanguage)}
-              </p>
-              <p>
-                <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
-                {contactPhone.trim() || contactEmail.trim() ? `${contactPhone.trim() || "-"} / ${contactEmail.trim() || "-"}` : "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Termin:</span>{" "}
-                {scheduledAt ? new Date(toIsoFromDateTimeLocal(scheduledAt)).toLocaleString("pl-PL") : "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Status:</span> {getStatusLabel(status)}
-              </p>
-              <p>
-                <span className="text-zinc-500">Czas trwania:</span> {Math.max(1, Math.round(durationMinutes) || 120)} min
-              </p>
-              <p>
-                <span className="text-zinc-500">Drużyny:</span> {teamCount}
-              </p>
-              <p>
-                <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Leaderboard w trakcie gry:</span> {showLeaderboardDuringGame ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboardOnFinish ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span> {teamStationNumberingEnabled ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Spadek punktów w grach czasowych:</span> {timedStationPointsDecayEnabled ? "Tak" : "Nie"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Lista zadań (mobile):</span> {hideTaskList ? "Ukryta" : "Widoczna"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Mapa:</span>{" "}
-                {hideMap ? "Ukryta (grafika statyczna)" : "Widoczna (interaktywna)"}
-              </p>
-              <p>
-                <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}
-              </p>
-              <p>
-                <span className="text-zinc-500">Suma punktów:</span>{" "}
-                <span className="font-medium text-amber-300">{selectedStationsPoints}</span>
-              </p>
-              <p>
-                <span className="text-zinc-500">Instruktorzy:</span> {instructors.length}
-              </p>
-            </div>
-          </SummaryCard>
-
-          {formError && <p className="sq-error-banner">{formError}</p>}
-
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Anuluj
-            </button>
-            <button
-              type="submit"
-              disabled={isBusy}
-              className="sq-button rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
-            >
-              {isCreating
-                ? "Dodawanie..."
-                : isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio
-                  ? "Przesyłanie plików..."
-                  : "Dodaj realizację"}
-            </button>
+            {activeTab === "summary" && (
+              <SummaryCard title="Podsumowanie">
+                <div className="space-y-1.5 text-sm text-zinc-300">
+                  <p>
+                    <span className="text-zinc-500">Firma:</span> {companyName.trim() || "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Kontakt:</span> {contactPerson.trim() || "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Lokalizacja:</span> {location.trim() || "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Język realizacji:</span>{" "}
+                    {formatRealizationLanguageSummary(languagePayload.language, languagePayload.customLanguage)}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
+                    {contactPhone.trim() || contactEmail.trim() ? `${contactPhone.trim() || "-"} / ${contactEmail.trim() || "-"}` : "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Termin:</span>{" "}
+                    {scheduledAt ? new Date(toIsoFromDateTimeLocal(scheduledAt)).toLocaleString("pl-PL") : "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Status:</span> {getStatusLabel(status)}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Czas trwania:</span> {Math.max(1, Math.round(durationMinutes) || 120)} min
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Drużyny:</span> {teamCount}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Leaderboard w trakcie gry:</span> {showLeaderboardDuringGame ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboardOnFinish ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span> {teamStationNumberingEnabled ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Spadek punktów w grach czasowych:</span> {timedStationPointsDecayEnabled ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Lista zadań (mobile):</span> {hideTaskList ? "Ukryta" : "Widoczna"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Mapa:</span>{" "}
+                    {hideMap ? "Ukryta (grafika statyczna)" : "Widoczna (interaktywna)"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Stanowiska w realizacji:</span> {scenarioStations.length}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Suma punktów:</span>{" "}
+                    <span className="font-medium text-amber-300">{selectedStationsPoints}</span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Instruktorzy:</span> {instructors.length}
+                  </p>
+                </div>
+              </SummaryCard>
+            )}
           </div>
         </form>
       </aside>
