@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { useGetStationsQuery } from "@/features/games/api/station.api";
@@ -22,6 +23,7 @@ import type { CurrentRealizationOverview } from "@/features/current-realization/
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
 import { AdminShell } from "@/shared/components/admin-shell";
+import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
 
 const CurrentRealizationTeamsMap = dynamic(
   () =>
@@ -233,6 +235,8 @@ export default function CurrentRealizationPage() {
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [visibleLogCount, setVisibleLogCount] = useState(20);
   const [selectedRealizationId, setSelectedRealizationId] = useState<"current" | string>("current");
+  const [joinCodeQrImage, setJoinCodeQrImage] = useState<QrImageLightboxImage | null>(null);
+  const [isGeneratingJoinCodeQr, setIsGeneratingJoinCodeQr] = useState(false);
 
   const {
     data: meData,
@@ -364,6 +368,30 @@ export default function CurrentRealizationPage() {
   const actionButtonRedClassName =
     "border-red-400/45 bg-red-500/10 text-red-200 hover:border-red-300/60 hover:bg-red-500/18";
 
+  async function showJoinCodeQr() {
+    const joinCode = overview?.realization.joinCode;
+    if (!joinCode || isGeneratingJoinCodeQr) {
+      return;
+    }
+
+    setIsGeneratingJoinCodeQr(true);
+    try {
+      const dataUrl = await QRCode.toDataURL(joinCode, {
+        margin: 1,
+        width: 280,
+        errorCorrectionLevel: "M",
+      });
+      setJoinCodeQrImage({
+        src: dataUrl,
+        alt: "Kod QR do dołączenia",
+        downloadFileName: `kod-dolaczenia-${joinCode}.png`,
+        caption: joinCode,
+      });
+    } finally {
+      setIsGeneratingJoinCodeQr(false);
+    }
+  }
+
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
       router.replace("/login");
@@ -415,6 +443,14 @@ export default function CurrentRealizationPage() {
             <p className="mt-0.5 text-sm font-semibold tracking-widest">
               {overview?.realization.joinCode ?? "---"}
             </p>
+            <button
+              type="button"
+              onClick={() => void showJoinCodeQr()}
+              disabled={!overview?.realization.joinCode || isGeneratingJoinCodeQr}
+              className="mt-1.5 w-full rounded-md border border-amber-400/40 px-2 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-55"
+            >
+              {isGeneratingJoinCodeQr ? "Generuję..." : "Pokaż QR"}
+            </button>
           </div>
         </div>
 
@@ -838,6 +874,8 @@ export default function CurrentRealizationPage() {
           </div>
         )}
       </div>
+
+      <QrImageLightbox image={joinCodeQrImage} onClose={() => setJoinCodeQrImage(null)} />
 
       {overview && isQrPanelOpen ? (
         <CurrentRealizationStationQrPanel

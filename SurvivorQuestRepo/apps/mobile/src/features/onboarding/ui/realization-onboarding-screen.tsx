@@ -27,11 +27,30 @@ import {
   type TeamColor,
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
+import { JoinCodeQrScannerOverlay } from "../components/join-code-qr-scanner-overlay";
 import { PhotoCaptureOverlay } from "../../../shared/ui/photo-capture-overlay";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 import { APP_VERSION, compareSemver } from "../../../shared/app-version";
+
+function QrCodeGlyph({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={2} y={2} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={4.5} y={4.5} width={2} height={2} fill={color} />
+      <Rect x={15} y={2} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={17.5} y={4.5} width={2} height={2} fill={color} />
+      <Rect x={2} y={15} width={7} height={7} rx={1} stroke={color} strokeWidth={1.8} />
+      <Rect x={4.5} y={17.5} width={2} height={2} fill={color} />
+      <Rect x={15} y={15} width={2.4} height={2.4} fill={color} />
+      <Rect x={19.6} y={15} width={2.4} height={2.4} fill={color} />
+      <Rect x={15} y={19.6} width={2.4} height={2.4} fill={color} />
+      <Rect x={19.6} y={19.6} width={2.4} height={2.4} fill={color} />
+      <Rect x={17.3} y={17.3} width={2.4} height={2.4} fill={color} />
+    </Svg>
+  );
+}
 
 type SetupState = "idle" | "loading" | "ready" | "error";
 type ApiConnectionStatus = "checking" | "connected" | "disconnected" | "config-missing";
@@ -205,6 +224,7 @@ type OnboardingUiText = {
   activeApiLabel: string;
   realizationCodePlaceholder: string;
   activateRealizationAction: string;
+  scanQrCodeAction: string;
   backToStepOneAction: string;
   loadingConfiguration: string;
   setupLoadFailed: string;
@@ -314,6 +334,7 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
     activeApiLabel: "Aktywne API",
     realizationCodePlaceholder: "Kod realizacji",
     activateRealizationAction: "Aktywuj realizację",
+    scanQrCodeAction: "Skanuj QR",
     backToStepOneAction: "Cofnij do etapu 1",
     loadingConfiguration: "Pobieranie konfiguracji od administratora...",
     setupLoadFailed: "Nie udało się pobrać konfiguracji.",
@@ -444,6 +465,7 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
     activeApiLabel: "Active API",
     realizationCodePlaceholder: "Realization code",
     activateRealizationAction: "Activate realization",
+    scanQrCodeAction: "Scan QR",
     backToStepOneAction: "Back to step 1",
     loadingConfiguration: "Loading configuration from administrator...",
     setupLoadFailed: "Failed to load configuration.",
@@ -569,6 +591,7 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
     activeApiLabel: "Активний API",
     realizationCodePlaceholder: "Код реалізації",
     activateRealizationAction: "Активувати реалізацію",
+    scanQrCodeAction: "Сканувати QR",
     backToStepOneAction: "Повернутися до кроку 1",
     loadingConfiguration: "Завантаження конфігурації від адміністратора...",
     setupLoadFailed: "Не вдалося завантажити конфігурацію.",
@@ -696,6 +719,7 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
     activeApiLabel: "Активный API",
     realizationCodePlaceholder: "Код реализации",
     activateRealizationAction: "Активировать реализацию",
+    scanQrCodeAction: "Сканировать QR",
     backToStepOneAction: "Назад к шагу 1",
     loadingConfiguration: "Загрузка конфигурации от администратора...",
     setupLoadFailed: "Не удалось загрузить конфигурацию.",
@@ -1302,6 +1326,7 @@ export function RealizationOnboardingScreen({
   const [teamPickerError, setTeamPickerError] = useState<string | null>(null);
 
   const [realizationCode, setRealizationCode] = useState("");
+  const [isJoinCodeScannerOpen, setIsJoinCodeScannerOpen] = useState(false);
   const [apiBaseUrlOverride, setApiBaseUrlOverride] = useState<string | null>(null);
   const [lastSuccessfulApiBaseUrl, setLastSuccessfulApiBaseUrl] = useState<string | null>(null);
   const [apiServerPreset, setApiServerPreset] = useState<ApiServerPreset>("local");
@@ -2630,22 +2655,37 @@ export function RealizationOnboardingScreen({
                 {text.activeApiLabel}: {apiConnectionTarget ?? text.noApiConfiguration}
               </Text>
 
-              <TextInput
-                className="mt-3 rounded-2xl border px-4 py-3 text-base font-semibold tracking-widest"
-                style={{
-                  borderColor: isRealizationCodeFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-                  backgroundColor: EXPEDITION_THEME.panelMuted,
-                  color: EXPEDITION_THEME.textPrimary,
-                }}
-                value={realizationCode}
-                onChangeText={(value) => setRealizationCode(value.toUpperCase())}
-                placeholder={text.realizationCodePlaceholder}
-                placeholderTextColor={EXPEDITION_THEME.textSubtle}
-                autoCapitalize="characters"
-                maxLength={12}
-                onFocus={() => setIsRealizationCodeFocused(true)}
-                onBlur={() => setIsRealizationCodeFocused(false)}
-              />
+              <View className="mt-3 flex-row items-stretch" style={{ columnGap: 8 }}>
+                <TextInput
+                  className="flex-1 rounded-2xl border px-4 py-3 text-base font-semibold tracking-widest"
+                  style={{
+                    borderColor: isRealizationCodeFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                    backgroundColor: EXPEDITION_THEME.panelMuted,
+                    color: EXPEDITION_THEME.textPrimary,
+                  }}
+                  value={realizationCode}
+                  onChangeText={(value) => setRealizationCode(value.toUpperCase())}
+                  placeholder={text.realizationCodePlaceholder}
+                  placeholderTextColor={EXPEDITION_THEME.textSubtle}
+                  autoCapitalize="characters"
+                  maxLength={12}
+                  onFocus={() => setIsRealizationCodeFocused(true)}
+                  onBlur={() => setIsRealizationCodeFocused(false)}
+                />
+
+                <Pressable
+                  className="items-center justify-center rounded-2xl border active:opacity-85"
+                  style={{
+                    width: isTabletLayout ? 64 : 52,
+                    borderColor: EXPEDITION_THEME.accentStrong,
+                    backgroundColor: EXPEDITION_THEME.panelMuted,
+                  }}
+                  onPress={() => setIsJoinCodeScannerOpen(true)}
+                  accessibilityLabel={text.scanQrCodeAction}
+                >
+                  <QrCodeGlyph size={isTabletLayout ? 28 : 24} color={EXPEDITION_THEME.accentStrong} />
+                </Pressable>
+              </View>
 
               <Pressable
                 className="mt-4 rounded-2xl px-4 py-3 active:opacity-85"
@@ -2996,6 +3036,15 @@ export function RealizationOnboardingScreen({
         uploadError={selfieUploadError}
         onClose={handleCloseSelfieCapture}
         onCaptured={handleSelfieCaptured}
+      />
+
+      <JoinCodeQrScannerOverlay
+        visible={isJoinCodeScannerOpen}
+        onClose={() => setIsJoinCodeScannerOpen(false)}
+        onDetected={(value) => {
+          setIsJoinCodeScannerOpen(false);
+          void onSubmitCode(value.trim().toUpperCase());
+        }}
       />
     </View>
   );
