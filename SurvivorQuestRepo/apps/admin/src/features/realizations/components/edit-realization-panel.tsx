@@ -578,7 +578,7 @@ export function EditRealizationPanel({
 
           {editError && <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{editError}</p>}
 
-          <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <div className="sq-thin-scrollbar min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             {activeTab === "basic" && (
               <>
                 <SummaryCard title="Informacje o realizacji">

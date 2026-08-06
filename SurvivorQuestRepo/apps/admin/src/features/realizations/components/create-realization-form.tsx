@@ -629,7 +629,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
           )}
           {formError && <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{formError}</p>}
 
-          <div className="min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <div className="sq-thin-scrollbar min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             {activeTab === "basic" && (
               <>
                 <FormSection title="Klient">
