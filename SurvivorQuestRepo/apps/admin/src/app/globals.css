@@ -124,3 +124,26 @@ body {
   font-size: 0.875rem;
   color: rgb(252 165 165);
 }
+
+.sq-thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(113 113 122 / 0.5) transparent;
+}
+
+.sq-thin-scrollbar::-webkit-scrollbar {
+  height: 5px;
+  width: 5px;
+}
+
+.sq-thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sq-thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(113 113 122 / 0.5);
+  border-radius: 9999px;
+}
+
+.sq-thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(161 161 170 / 0.7);
+}
