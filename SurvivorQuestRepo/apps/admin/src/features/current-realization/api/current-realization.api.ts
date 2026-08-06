@@ -59,6 +59,10 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         const value = realization.introText ?? realization.intro_text;
         return typeof value === "string" ? value : null;
       })(),
+      location: (() => {
+        const value = realization.location;
+        return typeof value === "string" ? value : null;
+      })(),
       status: asString(realization.status, "planned") as CurrentRealizationOverview["realization"]["status"],
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at),
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),

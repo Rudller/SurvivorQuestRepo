@@ -2173,6 +2173,7 @@ export class MobileService {
         companyName: realization.companyName,
         introText: realization.introText,
         gameRules: realization.gameRules,
+        location: realization.location,
         status: normalizedRealizationStatus,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,

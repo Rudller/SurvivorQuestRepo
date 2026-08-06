@@ -9,6 +9,7 @@ export type CurrentRealizationOverview = {
     id: string;
     companyName: string;
     introText: string | null;
+    location: string | null;
     status: CurrentRealizationStatus;
     scheduledAt: string;
     locationRequired: boolean;

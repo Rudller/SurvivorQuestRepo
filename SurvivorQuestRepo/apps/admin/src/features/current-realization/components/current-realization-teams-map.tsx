@@ -1,13 +1,15 @@
 "use client";
 
 import { divIcon } from "leaflet";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import { geocodeLocation } from "@/features/realizations/realization-geocoding";
 import type { CurrentRealizationOverview } from "../types/current-realization-overview";
 
 const DEFAULT_MAP_CENTER: [number, number] = [52.2297, 21.0122];
 const DEFAULT_MAP_ZOOM = 6;
 const ACTIVE_MAP_ZOOM = 13;
+const APPROXIMATE_MAP_ZOOM = 11;
 const DEFAULT_MAP_TILE_URL =
   process.env.NEXT_PUBLIC_MAP_TILE_URL?.trim() || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const DEFAULT_MAP_TILE_ATTRIBUTION =
@@ -145,6 +147,26 @@ export function CurrentRealizationTeamsMap({
   teamStationNumberingEnabled,
 }: CurrentRealizationTeamsMapProps) {
   const [showStations, setShowStations] = useState(false);
+  const [approximateCenter, setApproximateCenter] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    const query = realization.location?.trim();
+    if (!query) {
+      return;
+    }
+
+    let cancelled = false;
+    void geocodeLocation(query).then((geocoded) => {
+      if (!cancelled && geocoded) {
+        setApproximateCenter([geocoded.latitude, geocoded.longitude]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [realization.location]);
+
   const stationOrderById = useMemo(() => {
     const map = new Map<string, number>();
     realization.stationIds.forEach((stationId, index) => {
@@ -240,7 +262,7 @@ export function CurrentRealizationTeamsMap({
     [showStations, stationMarkers, teamMarkers],
   );
   const mapCenter = useMemo(() => {
-    if (allMapPoints.length === 0) return DEFAULT_MAP_CENTER;
+    if (allMapPoints.length === 0) return approximateCenter ?? DEFAULT_MAP_CENTER;
     const sums = allMapPoints.reduce(
       (accumulator, point) => ({
         lat: accumulator.lat + point[0],
@@ -249,8 +271,9 @@ export function CurrentRealizationTeamsMap({
       { lat: 0, lng: 0 },
     );
     return [sums.lat / allMapPoints.length, sums.lng / allMapPoints.length] as [number, number];
-  }, [allMapPoints]);
-  const mapZoom = allMapPoints.length > 0 ? ACTIVE_MAP_ZOOM : DEFAULT_MAP_ZOOM;
+  }, [allMapPoints, approximateCenter]);
+  const mapZoom =
+    allMapPoints.length > 0 ? ACTIVE_MAP_ZOOM : approximateCenter ? APPROXIMATE_MAP_ZOOM : DEFAULT_MAP_ZOOM;
   const mapRenderKey = `${mapCenter[0].toFixed(6)}:${mapCenter[1].toFixed(6)}:${mapZoom}:${stationMarkers.length}:${teamMarkers.length}`;
 
   return (
