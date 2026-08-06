@@ -119,6 +119,7 @@ export function normalizeScenarioStationDrafts(
         allowConcurrentTeams: normalizeAllowConcurrentTeams(
           draft.allowConcurrentTeams,
         ),
+        fastestCompletionBonusPoints: draft.fastestCompletionBonusPoints,
         color: draft.color,
         latitude: hasCoordinates ? draft.latitude : undefined,
         longitude: hasCoordinates ? draft.longitude : undefined,

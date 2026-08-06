@@ -32,11 +32,35 @@ const realizationExportDataSchema = z.object({
   scheduledAt: z.string(),
 });
 
+const stationDraftExportSchema = z.object({
+  id: z.string().optional(),
+  name: z.string(),
+  type: z.string(),
+  categories: z.array(z.string()).optional(),
+  description: z.string(),
+  imageUrl: z.string(),
+  points: z.number(),
+  timeLimitSeconds: z.number(),
+  completionCode: z.string().optional(),
+  qrEntryCode: z.string().optional(),
+  qrScanCodes: z.array(z.string()).optional(),
+  quiz: z.record(z.string(), z.unknown()).optional(),
+  translations: z.record(z.string(), z.unknown()).optional(),
+  challengeDifficultyMode: z.string().optional(),
+  challengeDifficulty: z.string().optional(),
+  completionStopwatchEnabled: z.boolean().optional(),
+  allowConcurrentTeams: z.boolean().optional(),
+  fastestCompletionBonusPoints: z.number().optional(),
+  color: z.string(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+});
+
 const realizationExportFileSchema = z.object({
   schemaVersion: z.literal(1),
   exportedAt: z.string(),
   realization: realizationExportDataSchema,
-  scenarioStations: z.array(z.record(z.string(), z.unknown())),
+  scenarioStations: z.array(stationDraftExportSchema),
 });
 
 function slugifyCompanyName(companyName: string) {

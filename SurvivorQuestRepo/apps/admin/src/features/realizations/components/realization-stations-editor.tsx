@@ -128,6 +128,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     challengeDifficulty: "medium",
     completionStopwatchEnabled: false,
     allowConcurrentTeams: false,
+    fastestCompletionBonusPoints: 0,
     color: STATION_TYPE_DEFAULT_COLOR["quiz"],
     quiz: {
       question: "",
@@ -195,6 +196,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     challengeDifficulty: station.challengeDifficulty,
     completionStopwatchEnabled: station.completionStopwatchEnabled,
     allowConcurrentTeams: station.allowConcurrentTeams,
+    fastestCompletionBonusPoints: station.fastestCompletionBonusPoints,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? station.color! : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz: station.quiz
         ? {
@@ -231,7 +233,11 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
 }
 
 export function normalizeRealizationStationDrafts(stations: RealizationStationDraft[]) {
-  return stations.map((station) => ({
+  return stations.map((station) => {
+    const normalizedCompletionStopwatchEnabled =
+      Math.round(station.timeLimitSeconds) === 0 ? station.completionStopwatchEnabled ?? false : false;
+
+    return {
     id: station.id,
     name: station.name.trim(),
     type: station.type,
@@ -252,9 +258,11 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     challengeDifficulty: supportsChallengeDifficulty(station.type)
       ? station.challengeDifficulty ?? "medium"
       : "medium",
-    completionStopwatchEnabled:
-      Math.round(station.timeLimitSeconds) === 0 ? station.completionStopwatchEnabled ?? false : false,
+    completionStopwatchEnabled: normalizedCompletionStopwatchEnabled,
     allowConcurrentTeams: station.allowConcurrentTeams ?? false,
+    fastestCompletionBonusPoints: normalizedCompletionStopwatchEnabled
+      ? Math.max(0, Math.round(station.fastestCompletionBonusPoints ?? 0))
+      : 0,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color) ? station.color : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz:
       isQuizStationType(station.type) && station.quiz
@@ -269,7 +277,8 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
     translations: normalizeStationTranslations(station.translations, station.type),
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
-  }));
+    };
+  });
 }
 
 export function hasInvalidRealizationStationDrafts(stations: RealizationStationDraft[]) {
@@ -1939,11 +1948,37 @@ export function RealizationStationsEditor({
                           type="checkbox"
                           checked={station.completionStopwatchEnabled ?? false}
                           onChange={(event) =>
-                            updateStation(stationIndex, { completionStopwatchEnabled: event.target.checked })
+                            updateStation(stationIndex, {
+                              completionStopwatchEnabled: event.target.checked,
+                              ...(event.target.checked ? {} : { fastestCompletionBonusPoints: 0 }),
+                            })
                           }
                         />
                         Pokaż stoper czasu wykonania (dla graczy i organizatora)
                       </label>
+                    ) : null}
+                    {station.timeLimitSeconds === 0 && station.completionStopwatchEnabled ? (
+                      <div className="space-y-1">
+                        <label className="text-xs uppercase tracking-wider text-zinc-400">
+                          Bonus za najszybsze ukończenie
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={5}
+                          value={station.fastestCompletionBonusPoints ?? 0}
+                          onChange={(event) =>
+                            updateStation(stationIndex, {
+                              fastestCompletionBonusPoints: Math.max(0, Math.round(Number(event.target.value) || 0)),
+                            })
+                          }
+                          placeholder="0 = brak bonusu"
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                        <p className="text-xs text-zinc-500">
+                          Dodatkowe punkty dla pierwszej drużyny, która ukończy to stanowisko.
+                        </p>
+                      </div>
                     ) : null}
                     <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
                       <input
