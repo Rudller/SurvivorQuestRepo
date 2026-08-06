@@ -242,6 +242,7 @@ export type RealizationStationDraft = {
   challengeDifficultyMode?: Station["challengeDifficultyMode"];
   challengeDifficulty?: Station["challengeDifficulty"];
   completionStopwatchEnabled?: Station["completionStopwatchEnabled"];
+  allowConcurrentTeams?: Station["allowConcurrentTeams"];
   color: string;
   latitude?: number;
   longitude?: number;

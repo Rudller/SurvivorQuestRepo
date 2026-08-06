@@ -1356,22 +1356,24 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const activeOtherTeamProgress = await this.prisma.teamTaskProgress.findFirst({
-      where: {
-        realizationId: realization.id,
-        stationId: input.stationId,
-        status: TaskStatus.IN_PROGRESS,
-        teamId: { not: team.id },
-      },
-      select: { id: true },
-    });
-
-    if (activeOtherTeamProgress) {
-      throw new ConflictException({
-        code: 'STATION_IN_USE',
-        message:
-          'Inna drużyna wykonuje zadania na tym stanowisku, kiedy skończą uruchom to stanowisko',
+    if (!station.allowConcurrentTeams) {
+      const activeOtherTeamProgress = await this.prisma.teamTaskProgress.findFirst({
+        where: {
+          realizationId: realization.id,
+          stationId: input.stationId,
+          status: TaskStatus.IN_PROGRESS,
+          teamId: { not: team.id },
+        },
+        select: { id: true },
       });
+
+      if (activeOtherTeamProgress) {
+        throw new ConflictException({
+          code: 'STATION_IN_USE',
+          message:
+            'Inna drużyna wykonuje zadania na tym stanowisku, kiedy skończą uruchom to stanowisko',
+        });
+      }
     }
 
     const startedAtIso =

@@ -9,7 +9,7 @@ import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
   normalizeStationQuizForType,
-  QUIZ_ANSWER_COUNT,
+  normalizeStationTranslations,
   isCompletionCodeRequired,
   isQuizStationType,
   isWordPuzzleStationType,
@@ -127,6 +127,7 @@ export function createEmptyRealizationStationDraft(): RealizationStationDraft {
     challengeDifficultyMode: "admin",
     challengeDifficulty: "medium",
     completionStopwatchEnabled: false,
+    allowConcurrentTeams: false,
     color: STATION_TYPE_DEFAULT_COLOR["quiz"],
     quiz: {
       question: "",
@@ -177,58 +178,6 @@ function cloneStationTranslations(translations: Station["translations"] | undefi
   return Object.keys(cloned).length > 0 ? cloned : undefined;
 }
 
-function normalizeStationTranslations(
-  translations: RealizationStationDraft["translations"],
-  stationType: RealizationStationDraft["type"],
-) {
-  if (!translations) {
-    return undefined;
-  }
-
-  const normalized = Object.entries(translations).reduce<NonNullable<RealizationStationDraft["translations"]>>(
-    (acc, [language, value]) => {
-      if (!value || typeof value !== "object") {
-        return acc;
-      }
-
-      const name = typeof value.name === "string" ? value.name.trim() : "";
-      const description = typeof value.description === "string" ? value.description.trim() : "";
-      const normalizedQuiz = value.quiz ? normalizeStationQuizForType(stationType, value.quiz) ?? undefined : undefined;
-
-      if (!name && !description && !normalizedQuiz) {
-        return acc;
-      }
-
-      if (
-        language === "polish" ||
-        language === "english" ||
-        language === "ukrainian" ||
-        language === "russian" ||
-        language === "other"
-      ) {
-        acc[language] = {
-          name: name || undefined,
-          description: description || undefined,
-          quiz: normalizedQuiz
-            ? {
-                question: normalizedQuiz.question,
-                answers: toQuizAnswersTuple(normalizedQuiz.answers),
-                correctAnswerIndex: normalizedQuiz.correctAnswerIndex,
-                audioUrl: normalizedQuiz.audioUrl,
-                acceptedAnswers: normalizedQuiz.acceptedAnswers,
-              }
-            : undefined,
-        };
-      }
-
-      return acc;
-    },
-    {},
-  );
-
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-}
-
 export function toRealizationStationDraft(station: Station): RealizationStationDraft {
   return {
     id: station.id,
@@ -245,6 +194,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
     challengeDifficultyMode: station.challengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty,
     completionStopwatchEnabled: station.completionStopwatchEnabled,
+    allowConcurrentTeams: station.allowConcurrentTeams,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? station.color! : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz: station.quiz
         ? {
@@ -304,6 +254,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
       : "medium",
     completionStopwatchEnabled:
       Math.round(station.timeLimitSeconds) === 0 ? station.completionStopwatchEnabled ?? false : false,
+    allowConcurrentTeams: station.allowConcurrentTeams ?? false,
     color: /^#[0-9a-fA-F]{6}$/.test(station.color) ? station.color : STATION_TYPE_DEFAULT_COLOR[station.type],
     quiz:
       isQuizStationType(station.type) && station.quiz
@@ -1994,6 +1945,16 @@ export function RealizationStationsEditor({
                         Pokaż stoper czasu wykonania (dla graczy i organizatora)
                       </label>
                     ) : null}
+                    <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={station.allowConcurrentTeams ?? false}
+                        onChange={(event) =>
+                          updateStation(stationIndex, { allowConcurrentTeams: event.target.checked })
+                        }
+                      />
+                      Zezwól na jednoczesny start przez wiele drużyn
+                    </label>
                   </div>
 
                   {station.type === "qr-hunt" ? (

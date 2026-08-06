@@ -132,6 +132,7 @@ model Station {
   challengeDifficultyMode String             @default("admin")
   challengeDifficulty String                 @default("medium")
   completionStopwatchEnabled Boolean       @default(false)
+  allowConcurrentTeams Boolean             @default(false)
   fastestCompletionBonusPoints Int         @default(0)
   color            String             @default("#f59e0b")
   latitude         Float?

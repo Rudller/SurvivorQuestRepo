@@ -79,6 +79,7 @@ export type Station = {
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
   completionStopwatchEnabled: boolean;
+  allowConcurrentTeams: boolean;
   fastestCompletionBonusPoints: number;
   color: string;
   latitude?: number;

@@ -3,8 +3,20 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
-import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationType } from "../types/station";
+import type {
+  ChallengeDifficulty,
+  ChallengeDifficultyMode,
+  Station,
+  StationQuiz,
+  StationTranslation,
+  StationType,
+} from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import {
+  getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
+  type RealizationLanguage,
+} from "../../realizations/types/realization";
 import {
   useUpdateStationMutation,
   useDeleteStationMutation,
@@ -31,6 +43,7 @@ import {
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
   normalizeStationQuizForType,
+  normalizeStationTranslations,
   QUIZ_ANSWER_COUNT,
   getQuizLikeStationCopy,
   resolveCompletionCodeGeneratorMode,
@@ -56,6 +69,24 @@ interface EditStationModalProps {
 }
 
 const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
+
+const supportedStationTranslationLanguages: RealizationLanguage[] = [
+  "polish",
+  "english",
+  "ukrainian",
+  "russian",
+  "other",
+];
+
+function isRealizationLanguage(value: string): value is RealizationLanguage {
+  return (
+    value === "polish" ||
+    value === "english" ||
+    value === "ukrainian" ||
+    value === "russian" ||
+    value === "other"
+  );
+}
 
 const RealizationLocationPickerMap = dynamic(
   () => import("../../realizations/components/realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -161,6 +192,25 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [openQuizAcceptedAnswersInput, setOpenQuizAcceptedAnswersInput] = useState(
     (station.quiz?.acceptedAnswers ?? []).join("\n"),
   );
+  const [translationAcceptedAnswersInputs, setTranslationAcceptedAnswersInputs] = useState<
+    Partial<Record<RealizationLanguage, string>>
+  >(() => {
+    const initial: Partial<Record<RealizationLanguage, string>> = {};
+    for (const language of supportedStationTranslationLanguages) {
+      const accepted = station.translations?.[language]?.quiz?.acceptedAnswers;
+      if (accepted?.length) {
+        initial[language] = accepted.join("\n");
+      }
+    }
+    return initial;
+  });
+
+  const [baseLanguage, setBaseLanguage] = useState<RealizationLanguage>("polish");
+  const [editingLanguage, setEditingLanguage] = useState<RealizationLanguage>("polish");
+  const editableLanguages = useMemo(
+    () => [baseLanguage, ...supportedStationTranslationLanguages.filter((language) => language !== baseLanguage)],
+    [baseLanguage],
+  );
 
   const [editValues, setEditValues] = useState({
     name: station.name,
@@ -182,9 +232,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     quizAnswers: station.quiz?.answers?.length === QUIZ_ANSWER_COUNT ? station.quiz.answers : createEmptyQuizAnswers(),
     quizCorrectAnswerIndex: station.quiz?.correctAnswerIndex ?? 0,
     quizAudioUrl: station.quiz?.audioUrl ?? "",
+    translations: station.translations,
     challengeDifficultyMode: station.challengeDifficultyMode as ChallengeDifficultyMode,
     challengeDifficulty: station.challengeDifficulty as ChallengeDifficulty,
     completionStopwatchEnabled: station.completionStopwatchEnabled,
+    allowConcurrentTeams: station.allowConcurrentTeams,
     fastestCompletionBonusPoints: station.fastestCompletionBonusPoints,
     latitude: typeof station.latitude === "number" && Number.isFinite(station.latitude) ? station.latitude : undefined,
     longitude: typeof station.longitude === "number" && Number.isFinite(station.longitude) ? station.longitude : undefined,
@@ -193,6 +245,101 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const hasLongitude = typeof editValues.longitude === "number" && Number.isFinite(editValues.longitude);
   const hasCoordinates = hasLatitude && hasLongitude;
   const quizLikeCopy = getQuizLikeStationCopy(editValues.type);
+
+  const isEditingBaseLanguage = editingLanguage === baseLanguage;
+  const activeTranslation = isEditingBaseLanguage ? undefined : editValues.translations?.[editingLanguage];
+  const activeName = isEditingBaseLanguage ? editValues.name : activeTranslation?.name ?? "";
+  const activeDescription = isEditingBaseLanguage ? editValues.description : activeTranslation?.description ?? "";
+  const activeQuizQuestion = isEditingBaseLanguage ? editValues.quizQuestion : activeTranslation?.quiz?.question ?? "";
+  const activeQuizAnswers = isEditingBaseLanguage
+    ? editValues.quizAnswers
+    : activeTranslation?.quiz?.answers?.length === QUIZ_ANSWER_COUNT
+      ? activeTranslation.quiz.answers
+      : createEmptyQuizAnswers();
+  const activeQuizCorrectAnswerIndex = isEditingBaseLanguage
+    ? editValues.quizCorrectAnswerIndex
+    : activeTranslation?.quiz?.correctAnswerIndex ?? 0;
+  const activeQuizAudioUrl = isEditingBaseLanguage ? editValues.quizAudioUrl : activeTranslation?.quiz?.audioUrl ?? "";
+  const activeQuizAcceptedAnswersText = isEditingBaseLanguage
+    ? openQuizAcceptedAnswersInput
+    : translationAcceptedAnswersInputs[editingLanguage] ?? "";
+
+  function updateActiveTranslation(patch: Partial<StationTranslation>) {
+    setEditValues((prev) => {
+      const currentTranslation = prev.translations?.[editingLanguage] ?? {};
+      const nextTranslation: StationTranslation = { ...currentTranslation, ...patch };
+      const hasValue =
+        Boolean(nextTranslation.name?.trim()) ||
+        Boolean(nextTranslation.description?.trim()) ||
+        Boolean(nextTranslation.quiz);
+      const nextTranslations = { ...(prev.translations ?? {}) };
+
+      if (hasValue) {
+        nextTranslations[editingLanguage] = nextTranslation;
+      } else {
+        delete nextTranslations[editingLanguage];
+      }
+
+      return {
+        ...prev,
+        translations: Object.keys(nextTranslations).length > 0 ? nextTranslations : undefined,
+      };
+    });
+  }
+
+  function setActiveName(value: string) {
+    if (isEditingBaseLanguage) {
+      setEditValues((prev) => ({ ...prev, name: value }));
+      return;
+    }
+    updateActiveTranslation({ name: value });
+  }
+
+  function setActiveDescription(value: string) {
+    if (isEditingBaseLanguage) {
+      setEditValues((prev) => ({ ...prev, description: value }));
+      return;
+    }
+    updateActiveTranslation({ description: value });
+  }
+
+  function setActiveQuizField(patch: {
+    question?: string;
+    answers?: string[];
+    correctAnswerIndex?: number;
+    audioUrl?: string;
+  }) {
+    if (isEditingBaseLanguage) {
+      setEditValues((prev) => ({
+        ...prev,
+        ...(patch.question !== undefined ? { quizQuestion: patch.question } : {}),
+        ...(patch.answers !== undefined ? { quizAnswers: patch.answers } : {}),
+        ...(patch.correctAnswerIndex !== undefined ? { quizCorrectAnswerIndex: patch.correctAnswerIndex } : {}),
+        ...(patch.audioUrl !== undefined ? { quizAudioUrl: patch.audioUrl } : {}),
+      }));
+      return;
+    }
+
+    const nextQuiz: StationQuiz = {
+      question: patch.question ?? activeQuizQuestion,
+      answers: patch.answers ?? activeQuizAnswers,
+      correctAnswerIndex: patch.correctAnswerIndex ?? activeQuizCorrectAnswerIndex,
+      audioUrl: (patch.audioUrl ?? activeQuizAudioUrl) || undefined,
+    };
+    updateActiveTranslation({ quiz: nextQuiz });
+  }
+
+  function setActiveQuizAcceptedAnswersText(value: string) {
+    if (isEditingBaseLanguage) {
+      setOpenQuizAcceptedAnswersInput(value);
+      return;
+    }
+    setTranslationAcceptedAnswersInputs((prev) => ({ ...prev, [editingLanguage]: value }));
+  }
+
+  function showAutoTranslateNotImplemented() {
+    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
+  }
 
   const addCategory = () => {
     const nextCategory = normalizeCategoryValue(categoryInput);
@@ -304,11 +451,28 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               }
 
               try {
-                let nextAudioUrl = editValues.quizAudioUrl.trim();
-                if (editValues.type === "audio-quiz" && editAudioMode === "upload" && editAudioFile) {
-                  const uploadedAudio = await uploadStationAudio(editAudioFile).unwrap();
-                  nextAudioUrl = uploadedAudio.url;
-                }
+                const translationsWithAcceptedAnswers = editValues.translations
+                  ? (Object.fromEntries(
+                      Object.entries(editValues.translations).map(([language, translation]) => {
+                        if (!translation?.quiz || !isOpenQuizStationType(editValues.type)) {
+                          return [language, translation];
+                        }
+
+                        return [
+                          language,
+                          {
+                            ...translation,
+                            quiz: {
+                              ...translation.quiz,
+                              acceptedAnswers: parseAcceptedAnswersInput(
+                                translationAcceptedAnswersInputs[language as RealizationLanguage] ?? "",
+                              ),
+                            },
+                          },
+                        ];
+                      }),
+                    ) as typeof editValues.translations)
+                  : undefined;
 
                 await updateStation({
                   id: station.id,
@@ -329,9 +493,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     isQuizStationType(editValues.type) && quizConfig
                       ? {
                           ...quizConfig,
-                          audioUrl: editValues.type === "audio-quiz" ? nextAudioUrl || undefined : undefined,
+                          audioUrl: editValues.type === "audio-quiz" ? editValues.quizAudioUrl.trim() || undefined : undefined,
                         }
                       : undefined,
+                  translations: normalizeStationTranslations(translationsWithAcceptedAnswers, editValues.type),
+                  allowConcurrentTeams: editValues.allowConcurrentTeams,
                   challengeDifficultyMode: supportsChallengeDifficulty(editValues.type)
                     ? editValues.challengeDifficultyMode
                     : "admin",
@@ -358,11 +524,64 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             }}
             className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
           >
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+              <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200">
+                <span>Język podstawowy</span>
+                <select
+                  value={baseLanguage}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (isRealizationLanguage(nextValue)) {
+                      setBaseLanguage(nextValue);
+                    }
+                  }}
+                  className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                >
+                  {supportedStationTranslationLanguages.map((language) => (
+                    <option key={language} value={language}>
+                      {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+                <span>{getRealizationLanguageFlag(baseLanguage)}</span>
+                <span>Podstawowy: {getRealizationLanguageLabel(baseLanguage)}</span>
+              </span>
+              <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+                <span>Edytowany język</span>
+                <select
+                  value={editingLanguage}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (isRealizationLanguage(nextValue)) {
+                      setEditingLanguage(nextValue);
+                    }
+                  }}
+                  className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                >
+                  {editableLanguages.map((language) => (
+                    <option key={`editing-${language}`} value={language}>
+                      {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                      {language === baseLanguage ? " (podstawowy)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={showAutoTranslateNotImplemented}
+                className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
+              >
+                Auto-tłumacz
+              </button>
+            </div>
+
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
               <input
-                value={editValues.name}
-                onChange={(event) => setEditValues((prev) => ({ ...prev, name: event.target.value }))}
+                value={activeName}
+                onChange={(event) => setActiveName(event.target.value)}
                 placeholder="Nazwa stanowiska"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
@@ -646,11 +865,22 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                             type="file"
                             accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                             className="hidden"
-                            onChange={(event) => {
+                            onChange={async (event) => {
                               const selected = event.target.files?.[0] ?? null;
+                              event.currentTarget.value = "";
+                              if (!selected) {
+                                return;
+                              }
+
                               setEditAudioFile(selected);
                               setEditAudioError(null);
-                              event.currentTarget.value = "";
+
+                              try {
+                                const uploaded = await uploadStationAudio(selected).unwrap();
+                                setActiveQuizField({ audioUrl: uploaded.url });
+                              } catch {
+                                setEditAudioError("Nie udało się przesłać pliku audio.");
+                              }
                             }}
                           />
                         </label>
@@ -664,9 +894,9 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                         <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
                         <input
                           type="url"
-                          value={editValues.quizAudioUrl}
+                          value={activeQuizAudioUrl}
                           onChange={(event) => {
-                            setEditValues((prev) => ({ ...prev, quizAudioUrl: event.target.value }));
+                            setActiveQuizField({ audioUrl: event.target.value });
                             setEditAudioError(null);
                           }}
                           placeholder="https://..."
@@ -682,22 +912,21 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 <label className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                   <textarea
-                    value={editValues.quizQuestion}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({
-                        ...prev,
-                        quizQuestion:
-                          editValues.type === "memory" && !event.target.value.trim()
-                            ? MEMORY_SYSTEM_STATION_PROMPT
-                            : editValues.type === "mini-sudoku" && !event.target.value.trim()
-                              ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
-                              : editValues.type === "matching" && !event.target.value.trim()
-                                ? MATCHING_SYSTEM_STATION_PROMPT
-                            : editValues.type === "simon"
-                              ? normalizeSimonSequenceInput(event.target.value)
-                              : event.target.value,
-                      }))
-                    }
+                    value={activeQuizQuestion}
+                    onChange={(event) => {
+                      const rawValue = event.target.value;
+                      const nextValue =
+                        editValues.type === "memory" && !rawValue.trim()
+                          ? MEMORY_SYSTEM_STATION_PROMPT
+                          : editValues.type === "mini-sudoku" && !rawValue.trim()
+                            ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                            : editValues.type === "matching" && !rawValue.trim()
+                              ? MATCHING_SYSTEM_STATION_PROMPT
+                          : editValues.type === "simon"
+                            ? normalizeSimonSequenceInput(rawValue)
+                            : rawValue;
+                      setActiveQuizField({ question: nextValue });
+                    }}
                     rows={2}
                     placeholder={quizLikeCopy.questionPlaceholder}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -708,12 +937,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
                     <button
                       type="button"
-                      onClick={() =>
-                        setEditValues((prev) => ({
-                          ...prev,
-                          quizQuestion: generateSimonSequence(10),
-                        }))
-                      }
+                      onClick={() => setActiveQuizField({ question: generateSimonSequence(10) })}
                       className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                     >
                       Generuj sekwencję
@@ -723,24 +947,23 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
 
                 {!isWordPuzzleStationType(editValues.type) && !isMatchingStationType(editValues.type) && !isOpenQuizStationType(editValues.type) ? (
                   <div className="space-y-2">
-                    {editValues.quizAnswers.map((answer, index) => (
+                    {activeQuizAnswers.map((answer, index) => (
                       <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
                         <input
                           type="radio"
                           name={`quiz-correct-answer-${station.id}`}
-                          checked={editValues.quizCorrectAnswerIndex === index}
-                          onChange={() => setEditValues((prev) => ({ ...prev, quizCorrectAnswerIndex: index }))}
+                          checked={activeQuizCorrectAnswerIndex === index}
+                          onChange={() => setActiveQuizField({ correctAnswerIndex: index })}
                           className="h-4 w-4 accent-amber-400"
                         />
                         <input
                           value={answer}
                           onChange={(event) =>
-                            setEditValues((prev) => ({
-                              ...prev,
-                              quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                            setActiveQuizField({
+                              answers: activeQuizAnswers.map((item, answerIndex) =>
                                 answerIndex === index ? event.target.value : item,
                               ),
-                            }))
+                            })
                           }
                           placeholder={`Odpowiedź ${index + 1}`}
                           className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -754,12 +977,11 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
                       <input
-                        value={editValues.quizAnswers[0] ?? ""}
+                        value={activeQuizAnswers[0] ?? ""}
                         onChange={(event) =>
-                          setEditValues((prev) => ({
-                            ...prev,
-                            quizAnswers: [event.target.value, ...prev.quizAnswers.slice(1)],
-                          }))
+                          setActiveQuizField({
+                            answers: [event.target.value, ...activeQuizAnswers.slice(1)],
+                          })
                         }
                         placeholder="Wpisz poprawną odpowiedź"
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -771,8 +993,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       </span>
                       <textarea
                         rows={3}
-                        value={openQuizAcceptedAnswersInput}
-                        onChange={(event) => setOpenQuizAcceptedAnswersInput(event.target.value)}
+                        value={activeQuizAcceptedAnswersText}
+                        onChange={(event) => setActiveQuizAcceptedAnswersText(event.target.value)}
                         placeholder={"Jedna odpowiedź na linię, np.\nWarszawa\nstolica Polski"}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       />
@@ -781,7 +1003,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 ) : null}
                 {isMatchingStationType(editValues.type) ? (
                   <div className="space-y-2">
-                    {editValues.quizAnswers.map((answer, index) => {
+                    {activeQuizAnswers.map((answer, index) => {
                       const pair = splitMatchingPairAnswer(answer);
                       return (
                         <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
@@ -790,14 +1012,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                             <input
                               value={pair.left}
                               onChange={(event) =>
-                                setEditValues((prev) => ({
-                                  ...prev,
-                                  quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                                setActiveQuizField({
+                                  answers: activeQuizAnswers.map((item, answerIndex) =>
                                     answerIndex === index
                                       ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right)
                                       : item,
                                   ),
-                                }))
+                                })
                               }
                               placeholder="Lewa strona"
                               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -805,14 +1026,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                             <input
                               value={pair.right}
                               onChange={(event) =>
-                                setEditValues((prev) => ({
-                                  ...prev,
-                                  quizAnswers: prev.quizAnswers.map((item, answerIndex) =>
+                                setActiveQuizField({
+                                  answers: activeQuizAnswers.map((item, answerIndex) =>
                                     answerIndex === index
                                       ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value)
                                       : item,
                                   ),
-                                }))
+                                })
                               }
                               placeholder="Prawa strona"
                               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -838,8 +1058,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     : "Opis"}
               </span>
               <textarea
-                value={editValues.description}
-                onChange={(event) => setEditValues((prev) => ({ ...prev, description: event.target.value }))}
+                value={activeDescription}
+                onChange={(event) => setActiveDescription(event.target.value)}
                 rows={4}
                 placeholder={
                   editValues.type === "photo-task"
@@ -1062,6 +1282,24 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 ) : null}
               </div>
             ) : null}
+
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                <input
+                  type="checkbox"
+                  checked={editValues.allowConcurrentTeams}
+                  onChange={(event) =>
+                    setEditValues((prev) => ({ ...prev, allowConcurrentTeams: event.target.checked }))
+                  }
+                />
+                Zezwól na jednoczesny start przez wiele drużyn
+              </label>
+              <p className="text-xs text-zinc-500">
+                Domyślnie tylko jedna drużyna naraz może wykonywać to stanowisko. Zaznacz, aby kilka drużyn mogło je
+                uruchomić jednocześnie (nie dotyczy stanowisk QR i zadań fotograficznych, które już działają
+                współbieżnie).
+              </p>
+            </div>
 
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
               <div className="flex items-center justify-between gap-2">

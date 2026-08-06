@@ -44,6 +44,12 @@ function normalizeCompletionStopwatchEnabled(
   return value === true;
 }
 
+function normalizeAllowConcurrentTeams(
+  value: unknown,
+): StationDraftInput['allowConcurrentTeams'] {
+  return value === true;
+}
+
 export function normalizeScenarioStationDrafts(
   drafts: ScenarioStationDraftPayload[] | undefined,
   parseTimeLimitSeconds: (value: unknown) => ParseTimeLimitResult,
@@ -109,6 +115,9 @@ export function normalizeScenarioStationDrafts(
         ),
         completionStopwatchEnabled: normalizeCompletionStopwatchEnabled(
           draft.completionStopwatchEnabled,
+        ),
+        allowConcurrentTeams: normalizeAllowConcurrentTeams(
+          draft.allowConcurrentTeams,
         ),
         color: draft.color,
         latitude: hasCoordinates ? draft.latitude : undefined,

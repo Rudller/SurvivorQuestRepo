@@ -65,6 +65,7 @@ export type StationEntity = {
   challengeDifficultyMode: ChallengeDifficultyMode;
   challengeDifficulty: ChallengeDifficulty;
   completionStopwatchEnabled: boolean;
+  allowConcurrentTeams: boolean;
   fastestCompletionBonusPoints: number;
   color: string;
   latitude?: number;
@@ -94,6 +95,7 @@ export type StationDraftInput = {
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  allowConcurrentTeams?: boolean;
   fastestCompletionBonusPoints?: number;
   color?: string;
   latitude?: number;

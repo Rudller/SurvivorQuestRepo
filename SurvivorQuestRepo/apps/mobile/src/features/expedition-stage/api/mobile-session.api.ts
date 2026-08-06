@@ -14,7 +14,21 @@ import {
 import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
 
 type UnknownRecord = Record<string, unknown>;
-type MobileApiError = { message?: string | string[]; statusCode?: number; code?: string; error?: string };
+type MobileApiError = {
+  // Legacy/fallback flat shape.
+  message?: string | string[];
+  statusCode?: number;
+  code?: string;
+  // Actual backend shape, see apps/backend/src/common/http/api-error.ts (ApiErrorBody).
+  error?: {
+    code?: string;
+    message?: string | string[];
+    details?: unknown;
+  };
+  meta?: {
+    statusCode?: number;
+  };
+};
 type MobileApiRequestOptions = { signal?: AbortSignal };
 
 export type MobileApiErrorCode =
@@ -636,6 +650,26 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
   };
 }
 
+export function buildMobileApiHttpError(data: MobileApiError, fallbackStatusCode: number) {
+  // The backend never sends a mobile-specific code (only a generic HTTP-class
+  // bucket like "conflict"/"bad_request" — see ApiErrorBody in
+  // apps/backend/src/common/http/api-error.ts), so resolveMobileApiErrorCode is
+  // intentionally left to infer the specific MobileApiErrorCode from the message
+  // text below instead of short-circuiting on that generic bucket.
+  const message = normalizeErrorMessage(
+    data.error?.message ?? data.message,
+    `HTTP ${fallbackStatusCode}`,
+  );
+  const statusCode =
+    typeof data.meta?.statusCode === "number"
+      ? data.meta.statusCode
+      : typeof data.statusCode === "number"
+        ? data.statusCode
+        : fallbackStatusCode;
+
+  return { message, statusCode };
+}
+
 async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -648,10 +682,10 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 
   if (!response.ok) {
-    const message = normalizeErrorMessage(data.message, `HTTP ${response.status}`);
+    const { message, statusCode } = buildMobileApiHttpError(data, response.status);
     throw new MobileApiHttpError({
-      statusCode: typeof data.statusCode === "number" ? data.statusCode : response.status,
-      code: resolveMobileApiErrorCode(response.status, message, data.code),
+      statusCode,
+      code: resolveMobileApiErrorCode(response.status, message),
       message,
       responseBody: data,
     });
@@ -670,10 +704,10 @@ async function requestMobileApiMultipart<T>(baseUrl: string, path: string, formD
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 
   if (!response.ok) {
-    const message = normalizeErrorMessage(data.message, `HTTP ${response.status}`);
+    const { message, statusCode } = buildMobileApiHttpError(data, response.status);
     throw new MobileApiHttpError({
-      statusCode: typeof data.statusCode === "number" ? data.statusCode : response.status,
-      code: resolveMobileApiErrorCode(response.status, message, data.code),
+      statusCode,
+      code: resolveMobileApiErrorCode(response.status, message),
       message,
       responseBody: data,
     });

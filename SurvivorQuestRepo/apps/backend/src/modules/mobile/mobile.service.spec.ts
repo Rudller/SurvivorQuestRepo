@@ -968,6 +968,101 @@ describe('MobileService task scoring', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.teamTaskProgress.findUnique).not.toHaveBeenCalled();
   });
+
+  it('rejects starting a task when another team is already in progress and concurrent teams are not allowed', async () => {
+    const { service, prisma, stationService } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'quiz',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: 0,
+      allowConcurrentTeams: false,
+    });
+    prisma.teamTaskProgress.findUnique.mockResolvedValue(null);
+    prisma.teamTaskProgress.findFirst.mockResolvedValue({
+      id: 'other-team-progress',
+    });
+
+    await expect(
+      service.startMobileTask({
+        sessionToken: 'session-token',
+        stationId: 'station-1',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.teamTaskProgress.create).not.toHaveBeenCalled();
+  });
+
+  it('allows starting a task on a station with allowConcurrentTeams even while another team is in progress', async () => {
+    const { service, prisma, stationService } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { deviceId: 'device-1' },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
+      realization: {
+        id: 'realization-1',
+        status: 'in-progress',
+        scheduledAt: '2026-05-10T09:00:00.000Z',
+        durationMinutes: 120,
+        stationIds: ['station-1'],
+        locationRequired: false,
+        timedStationPointsDecayEnabled: false,
+        updatedAt: '2026-05-10T09:00:00.000Z',
+      },
+    });
+    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      realizationId: 'realization-1',
+      type: 'quiz',
+      completionCode: null,
+      points: 50,
+      timeLimitSeconds: 0,
+      allowConcurrentTeams: true,
+    });
+    prisma.teamTaskProgress.findUnique.mockResolvedValue(null);
+    prisma.teamTaskProgress.findFirst.mockResolvedValue({
+      id: 'other-team-progress',
+    });
+
+    const result = await service.startMobileTask({
+      sessionToken: 'session-token',
+      stationId: 'station-1',
+    });
+
+    expect(result.taskStatus).toBe('in-progress');
+    expect(prisma.teamTaskProgress.findFirst).not.toHaveBeenCalled();
+    expect(prisma.teamTaskProgress.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ teamId: 'team-1', stationId: 'station-1' }),
+      }),
+    );
+  });
 });
 
 describe('MobileService failed task snapshots', () => {

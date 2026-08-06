@@ -1,6 +1,14 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationKind, StationQuiz, StationType } from "../types/station";
+import type {
+  ChallengeDifficulty,
+  ChallengeDifficultyMode,
+  Station,
+  StationKind,
+  StationQuiz,
+  StationTranslations,
+  StationType,
+} from "../types/station";
 import { normalizeStationQuiz } from "../station.utils";
 
 type StationDto = {
@@ -17,6 +25,7 @@ type StationDto = {
   challengeDifficultyMode?: ChallengeDifficultyMode | null;
   challengeDifficulty?: ChallengeDifficulty | null;
   completionStopwatchEnabled?: boolean | null;
+  allowConcurrentTeams?: boolean | null;
   fastestCompletionBonusPoints?: number | null;
   qrScanCodes?: string[] | null;
   color?: string | null;
@@ -29,6 +38,7 @@ type StationDto = {
         acceptedAnswers?: string[];
       }
     | null;
+  translations?: StationTranslations | null;
   latitude?: number | null;
   longitude?: number | null;
   sourceTemplateId?: string;
@@ -53,9 +63,11 @@ type CreateStationPayload = {
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  allowConcurrentTeams?: boolean;
   fastestCompletionBonusPoints?: number;
   qrScanCodes?: string[];
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
 };
@@ -74,9 +86,11 @@ type UpdateStationPayload = {
   challengeDifficultyMode?: ChallengeDifficultyMode;
   challengeDifficulty?: ChallengeDifficulty;
   completionStopwatchEnabled?: boolean;
+  allowConcurrentTeams?: boolean;
   fastestCompletionBonusPoints?: number;
   qrScanCodes?: string[];
   quiz?: StationQuiz;
+  translations?: StationTranslations;
   latitude?: number;
   longitude?: number;
 };
@@ -159,6 +173,7 @@ function normalizeStation(station: StationDto): Station {
         ? station.challengeDifficulty
         : "medium",
     completionStopwatchEnabled: station.completionStopwatchEnabled === true,
+    allowConcurrentTeams: station.allowConcurrentTeams === true,
     fastestCompletionBonusPoints:
       Number.isFinite(station.fastestCompletionBonusPoints) && (station.fastestCompletionBonusPoints ?? -1) >= 0
         ? Math.round(station.fastestCompletionBonusPoints as number)
@@ -175,6 +190,7 @@ function normalizeStation(station: StationDto): Station {
             acceptedAnswers: station.quiz.acceptedAnswers,
           }) ?? undefined
         : undefined,
+    translations: station.translations ?? undefined,
     latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
     longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
     sourceTemplateId: station.sourceTemplateId,

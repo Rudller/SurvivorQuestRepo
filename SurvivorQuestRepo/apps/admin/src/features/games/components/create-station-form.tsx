@@ -3,8 +3,20 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState, type ClipboardEvent } from "react";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
-import type { ChallengeDifficulty, ChallengeDifficultyMode, StationType } from "../types/station";
+import type {
+  ChallengeDifficulty,
+  ChallengeDifficultyMode,
+  StationQuiz,
+  StationTranslation,
+  StationTranslations,
+  StationType,
+} from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import {
+  getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
+  type RealizationLanguage,
+} from "../../realizations/types/realization";
 import {
   useCreateStationMutation,
   useGetStationsQuery,
@@ -30,6 +42,8 @@ import {
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
   normalizeStationQuizForType,
+  normalizeStationTranslations,
+  QUIZ_ANSWER_COUNT,
   getQuizLikeStationCopy,
   resolveCompletionCodeGeneratorMode,
   resolveDefaultStationDescription,
@@ -53,6 +67,24 @@ import {
 type CreateStationFormProps = {
   onClose: () => void;
 };
+
+const supportedStationTranslationLanguages: RealizationLanguage[] = [
+  "polish",
+  "english",
+  "ukrainian",
+  "russian",
+  "other",
+];
+
+function isRealizationLanguage(value: string): value is RealizationLanguage {
+  return (
+    value === "polish" ||
+    value === "english" ||
+    value === "ukrainian" ||
+    value === "russian" ||
+    value === "other"
+  );
+}
 
 const RealizationLocationPickerMap = dynamic(
   () => import("../../realizations/components/realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -156,9 +188,20 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
   const [quizAudioUrl, setQuizAudioUrl] = useState("");
   const [openQuizAcceptedAnswersInput, setOpenQuizAcceptedAnswersInput] = useState("");
+  const [translations, setTranslations] = useState<StationTranslations | undefined>(undefined);
+  const [translationAcceptedAnswersInputs, setTranslationAcceptedAnswersInputs] = useState<
+    Partial<Record<RealizationLanguage, string>>
+  >({});
+  const [baseLanguage, setBaseLanguage] = useState<RealizationLanguage>("polish");
+  const [editingLanguage, setEditingLanguage] = useState<RealizationLanguage>("polish");
+  const editableLanguages = useMemo(
+    () => [baseLanguage, ...supportedStationTranslationLanguages.filter((language) => language !== baseLanguage)],
+    [baseLanguage],
+  );
   const [challengeDifficultyMode, setChallengeDifficultyMode] = useState<ChallengeDifficultyMode>("admin");
   const [challengeDifficulty, setChallengeDifficulty] = useState<ChallengeDifficulty>("medium");
   const [completionStopwatchEnabled, setCompletionStopwatchEnabled] = useState(false);
+  const [allowConcurrentTeams, setAllowConcurrentTeams] = useState(false);
   const [fastestCompletionBonusPoints, setFastestCompletionBonusPoints] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
@@ -175,6 +218,103 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const hasLongitude = typeof longitude === "number" && Number.isFinite(longitude);
   const hasCoordinates = hasLatitude && hasLongitude;
   const quizLikeCopy = getQuizLikeStationCopy(type);
+
+  const isEditingBaseLanguage = editingLanguage === baseLanguage;
+  const activeTranslation = isEditingBaseLanguage ? undefined : translations?.[editingLanguage];
+  const activeName = isEditingBaseLanguage ? name : activeTranslation?.name ?? "";
+  const activeDescription = isEditingBaseLanguage ? description : activeTranslation?.description ?? "";
+  const activeQuizQuestion = isEditingBaseLanguage ? quizQuestion : activeTranslation?.quiz?.question ?? "";
+  const activeQuizAnswers = isEditingBaseLanguage
+    ? quizAnswers
+    : activeTranslation?.quiz?.answers?.length === QUIZ_ANSWER_COUNT
+      ? activeTranslation.quiz.answers
+      : createEmptyQuizAnswers();
+  const activeQuizCorrectAnswerIndex = isEditingBaseLanguage
+    ? quizCorrectAnswerIndex
+    : activeTranslation?.quiz?.correctAnswerIndex ?? 0;
+  const activeQuizAudioUrl = isEditingBaseLanguage ? quizAudioUrl : activeTranslation?.quiz?.audioUrl ?? "";
+  const activeQuizAcceptedAnswersText = isEditingBaseLanguage
+    ? openQuizAcceptedAnswersInput
+    : translationAcceptedAnswersInputs[editingLanguage] ?? "";
+
+  function updateActiveTranslation(patch: Partial<StationTranslation>) {
+    setTranslations((prev) => {
+      const currentTranslation = prev?.[editingLanguage] ?? {};
+      const nextTranslation: StationTranslation = { ...currentTranslation, ...patch };
+      const hasValue =
+        Boolean(nextTranslation.name?.trim()) ||
+        Boolean(nextTranslation.description?.trim()) ||
+        Boolean(nextTranslation.quiz);
+      const nextTranslations = { ...(prev ?? {}) };
+
+      if (hasValue) {
+        nextTranslations[editingLanguage] = nextTranslation;
+      } else {
+        delete nextTranslations[editingLanguage];
+      }
+
+      return Object.keys(nextTranslations).length > 0 ? nextTranslations : undefined;
+    });
+  }
+
+  function setActiveName(value: string) {
+    if (isEditingBaseLanguage) {
+      setName(value);
+      return;
+    }
+    updateActiveTranslation({ name: value });
+  }
+
+  function setActiveDescription(value: string) {
+    if (isEditingBaseLanguage) {
+      setDescription(value);
+      return;
+    }
+    updateActiveTranslation({ description: value });
+  }
+
+  function setActiveQuizField(patch: {
+    question?: string;
+    answers?: string[];
+    correctAnswerIndex?: number;
+    audioUrl?: string;
+  }) {
+    if (isEditingBaseLanguage) {
+      if (patch.question !== undefined) {
+        setQuizQuestion(patch.question);
+      }
+      if (patch.answers !== undefined) {
+        setQuizAnswers(patch.answers);
+      }
+      if (patch.correctAnswerIndex !== undefined) {
+        setQuizCorrectAnswerIndex(patch.correctAnswerIndex);
+      }
+      if (patch.audioUrl !== undefined) {
+        setQuizAudioUrl(patch.audioUrl);
+      }
+      return;
+    }
+
+    const nextQuiz: StationQuiz = {
+      question: patch.question ?? activeQuizQuestion,
+      answers: patch.answers ?? activeQuizAnswers,
+      correctAnswerIndex: patch.correctAnswerIndex ?? activeQuizCorrectAnswerIndex,
+      audioUrl: (patch.audioUrl ?? activeQuizAudioUrl) || undefined,
+    };
+    updateActiveTranslation({ quiz: nextQuiz });
+  }
+
+  function setActiveQuizAcceptedAnswersText(value: string) {
+    if (isEditingBaseLanguage) {
+      setOpenQuizAcceptedAnswersInput(value);
+      return;
+    }
+    setTranslationAcceptedAnswersInputs((prev) => ({ ...prev, [editingLanguage]: value }));
+  }
+
+  function showAutoTranslateNotImplemented() {
+    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
+  }
 
   const addCategory = () => {
     const nextCategory = normalizeCategoryValue(categoryInput);
@@ -263,7 +403,6 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
 
             try {
               let nextImageUrl = imageUrl.trim();
-              let nextAudioUrl = quizAudioUrl.trim();
 
               if (isImageSupportedStationType(type)) {
                 if (createImageMode !== "url" && imageFile) {
@@ -276,14 +415,28 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 nextImageUrl = "";
               }
 
-              if (type === "audio-quiz") {
-                if (createAudioMode === "upload" && audioFile) {
-                  const uploadedAudio = await uploadStationAudio(audioFile).unwrap();
-                  nextAudioUrl = uploadedAudio.url;
-                  setQuizAudioUrl(uploadedAudio.url);
-                  setAudioFile(null);
-                }
-              }
+              const translationsWithAcceptedAnswers = translations
+                ? (Object.fromEntries(
+                    Object.entries(translations).map(([language, translation]) => {
+                      if (!translation?.quiz || !isOpenQuizStationType(type)) {
+                        return [language, translation];
+                      }
+
+                      return [
+                        language,
+                        {
+                          ...translation,
+                          quiz: {
+                            ...translation.quiz,
+                            acceptedAnswers: parseAcceptedAnswersInput(
+                              translationAcceptedAnswersInputs[language as RealizationLanguage] ?? "",
+                            ),
+                          },
+                        },
+                      ];
+                    }),
+                  ) as StationTranslations)
+                : undefined;
 
               await createStation({
                 name: name.trim(),
@@ -298,11 +451,13 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 qrScanCodes: type === "qr-hunt" ? parseQrScanCodesInput(qrScanCodesInput) : undefined,
                 quiz:
                   isQuizStationType(type) && quizConfig
-                    ? { ...quizConfig, audioUrl: type === "audio-quiz" ? nextAudioUrl || undefined : undefined }
+                    ? { ...quizConfig, audioUrl: type === "audio-quiz" ? quizAudioUrl.trim() || undefined : undefined }
                     : undefined,
+                translations: normalizeStationTranslations(translationsWithAcceptedAnswers, type),
                 challengeDifficultyMode: supportsChallengeDifficulty(type) ? challengeDifficultyMode : "admin",
                 challengeDifficulty: supportsChallengeDifficulty(type) ? challengeDifficulty : "medium",
                 completionStopwatchEnabled: clampTimeLimitSeconds(timeLimitSeconds) === 0 ? completionStopwatchEnabled : false,
+                allowConcurrentTeams,
                 fastestCompletionBonusPoints:
                   clampTimeLimitSeconds(timeLimitSeconds) === 0 && completionStopwatchEnabled
                     ? fastestCompletionBonusPoints
@@ -323,6 +478,10 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setQrEntryCode("");
               setQrScanCodesInput("");
               setOpenQuizAcceptedAnswersInput("");
+              setTranslations(undefined);
+              setTranslationAcceptedAnswersInputs({});
+              setBaseLanguage("polish");
+              setEditingLanguage("polish");
               setQuizQuestion("");
               setQuizAnswers(createEmptyQuizAnswers());
               setQuizCorrectAnswerIndex(0);
@@ -331,6 +490,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               setChallengeDifficultyMode("admin");
               setChallengeDifficulty("medium");
               setCompletionStopwatchEnabled(false);
+              setAllowConcurrentTeams(false);
               setFastestCompletionBonusPoints(0);
               setLatitude(undefined);
               setLongitude(undefined);
@@ -355,11 +515,64 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
         </div>
 
         <div className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+            <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200">
+              <span>Język podstawowy</span>
+              <select
+                value={baseLanguage}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (isRealizationLanguage(nextValue)) {
+                    setBaseLanguage(nextValue);
+                  }
+                }}
+                className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+              >
+                {supportedStationTranslationLanguages.map((language) => (
+                  <option key={language} value={language}>
+                    {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+              <span>{getRealizationLanguageFlag(baseLanguage)}</span>
+              <span>Podstawowy: {getRealizationLanguageLabel(baseLanguage)}</span>
+            </span>
+            <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+              <span>Edytowany język</span>
+              <select
+                value={editingLanguage}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (isRealizationLanguage(nextValue)) {
+                    setEditingLanguage(nextValue);
+                  }
+                }}
+                className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+              >
+                {editableLanguages.map((language) => (
+                  <option key={`editing-${language}`} value={language}>
+                    {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
+                    {language === baseLanguage ? " (podstawowy)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={showAutoTranslateNotImplemented}
+              className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
+            >
+              Auto-tłumacz
+            </button>
+          </div>
+
           <label className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
             <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              value={activeName}
+              onChange={(event) => setActiveName(event.target.value)}
               placeholder="Np. Night Mission"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             />
@@ -636,11 +849,22 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                           type="file"
                           accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                           className="hidden"
-                          onChange={(event) => {
+                          onChange={async (event) => {
                             const selected = event.target.files?.[0] ?? null;
+                            event.currentTarget.value = "";
+                            if (!selected) {
+                              return;
+                            }
+
                             setAudioFile(selected);
                             setAudioError(null);
-                            event.currentTarget.value = "";
+
+                            try {
+                              const uploaded = await uploadStationAudio(selected).unwrap();
+                              setActiveQuizField({ audioUrl: uploaded.url });
+                            } catch {
+                              setAudioError("Nie udało się przesłać pliku audio.");
+                            }
                           }}
                         />
                       </label>
@@ -653,9 +877,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                       <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
                       <input
                         type="url"
-                        value={quizAudioUrl}
+                        value={activeQuizAudioUrl}
                         onChange={(event) => {
-                          setQuizAudioUrl(event.target.value);
+                          setActiveQuizField({ audioUrl: event.target.value });
                           setAudioError(null);
                         }}
                         placeholder="https://..."
@@ -671,20 +895,21 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               <label className="space-y-1.5">
                 <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
                 <textarea
-                  value={quizQuestion}
-                  onChange={(event) =>
-                    setQuizQuestion(
-                      type === "memory" && !event.target.value.trim()
+                  value={activeQuizQuestion}
+                  onChange={(event) => {
+                    const rawValue = event.target.value;
+                    const nextValue =
+                      type === "memory" && !rawValue.trim()
                         ? MEMORY_SYSTEM_STATION_PROMPT
-                        : type === "mini-sudoku" && !event.target.value.trim()
+                        : type === "mini-sudoku" && !rawValue.trim()
                           ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
-                        : type === "matching" && !event.target.value.trim()
+                        : type === "matching" && !rawValue.trim()
                           ? MATCHING_SYSTEM_STATION_PROMPT
                         : type === "simon"
-                          ? normalizeSimonSequenceInput(event.target.value)
-                          : event.target.value,
-                    )
-                  }
+                          ? normalizeSimonSequenceInput(rawValue)
+                          : rawValue;
+                    setActiveQuizField({ question: nextValue });
+                  }}
                   rows={2}
                   placeholder={quizLikeCopy.questionPlaceholder}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -695,7 +920,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
                   <button
                     type="button"
-                    onClick={() => setQuizQuestion(generateSimonSequence(10))}
+                    onClick={() => setActiveQuizField({ question: generateSimonSequence(10) })}
                     className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                   >
                     Generuj sekwencję
@@ -705,21 +930,23 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
 
               {!isWordPuzzleStationType(type) && !isMatchingStationType(type) && !isOpenQuizStationType(type) ? (
                 <div className="space-y-2">
-                  {quizAnswers.map((answer, index) => (
+                  {activeQuizAnswers.map((answer, index) => (
                     <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
                       <input
                         type="radio"
                         name="quiz-correct-answer-create"
-                        checked={quizCorrectAnswerIndex === index}
-                        onChange={() => setQuizCorrectAnswerIndex(index)}
+                        checked={activeQuizCorrectAnswerIndex === index}
+                        onChange={() => setActiveQuizField({ correctAnswerIndex: index })}
                         className="h-4 w-4 accent-amber-400"
                       />
                       <input
                         value={answer}
                         onChange={(event) =>
-                          setQuizAnswers((current) =>
-                            current.map((item, answerIndex) => (answerIndex === index ? event.target.value : item)),
-                          )
+                          setActiveQuizField({
+                            answers: activeQuizAnswers.map((item, answerIndex) =>
+                              answerIndex === index ? event.target.value : item,
+                            ),
+                          })
                         }
                         placeholder={`Odpowiedź ${index + 1}`}
                         className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -733,9 +960,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
                     <input
-                      value={quizAnswers[0] ?? ""}
+                      value={activeQuizAnswers[0] ?? ""}
                       onChange={(event) =>
-                        setQuizAnswers((current) => [event.target.value, ...current.slice(1)])
+                        setActiveQuizField({ answers: [event.target.value, ...activeQuizAnswers.slice(1)] })
                       }
                       placeholder="Wpisz poprawną odpowiedź"
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -747,8 +974,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                     </span>
                     <textarea
                       rows={3}
-                      value={openQuizAcceptedAnswersInput}
-                      onChange={(event) => setOpenQuizAcceptedAnswersInput(event.target.value)}
+                      value={activeQuizAcceptedAnswersText}
+                      onChange={(event) => setActiveQuizAcceptedAnswersText(event.target.value)}
                       placeholder={"Jedna odpowiedź na linię, np.\nWarszawa\nstolica Polski"}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
@@ -757,7 +984,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               ) : null}
               {isMatchingStationType(type) ? (
                 <div className="space-y-2">
-                  {quizAnswers.map((answer, index) => {
+                  {activeQuizAnswers.map((answer, index) => {
                     const pair = splitMatchingPairAnswer(answer);
                     return (
                       <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
@@ -766,11 +993,11 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                           <input
                             value={pair.left}
                             onChange={(event) =>
-                              setQuizAnswers((current) =>
-                                current.map((item, answerIndex) =>
+                              setActiveQuizField({
+                                answers: activeQuizAnswers.map((item, answerIndex) =>
                                   answerIndex === index ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right) : item,
                                 ),
-                              )
+                              })
                             }
                             placeholder="Lewa strona"
                             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -778,11 +1005,11 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                           <input
                             value={pair.right}
                             onChange={(event) =>
-                              setQuizAnswers((current) =>
-                                current.map((item, answerIndex) =>
+                              setActiveQuizField({
+                                answers: activeQuizAnswers.map((item, answerIndex) =>
                                   answerIndex === index ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value) : item,
                                 ),
-                              )
+                              })
                             }
                             placeholder="Prawa strona"
                             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
@@ -808,8 +1035,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   : "Opis (opcjonalny)"}
             </span>
             <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              value={activeDescription}
+              onChange={(event) => setActiveDescription(event.target.value)}
               placeholder={
                 type === "photo-task"
                   ? "Np. Znajdź młotek i zrób jego zdjęcie"
@@ -1080,6 +1307,22 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               ) : null}
             </div>
           ) : null}
+
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                checked={allowConcurrentTeams}
+                onChange={(event) => setAllowConcurrentTeams(event.target.checked)}
+              />
+              Zezwól na jednoczesny start przez wiele drużyn
+            </label>
+            <p className="text-xs text-zinc-500">
+              Domyślnie tylko jedna drużyna naraz może wykonywać to stanowisko. Zaznacz, aby kilka drużyn mogło je
+              uruchomić jednocześnie (nie dotyczy stanowisk QR i zadań fotograficznych, które już działają
+              współbieżnie).
+            </p>
+          </div>
 
           <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
             <div className="flex items-center justify-between gap-2">

@@ -7,6 +7,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 import {
+  buildMobileApiHttpError,
   getMobileApiErrorCode,
   getMobileApiErrorStatusCode,
   isSessionTokenInvalidError,
@@ -340,5 +341,32 @@ describe("network retry helpers", () => {
     });
 
     expect(isSessionTokenInvalidError(error)).toBe(true);
+  });
+
+  it("extracts the real backend error message instead of a generic HTTP status fallback", () => {
+    // Mirrors apps/backend/src/common/http/api-error.ts's ApiErrorBody shape,
+    // e.g. the STATION_IN_USE conflict thrown by startMobileTask.
+    const { message, statusCode } = buildMobileApiHttpError(
+      {
+        error: {
+          code: "conflict",
+          message: "Inna drużyna wykonuje zadania na tym stanowisku, kiedy skończą uruchom to stanowisko",
+        },
+        meta: { statusCode: 409 },
+      },
+      409,
+    );
+
+    expect(statusCode).toBe(409);
+    expect(message).toBe(
+      "Inna drużyna wykonuje zadania na tym stanowisku, kiedy skończą uruchom to stanowisko",
+    );
+    expect(message.toLowerCase()).not.toContain("http 409");
+  });
+
+  it("falls back to a generic HTTP status message only when no error body is present", () => {
+    const { message } = buildMobileApiHttpError({}, 500);
+
+    expect(message).toBe("HTTP 500");
   });
 });

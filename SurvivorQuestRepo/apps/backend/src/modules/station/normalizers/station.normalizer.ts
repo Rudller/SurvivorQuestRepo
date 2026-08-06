@@ -38,6 +38,12 @@ function normalizeCompletionStopwatchEnabled(
   return value === true;
 }
 
+function normalizeAllowConcurrentTeams(
+  value: StationDraftInput['allowConcurrentTeams'],
+): boolean {
+  return value === true;
+}
+
 function normalizeFastestCompletionBonusPoints(
   value: StationDraftInput['fastestCompletionBonusPoints'],
   completionStopwatchEnabled: boolean,
@@ -267,6 +273,7 @@ export function normalizeStationDraft(
       input.challengeDifficulty,
     ),
     completionStopwatchEnabled: normalizedCompletionStopwatchEnabled,
+    allowConcurrentTeams: normalizeAllowConcurrentTeams(input.allowConcurrentTeams),
     fastestCompletionBonusPoints: normalizeFastestCompletionBonusPoints(
       input.fastestCompletionBonusPoints,
       normalizedCompletionStopwatchEnabled,

@@ -1,5 +1,5 @@
 import type { ClipboardEvent } from "react";
-import type { ChallengeDifficulty, ChallengeDifficultyMode, StationQuiz, StationType } from "./types/station";
+import type { ChallengeDifficulty, ChallengeDifficultyMode, StationQuiz, StationTranslations, StationType } from "./types/station";
 import { stationTypeOptions } from "./types/station";
 
 export type ImageInputMode = "upload" | "paste" | "url";
@@ -607,6 +607,55 @@ export function normalizeStationQuizForType(stationType: StationType, input: Sta
   }
 
   return normalizeStationQuiz(input);
+}
+
+export function normalizeStationTranslations(
+  translations: StationTranslations | undefined,
+  stationType: StationType,
+): StationTranslations | undefined {
+  if (!translations) {
+    return undefined;
+  }
+
+  const normalized = Object.entries(translations).reduce<StationTranslations>((acc, [language, value]) => {
+    if (!value || typeof value !== "object") {
+      return acc;
+    }
+
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    const description = typeof value.description === "string" ? value.description.trim() : "";
+    const normalizedQuiz = value.quiz ? normalizeStationQuizForType(stationType, value.quiz) ?? undefined : undefined;
+
+    if (!name && !description && !normalizedQuiz) {
+      return acc;
+    }
+
+    if (
+      language === "polish" ||
+      language === "english" ||
+      language === "ukrainian" ||
+      language === "russian" ||
+      language === "other"
+    ) {
+      acc[language] = {
+        name: name || undefined,
+        description: description || undefined,
+        quiz: normalizedQuiz
+          ? {
+              question: normalizedQuiz.question,
+              answers: normalizedQuiz.answers,
+              correctAnswerIndex: normalizedQuiz.correctAnswerIndex,
+              audioUrl: normalizedQuiz.audioUrl,
+              acceptedAnswers: normalizedQuiz.acceptedAnswers,
+            }
+          : undefined,
+      };
+    }
+
+    return acc;
+  }, {});
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 export function normalizeCompletionCode(value: string) {

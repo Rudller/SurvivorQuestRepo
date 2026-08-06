@@ -298,6 +298,7 @@ export function mapStation(input: {
   challengeDifficultyMode: string;
   challengeDifficulty: string;
   completionStopwatchEnabled: boolean;
+  allowConcurrentTeams: boolean;
   fastestCompletionBonusPoints: number;
   color: string;
   latitude: number | null;
@@ -332,6 +333,7 @@ export function mapStation(input: {
         ? input.challengeDifficulty
         : 'medium',
     completionStopwatchEnabled: input.completionStopwatchEnabled === true,
+    allowConcurrentTeams: input.allowConcurrentTeams === true,
     fastestCompletionBonusPoints: Math.max(
       0,
       Math.round(input.fastestCompletionBonusPoints ?? 0),

@@ -88,6 +88,7 @@ export type ScenarioStationDraftPayload = {
   challengeDifficultyMode?: 'admin' | 'player';
   challengeDifficulty?: 'easy' | 'medium' | 'hard';
   completionStopwatchEnabled?: boolean;
+  allowConcurrentTeams?: boolean;
   color?: string;
   latitude?: number;
   longitude?: number;
