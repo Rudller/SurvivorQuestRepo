@@ -19,7 +19,7 @@ import { StationStorageService } from '../station/station-storage.service';
 import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import type {
   CreateRealizationDto,
-  TranslateRealizationStationDto,
+  TranslateRealizationTextsDto,
   UpdateRealizationDto,
 } from './dto/realization.dto';
 import { RealizationService } from './realization.service';
@@ -52,10 +52,9 @@ export class RealizationController {
     return this.realizationService.createRealization(payload);
   }
 
-  @Post('translate-station')
-  @AdminOnly()
-  translateStation(@Body() payload: TranslateRealizationStationDto) {
-    return this.realizationService.translateStation(payload);
+  @Post('translate-texts')
+  translateTexts(@Body() payload: TranslateRealizationTextsDto) {
+    return this.realizationService.translateTexts(payload);
   }
 
   @Post('upload-logo')

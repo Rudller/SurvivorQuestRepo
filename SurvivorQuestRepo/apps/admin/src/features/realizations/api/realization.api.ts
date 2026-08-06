@@ -553,6 +553,16 @@ export const realizationApi = baseApi.injectEndpoints({
       query: ({ realizationId }) =>
         buildApiPath(`/mobile/admin/realizations/${realizationId}/station-qr`),
     }),
+    translateRealizationTexts: build.mutation<
+      { texts: string[] },
+      { sourceLanguage: RealizationLanguage; targetLanguage: RealizationLanguage; texts: string[] }
+    >({
+      query: (body) => ({
+        url: buildApiPath("/realizations/translate-texts"),
+        method: "POST",
+        body,
+      }),
+    }),
   }),
 });
 
@@ -567,4 +577,5 @@ export const {
   useDeleteMediaAssetMutation,
   useGetMobileAdminRealizationOverviewQuery,
   useGetRealizationStationQrsQuery,
+  useTranslateRealizationTextsMutation,
 } = realizationApi;

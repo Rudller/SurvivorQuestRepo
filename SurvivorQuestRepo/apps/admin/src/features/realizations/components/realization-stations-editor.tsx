@@ -46,6 +46,8 @@ import {
   type RealizationLanguage,
   type RealizationStationDraft,
 } from "../types/realization";
+import { useTranslateRealizationTextsMutation } from "../api/realization.api";
+import { MobileStationPreview } from "../mobile-preview/mobile-station-preview";
 
 const RealizationLocationPickerMap = dynamic(
   () => import("./realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -77,6 +79,10 @@ const supportedStationTranslationLanguages: RealizationLanguage[] = [
   "other",
 ];
 const UNCATEGORIZED_FILTER_LABEL = "Bez kategorii";
+// Auto-tłumacz jest w pełni zaimplementowany (backend + frontend), ale ukryty w UI —
+// wymaga klucza DEEPL_API_KEY do zewnętrznego API, którego użycie ponad darmowy limit
+// wymaga płatnej subskrypcji. Ustaw na true, aby przywrócić przycisk w edytorze.
+const AUTO_TRANSLATE_UI_ENABLED = false;
 
 function isRealizationLanguage(value: string): value is RealizationLanguage {
   return (
@@ -404,6 +410,8 @@ export function RealizationStationsEditor({
   const [stationSearchQuery, setStationSearchQuery] = useState("");
   const [selectedStationCategories, setSelectedStationCategories] = useState<string[]>([]);
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
   const { data: allStations } = useGetStationsQuery();
   const qrEntryCodeSuggestions = useMemo(() => {
     const codes = new Set<string>();
@@ -670,8 +678,219 @@ export function RealizationStationsEditor({
     }));
   }
 
-  function showAutoTranslateNotImplemented() {
-    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
+  async function handleAutoTranslate() {
+    if (editingLanguage === baseLanguage || editingLanguage === "other" || baseLanguage === "other") {
+      return;
+    }
+
+    type PendingField =
+      | { kind: "name"; stationIndex: number }
+      | { kind: "description"; stationIndex: number }
+      | { kind: "question"; stationIndex: number }
+      | { kind: "answer"; stationIndex: number; answerIndex: number }
+      | { kind: "matchingLeft"; stationIndex: number; pairIndex: number }
+      | { kind: "matchingRight"; stationIndex: number; pairIndex: number };
+
+    const pendingFields: PendingField[] = [];
+    const texts: string[] = [];
+
+    function queue(field: PendingField, text: string) {
+      pendingFields.push(field);
+      texts.push(text);
+    }
+
+    let stationsNeedingTranslation = 0;
+
+    stations.forEach((station, stationIndex) => {
+      const translation = station.translations?.[editingLanguage];
+      const hasQuiz = isQuizStationType(station.type);
+      const nameFilled = Boolean(translation?.name?.trim());
+      const descriptionFilled = Boolean(translation?.description?.trim());
+      const questionFilled = Boolean(translation?.quiz?.question?.trim());
+
+      const alreadyTranslated = hasQuiz
+        ? nameFilled && descriptionFilled && questionFilled
+        : nameFilled && descriptionFilled;
+
+      if (alreadyTranslated) {
+        return;
+      }
+
+      const fieldCountBefore = pendingFields.length;
+
+      if (!nameFilled && station.name.trim()) {
+        queue({ kind: "name", stationIndex }, station.name);
+      }
+      if (!descriptionFilled && station.description.trim()) {
+        queue({ kind: "description", stationIndex }, station.description);
+      }
+
+      if (hasQuiz && !questionFilled && station.type !== "simon" && station.quiz?.question?.trim()) {
+        queue({ kind: "question", stationIndex }, station.quiz.question);
+
+        if (station.type === "quiz" || station.type === "audio-quiz") {
+          (station.quiz.answers ?? []).forEach((answer, answerIndex) => {
+            if (answer.trim()) {
+              queue({ kind: "answer", stationIndex, answerIndex }, answer);
+            }
+          });
+        } else if (isOpenQuizStationType(station.type)) {
+          const correctAnswer = station.quiz.answers?.[0] ?? "";
+          if (correctAnswer.trim()) {
+            queue({ kind: "answer", stationIndex, answerIndex: 0 }, correctAnswer);
+          }
+        } else if (isMatchingStationType(station.type)) {
+          (station.quiz.answers ?? []).forEach((answer, pairIndex) => {
+            const pair = splitMatchingPairAnswer(answer);
+            if (pair.left) {
+              queue({ kind: "matchingLeft", stationIndex, pairIndex }, pair.left);
+            }
+            if (pair.right) {
+              queue({ kind: "matchingRight", stationIndex, pairIndex }, pair.right);
+            }
+          });
+        }
+        // word-puzzle types (wordle/hangman/mastermind/anagram/caesar-cipher/rebus/boggle/
+        // memory/mini-sudoku/strong-password) skip answers entirely: normalizeStationQuizForType
+        // always rebuilds them from the translated question.
+      }
+
+      if (pendingFields.length > fieldCountBefore) {
+        stationsNeedingTranslation += 1;
+      }
+    });
+
+    if (texts.length === 0) {
+      setAutoTranslateMessage("Wszystkie widoczne stanowiska mają już tłumaczenie dla tego języka.");
+      return;
+    }
+
+    setAutoTranslateMessage(null);
+
+    let translatedTexts: string[];
+    try {
+      const response = await translateRealizationTexts({
+        sourceLanguage: baseLanguage,
+        targetLanguage: editingLanguage,
+        texts,
+      }).unwrap();
+      translatedTexts = response.texts;
+    } catch {
+      setAutoTranslateMessage("Nie udało się przetłumaczyć stanowisk. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+      return;
+    }
+
+    type StationTranslationPatch = Partial<NonNullable<RealizationStationDraft["translations"]>[RealizationLanguage]>;
+    const patchByStationIndex = new Map<number, StationTranslationPatch>();
+    const questionByStationIndex = new Map<number, string>();
+    const answersByStationIndex = new Map<number, string[]>();
+    const matchingLeftByStationIndex = new Map<number, Map<number, string>>();
+    const matchingRightByStationIndex = new Map<number, Map<number, string>>();
+
+    pendingFields.forEach((field, position) => {
+      const translated = translatedTexts[position]?.trim();
+      if (!translated) {
+        return;
+      }
+
+      const patch = patchByStationIndex.get(field.stationIndex) ?? {};
+      patchByStationIndex.set(field.stationIndex, patch);
+
+      if (field.kind === "name") {
+        patch.name = translated;
+      } else if (field.kind === "description") {
+        patch.description = translated;
+      } else if (field.kind === "question") {
+        questionByStationIndex.set(field.stationIndex, translated);
+      } else if (field.kind === "answer") {
+        const answers = answersByStationIndex.get(field.stationIndex) ?? [];
+        answers[field.answerIndex] = translated;
+        answersByStationIndex.set(field.stationIndex, answers);
+      } else if (field.kind === "matchingLeft") {
+        const lefts = matchingLeftByStationIndex.get(field.stationIndex) ?? new Map<number, string>();
+        lefts.set(field.pairIndex, translated);
+        matchingLeftByStationIndex.set(field.stationIndex, lefts);
+      } else if (field.kind === "matchingRight") {
+        const rights = matchingRightByStationIndex.get(field.stationIndex) ?? new Map<number, string>();
+        rights.set(field.pairIndex, translated);
+        matchingRightByStationIndex.set(field.stationIndex, rights);
+      }
+    });
+
+    let translatedStationCount = 0;
+
+    questionByStationIndex.forEach((translatedQuestion, stationIndex) => {
+      const station = stations[stationIndex];
+      const existingTranslationQuiz = station.translations?.[editingLanguage]?.quiz;
+
+      let answers: string[];
+      if (isMatchingStationType(station.type)) {
+        const lefts = matchingLeftByStationIndex.get(stationIndex);
+        const rights = matchingRightByStationIndex.get(stationIndex);
+        answers = (station.quiz?.answers ?? []).map((originalAnswer, pairIndex) => {
+          const originalPair = splitMatchingPairAnswer(originalAnswer);
+          const left = lefts?.get(pairIndex) ?? originalPair.left;
+          const right = rights?.get(pairIndex) ?? originalPair.right;
+          return joinMatchingPairAnswer(left, right);
+        });
+      } else {
+        answers = answersByStationIndex.get(stationIndex) ?? createEmptyQuizAnswers();
+      }
+
+      const translatedQuiz = normalizeStationQuizForType(station.type, {
+        question: translatedQuestion,
+        answers,
+        correctAnswerIndex: 0,
+        audioUrl: existingTranslationQuiz?.audioUrl,
+        acceptedAnswers: existingTranslationQuiz?.acceptedAnswers,
+      });
+
+      if (translatedQuiz) {
+        const patch = patchByStationIndex.get(stationIndex) ?? {};
+        patch.quiz = translatedQuiz;
+        patchByStationIndex.set(stationIndex, patch);
+      }
+    });
+
+    patchByStationIndex.forEach(() => {
+      translatedStationCount += 1;
+    });
+
+    if (patchByStationIndex.size > 0) {
+      onChange(
+        stations.map((station, index) => {
+          const patch = patchByStationIndex.get(index);
+          if (!patch) {
+            return station;
+          }
+
+          const currentTranslation = station.translations?.[editingLanguage] ?? {};
+          const nextTranslation = { ...currentTranslation, ...patch };
+          const hasTranslationValue =
+            Boolean(nextTranslation.name?.trim()) ||
+            Boolean(nextTranslation.description?.trim()) ||
+            Boolean(nextTranslation.quiz);
+
+          const nextTranslations = { ...(station.translations ?? {}) };
+          if (hasTranslationValue) {
+            nextTranslations[editingLanguage] = nextTranslation;
+          } else {
+            delete nextTranslations[editingLanguage];
+          }
+
+          return {
+            ...station,
+            translations: Object.keys(nextTranslations).length > 0 ? nextTranslations : undefined,
+          };
+        }),
+      );
+    }
+
+    setAutoTranslateMessage(
+      translatedStationCount > 0
+        ? `Przetłumaczono ${translatedStationCount} z ${stationsNeedingTranslation} stanowisk.`
+        : "Nie udało się uzupełnić żadnego pola — spróbuj ponownie.",
+    );
   }
 
   function setStationCategoryInput(stationKey: string, value: string) {
@@ -922,14 +1141,27 @@ export function RealizationStationsEditor({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          onClick={showAutoTranslateNotImplemented}
-          className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
-        >
-          Auto-tłumacz
-        </button>
+        {AUTO_TRANSLATE_UI_ENABLED ? (
+          <button
+            type="button"
+            onClick={handleAutoTranslate}
+            disabled={isAutoTranslating || editingLanguage === baseLanguage || editingLanguage === "other" || baseLanguage === "other"}
+            title={
+              editingLanguage === baseLanguage
+                ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+                : editingLanguage === "other" || baseLanguage === "other"
+                  ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                  : undefined
+            }
+            className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
+          </button>
+        ) : null}
       </div>
+      {AUTO_TRANSLATE_UI_ENABLED && autoTranslateMessage ? (
+        <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>
+      ) : null}
 
       <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -2110,6 +2342,26 @@ export function RealizationStationsEditor({
                   <p className="text-xs text-zinc-500">
                     Jeśli uzupełnisz GPS, mobilka pokaże stanowisko w realnym miejscu zamiast generować pozycję zastępczą.
                   </p>
+
+                  <div>
+                    <p className="mb-1.5 text-xs uppercase tracking-wider text-zinc-400">Podgląd na mobilce</p>
+                    <MobileStationPreview
+                      stationKey={stationKey}
+                      type={station.type}
+                      name={selectedStationName}
+                      description={selectedStationDescription}
+                      quiz={selectedStationQuiz}
+                      points={station.points}
+                      timeLimitSeconds={station.timeLimitSeconds}
+                      completionCode={station.completionCode}
+                      completionStopwatchEnabled={station.completionStopwatchEnabled}
+                      fastestCompletionBonusPoints={station.fastestCompletionBonusPoints}
+                      challengeDifficulty={station.challengeDifficulty}
+                      challengeDifficultyMode={station.challengeDifficultyMode}
+                      imageUrl={station.imageUrl}
+                      language={editingLanguage}
+                    />
+                  </div>
                 </div>
               )}
             </div>

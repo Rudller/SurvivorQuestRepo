@@ -8,8 +8,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   requireRealizationId,
   validateRealizationPayload,
+  validateTranslateRealizationTextsPayload,
   type CreateRealizationDto,
-  type TranslateRealizationStationDto,
+  type TranslateRealizationTextsDto,
   type UpdateRealizationDto,
 } from './dto/realization.dto';
 import type { ScenarioStationDraftPayload } from './entities/realization.entity';
@@ -28,6 +29,7 @@ import {
 } from '../scenario/scenario.service';
 import { StationService, type StationEntity } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
+import { TranslationService } from '../translation/translation.service';
 import { RealizationJoinCodeService } from './domain/realization.join-code';
 import {
   normalizeScenarioStationDrafts,
@@ -63,6 +65,7 @@ export class RealizationService {
     private readonly scenarioService: ScenarioService,
     private readonly stationService: StationService,
     private readonly stationStorageService: StationStorageService,
+    private readonly translationService: TranslationService,
   ) {}
 
   async listRealizations() {
@@ -279,9 +282,14 @@ export class RealizationService {
     return entity;
   }
 
-  translateStation(payload: TranslateRealizationStationDto) {
-    void payload;
-    throw new BadRequestException('Auto-translate is not implemented yet.');
+  async translateTexts(payload: TranslateRealizationTextsDto) {
+    const validated = validateTranslateRealizationTextsPayload(payload);
+    const texts = await this.translationService.translateBatch(
+      validated.texts,
+      validated.sourceLanguage,
+      validated.targetLanguage,
+    );
+    return { texts };
   }
 
   async listMediaLibrary() {

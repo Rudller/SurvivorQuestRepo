@@ -69,11 +69,71 @@ export type UpdateRealizationDto = CreateRealizationDto & {
   id?: string;
 };
 
-export type TranslateRealizationStationDto = {
+export type TranslateRealizationTextsDto = {
   sourceLanguage?: RealizationLanguage;
   targetLanguage?: RealizationLanguage;
-  station?: ScenarioStationDraftPayload;
+  texts?: unknown;
 };
+
+export type ValidatedTranslateRealizationTextsPayload = {
+  sourceLanguage: RealizationLanguage;
+  targetLanguage: RealizationLanguage;
+  texts: string[];
+};
+
+const TRANSLATE_TEXTS_MAX_COUNT = 200;
+const TRANSLATE_TEXTS_MAX_LENGTH = 5000;
+
+export function validateTranslateRealizationTextsPayload(
+  payload: TranslateRealizationTextsDto,
+): ValidatedTranslateRealizationTextsPayload {
+  if (
+    !isValidRealizationLanguage(payload.sourceLanguage) ||
+    !isValidRealizationLanguage(payload.targetLanguage)
+  ) {
+    throw new BadRequestException('Invalid source or target language.');
+  }
+
+  if (payload.sourceLanguage === 'other' || payload.targetLanguage === 'other') {
+    throw new BadRequestException(
+      'Automatic translation is not available for a custom language.',
+    );
+  }
+
+  if (payload.sourceLanguage === payload.targetLanguage) {
+    throw new BadRequestException(
+      'Source and target language must be different.',
+    );
+  }
+
+  if (!Array.isArray(payload.texts) || payload.texts.length === 0) {
+    throw new BadRequestException('texts must be a non-empty array.');
+  }
+
+  if (payload.texts.length > TRANSLATE_TEXTS_MAX_COUNT) {
+    throw new BadRequestException(
+      `texts must contain at most ${TRANSLATE_TEXTS_MAX_COUNT} entries.`,
+    );
+  }
+
+  const texts = payload.texts.map((text) => {
+    if (typeof text !== 'string') {
+      throw new BadRequestException('Each text entry must be a string.');
+    }
+    if (text.length > TRANSLATE_TEXTS_MAX_LENGTH) {
+      throw new BadRequestException(
+        `Each text entry must be at most ${TRANSLATE_TEXTS_MAX_LENGTH} characters.`,
+      );
+    }
+    return text;
+  });
+
+  return {
+    sourceLanguage: payload.sourceLanguage,
+    targetLanguage: payload.targetLanguage,
+    texts,
+  };
+}
 
 function sanitizeInstructors(value: unknown) {
   if (!Array.isArray(value)) {
