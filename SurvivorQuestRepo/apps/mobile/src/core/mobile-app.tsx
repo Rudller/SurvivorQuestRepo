@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -32,6 +33,8 @@ import {
 import { UiLanguageProvider, resolveUiLanguage, type UiLanguage } from "../features/i18n";
 import {
   fetchMobileSessionState,
+  getMobileApiErrorCode,
+  getMobileApiErrorStatusCode,
   isSessionTokenInvalidError,
 } from "../features/expedition-stage/api/mobile-session.api";
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
@@ -39,6 +42,9 @@ import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
+const ADMIN_START_POLL_TIMEOUT_MS = 8000;
+const ADMIN_START_POLL_ERROR_THRESHOLD = 2;
+const HIDDEN_RESET_HOLD_MS = 5000;
 const STALE_REALIZATION_AUTO_RESUME_GRACE_MS = 6 * 60 * 60 * 1000;
 
 type MobileThemePreference = ExpeditionThemeMode;
@@ -152,6 +158,11 @@ const MOBILE_APP_TEXT: Record<
     sessionResetNotice: string;
     mobileSessionReset: string;
     serverReconnect: string;
+    retryNowAction: string;
+    hiddenResetTitle: string;
+    hiddenResetBody: string;
+    hiddenResetConfirmAction: string;
+    hiddenResetCancelAction: string;
     themeLabel: string;
     themeLight: string;
     themeDark: string;
@@ -171,6 +182,11 @@ const MOBILE_APP_TEXT: Record<
       "Wykryto reset realizacji lub wygaśnięcie sesji{reasonSuffix}. Przekierowaliśmy do Etapu 3, aby ponownie potwierdzić drużynę.",
     mobileSessionReset: "Sesja mobilna została zresetowana ({reason}).",
     serverReconnect: "Brak połączenia z serwerem. Ponawiam sprawdzenie startu...",
+    retryNowAction: "Spróbuj ponownie",
+    hiddenResetTitle: "Wrócić do startu?",
+    hiddenResetBody: "Zresetuje to lokalną sesję i spróbuje ponownie dołączyć tym samym kodem.",
+    hiddenResetConfirmAction: "Wróć do startu",
+    hiddenResetCancelAction: "Anuluj",
     themeLabel: "Motyw",
     themeLight: "Jasny",
     themeDark: "Ciemny",
@@ -189,6 +205,11 @@ const MOBILE_APP_TEXT: Record<
       "A realization reset or session expiration was detected{reasonSuffix}. We redirected you to Step 3 to confirm the team again.",
     mobileSessionReset: "Mobile session was reset ({reason}).",
     serverReconnect: "No connection to the server. Retrying start check...",
+    retryNowAction: "Try again",
+    hiddenResetTitle: "Back to start?",
+    hiddenResetBody: "This resets the local session and tries to rejoin with the same code.",
+    hiddenResetConfirmAction: "Back to start",
+    hiddenResetCancelAction: "Cancel",
     themeLabel: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
@@ -207,6 +228,11 @@ const MOBILE_APP_TEXT: Record<
       "Виявлено скидання реалізації або завершення сесії{reasonSuffix}. Вас перенаправлено до кроку 3 для повторного підтвердження команди.",
     mobileSessionReset: "Мобільну сесію скинуто ({reason}).",
     serverReconnect: "Немає з'єднання із сервером. Повторюємо перевірку старту...",
+    retryNowAction: "Спробувати ще раз",
+    hiddenResetTitle: "Повернутися до старту?",
+    hiddenResetBody: "Це скине локальну сесію і спробує знову приєднатися тим самим кодом.",
+    hiddenResetConfirmAction: "Повернутися до старту",
+    hiddenResetCancelAction: "Скасувати",
     themeLabel: "Тема",
     themeLight: "Світла",
     themeDark: "Темна",
@@ -225,6 +251,11 @@ const MOBILE_APP_TEXT: Record<
       "Обнаружен сброс реализации или истечение сессии{reasonSuffix}. Вас перенаправили на шаг 3 для повторного подтверждения команды.",
     mobileSessionReset: "Мобильная сессия была сброшена ({reason}).",
     serverReconnect: "Нет соединения с сервером. Повторяем проверку старта...",
+    retryNowAction: "Попробовать снова",
+    hiddenResetTitle: "Вернуться к старту?",
+    hiddenResetBody: "Это сбросит локальную сессию и попробует снова присоединиться тем же кодом.",
+    hiddenResetConfirmAction: "Вернуться к старту",
+    hiddenResetCancelAction: "Отмена",
     themeLabel: "Тема",
     themeLight: "Светлая",
     themeDark: "Тёмная",
@@ -422,10 +453,14 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
 function IntroTextPreview({ text, language }: { text: string; language: UiLanguage }) {
   const uiText = MOBILE_APP_TEXT[language];
   const blocks = parseRulesBlocks(text);
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTablet = adaptiveLayout.isTablet;
+  const introFontSize = adaptiveLayout.fs(isTablet ? 16 : 12, 11, 20);
+  const introLineHeight = adaptiveLayout.s(isTablet ? 28 : 20, 18, 34);
 
   if (blocks.length === 0) {
     return (
-      <Text className="mt-3 text-base leading-6" style={{ color: EXPEDITION_THEME.textPrimary }}>
+      <Text className="mt-3" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: introFontSize, lineHeight: introLineHeight }}>
         {uiText.introFallback}
       </Text>
     );
@@ -440,8 +475,8 @@ function IntroTextPreview({ text, language }: { text: string; language: UiLangua
         return (
           <Text
             key={`intro-${block.kind}-${blockIndex}`}
-            className="mb-1 text-base leading-6"
-            style={{ color: EXPEDITION_THEME.textPrimary }}
+            className="mb-1"
+            style={{ color: EXPEDITION_THEME.textPrimary, fontSize: introFontSize, lineHeight: introLineHeight }}
           >
             {prefix ? (
               <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
@@ -466,11 +501,221 @@ function IntroTextPreview({ text, language }: { text: string; language: UiLangua
   );
 }
 
+const INTRO_AUTOSCROLL_SPEED_PX_PER_SEC = 25;
+const INTRO_AUTOSCROLL_IDLE_DELAY_MS = 5000;
+
+function AutoScrollingIntroBox({ text, language }: { text: string; language: UiLanguage }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const currentYRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const visibleHeightRef = useRef(0);
+  const maxScrollYRef = useRef(0);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const clearAutoScrollTimers = () => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+
+  const scheduleIdle = (callback: () => void) => {
+    idleTimerRef.current = setTimeout(callback, INTRO_AUTOSCROLL_IDLE_DELAY_MS);
+  };
+
+  const startDownScroll = () => {
+    if (maxScrollYRef.current <= 0) {
+      return;
+    }
+
+    let lastTimestamp: number | null = null;
+
+    const tick = (timestamp: number) => {
+      if (lastTimestamp === null) {
+        lastTimestamp = timestamp;
+      }
+      const deltaSeconds = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+      currentYRef.current = Math.min(
+        maxScrollYRef.current,
+        currentYRef.current + INTRO_AUTOSCROLL_SPEED_PX_PER_SEC * deltaSeconds,
+      );
+      scrollRef.current?.scrollTo({ y: currentYRef.current, animated: false });
+
+      if (currentYRef.current < maxScrollYRef.current) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      scheduleIdle(scrollToTopSmooth);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  function scrollToTopSmooth() {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    currentYRef.current = 0;
+    scheduleIdle(startDownScroll);
+  }
+
+  const resetIdleCycle = () => {
+    clearAutoScrollTimers();
+    if (maxScrollYRef.current > 0) {
+      scheduleIdle(startDownScroll);
+    }
+  };
+
+  const recomputeMaxScroll = () => {
+    maxScrollYRef.current = Math.max(0, contentHeightRef.current - visibleHeightRef.current);
+    resetIdleCycle();
+  };
+
+  useEffect(() => {
+    return () => {
+      clearAutoScrollTimers();
+    };
+  }, []);
+
+  return (
+    <ScrollView
+      ref={scrollRef}
+      showsVerticalScrollIndicator={false}
+      className="mt-2 rounded-2xl border"
+      contentContainerStyle={{ padding: 12 }}
+      style={{
+        flexShrink: 1,
+        borderColor: EXPEDITION_THEME.border,
+        backgroundColor: EXPEDITION_THEME.panelMuted,
+      }}
+      scrollEventThrottle={16}
+      onScroll={(event) => {
+        currentYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+      onScrollBeginDrag={resetIdleCycle}
+      onTouchStart={resetIdleCycle}
+      onContentSizeChange={(_width, height) => {
+        contentHeightRef.current = height;
+        recomputeMaxScroll();
+      }}
+      onLayout={(event) => {
+        visibleHeightRef.current = event.nativeEvent.layout.height;
+        recomputeMaxScroll();
+      }}
+    >
+      <IntroTextPreview text={text} language={language} />
+    </ScrollView>
+  );
+}
+
+function resolvePollErrorDetail(error: unknown): string {
+  const statusCode = getMobileApiErrorStatusCode(error);
+  const code = getMobileApiErrorCode(error);
+  const timeLabel = new Date().toLocaleTimeString();
+
+  if (statusCode !== null) {
+    return `HTTP ${statusCode}${code ? ` • ${code}` : ""} • ${timeLabel}`;
+  }
+
+  const message = error instanceof Error ? error.message.trim() : String(error);
+  return `${message || "Unknown error"} • ${timeLabel}`;
+}
+
+function HiddenResetOnHold({
+  language,
+  onReset,
+  children,
+}: {
+  language: UiLanguage;
+  onReset: () => void;
+  children: ReactNode;
+}) {
+  const text = MOBILE_APP_TEXT[language];
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
+
+  const clearHoldTimer = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearHoldTimer, []);
+
+  return (
+    <>
+      <Pressable
+        onPressIn={() => {
+          clearHoldTimer();
+          holdTimerRef.current = setTimeout(() => setIsOverlayOpen(true), HIDDEN_RESET_HOLD_MS);
+        }}
+        onPressOut={clearHoldTimer}
+      >
+        {children}
+      </Pressable>
+
+      <Modal
+        visible={isOverlayOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsOverlayOpen(false)}
+      >
+        <View
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: "rgba(5, 10, 8, 0.72)" }}
+        >
+          <View
+            className="w-full rounded-3xl border p-5"
+            style={{ maxWidth: 420, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+          >
+            <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              {text.hiddenResetTitle}
+            </Text>
+            <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+              {text.hiddenResetBody}
+            </Text>
+            <Pressable
+              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-85"
+              style={{ borderColor: "rgba(248, 113, 113, 0.55)", backgroundColor: "rgba(127, 29, 29, 0.3)" }}
+              onPress={() => {
+                setIsOverlayOpen(false);
+                onReset();
+              }}
+            >
+              <Text className="text-center font-semibold" style={{ color: "#fca5a5" }}>
+                {text.hiddenResetConfirmAction}
+              </Text>
+            </Pressable>
+            <Pressable
+              className="mt-2 rounded-2xl border px-4 py-3 active:opacity-85"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              onPress={() => setIsOverlayOpen(false)}
+            >
+              <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                {text.hiddenResetCancelAction}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
 export function MobileApp() {
   const [onboardingSession, setOnboardingSession] = useState<OnboardingSession | null>(null);
   const [isHydratingSession, setIsHydratingSession] = useState(true);
   const [isWaitingForAdminStart, setIsWaitingForAdminStart] = useState(false);
   const [waitingError, setWaitingError] = useState<string | null>(null);
+  const [waitingErrorDetail, setWaitingErrorDetail] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const consecutivePollFailuresRef = useRef(0);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
   const [themePreference, setThemePreference] = useState<MobileThemePreference>("dark");
   const activeThemeMode = themePreference;
@@ -483,6 +728,8 @@ export function MobileApp() {
   );
   const text = MOBILE_APP_TEXT[uiLanguage];
   const statusBarStyle: "light" | "dark" = activeThemeMode === "dark" ? "light" : "dark";
+  const adaptiveLayout = useAdaptiveLayout();
+  const introLabelFontSize = adaptiveLayout.fs(adaptiveLayout.isTablet ? 13 : 11, 10, 16);
 
   useEffect(() => {
     if (Platform.OS !== "android") {
@@ -673,15 +920,23 @@ export function MobileApp() {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const pollUntilStarted = async () => {
+      const abortController = new AbortController();
+      const abortTimeoutId = setTimeout(() => abortController.abort(), ADMIN_START_POLL_TIMEOUT_MS);
+
       try {
         const nextState = await fetchMobileSessionState(
           onboardingSession.apiBaseUrl as string,
           onboardingSession.sessionToken,
           onboardingSession.selectedLanguage,
+          { signal: abortController.signal },
         );
+        clearTimeout(abortTimeoutId);
         if (cancelled) {
           return;
         }
+
+        consecutivePollFailuresRef.current = 0;
+        setWaitingErrorDetail(null);
 
         if (nextState.realization.status === "in-progress") {
           const nextGameRules =
@@ -731,9 +986,20 @@ export function MobileApp() {
           void pollUntilStarted();
         }, ADMIN_START_POLL_INTERVAL_MS);
       } catch (error) {
+        clearTimeout(abortTimeoutId);
         if (cancelled) {
           return;
         }
+
+        console.error(
+          "[MobileApp] admin-start poll failed",
+          error,
+          {
+            statusCode: getMobileApiErrorStatusCode(error),
+            code: getMobileApiErrorCode(error),
+            apiBaseUrl: onboardingSession.apiBaseUrl,
+          },
+        );
 
         if (isSessionTokenInvalidError(error)) {
           const reason = resolveSessionInvalidReason(error);
@@ -742,7 +1008,12 @@ export function MobileApp() {
           return;
         }
 
-        setWaitingError(text.serverReconnect);
+        consecutivePollFailuresRef.current += 1;
+        setWaitingErrorDetail(resolvePollErrorDetail(error));
+        if (consecutivePollFailuresRef.current >= ADMIN_START_POLL_ERROR_THRESHOLD) {
+          setWaitingError(text.serverReconnect);
+        }
+
         timeoutId = setTimeout(() => {
           void pollUntilStarted();
         }, ADMIN_START_POLL_INTERVAL_MS);
@@ -760,6 +1031,7 @@ export function MobileApp() {
   }, [
     isWaitingForAdminStart,
     onboardingSession,
+    retryNonce,
     text.mobileSessionReset,
     text.serverReconnect,
   ]);
@@ -783,6 +1055,13 @@ export function MobileApp() {
   }
 
   if (onboardingSession && isWaitingForAdminStart) {
+    const isTabletLayout = adaptiveLayout.isTablet;
+    const introPanelMaxHeight = isTabletLayout
+      ? Math.min(Math.max(adaptiveLayout.height * 0.8, 480), 900)
+      : Math.min(Math.max(adaptiveLayout.height * 0.72, 360), 680);
+    const waitingFontSize = adaptiveLayout.fs(isTabletLayout ? 17 : 14, 13, 22);
+    const waitingDetailFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 11, 10, 15);
+
     return (
       <SafeAreaProvider>
         <HorizontalSafeArea
@@ -792,18 +1071,48 @@ export function MobileApp() {
           <View className="flex-1 items-center justify-center px-6">
             <View
               className="w-full rounded-3xl border p-5"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
+              style={{
+                borderColor: EXPEDITION_THEME.border,
+                backgroundColor: EXPEDITION_THEME.panel,
+                maxHeight: introPanelMaxHeight,
+              }}
             >
-              <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+              <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong, fontSize: introLabelFontSize }}>
                 {text.introTextLabel}
               </Text>
-              <IntroTextPreview text={onboardingSession.realization?.introText?.trim() || ""} language={uiLanguage} />
-              <View className="mt-5 flex-row items-center gap-2">
-                <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
-                <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-                  {waitingError ?? text.waitForStart}
-                </Text>
-              </View>
+              <AutoScrollingIntroBox
+                text={onboardingSession.realization?.introText?.trim() || ""}
+                language={uiLanguage}
+              />
+              <HiddenResetOnHold
+                language={uiLanguage}
+                onReset={() => void resetToOnboardingWithMessage()}
+              >
+                <View className="mt-5 flex-row items-center gap-2">
+                  <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+                  <View className="flex-1">
+                    <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: waitingFontSize }}>
+                      {waitingError ?? text.waitForStart}
+                    </Text>
+                    {waitingError && waitingErrorDetail ? (
+                      <Text className="mt-1" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: waitingDetailFontSize }}>
+                        {waitingErrorDetail}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </HiddenResetOnHold>
+              {waitingError ? (
+                <Pressable
+                  className="mt-3 rounded-2xl border px-4 py-3 active:opacity-85"
+                  style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                  onPress={() => setRetryNonce((current) => current + 1)}
+                >
+                  <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                    {text.retryNowAction}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
           {themeSwitchButton}
