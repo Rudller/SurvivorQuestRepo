@@ -102,9 +102,6 @@ export function StationMediaPanel({
   const isCaesarStation = stationType === "caesar-cipher";
   const isPhotoTaskStation = stationType === "photo-task";
   const isHangmanStation = stationType === "hangman";
-  const isSimonStation = stationType === "simon";
-  const isMiniSudokuStation = stationType === "mini-sudoku";
-  const isMemoryStation = stationType === "memory";
   const isAudioQuizStation = stationType === "audio-quiz";
   const caesarEncoded = caesarShift(caesarMedia.decodedText, caesarMedia.shiftValue);
   const [hangmanWordContainerWidth, setHangmanWordContainerWidth] = useState(0);
@@ -182,9 +179,7 @@ export function StationMediaPanel({
       style={{
         ...(requiresCode
           ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
-          : isSimonStation || isMiniSudokuStation || isMemoryStation || stationType === "mastermind" || stationType === "matching" || stationType === "boggle" || stationType === "anagram"
-            ? { minHeight: stationMediaHeight }
-            : { height: stationMediaHeight }),
+          : { height: stationMediaHeight }),
         borderColor: EXPEDITION_THEME.border,
         backgroundColor: EXPEDITION_THEME.panelMuted,
       }}

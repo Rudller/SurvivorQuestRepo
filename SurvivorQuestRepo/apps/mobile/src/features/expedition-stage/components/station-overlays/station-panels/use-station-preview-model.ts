@@ -264,17 +264,34 @@ export function buildStationPreviewModel({
   const isNumericCodeStation = requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
   const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
+  // Type-agnostic "is there an actual admin-uploaded image to show" check —
+  // unlike shouldShowQuizFallbackGraphic/stationImageUri below (which are
+  // scoped to isQuizStation for the brain-icon fallback), this applies to
+  // every station type, e.g. to decide whether to hide the image box entirely.
+  const hasRealStationImage = Boolean(normalizedImageUrl) && !isDicebearFallback && !imageLoadFailed;
   const shouldShowQuizFallbackGraphic =
     isQuizStation && (imageLoadFailed || !normalizedImageUrl || isDicebearFallback);
   const stationImageUri = shouldShowQuizFallbackGraphic ? undefined : normalizedImageUrl || undefined;
   const stationDescription = station.description.trim();
+  // Grid/board station types are sized as a fraction of the height actually
+  // left over after the card's outer padding, header, and description — not
+  // raw viewportHeight — so they fit under the header without needing to
+  // scroll. The timer/points footer floats as an absolute overlay (see
+  // preview.tsx) and no longer competes for this space.
+  const stationMediaChromeReserve = isTabletOverlay ? 180 : 120;
+  const availableMediaHeight = Math.max(160, viewportHeight - stationMediaChromeReserve);
   const stationMediaHeight = (() => {
     if (isNumericCodeStation) {
       return isTabletOverlay
         ? Math.max(104, Math.round(viewportHeight * 0.14))
         : Math.max(72, Math.round(viewportHeight * 0.1));
     }
-    if (requiresCode || requiresPhotoUpload || requiresQrScan) {
+    if (requiresQrScan) {
+      return isTabletOverlay
+        ? Math.max(420, Math.round(availableMediaHeight * 0.75))
+        : Math.max(320, Math.round(availableMediaHeight * 0.75));
+    }
+    if (requiresCode || requiresPhotoUpload) {
       return isTabletOverlay
         ? Math.max(128, Math.round(viewportHeight * 0.2))
         : Math.max(92, Math.round(viewportHeight * 0.14));
@@ -286,38 +303,38 @@ export function buildStationPreviewModel({
     }
     if (isAnagramStation) {
       return isTabletOverlay
-        ? Math.max(210, Math.round(viewportHeight * 0.34))
-        : Math.max(100, Math.round(viewportHeight * 0.16));
+        ? Math.max(210, Math.round(availableMediaHeight * 0.34))
+        : Math.max(100, Math.round(availableMediaHeight * 0.16));
     }
     if (isSimonStation) {
       return isTabletOverlay
-        ? Math.max(540, Math.round(viewportHeight * 0.72))
-        : Math.max(420, Math.round(viewportHeight * 0.56));
+        ? Math.max(540, Math.round(availableMediaHeight * 0.72))
+        : Math.max(420, Math.round(availableMediaHeight * 0.56));
     }
     if (isMemoryStation) {
       return isTabletOverlay
-        ? Math.max(560, Math.round(viewportHeight * 0.8))
-        : Math.max(180, Math.round(viewportHeight * 0.28));
+        ? Math.max(560, Math.round(availableMediaHeight * 0.8))
+        : Math.max(180, Math.round(availableMediaHeight * 0.28));
     }
     if (isMiniSudokuStation) {
       return isTabletOverlay
-        ? Math.max(560, Math.round(viewportHeight * 0.74))
-        : Math.max(300, Math.round(viewportHeight * 0.45));
+        ? Math.max(560, Math.round(availableMediaHeight * 0.74))
+        : Math.max(300, Math.round(availableMediaHeight * 0.45));
     }
     if (isMastermindStation) {
       return isTabletOverlay
-        ? Math.max(340, Math.round(viewportHeight * 0.56))
-        : Math.max(180, Math.round(viewportHeight * 0.28));
+        ? Math.max(340, Math.round(availableMediaHeight * 0.56))
+        : Math.max(180, Math.round(availableMediaHeight * 0.28));
     }
     if (isMatchingStation) {
       return isTabletOverlay
-        ? Math.max(430, Math.round(viewportHeight * 0.7))
-        : Math.max(160, Math.round(viewportHeight * 0.26));
+        ? Math.max(430, Math.round(availableMediaHeight * 0.7))
+        : Math.max(160, Math.round(availableMediaHeight * 0.26));
     }
     if (isBoggleStation) {
       return isTabletOverlay
-        ? Math.max(400, Math.round(viewportHeight * 0.64))
-        : Math.max(160, Math.round(viewportHeight * 0.26));
+        ? Math.max(400, Math.round(availableMediaHeight * 0.64))
+        : Math.max(160, Math.round(availableMediaHeight * 0.26));
     }
     if (isStrongPasswordStation) {
       return isTabletOverlay
@@ -580,6 +597,7 @@ export function buildStationPreviewModel({
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,
+    hasRealStationImage,
     stationDescription,
     stationMediaHeight,
     hasTimerStarted,

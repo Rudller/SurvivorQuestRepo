@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { View } from "react-native";
 
-import { AnagramMediaPanel, AnagramStationPanel } from "./anagram-station-panel";
+import { AnagramStationPanel } from "./anagram-station-panel";
 import { BoggleMediaSection } from "./boggle-station-panel";
 import { CaesarStationPanel } from "./caesar-station-panel";
 import { HangmanStationPanel } from "./hangman-station-panel";
@@ -21,7 +21,6 @@ export type StationRendererByType = Partial<Record<StationTestType, () => ReactN
 
 type BuildStationMediaRendererByTypeArgs = {
   wordleMediaBoardProps: ComponentProps<typeof WordleMediaBoard>;
-  anagramMediaPanelProps: ComponentProps<typeof AnagramMediaPanel>;
   simonPanelProps: ComponentProps<typeof SimonStationPanel>;
   mastermindMediaSectionProps: ComponentProps<typeof MastermindMediaSection>;
   memoryMediaSectionProps: ComponentProps<typeof MemoryMediaSection>;
@@ -32,7 +31,6 @@ type BuildStationMediaRendererByTypeArgs = {
 
 export function buildStationMediaRendererByType({
   wordleMediaBoardProps,
-  anagramMediaPanelProps,
   simonPanelProps,
   mastermindMediaSectionProps,
   memoryMediaSectionProps,
@@ -42,7 +40,6 @@ export function buildStationMediaRendererByType({
 }: BuildStationMediaRendererByTypeArgs): StationRendererByType {
   return {
     wordle: () => <WordleMediaBoard {...wordleMediaBoardProps} />,
-    anagram: () => <AnagramMediaPanel {...anagramMediaPanelProps} />,
     simon: () => (
       <View className="px-2 py-2">
         <SimonStationPanel {...simonPanelProps} />

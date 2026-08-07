@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -11,6 +11,7 @@ type QrHuntText = {
   scanCode: string;
   scanNextCode: string;
   progress: (scanned: number, required: number) => string;
+  progressLabel: string;
   allScanned: string;
   cameraAccessTitle: string;
   cameraAccessDescription: string;
@@ -22,6 +23,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Skanuj kod",
     scanNextCode: "Skanuj kolejny kod",
     progress: (scanned, required) => `${scanned}/${required} zeskanowanych kodów`,
+    progressLabel: "Postęp skanowania",
     allScanned: "Wszystkie kody zeskanowane, zadanie zaliczone.",
     cameraAccessTitle: "Dostęp do kamery",
     cameraAccessDescription: "Aby zeskanować kod, włącz dostęp do kamery.",
@@ -31,6 +33,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Scan code",
     scanNextCode: "Scan next code",
     progress: (scanned, required) => `${scanned}/${required} codes scanned`,
+    progressLabel: "Scanning progress",
     allScanned: "All codes scanned, task completed.",
     cameraAccessTitle: "Camera access",
     cameraAccessDescription: "Enable camera access to scan a code.",
@@ -40,6 +43,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Сканувати код",
     scanNextCode: "Сканувати наступний код",
     progress: (scanned, required) => `${scanned}/${required} відсканованих кодів`,
+    progressLabel: "Прогрес сканування",
     allScanned: "Усі коди відскановано, завдання зараховано.",
     cameraAccessTitle: "Доступ до камери",
     cameraAccessDescription: "Щоб відсканувати код, увімкніть доступ до камери.",
@@ -49,6 +53,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Сканировать код",
     scanNextCode: "Сканировать следующий код",
     progress: (scanned, required) => `${scanned}/${required} отсканированных кодов`,
+    progressLabel: "Прогресс сканирования",
     allScanned: "Все коды отсканированы, задание зачтено.",
     cameraAccessTitle: "Доступ к камере",
     cameraAccessDescription: "Чтобы отсканировать код, включите доступ к камере.",
@@ -112,14 +117,14 @@ export function useQrHuntScan(
   };
 }
 
-type QrHuntProgressTextProps = {
+type QrHuntProgressDotsProps = {
   text: QrHuntText;
   requiredCount: number;
   scannedCount: number;
   isDone: boolean;
 };
 
-export function QrHuntProgressText({ text, requiredCount, scannedCount, isDone }: QrHuntProgressTextProps) {
+export function QrHuntProgressDots({ text, requiredCount, scannedCount, isDone }: QrHuntProgressDotsProps) {
   const layout = useStationPanelLayout();
 
   if (isDone) {
@@ -135,8 +140,30 @@ export function QrHuntProgressText({ text, requiredCount, scannedCount, isDone }
   }
 
   return (
-    <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
-      {text.progress(scannedCount, requiredCount)}
-    </Text>
+    <View className="items-center" style={{ rowGap: layout.attemptRowGap }}>
+      <Text
+        className="text-center uppercase tracking-widest"
+        style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}
+      >
+        {text.progressLabel}
+      </Text>
+      <View className="flex-row items-center justify-center flex-wrap" style={{ columnGap: layout.attemptDotGap, rowGap: layout.attemptDotGap }}>
+        {Array.from({ length: requiredCount }).map((_, index) => {
+          const isScanned = index < scannedCount;
+          return (
+            <View
+              key={`qr-hunt-progress-dot-${index}`}
+              className="rounded-full border"
+              style={{
+                width: layout.attemptDotSize * 1.6,
+                height: layout.attemptDotSize * 1.6,
+                borderColor: isScanned ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+                backgroundColor: isScanned ? EXPEDITION_THEME.accentStrong : "transparent",
+              }}
+            />
+          );
+        })}
+      </View>
+    </View>
   );
 }

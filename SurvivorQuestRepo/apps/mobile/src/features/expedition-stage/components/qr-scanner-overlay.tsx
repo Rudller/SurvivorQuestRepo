@@ -315,3 +315,154 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
     </Animated.View>
   );
 }
+
+type InlineQrScannerProps = {
+  isResolving: boolean;
+  onClose: () => void;
+  onDetected: (rawValue: string) => void;
+};
+
+// Same camera/permission/scan-frame logic as QrScannerOverlay, but rendered
+// inline (no backdrop, no modal chrome) so it can fill an already-placed
+// container — used by the qr-hunt station panel to swap its "Scan code"
+// button for a live camera view in place, instead of opening a popup.
+export function InlineQrScanner({ isResolving, onClose, onDetected }: InlineQrScannerProps) {
+  const adaptiveLayout = useAdaptiveLayout();
+  const uiLanguage = useUiLanguage();
+  const text = QR_SCANNER_OVERLAY_TEXT[uiLanguage];
+  const isTabletLayout = adaptiveLayout.isTablet;
+  const isLightTheme = getExpeditionThemeMode() === "light";
+  const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
+  const cameraOverlayTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanLocked, setIsScanLocked] = useState(false);
+
+  useEffect(() => {
+    if (!permission?.granted) {
+      void requestPermission();
+    }
+    // Only re-check permission when it actually changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permission?.granted]);
+
+  useEffect(() => {
+    if (!isResolving) {
+      setIsScanLocked(false);
+    }
+  }, [isResolving]);
+
+  const canScan = Boolean(permission?.granted) && !isResolving && !isScanLocked;
+  const frameSize = adaptiveLayout.s(isTabletLayout ? 240 : 170, 120, 300);
+  const cornerSize = adaptiveLayout.s(isTabletLayout ? 40 : 26, 20, 46);
+  const cornerRadius = adaptiveLayout.s(14, 8, 18);
+  const cornerBorderWidth = adaptiveLayout.s(4, 3, 5);
+  const closeSize = adaptiveLayout.hit(isTabletLayout ? 44 : 34);
+  const cardRadius = adaptiveLayout.s(isTabletLayout ? 22 : 16, 12, 26);
+
+  return (
+    <View className="flex-1 w-full" style={{ borderRadius: cardRadius, overflow: "hidden" }}>
+      {!permission?.granted ? (
+        <View
+          className="flex-1 items-center justify-center"
+          style={{ padding: adaptiveLayout.s(20, 14, 28), rowGap: adaptiveLayout.s(12, 8, 16) }}
+        >
+          <Text
+            className="text-center font-semibold"
+            style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 20 : 15, 14, 24) }}
+          >
+            {text.cameraAccessTitle}
+          </Text>
+          <Text
+            className="text-center"
+            style={{ color: EXPEDITION_THEME.textMuted, fontSize: adaptiveLayout.fs(isTabletLayout ? 15 : 12, 11, 18) }}
+          >
+            {text.cameraAccessDescription}
+          </Text>
+          <Pressable
+            className="active:opacity-90"
+            style={{
+              borderRadius: adaptiveLayout.s(14, 10, 18),
+              paddingVertical: adaptiveLayout.s(12, 9, 16),
+              paddingHorizontal: adaptiveLayout.s(18, 14, 22),
+              backgroundColor: EXPEDITION_THEME.accent,
+            }}
+            onPress={() => void requestPermission()}
+          >
+            <Text
+              className="text-center font-semibold"
+              style={{ color: accentButtonTextColor, fontSize: adaptiveLayout.fs(isTabletLayout ? 15 : 13, 12, 18) }}
+            >
+              {text.enableCamera}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View className="flex-1 bg-black">
+          <CameraView
+            style={{ flex: 1 }}
+            active
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarcodeScanned={
+              canScan
+                ? ({ data }) => {
+                    const value = typeof data === "string" ? data.trim() : "";
+                    if (!value) {
+                      return;
+                    }
+
+                    setIsScanLocked(true);
+                    onDetected(value);
+                  }
+                : undefined
+            }
+          />
+          <View className="pointer-events-none absolute inset-0 items-center justify-center">
+            <View style={{ width: frameSize, height: frameSize, position: "relative" }}>
+              {[
+                { top: 0, left: 0, borderTopWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderTopLeftRadius: cornerRadius },
+                { top: 0, right: 0, borderTopWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderTopRightRadius: cornerRadius },
+                { bottom: 0, left: 0, borderBottomWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderBottomLeftRadius: cornerRadius },
+                { bottom: 0, right: 0, borderBottomWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderBottomRightRadius: cornerRadius },
+              ].map((cornerStyle, index) => (
+                <View
+                  key={index}
+                  style={{
+                    position: "absolute",
+                    width: cornerSize,
+                    height: cornerSize,
+                    borderColor: EXPEDITION_THEME.accent,
+                    ...cornerStyle,
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+          {isResolving ? (
+            <View className="pointer-events-none absolute inset-0 items-center justify-center bg-black/45">
+              <View
+                className="flex-row items-center"
+                style={{ columnGap: 10, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "rgba(0, 0, 0, 0.52)" }}
+              >
+                <ActivityIndicator color={EXPEDITION_THEME.accent} />
+                <Text style={{ color: cameraOverlayTextColor, fontSize: adaptiveLayout.fs(isTabletLayout ? 17 : 14, 13, 20) }}>
+                  {text.verifyingCode}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      )}
+      <Pressable
+        className="absolute top-2 right-2 items-center justify-center rounded-full border active:opacity-90"
+        style={{ width: closeSize, height: closeSize, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+        onPress={onClose}
+        hitSlop={8}
+      >
+        <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: adaptiveLayout.fs(isTabletLayout ? 16 : 13, 12, 20) }}>
+          ✕
+        </Text>
+      </Pressable>
+    </View>
+  );
+}

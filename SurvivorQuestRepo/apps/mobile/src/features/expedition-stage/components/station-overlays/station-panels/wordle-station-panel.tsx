@@ -3,6 +3,7 @@ import { Animated, Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { WORDLE_MAX_ATTEMPTS, type WordleCellState } from "../puzzle-helpers";
 import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
@@ -272,6 +273,11 @@ export function WordleInteractionPanel({
   const uiLanguage = useUiLanguage();
   const text = WORDLE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
+  // Same footer-clearance fix as code-station-panel.tsx: the timer/points
+  // footer in preview.tsx is absolutely positioned and doesn't push this
+  // panel's layout, so reserve space manually.
+  const footerClearance = adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
   const isBackspaceDisabled = isInteractiveDisabled || !canBackspace;
   const hasSubmitAccent = !isInteractiveDisabled && canSubmit;
   const backspaceLabelColor = resolveActionLabelColor(isBackspaceDisabled);
@@ -339,7 +345,7 @@ export function WordleInteractionPanel({
   };
 
   return (
-    <View className="mt-3">
+    <View className="mt-3" style={{ marginBottom: footerClearance }}>
       <Animated.View className="mt-3 w-full items-center justify-center" style={inputRowShakeStyle}>
         <View className="flex-row items-center justify-center" style={{ columnGap: inputActionGap }}>
           <View className="flex-row justify-center" style={{ columnGap: inputCellGap }}>

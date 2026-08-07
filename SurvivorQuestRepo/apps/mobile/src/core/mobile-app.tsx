@@ -38,6 +38,7 @@ import {
   isSessionTokenInvalidError,
 } from "../features/expedition-stage/api/mobile-session.api";
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
+import { AutoScrollingBox } from "../shared/ui/auto-scrolling-box";
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
@@ -501,115 +502,15 @@ function IntroTextPreview({ text, language }: { text: string; language: UiLangua
   );
 }
 
-const INTRO_AUTOSCROLL_SPEED_PX_PER_SEC = 25;
-const INTRO_AUTOSCROLL_IDLE_DELAY_MS = 5000;
-
 function AutoScrollingIntroBox({ text, language }: { text: string; language: UiLanguage }) {
-  const scrollRef = useRef<ScrollView>(null);
-  const currentYRef = useRef(0);
-  const contentHeightRef = useRef(0);
-  const visibleHeightRef = useRef(0);
-  const maxScrollYRef = useRef(0);
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rafRef = useRef<number | null>(null);
-
-  const clearAutoScrollTimers = () => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  };
-
-  const scheduleIdle = (callback: () => void) => {
-    idleTimerRef.current = setTimeout(callback, INTRO_AUTOSCROLL_IDLE_DELAY_MS);
-  };
-
-  const startDownScroll = () => {
-    if (maxScrollYRef.current <= 0) {
-      return;
-    }
-
-    let lastTimestamp: number | null = null;
-
-    const tick = (timestamp: number) => {
-      if (lastTimestamp === null) {
-        lastTimestamp = timestamp;
-      }
-      const deltaSeconds = (timestamp - lastTimestamp) / 1000;
-      lastTimestamp = timestamp;
-      currentYRef.current = Math.min(
-        maxScrollYRef.current,
-        currentYRef.current + INTRO_AUTOSCROLL_SPEED_PX_PER_SEC * deltaSeconds,
-      );
-      scrollRef.current?.scrollTo({ y: currentYRef.current, animated: false });
-
-      if (currentYRef.current < maxScrollYRef.current) {
-        rafRef.current = requestAnimationFrame(tick);
-        return;
-      }
-
-      scheduleIdle(scrollToTopSmooth);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-  };
-
-  function scrollToTopSmooth() {
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-    currentYRef.current = 0;
-    scheduleIdle(startDownScroll);
-  }
-
-  const resetIdleCycle = () => {
-    clearAutoScrollTimers();
-    if (maxScrollYRef.current > 0) {
-      scheduleIdle(startDownScroll);
-    }
-  };
-
-  const recomputeMaxScroll = () => {
-    maxScrollYRef.current = Math.max(0, contentHeightRef.current - visibleHeightRef.current);
-    resetIdleCycle();
-  };
-
-  useEffect(() => {
-    return () => {
-      clearAutoScrollTimers();
-    };
-  }, []);
-
   return (
-    <ScrollView
-      ref={scrollRef}
-      showsVerticalScrollIndicator={false}
+    <AutoScrollingBox
       className="mt-2 rounded-2xl border"
       contentContainerStyle={{ padding: 12 }}
-      style={{
-        flexShrink: 1,
-        borderColor: EXPEDITION_THEME.border,
-        backgroundColor: EXPEDITION_THEME.panelMuted,
-      }}
-      scrollEventThrottle={16}
-      onScroll={(event) => {
-        currentYRef.current = event.nativeEvent.contentOffset.y;
-      }}
-      onScrollBeginDrag={resetIdleCycle}
-      onTouchStart={resetIdleCycle}
-      onContentSizeChange={(_width, height) => {
-        contentHeightRef.current = height;
-        recomputeMaxScroll();
-      }}
-      onLayout={(event) => {
-        visibleHeightRef.current = event.nativeEvent.layout.height;
-        recomputeMaxScroll();
-      }}
+      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
     >
       <IntroTextPreview text={text} language={language} />
-    </ScrollView>
+    </AutoScrollingBox>
   );
 }
 

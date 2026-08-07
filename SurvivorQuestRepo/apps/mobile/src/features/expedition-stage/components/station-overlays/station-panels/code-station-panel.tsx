@@ -3,6 +3,7 @@ import { Animated, Pressable, Text, TextInput, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import {
   NUMERIC_PINPAD_LAYOUT,
   NUMERIC_PINPAD_SUBLABELS,
@@ -93,6 +94,11 @@ export function CodeStationPanel({
   const uiLanguage = useUiLanguage();
   const text = CODE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
+  // Reserve empty space below the keyboard so it never renders under the
+  // absolutely-positioned timer/points footer (preview.tsx) — that footer
+  // floats over the card and doesn't push this panel's layout on its own.
+  const footerClearance = adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
   const successColor = "#34d399";
   const successSurfaceColor = withAlpha(successColor, 0.2);
   const dangerSurfaceColor = withAlpha(EXPEDITION_THEME.danger, 0.16);
@@ -130,7 +136,7 @@ export function CodeStationPanel({
   return (
     <View
       className={`${isNumericCodeStation ? "mt-2" : "mt-3"} rounded-2xl border px-3 ${isNumericCodeStation ? "py-2" : "py-3"}`}
-      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted, marginBottom: footerClearance }}
     >
       {station.completionCodeInputMode === "numeric" ? (
         <View className={isNumericCodeStation ? "mt-1" : "mt-2"}>

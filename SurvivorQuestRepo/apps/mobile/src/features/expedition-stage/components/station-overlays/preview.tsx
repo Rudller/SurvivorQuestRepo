@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Keyboard, Pressable, Text, View } from "react-native";
+import { SvgUri } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import { MOBILE_UX_TOKENS } from "../../../../shared/ui/ux-tokens";
+import { AutoScrollingBox } from "../../../../shared/ui/auto-scrolling-box";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
 import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
-import { useQrHuntScan, QrHuntProgressText } from "./station-panels/qr-hunt-station-panel";
-import { QrScannerOverlay } from "../qr-scanner-overlay";
+import { useQrHuntScan, QrHuntProgressDots } from "./station-panels/qr-hunt-station-panel";
+import { InlineQrScanner } from "../qr-scanner-overlay";
 import type { MastermindAttempt } from "./station-panels/mastermind-station-panel";
 import { StationMediaPanel } from "./station-panels/station-media-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
@@ -36,6 +38,7 @@ import {
   resolveSimonSequence,
 } from "./puzzle-helpers";
 
+const QR_HUNT_WATERMARK_ICON_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/qrcode.svg";
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
 const TIMEOUT_POPUP_AUTO_CLOSE_SECONDS = 10;
@@ -1511,8 +1514,6 @@ export function StationPreviewOverlay({
   const shouldShowDynamicPoints =
     timedStationPointsDecayEnabled && station.timeLimitSeconds > 0 && Boolean(station.startedAt);
   const pointsAccentColor = isLightTheme ? "#92400e" : "#fcd34d";
-  const pointsPanelBorderColor = isLightTheme ? "rgba(146, 64, 14, 0.38)" : "rgba(252, 211, 77, 0.4)";
-  const pointsPanelBackgroundColor = isLightTheme ? "rgba(146, 64, 14, 0.12)" : "rgba(252, 211, 77, 0.1)";
   const mastermindDifficulty: ChallengeDifficulty =
     station.challengeDifficultyMode === "player"
       ? selectedMastermindDifficulty ?? station.challengeDifficulty ?? "medium"
@@ -1539,6 +1540,7 @@ export function StationPreviewOverlay({
     isNumericCodeStation,
     shouldShowQuizFallbackGraphic,
     stationImageUri,
+    hasRealStationImage,
     stationDescription,
     stationMediaHeight,
     hasTimerStarted,
@@ -2024,16 +2026,6 @@ export function StationPreviewOverlay({
       letterGap: wordleInputCellGap,
       rowGap: wordleDisplayLength >= 12 ? 4 : 6,
     },
-    anagramMediaPanelProps: {
-      scrambledWords: anagramScrambledWords,
-      hintWordCount: anagramHintWordCount,
-      hintLettersLayout: anagramHintLettersLayout,
-      anagramInput,
-      isActionDisabled: isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0,
-      onLetterPress: (letter: string) => {
-        handleAnagramInputChange(anagramInput + letter);
-      },
-    },
     simonPanelProps: {
       stationId: station.stationId,
       simonSequence,
@@ -2266,6 +2258,9 @@ export function StationPreviewOverlay({
       },
     },
       anagramStationPanelProps: {
+        scrambledWords: anagramScrambledWords,
+        hintWordCount: anagramHintWordCount,
+        hintLettersLayout: anagramHintLettersLayout,
         anagramAttemptsLeft,
         anagramInput,
         anagramResult,
@@ -2351,6 +2346,7 @@ export function StationPreviewOverlay({
   const stationHeaderLabel = isCaesarStation
     ? station.typeLabel
     : `${station.name} • ${station.typeLabel}`;
+  const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
 
   return (
     <Animated.View
@@ -2403,8 +2399,8 @@ export function StationPreviewOverlay({
                 style={{
                   borderColor: EXPEDITION_THEME.border,
                   backgroundColor: EXPEDITION_THEME.panelMuted,
-                  width: adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56),
-                  height: adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56),
+                  width: closeButtonDiameter,
+                  height: closeButtonDiameter,
                 }}
               onPress={onRequestClose ?? onClose}
               hitSlop={8}
@@ -2413,9 +2409,15 @@ export function StationPreviewOverlay({
                 className="font-semibold text-center"
                 style={{
                   color: EXPEDITION_THEME.textPrimary,
-                  lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                   fontSize: adaptiveLayout.fs(isTabletOverlay ? 20 : 13, 12, 24),
                   includeFontPadding: false,
+                  width: closeButtonDiameter,
+                  height: closeButtonDiameter,
+                  lineHeight: closeButtonDiameter,
+                  verticalAlign: "middle",
+                  // The ✕ glyph sits low within its own line box in the system font,
+                  // even when the box itself is perfectly centered — nudge it up a bit.
+                  transform: [{ translateY: -closeButtonDiameter * 0.04 }],
                 }}
               >
                 ✕
@@ -2423,15 +2425,22 @@ export function StationPreviewOverlay({
             </Pressable>
             </View>
 
-            <View className="flex-1" style={{ paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22) }}>
+            <View
+              className="flex-1"
+              style={{ paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22), overflow: "hidden" }}
+            >
               <View className="flex-1">
-                {station.stationType !== "strong-password" ? (
+                {station.stationType !== "strong-password" &&
+                !requiresQrScan &&
+                !isAnagramStation &&
+                !(station.stationType === "quiz" && !hasRealStationImage) &&
+                !(station.stationType === "time" && !hasRealStationImage) ? (
                   <StationMediaPanel
                     stationId={station.stationId}
                     stationType={station.stationType}
                     viewportHeight={viewportHeight}
                     stationMediaHeight={stationMediaHeight}
-                    requiresCode={requiresCode || requiresPhotoUpload || requiresQrScan}
+                    requiresCode={requiresCode || requiresPhotoUpload}
                     isNumericCodeStation={isNumericCodeStation}
                     renderedStationMedia={renderedStationMedia}
                     shouldShowQuizFallbackGraphic={shouldShowQuizFallbackGraphic}
@@ -2520,46 +2529,73 @@ export function StationPreviewOverlay({
 
               {requiresQrScan ? (
                 <View
-                  className="items-center"
-                  style={{ marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16), rowGap: adaptiveLayout.s(10, 8, 14) }}
+                  className="mt-1 w-full overflow-hidden rounded-2xl border"
+                  style={{
+                    height: stationMediaHeight,
+                    borderColor: EXPEDITION_THEME.border,
+                    backgroundColor: EXPEDITION_THEME.panelMuted,
+                  }}
                 >
-                  <QrHuntProgressText
-                    text={qrHuntScan.text}
-                    requiredCount={qrHuntScan.requiredCount}
-                    scannedCount={qrHuntScan.scannedCount}
-                    isDone={station.status === "done"}
-                  />
-                  {qrHuntScan.canScan ? (
-                    <Pressable
-                      className="items-center justify-center rounded-xl active:opacity-90"
+                  {!qrHuntScan.isScannerOpen ? (
+                    <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
+                      <SvgUri
+                        uri={QR_HUNT_WATERMARK_ICON_URI}
+                        width={Math.round(stationMediaHeight * 0.5)}
+                        height={Math.round(stationMediaHeight * 0.5)}
+                        color={EXPEDITION_THEME.textSubtle}
+                        stroke={EXPEDITION_THEME.textSubtle}
+                        opacity={0.16}
+                      />
+                    </View>
+                  ) : null}
+                  {qrHuntScan.isScannerOpen ? (
+                    <InlineQrScanner
+                      isResolving={qrHuntScan.isSubmitting}
+                      onClose={qrHuntScan.closeScanner}
+                      onDetected={qrHuntScan.handleDetected}
+                    />
+                  ) : (
+                    <View
+                      className="flex-1 items-center justify-center"
                       style={{
-                        backgroundColor: EXPEDITION_THEME.accent,
-                        minHeight: stationPanelLayout.actionMinHeight,
-                        paddingHorizontal: adaptiveLayout.s(24, 16, 32),
-                        opacity: qrHuntScan.isSubmitting ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                        rowGap: adaptiveLayout.s(16, 10, 22),
+                        paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
+                        paddingVertical: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
                       }}
-                      onPress={qrHuntScan.openScanner}
-                      disabled={qrHuntScan.isSubmitting}
                     >
-                      <Text
-                        className="font-semibold"
-                        style={{
-                          color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
-                          fontSize: stationPanelLayout.actionFontSize,
-                        }}
-                      >
-                        {qrHuntScan.scannedCount > 0 ? qrHuntScan.text.scanNextCode : qrHuntScan.text.scanCode}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {qrHuntScan.submitError ? (
-                    <Text
-                      className="text-center"
-                      style={{ color: EXPEDITION_THEME.danger, fontSize: stationPanelLayout.resultFontSize }}
-                    >
-                      {qrHuntScan.submitError}
-                    </Text>
-                  ) : null}
+                      {qrHuntScan.canScan ? (
+                        <Pressable
+                          className="items-center justify-center rounded-xl active:opacity-90"
+                          style={{
+                            backgroundColor: EXPEDITION_THEME.accent,
+                            minHeight: stationPanelLayout.actionMinHeight,
+                            paddingHorizontal: adaptiveLayout.s(24, 16, 32),
+                            opacity: qrHuntScan.isSubmitting ? MOBILE_UX_TOKENS.disabledOpacity : 1,
+                          }}
+                          onPress={qrHuntScan.openScanner}
+                          disabled={qrHuntScan.isSubmitting}
+                        >
+                          <Text
+                            className="font-semibold"
+                            style={{
+                              color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                              fontSize: stationPanelLayout.actionFontSize,
+                            }}
+                          >
+                            {qrHuntScan.scannedCount > 0 ? qrHuntScan.text.scanNextCode : qrHuntScan.text.scanCode}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {qrHuntScan.submitError ? (
+                        <Text
+                          className="text-center"
+                          style={{ color: EXPEDITION_THEME.danger, fontSize: stationPanelLayout.resultFontSize }}
+                        >
+                          {qrHuntScan.submitError}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
               ) : null}
 
@@ -2568,33 +2604,44 @@ export function StationPreviewOverlay({
                   className="px-1"
                   style={{ marginVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 16) }}
                 >
+                  <AutoScrollingBox>
+                    <Text
+                      className="leading-6"
+                      style={{
+                        color: EXPEDITION_THEME.textMuted,
+                        textAlign: "justify",
+                        fontSize: stationPanelLayout.descriptionFontSize,
+                        lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
+                      }}
+                    >
+                      {stationDescription.length > 0
+                        ? stationDescription
+                        : text.taskDescriptionMissing}
+                    </Text>
+                  </AutoScrollingBox>
+                </View>
+              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+                <AutoScrollingBox className="mt-1">
                   <Text
-                    className="leading-6"
                     style={{
                       color: EXPEDITION_THEME.textMuted,
-                      textAlign: "justify",
                       fontSize: stationPanelLayout.descriptionFontSize,
-                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
+                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                     }}
                   >
-                    {stationDescription.length > 0
-                      ? stationDescription
-                      : text.taskDescriptionMissing}
+                    {stationDescription}
                   </Text>
+                </AutoScrollingBox>
+              ) : null}
+              {requiresQrScan ? (
+                <View className="mt-2 w-full items-center">
+                  <QrHuntProgressDots
+                    text={qrHuntScan.text}
+                    requiredCount={qrHuntScan.requiredCount}
+                    scannedCount={qrHuntScan.scannedCount}
+                    isDone={station.status === "done"}
+                  />
                 </View>
-              ) : !isCaesarStation && !requiresPhotoUpload && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
-                <Text
-                  className={isNumericCodeStation ? "mt-1" : "mt-1"}
-                  numberOfLines={isTabletOverlay ? undefined : 2}
-                  ellipsizeMode="tail"
-                  style={{
-                    color: EXPEDITION_THEME.textMuted,
-                    fontSize: stationPanelLayout.descriptionFontSize,
-                    lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
-                  }}
-                >
-                  {stationDescription}
-                </Text>
               ) : null}
               {isAnagramStation ? (
                 <Text
@@ -2620,6 +2667,20 @@ export function StationPreviewOverlay({
                 >
                   {renderedQuizStation}
                 </StationQuizTaskWrapper>
+              ) : null}
+
+              {isAnagramStation && stationDescription.length > 0 ? (
+                <AutoScrollingBox className="mt-2">
+                  <Text
+                    style={{
+                      color: EXPEDITION_THEME.textMuted,
+                      fontSize: stationPanelLayout.descriptionFontSize,
+                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
+                    }}
+                  >
+                    {stationDescription}
+                  </Text>
+                </AutoScrollingBox>
               ) : null}
 
             </View>
@@ -2655,100 +2716,97 @@ export function StationPreviewOverlay({
           </View>
 
           <View
+            pointerEvents="box-none"
             style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 10,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
               paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
               paddingTop: adaptiveLayout.s(isNumericCodeStation ? (isTabletOverlay ? 4 : 2) : isTabletOverlay ? 8 : 4, 1, 12),
               paddingBottom: adaptiveLayout.s(isNumericCodeStation ? (isTabletOverlay ? 12 : 6) : isTabletOverlay ? 16 : 8, 5, 22),
             }}
           >
-            <View className="flex-row items-end">
-              <View className="flex-1" />
-              {shouldShowExecutionTimer ? (
-                <View className="items-center px-4 py-2">
-                  <Animated.Text
-                    className="text-center font-extrabold"
-                    style={[
-                      {
-                        color: timerTextColor,
-                        fontSize: adaptiveLayout.fs(
-                          isTabletOverlay ? (isNumericCodeStation ? 40 : 50) : isNumericCodeStation ? 30 : 36,
-                          26,
-                          58,
-                        ),
-                      },
-                      timerPulseStyle,
-                    ]}
-                  >
-                    {executionTimeLabel}
-                  </Animated.Text>
-                  <Text
-                    className="mt-1 text-center text-[10px] uppercase tracking-widest"
-                    style={{ color: EXPEDITION_THEME.textSubtle }}
-                  >
-                    {isCompletionStopwatchActive ? text.executionStopwatchLabel : text.executionTimerLabel}
-                  </Text>
-                  {isCompletionStopwatchActive && (displayedStation.fastestCompletionBonusPoints ?? 0) > 0 ? (
-                    <Text
-                      className="mt-0.5 text-center text-[10px] font-semibold"
-                      style={{ color: EXPEDITION_THEME.accent }}
-                    >
-                      {text.fastestBonusAvailableLabel(displayedStation.fastestCompletionBonusPoints ?? 0)}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-              <View className="flex-1 items-end">
-                <View
-                  className="border"
-                  style={{
-                    borderColor: pointsPanelBorderColor,
-                    backgroundColor: pointsPanelBackgroundColor,
-                    borderRadius: adaptiveLayout.s(isTabletOverlay ? 24 : 14, 12, 30),
-                    paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 8, 7, 22),
-                    paddingVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 18),
-                  }}
-                >
-                  <Text
-                    className="text-center uppercase tracking-widest"
-                    style={{ color: pointsAccentColor, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 8, 7, 14) }}
-                  >
-                    {text.points}
-                  </Text>
-                  <Text
-                    className="mt-0.5 text-center font-extrabold"
-                    style={{
-                      color: pointsAccentColor,
+            {shouldShowExecutionTimer ? (
+              <View className="items-start px-4 py-2">
+                <Animated.Text
+                  className="text-center font-extrabold"
+                  style={[
+                    {
+                      color: timerTextColor,
                       fontSize: adaptiveLayout.fs(
-                        isTabletOverlay
-                          ? isNumericCodeStation
-                            ? 36
-                            : 46
-                          : isNumericCodeStation
-                            ? 20
-                            : 24,
-                        18,
-                        54,
-                      ),
-                      lineHeight: adaptiveLayout.s(
-                        isTabletOverlay
-                          ? isNumericCodeStation
-                            ? 40
-                            : 50
-                          : isNumericCodeStation
-                            ? 23
-                            : 27,
-                        20,
+                        isTabletOverlay ? (isNumericCodeStation ? 40 : 50) : isNumericCodeStation ? 30 : 36,
+                        26,
                         58,
                       ),
-                    }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.65}
+                    },
+                    timerPulseStyle,
+                  ]}
+                >
+                  {executionTimeLabel}
+                </Animated.Text>
+                <Text
+                  className="mt-1 text-center text-[10px] uppercase tracking-widest"
+                  style={{ color: EXPEDITION_THEME.textSubtle }}
+                >
+                  {isCompletionStopwatchActive ? text.executionStopwatchLabel : text.executionTimerLabel}
+                </Text>
+                {isCompletionStopwatchActive && (displayedStation.fastestCompletionBonusPoints ?? 0) > 0 ? (
+                  <Text
+                    className="mt-0.5 text-center text-[10px] font-semibold"
+                    style={{ color: EXPEDITION_THEME.accent }}
                   >
-                    {shouldShowDynamicPoints ? dynamicAvailablePoints : station.points}
+                    {text.fastestBonusAvailableLabel(displayedStation.fastestCompletionBonusPoints ?? 0)}
                   </Text>
-                </View>
+                ) : null}
               </View>
+            ) : (
+              <View />
+            )}
+            <View className="items-end px-2 py-1">
+              <Text
+                className="text-center uppercase tracking-widest"
+                style={{ color: pointsAccentColor, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 8, 7, 14) }}
+              >
+                {text.points}
+              </Text>
+              <Text
+                className="mt-0.5 text-center font-extrabold"
+                style={{
+                  color: pointsAccentColor,
+                  fontSize: adaptiveLayout.fs(
+                    isTabletOverlay
+                      ? isNumericCodeStation
+                        ? 36
+                        : 46
+                      : isNumericCodeStation
+                        ? 20
+                        : 24,
+                    18,
+                    54,
+                  ),
+                  lineHeight: adaptiveLayout.s(
+                    isTabletOverlay
+                      ? isNumericCodeStation
+                        ? 40
+                        : 50
+                      : isNumericCodeStation
+                        ? 23
+                        : 27,
+                    20,
+                    58,
+                  ),
+                }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.65}
+              >
+                {shouldShowDynamicPoints ? dynamicAvailablePoints : station.points}
+              </Text>
             </View>
           </View>
 
@@ -2768,14 +2826,6 @@ export function StationPreviewOverlay({
           backToMap: text.backToMap,
         }}
       />
-      {requiresQrScan ? (
-        <QrScannerOverlay
-          visible={qrHuntScan.isScannerOpen}
-          isResolving={qrHuntScan.isSubmitting}
-          onClose={qrHuntScan.closeScanner}
-          onDetected={qrHuntScan.handleDetected}
-        />
-      ) : null}
     </Animated.View>
   );
 }

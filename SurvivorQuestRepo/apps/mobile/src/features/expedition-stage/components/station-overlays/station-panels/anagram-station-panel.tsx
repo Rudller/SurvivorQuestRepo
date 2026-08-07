@@ -7,6 +7,9 @@ import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-lay
 import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type AnagramStationPanelProps = {
+  scrambledWords: string[];
+  hintWordCount: number;
+  hintLettersLayout: string;
   anagramAttemptsLeft: number;
   anagramInput: string;
   anagramResult: string | null;
@@ -14,15 +17,6 @@ type AnagramStationPanelProps = {
   isSubmittingAnagram: boolean;
   onChangeInput: (value: string) => void;
   onSubmit: () => void;
-};
-
-export type AnagramMediaPanelProps = {
-  scrambledWords: string[];
-  hintWordCount: number;
-  hintLettersLayout: string;
-  anagramInput?: string;
-  isActionDisabled?: boolean;
-  onLetterPress?: (letter: string) => void;
 };
 
 type AnagramStationText = {
@@ -80,6 +74,9 @@ function computeLetterRemaining(scrambledWords: string[], anagramInput: string):
 }
 
 export function AnagramStationPanel({
+  scrambledWords,
+  hintWordCount,
+  hintLettersLayout,
   anagramAttemptsLeft,
   anagramInput,
   anagramResult,
@@ -91,17 +88,89 @@ export function AnagramStationPanel({
   const uiLanguage = useUiLanguage();
   const text = ANAGRAM_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
   const tileSize = layout.isTablet ? 40 : 32;
   const tileFontSize = layout.isTablet ? 17 : 13;
   const isBackspaceDisabled = !anagramInput.length || isActionDisabled;
 
+  const wordsToDisplay = scrambledWords.length > 0 ? scrambledWords : ["—"];
+  const pickerTileGap = layout.isTablet ? 12 : 6;
+  const longestWordLength = Math.max(...wordsToDisplay.map((w) => w.length), 1);
+  const availableWidth = adaptiveLayout.width - (layout.isTablet ? 48 : 24);
+  const maxTileFromWidth = Math.floor(
+    (availableWidth - pickerTileGap * (longestWordLength - 1)) / longestWordLength,
+  );
+  const pickerTileSize = layout.isTablet ? 62 : Math.max(28, Math.min(48, maxTileFromWidth));
+  const pickerTileFontSize = layout.isTablet ? 28 : Math.max(12, Math.round(pickerTileSize * 0.46));
+  const wordRowGap = layout.isTablet ? 18 : 12;
+
+  const letterRemaining = computeLetterRemaining(scrambledWords, anagramInput);
+  const remainingForTiles = { ...letterRemaining };
+  const wordTiles = wordsToDisplay.map((word) =>
+    Array.from(word).map((character) => {
+      const isAvailable = (remainingForTiles[character] ?? 0) > 0;
+      if (isAvailable) {
+        remainingForTiles[character]--;
+      }
+      return { character, isAvailable };
+    }),
+  );
+
   return (
     <View className="mt-3">
-      <AttemptsIndicator
-        label={text.attemptsLeft}
-        attemptsLeft={anagramAttemptsLeft}
-        maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
-      />
+      <View className="items-center" style={{ rowGap: wordRowGap }}>
+        {wordTiles.map((tiles, wordIndex) => (
+          <View
+            key={`anagram-picker-word-${wordIndex}`}
+            className="flex-row flex-wrap justify-center"
+            style={{ columnGap: pickerTileGap, rowGap: pickerTileGap }}
+          >
+            {tiles.map(({ character, isAvailable }, characterIndex) => {
+              const tileDisabled = !isAvailable || isActionDisabled;
+              return (
+                <Pressable
+                  key={`anagram-picker-${wordIndex}-${characterIndex}`}
+                  className="active:opacity-60"
+                  style={{ opacity: tileDisabled ? 0.3 : 1 }}
+                  disabled={tileDisabled}
+                  onPress={() => onChangeInput(`${anagramInput}${character}`)}
+                >
+                  <View
+                    className="items-center justify-center rounded-lg border"
+                    style={{
+                      width: pickerTileSize,
+                      height: pickerTileSize,
+                      borderColor: EXPEDITION_THEME.border,
+                      backgroundColor: EXPEDITION_THEME.panelStrong,
+                    }}
+                  >
+                    <Text
+                      className="font-bold"
+                      style={{ color: EXPEDITION_THEME.textPrimary, fontSize: pickerTileFontSize }}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      numberOfLines={1}
+                    >
+                      {character}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+      <Text className="mt-2 text-center" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
+        {text.words}: {hintWordCount} • {text.letters}: {hintLettersLayout}
+      </Text>
+
+      <View className="mt-3">
+        <AttemptsIndicator
+          label={text.attemptsLeft}
+          attemptsLeft={anagramAttemptsLeft}
+          maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
+        />
+      </View>
       <View className="mt-2 flex-row items-center gap-2">
         <View
           className="flex-1 flex-row flex-wrap gap-1 rounded-xl border p-2"
@@ -186,115 +255,6 @@ export function AnagramStationPanel({
           {anagramResult}
         </Text>
       ) : null}
-    </View>
-  );
-}
-
-export function AnagramMediaPanel({
-  scrambledWords,
-  hintWordCount,
-  hintLettersLayout,
-  anagramInput,
-  isActionDisabled,
-  onLetterPress,
-}: AnagramMediaPanelProps) {
-  const uiLanguage = useUiLanguage();
-  const text = ANAGRAM_STATION_TEXT[uiLanguage];
-  const layout = useStationPanelLayout();
-  const adaptiveLayout = useAdaptiveLayout();
-
-  const isInteractive = Boolean(onLetterPress);
-  const wordsToDisplay = scrambledWords.length > 0 ? scrambledWords : ["—"];
-
-  const tileGap = layout.isTablet ? 12 : 6;
-  const rowGap = layout.isTablet ? 18 : 8;
-  const longestWordLength = Math.max(...wordsToDisplay.map((w) => w.length), 1);
-  const availableWidth = adaptiveLayout.width - (layout.isTablet ? 48 : 24);
-  const maxTileFromWidth = Math.floor(
-    (availableWidth - tileGap * (longestWordLength - 1)) / longestWordLength,
-  );
-  const tileSize = layout.isTablet ? 62 : Math.max(28, Math.min(48, maxTileFromWidth));
-  const tileFontSize = layout.isTablet ? 28 : Math.max(12, Math.round(tileSize * 0.46));
-
-  const letterRemaining = isInteractive
-    ? computeLetterRemaining(scrambledWords, anagramInput ?? "")
-    : null;
-
-  const remainingForTiles = letterRemaining ? { ...letterRemaining } : null;
-  const wordTiles = wordsToDisplay.map((word) =>
-    Array.from(word).map((character) => {
-      if (!remainingForTiles) {
-        return { character, isAvailable: false };
-      }
-      const isAvailable = (remainingForTiles[character] ?? 0) > 0;
-      if (isAvailable) {
-        remainingForTiles[character]--;
-      }
-      return { character, isAvailable };
-    }),
-  );
-
-  const wordRowGap = layout.isTablet ? 18 : 12;
-
-  return (
-    <View className="items-center justify-center px-3 py-2">
-      <View className="w-full items-center" style={{ rowGap: wordRowGap }}>
-        {wordTiles.map((tiles, wordIndex) => (
-          <View
-            key={`anagram-top-word-${wordIndex}`}
-            className="flex-row flex-wrap justify-center"
-            style={{ columnGap: tileGap, rowGap: tileGap }}
-          >
-            {tiles.map(({ character, isAvailable }, characterIndex) => {
-              const tileDisabled = !isAvailable || Boolean(isActionDisabled);
-              const tileContent = (
-                <View
-                  className="items-center justify-center rounded-lg border"
-                  style={{
-                    width: tileSize,
-                    height: tileSize,
-                    borderColor: EXPEDITION_THEME.border,
-                    backgroundColor: EXPEDITION_THEME.panelStrong,
-                  }}
-                >
-                  <Text
-                    className="font-bold"
-                    style={{ color: EXPEDITION_THEME.textPrimary, fontSize: tileFontSize }}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                    numberOfLines={1}
-                  >
-                    {character}
-                  </Text>
-                </View>
-              );
-
-              if (!isInteractive) {
-                return (
-                  <View key={`anagram-top-${wordIndex}-${characterIndex}`}>
-                    {tileContent}
-                  </View>
-                );
-              }
-
-              return (
-                <Pressable
-                  key={`anagram-top-${wordIndex}-${characterIndex}`}
-                  className="active:opacity-60"
-                  style={{ opacity: tileDisabled ? 0.3 : 1 }}
-                  disabled={tileDisabled}
-                  onPress={() => onLetterPress?.(character)}
-                >
-                  {tileContent}
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-      </View>
-      <Text className="mt-2" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
-        {text.words}: {hintWordCount} • {text.letters}: {hintLettersLayout}
-      </Text>
     </View>
   );
 }
