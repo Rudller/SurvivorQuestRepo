@@ -301,7 +301,8 @@ export function isImageSupportedStationType(stationType: StationType) {
     stationType !== "simon" &&
     stationType !== "mini-sudoku" &&
     stationType !== "matching" &&
-    stationType !== "strong-password"
+    stationType !== "strong-password" &&
+    stationType !== "qr-hunt"
   );
 }
 

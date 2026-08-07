@@ -2359,6 +2359,7 @@ export function RealizationStationsEditor({
                       challengeDifficulty={station.challengeDifficulty}
                       challengeDifficultyMode={station.challengeDifficultyMode}
                       imageUrl={station.imageUrl}
+                      qrScanCodes={station.qrScanCodes}
                       language={editingLanguage}
                     />
                   </div>

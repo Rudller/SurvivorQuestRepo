@@ -25,6 +25,7 @@ import { MiniSudokuPreview } from "./panels/mini-sudoku-preview";
 import { MatchingPreview } from "./panels/matching-preview";
 import { StrongPasswordPreview } from "./panels/strong-password-preview";
 import { CameraPlaceholderPreview } from "./panels/camera-placeholder-preview";
+import { QrHuntPreview } from "./panels/qr-hunt-preview";
 
 const TYPE_LABEL_BY_VALUE: Record<string, string> = Object.fromEntries(
   stationTypeOptions.map((option) => [option.value, option.label]),
@@ -64,6 +65,7 @@ export type MobileStationPreviewProps = {
   challengeDifficulty?: StationPreviewProps["challengeDifficulty"];
   challengeDifficultyMode?: StationPreviewProps["challengeDifficultyMode"];
   imageUrl?: string;
+  qrScanCodes?: string[];
   language: RealizationLanguage;
 };
 
@@ -81,6 +83,7 @@ export function MobileStationPreview({
   challengeDifficulty,
   challengeDifficultyMode,
   imageUrl,
+  qrScanCodes,
   language,
 }: MobileStationPreviewProps) {
   const typeLabel = TYPE_LABEL_BY_VALUE[type] ?? type;
@@ -128,7 +131,7 @@ export function MobileStationPreview({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
-        {description ? (
+        {description && type !== "qr-hunt" ? (
           <p
             className={`mb-2 ${requiresCode ? "text-justify" : "line-clamp-2"}`}
             style={{ color: MOBILE_THEME.textMuted, fontSize: PREVIEW_LAYOUT.descriptionFontSize, lineHeight: 1.4 }}
@@ -145,7 +148,7 @@ export function MobileStationPreview({
             <CameraPlaceholderPreview kind={type} />
           </>
         ) : type === "qr-hunt" ? (
-          <CameraPlaceholderPreview kind={type} />
+          <QrHuntPreview description={description} qrScanCodesCount={qrScanCodes?.length ?? 0} />
         ) : requiresCode ? (
           <CodePreview {...panelProps} type={type} />
         ) : (
