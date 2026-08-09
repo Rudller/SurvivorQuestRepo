@@ -74,6 +74,7 @@ type StationMediaPanelProps = {
     cameraAccessTitle: string;
     cameraAccessDescription: string;
     enableCameraLabel: string;
+    switchCameraLabel: string;
     onCancelCapture: () => void;
     onConfirmCapture: (uri: string) => void;
   };
@@ -103,6 +104,8 @@ export function StationMediaPanel({
   const isPhotoTaskStation = stationType === "photo-task";
   const isHangmanStation = stationType === "hangman";
   const isAudioQuizStation = stationType === "audio-quiz";
+  const isMiniSudokuStation = stationType === "mini-sudoku";
+  const isWordleStation = stationType === "wordle";
   const caesarEncoded = caesarShift(caesarMedia.decodedText, caesarMedia.shiftValue);
   const [hangmanWordContainerWidth, setHangmanWordContainerWidth] = useState(0);
   const hangmanWords = hangmanMedia.secret.split(/\s+/).filter(Boolean);
@@ -179,7 +182,23 @@ export function StationMediaPanel({
       style={{
         ...(requiresCode
           ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
-          : { height: stationMediaHeight }),
+          : isMiniSudokuStation
+            // Flex + minHeight (instead of a fixed height) so the grid
+            // shrinks when the station description needs room, and grows
+            // back up to fill the available space otherwise.
+            ? { flex: 1, minHeight: Math.max(160, Math.round(viewportHeight * 0.22)) }
+            : isWordleStation
+              // Same reasoning as mini-sudoku: the guess grid used to claim a
+              // fixed ~38-40% of the viewport, leaving no room for the
+              // station description below it.
+              ? { flex: 1, minHeight: Math.max(200, Math.round(viewportHeight * 0.24)) }
+              : isHangmanStation
+                // Same reasoning as mini-sudoku: the word display is already
+                // width-driven (font size fitted from measured width above),
+                // so it just needs to flex-fill whatever height is left after
+                // the description, not claim a fixed guessed height.
+                ? { flex: 1, minHeight: Math.max(120, Math.round(viewportHeight * 0.16)) }
+                : { height: stationMediaHeight }),
         borderColor: EXPEDITION_THEME.border,
         backgroundColor: EXPEDITION_THEME.panelMuted,
       }}
@@ -299,6 +318,7 @@ export function StationMediaPanel({
             cameraAccessTitle={photoTaskCapture.cameraAccessTitle}
             cameraAccessDescription={photoTaskCapture.cameraAccessDescription}
             enableCameraLabel={photoTaskCapture.enableCameraLabel}
+            switchCameraLabel={photoTaskCapture.switchCameraLabel}
             onCancel={photoTaskCapture.onCancelCapture}
             onConfirm={photoTaskCapture.onConfirmCapture}
           />

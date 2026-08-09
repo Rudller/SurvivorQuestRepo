@@ -41,7 +41,7 @@ export function buildStationMediaRendererByType({
   return {
     wordle: () => <WordleMediaBoard {...wordleMediaBoardProps} />,
     simon: () => (
-      <View className="px-2 py-2">
+      <View className="flex-1 px-2 py-2">
         <SimonStationPanel {...simonPanelProps} />
       </View>
     ),

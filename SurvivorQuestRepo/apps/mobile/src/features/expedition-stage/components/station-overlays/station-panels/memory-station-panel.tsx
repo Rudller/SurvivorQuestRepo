@@ -137,65 +137,70 @@ export function MemoryStationPanel({
   isInteractiveLocked,
   onPressCard,
 }: MemoryStationPanelProps) {
-  const uiLanguage = useUiLanguage();
-  const text = MEMORY_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
   const adaptiveLayout = useAdaptiveLayout();
-  const [memoryGridWidth, setMemoryGridWidth] = useState(0);
-  const totalPairs = memoryDeck.length / 2;
-  const matchedPairs = memoryMatchedCount / 2;
+  const [gridAreaWidth, setGridAreaWidth] = useState(0);
+  const [gridAreaHeight, setGridAreaHeight] = useState(0);
   const memoryGridColumns = 6;
+  const memoryGridRows = Math.max(1, Math.ceil(memoryDeck.length / memoryGridColumns));
   const memoryGridGap = adaptiveLayout.s(layout.isTablet ? 10 : 2, 6, 14);
-  const fallbackCardWidth = "16%";
-  const baseCardHeight = layout.isTablet ? adaptiveLayout.s(110, 76, 128) : 12;
-  const computedCardWidth =
-    memoryGridWidth > 0
-      ? (memoryGridWidth - memoryGridGap * Math.max(0, memoryGridColumns - 1)) / memoryGridColumns
-      : null;
-  const resolvedCardWidth = computedCardWidth && computedCardWidth > 0 ? computedCardWidth : fallbackCardWidth;
-  const resolvedCardHeight = layout.isTablet
-    ? computedCardWidth && computedCardWidth > 0
-      ? Math.max(baseCardHeight, Math.round(computedCardWidth * 1.02))
-      : baseCardHeight
-    : computedCardWidth && computedCardWidth > 0
-      ? Math.round(computedCardWidth)
-      : baseCardHeight;
-  const cardMinHeight = layout.isTablet ? adaptiveLayout.hit(72) : 12;
+  const defaultCellSize = layout.isTablet ? 110 : 44;
+  // The grid-area wrapper below is flex-1 inside a flex-1 chain that fills
+  // the height-bounded media box (StationQuizTaskWrapper's fillHeight, see
+  // MemoryMediaSection), so its measured size is the real space left over
+  // after the prompt above it — sizing cells off both the column count
+  // (width) and row count (height) keeps the grid fitted to the container
+  // instead of overflowing and being clipped by overflow:hidden.
+  const widthBasedCellSize =
+    gridAreaWidth > 0 ? (gridAreaWidth - memoryGridGap * (memoryGridColumns - 1)) / memoryGridColumns : null;
+  const heightBasedCellSize =
+    gridAreaHeight > 0 ? (gridAreaHeight - memoryGridGap * (memoryGridRows - 1)) / memoryGridRows : null;
+  const cellSize = Math.max(
+    12,
+    Math.floor(
+      widthBasedCellSize && heightBasedCellSize
+        ? Math.min(widthBasedCellSize, heightBasedCellSize)
+        : widthBasedCellSize ?? heightBasedCellSize ?? defaultCellSize,
+    ),
+  );
   const cardFontSize = layout.isTablet ? 36 : 13;
   const areCardsDisabled = isInteractiveLocked || memoryBusy;
 
   return (
-    <View className="mt-3">
-      <View className="items-center justify-center">
-        <DotMetric
-          label={text.pairs}
-          value={matchedPairs}
-          max={totalPairs}
-          fillColor="#34d399"
-        />
-      </View>
+    <View className="flex-1">
       <View
-        className="mt-3 w-full flex-row flex-wrap self-center"
-        style={{ columnGap: memoryGridGap, rowGap: memoryGridGap }}
-        onLayout={({ nativeEvent }) => {
-          const nextWidth = nativeEvent.layout.width;
-          setMemoryGridWidth((currentWidth) =>
-            Math.abs(currentWidth - nextWidth) < 0.5 ? currentWidth : nextWidth,
+        className="flex-1 items-center justify-center"
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          const nextWidth = Math.round(width);
+          const nextHeight = Math.round(height);
+          setGridAreaWidth((currentWidth) => (Math.abs(currentWidth - nextWidth) < 0.5 ? currentWidth : nextWidth));
+          setGridAreaHeight((currentHeight) =>
+            Math.abs(currentHeight - nextHeight) < 0.5 ? currentHeight : nextHeight,
           );
         }}
       >
-        {memoryDeck.map((card) => (
-          <MemoryCardButton
-            key={card.id}
-            card={card}
-            disabled={areCardsDisabled}
-            width={resolvedCardWidth}
-            height={resolvedCardHeight}
-            minHeight={cardMinHeight}
-            fontSize={cardFontSize}
-            onPressCard={onPressCard}
-          />
-        ))}
+        <View
+          className="flex-row flex-wrap justify-center"
+          style={{
+            width: cellSize * memoryGridColumns + memoryGridGap * (memoryGridColumns - 1),
+            columnGap: memoryGridGap,
+            rowGap: memoryGridGap,
+          }}
+        >
+          {memoryDeck.map((card) => (
+            <MemoryCardButton
+              key={card.id}
+              card={card}
+              disabled={areCardsDisabled}
+              width={cellSize}
+              height={cellSize}
+              minHeight={cellSize}
+              fontSize={cardFontSize}
+              onPressCard={onPressCard}
+            />
+          ))}
+        </View>
       </View>
       {memoryResult ? (
         <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
@@ -230,13 +235,16 @@ export function MemoryMediaSection({
   onPressCard,
 }: MemoryMediaSectionProps) {
   return (
-    <View className="px-2 py-2">
+    <View className="flex-1 px-2 py-2">
       <StationQuizTaskWrapper
         prompt={prompt}
+        hidePrompt
         isTabletOverlay={isTabletOverlay}
         showBorder={false}
         error={quizSubmitError}
         errorPlacement="outside"
+        className="flex-1"
+        fillHeight
       >
         <MemoryStationPanel
           memoryDeck={memoryDeck}
@@ -249,4 +257,19 @@ export function MemoryMediaSection({
       </StationQuizTaskWrapper>
     </View>
   );
+}
+
+type MemoryPairsRowProps = {
+  memoryDeck: MemoryCard[];
+  memoryMatchedCount: number;
+};
+
+// Rendered outside the media-panel box (preview.tsx), below it.
+export function MemoryPairsRow({ memoryDeck, memoryMatchedCount }: MemoryPairsRowProps) {
+  const uiLanguage = useUiLanguage();
+  const text = MEMORY_STATION_TEXT[uiLanguage];
+  const totalPairs = memoryDeck.length / 2;
+  const matchedPairs = memoryMatchedCount / 2;
+
+  return <DotMetric label={text.pairs} value={matchedPairs} max={totalPairs} fillColor="#34d399" />;
 }

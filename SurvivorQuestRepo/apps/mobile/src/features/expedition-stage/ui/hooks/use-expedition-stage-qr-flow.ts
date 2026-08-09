@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { getApiErrorMessage } from "../../api/mobile-session.api";
+import { useQrScanFeedbackSound } from "../../components/station-overlays/station-panels/use-qr-scan-feedback-sound";
 import type { ExpeditionStationType, PlayerLocation } from "../../model/types";
 
 type QrFlowText = {
@@ -61,6 +62,7 @@ export function useExpeditionStageQrFlow({
   const [isScannerOpening, setIsScannerOpening] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isQrResolving, setIsQrResolving] = useState(false);
+  const feedbackSound = useQrScanFeedbackSound();
 
   const handleOpenQrScanner = useCallback(async () => {
     if (isSessionEnded) {
@@ -141,6 +143,7 @@ export function useExpeditionStageQrFlow({
         }
 
         const scannedStationId = result.station.id;
+        feedbackSound.playStationOpened();
         setSelectedStationId(scannedStationId);
         openStationByType(scannedStationId, result.station.type);
         setIsQrScannerOpen(false);
@@ -153,6 +156,7 @@ export function useExpeditionStageQrFlow({
     },
     [
       extractStationQrToken,
+      feedbackSound,
       interpolate,
       isInteractiveQuizStationType,
       isQrResolving,

@@ -3,6 +3,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { useCountUpValue } from "../../../shared/ui/use-count-up-value";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -117,6 +118,7 @@ export function TopRealizationPanel({
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletLayout = adaptiveLayout.isTablet;
   const text = TOP_REALIZATION_PANEL_TEXT[uiLanguage];
+  const displayedPoints = useCountUpValue(points);
   const cardTextColor = resolveCardTextColor(teamColorHex);
   const cardMutedTextColor = cardTextColor === "#0f172a" ? "rgba(15, 23, 42, 0.72)" : "rgba(248, 250, 252, 0.86)";
   const iconBackground = cardTextColor === "#0f172a" ? "rgba(255, 255, 255, 0.52)" : "rgba(15, 23, 42, 0.22)";
@@ -235,7 +237,7 @@ export function TopRealizationPanel({
                   adjustsFontSizeToFit
                   minimumFontScale={0.65}
                 >
-                  {points}
+                  {displayedPoints}
                 </Text>
               </View>
             </View>

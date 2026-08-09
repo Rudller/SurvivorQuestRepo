@@ -1,23 +1,54 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { translate } from 'google-translate-api-x';
 import type { RealizationLanguage } from '../realization/entities/realization.entity';
 
-const DEEPL_SOURCE_LANGUAGE_CODES: Partial<Record<RealizationLanguage, string>> = {
-  polish: 'PL',
-  english: 'EN',
-  ukrainian: 'UK',
-  russian: 'RU',
+// google-translate-api-x wraps Google Translate's consumer web endpoint rather than
+// the official (paid-beyond-free-tier) Cloud Translation API — it needs no API key or
+// billing account, but it isn't a sanctioned API: it can break without notice if Google
+// changes that endpoint, and is more likely than an individual user to get rate-limited
+// since every request comes from this server's one IP. If that becomes a problem, swap
+// this service for the official Cloud Translation API or DeepL.
+const GOOGLE_TRANSLATE_LANGUAGE_CODES: Partial<Record<RealizationLanguage, string>> = {
+  polish: 'pl',
+  english: 'en',
+  ukrainian: 'uk',
+  russian: 'ru',
 };
 
-const DEEPL_TARGET_LANGUAGE_CODES: Partial<Record<RealizationLanguage, string>> = {
-  polish: 'PL',
-  english: 'EN-GB',
-  ukrainian: 'UK',
-  russian: 'RU',
-};
+const CHUNK_MAX_ITEMS = 100;
+const CHUNK_MAX_CHARS = 4000;
+const RETRY_DELAY_MS = 2000;
 
-type DeeplTranslateResponse = {
-  translations?: Array<{ text?: unknown }>;
-};
+function chunkEntries(entries: string[]): string[][] {
+  const chunks: string[][] = [];
+  let currentChunk: string[] = [];
+  let currentChars = 0;
+
+  for (const entry of entries) {
+    const wouldOverflow =
+      currentChunk.length > 0 &&
+      (currentChunk.length >= CHUNK_MAX_ITEMS || currentChars + entry.length > CHUNK_MAX_CHARS);
+
+    if (wouldOverflow) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentChars = 0;
+    }
+
+    currentChunk.push(entry);
+    currentChars += entry.length;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 @Injectable()
 export class TranslationService {
@@ -26,8 +57,8 @@ export class TranslationService {
     sourceLanguage: RealizationLanguage,
     targetLanguage: RealizationLanguage,
   ): Promise<string[]> {
-    const sourceCode = DEEPL_SOURCE_LANGUAGE_CODES[sourceLanguage];
-    const targetCode = DEEPL_TARGET_LANGUAGE_CODES[targetLanguage];
+    const sourceCode = GOOGLE_TRANSLATE_LANGUAGE_CODES[sourceLanguage];
+    const targetCode = GOOGLE_TRANSLATE_LANGUAGE_CODES[targetLanguage];
 
     if (!sourceCode || !targetCode) {
       throw new BadRequestException(
@@ -43,11 +74,12 @@ export class TranslationService {
       return texts.map(() => '');
     }
 
-    const translated = await this.callDeepl(
-      nonBlankEntries.map((entry) => entry.text),
-      sourceCode,
-      targetCode,
-    );
+    const chunks = chunkEntries(nonBlankEntries.map((entry) => entry.text));
+    const translated: string[] = [];
+    for (const chunk of chunks) {
+      const chunkResult = await this.callGoogleTranslate(chunk, sourceCode, targetCode);
+      translated.push(...chunkResult);
+    }
 
     const results = texts.map(() => '');
     nonBlankEntries.forEach((entry, position) => {
@@ -57,57 +89,32 @@ export class TranslationService {
     return results;
   }
 
-  private async callDeepl(texts: string[], sourceCode: string, targetCode: string) {
-    const apiKey = this.getRequiredEnv('DEEPL_API_KEY');
-    const baseUrl = apiKey.endsWith(':fx')
-      ? 'https://api-free.deepl.com'
-      : 'https://api.deepl.com';
-
-    const body = new URLSearchParams();
-    for (const text of texts) {
-      body.append('text', text);
-    }
-    body.append('source_lang', sourceCode);
-    body.append('target_lang', targetCode);
-
-    let response: Response;
+  private async callGoogleTranslate(texts: string[], sourceCode: string, targetCode: string) {
     try {
-      response = await fetch(`${baseUrl}/v2/translate`, {
-        method: 'POST',
-        headers: {
-          Authorization: `DeepL-Auth-Key ${apiKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body,
-      });
+      return await this.requestGoogleTranslate(texts, sourceCode, targetCode);
     } catch {
-      throw new InternalServerErrorException(
-        'Failed to reach the translation provider.',
-      );
+      // Unofficial endpoint — a single retry after a short delay absorbs transient
+      // rate-limit/network blips without building out a full backoff system.
+      await delay(RETRY_DELAY_MS);
+
+      try {
+        return await this.requestGoogleTranslate(texts, sourceCode, targetCode);
+      } catch {
+        throw new InternalServerErrorException(
+          'Failed to reach the translation provider.',
+        );
+      }
     }
-
-    if (!response.ok) {
-      throw new InternalServerErrorException(
-        `Translation provider returned an error (${response.status}).`,
-      );
-    }
-
-    const payload = (await response.json()) as DeeplTranslateResponse;
-    const translations = payload.translations ?? [];
-
-    return translations.map((item) =>
-      typeof item.text === 'string' ? item.text : '',
-    );
   }
 
-  private getRequiredEnv(key: string) {
-    const value = process.env[key]?.trim();
-    if (!value) {
-      throw new InternalServerErrorException(
-        `Missing required environment variable: ${key}`,
-      );
-    }
+  private async requestGoogleTranslate(texts: string[], sourceCode: string, targetCode: string) {
+    const responses = await translate(texts, {
+      from: sourceCode,
+      to: targetCode,
+      forceFrom: true,
+      forceTo: true,
+    });
 
-    return value;
+    return responses.map((item) => (typeof item.text === 'string' ? item.text : ''));
   }
 }

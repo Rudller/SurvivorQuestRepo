@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { ExpeditionStationType, ExpeditionTask, PlayerLocation } from "../../model/types";
-import type { ChallengeDifficulty, StationTestViewModel } from "../../components/station-overlays";
+import type { AlreadyCompletedNotice, ChallengeDifficulty, StationTestViewModel } from "../../components/station-overlays";
 
 const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
+const ALREADY_COMPLETED_NOTICE_AUTO_CLOSE_MS = 3000;
 
 type DebugOutcomePreview = {
   id: number;
@@ -22,6 +23,8 @@ type OverlayFlowText = {
   taskTimeExpired: string;
   taskMarkedFailed: string;
   locationRequired: string;
+  stationAlreadyCompleted: string;
+  stationAlreadyFailed: string;
 };
 
 type UseExpeditionStageOverlayFlowArgs = {
@@ -85,7 +88,9 @@ export function useExpeditionStageOverlayFlow({
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const [localChallengeDifficultyByStationId, setLocalChallengeDifficultyByStationId] = useState<Record<string, ChallengeDifficulty>>({});
   const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
+  const [alreadyCompletedNotice, setAlreadyCompletedNotice] = useState<AlreadyCompletedNotice | null>(null);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alreadyCompletedNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTestMenuHoldTimeout = useCallback(() => {
     if (testMenuHoldTimeoutRef.current) {
@@ -93,6 +98,30 @@ export function useExpeditionStageOverlayFlow({
       testMenuHoldTimeoutRef.current = null;
     }
   }, []);
+
+  const clearAlreadyCompletedNoticeTimeout = useCallback(() => {
+    if (alreadyCompletedNoticeTimeoutRef.current) {
+      clearTimeout(alreadyCompletedNoticeTimeoutRef.current);
+      alreadyCompletedNoticeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const showAlreadyCompletedNotice = useCallback(
+    (notice: AlreadyCompletedNotice) => {
+      clearAlreadyCompletedNoticeTimeout();
+      setAlreadyCompletedNotice(notice);
+      alreadyCompletedNoticeTimeoutRef.current = setTimeout(() => {
+        alreadyCompletedNoticeTimeoutRef.current = null;
+        setAlreadyCompletedNotice(null);
+      }, ALREADY_COMPLETED_NOTICE_AUTO_CLOSE_MS);
+    },
+    [clearAlreadyCompletedNoticeTimeout],
+  );
+
+  const dismissAlreadyCompletedNotice = useCallback(() => {
+    clearAlreadyCompletedNoticeTimeout();
+    setAlreadyCompletedNotice(null);
+  }, [clearAlreadyCompletedNoticeTimeout]);
 
   const ensureLocationRequirement = useCallback(async () => {
     if (!locationRequired) {
@@ -243,14 +272,26 @@ export function useExpeditionStageOverlayFlow({
   useEffect(() => {
     return () => {
       clearTestMenuHoldTimeout();
+      clearAlreadyCompletedNoticeTimeout();
     };
-  }, [clearTestMenuHoldTimeout]);
+  }, [clearAlreadyCompletedNoticeTimeout, clearTestMenuHoldTimeout]);
 
   const openStationByType = useCallback(
     (stationId: string, stationType?: ExpeditionStationType) => {
       const selectedStation = stationTestEntries.find((item) => item.stationId === stationId) ?? null;
       const resolvedStationType = stationType ?? selectedStation?.stationType;
       const hasTimedLimit = Boolean(selectedStation?.timeLimitSeconds && selectedStation.timeLimitSeconds > 0);
+
+      if (selectedStation?.status === "done" || selectedStation?.status === "failed") {
+        // Nothing is actually about to start, so don't open the "launching..."
+        // prestart screens or the full station overlay at all — just show a
+        // standalone, auto-dismissing notice on top of the map.
+        showAlreadyCompletedNotice({
+          variant: selectedStation.status === "done" ? "success" : "failed",
+          message: selectedStation.status === "done" ? text.stationAlreadyCompleted : text.stationAlreadyFailed,
+        });
+        return;
+      }
 
       if (resolvedStationType === "photo-task") {
         // Backend never allows task/start for photo-task stations (they submit via task/photo
@@ -282,7 +323,13 @@ export function useExpeditionStageOverlayFlow({
         setActiveStationTestId(stationId);
       }
     },
-    [isInteractiveQuizStationType, stationTestEntries],
+    [
+      isInteractiveQuizStationType,
+      showAlreadyCompletedNotice,
+      stationTestEntries,
+      text.stationAlreadyCompleted,
+      text.stationAlreadyFailed,
+    ],
   );
 
   const handleEnterStationTest = useCallback(
@@ -664,6 +711,8 @@ export function useExpeditionStageOverlayFlow({
     setLocalStartedAtByStationId,
     debugOutcomePreview,
     setDebugOutcomePreview,
+    alreadyCompletedNotice,
+    dismissAlreadyCompletedNotice,
     activeStationTest,
     activeStationPreview,
     pendingQuizStartStation,

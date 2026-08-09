@@ -12,6 +12,8 @@ const CAMERA_SHUTTER_ICON_SVG_URI =
 const CHECK_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/check.svg";
 const RETRY_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/refresh.svg";
 const CLOSE_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/x.svg";
+const CAMERA_SWITCH_ICON_SVG_URI =
+  "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/camera-rotate.svg";
 
 type PhotoTaskInlineCameraProps = {
   isUploading: boolean;
@@ -19,6 +21,7 @@ type PhotoTaskInlineCameraProps = {
   cameraAccessTitle: string;
   cameraAccessDescription: string;
   enableCameraLabel: string;
+  switchCameraLabel: string;
   onCancel: () => void;
   onConfirm: (uri: string) => void;
 };
@@ -29,12 +32,14 @@ export function PhotoTaskInlineCamera({
   cameraAccessTitle,
   cameraAccessDescription,
   enableCameraLabel,
+  switchCameraLabel,
   onCancel,
   onConfirm,
 }: PhotoTaskInlineCameraProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletOverlay = adaptiveLayout.isTablet;
   const [permission, requestPermission] = useCameraPermissions();
+  const [facing, setFacing] = useState<"back" | "front">("back");
   const [localPreviewUri, setLocalPreviewUri] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
@@ -119,7 +124,7 @@ export function PhotoTaskInlineCamera({
       {localPreviewUri ? (
         <Image source={{ uri: localPreviewUri }} style={{ flex: 1 }} resizeMode="cover" />
       ) : (
-        <CameraView ref={cameraRef} style={{ flex: 1 }} active facing="back" />
+        <CameraView ref={cameraRef} style={{ flex: 1 }} active facing={facing} mirror={facing === "front"} />
       )}
 
       {isUploading ? (
@@ -138,6 +143,20 @@ export function PhotoTaskInlineCamera({
       >
         <SvgUri uri={CLOSE_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
       </Pressable>
+
+      {!localPreviewUri ? (
+        <Pressable
+          className="absolute bottom-2 right-2 items-center justify-center rounded-full active:opacity-90"
+          style={{ width: closeButtonSize, height: closeButtonSize, backgroundColor: "rgba(0, 0, 0, 0.45)" }}
+          onPress={() => setFacing((current) => (current === "back" ? "front" : "back"))}
+          disabled={isUploading}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={switchCameraLabel}
+        >
+          <SvgUri uri={CAMERA_SWITCH_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
+        </Pressable>
+      ) : null}
 
       <View
         className="absolute bottom-2 w-full flex-row items-center justify-center"

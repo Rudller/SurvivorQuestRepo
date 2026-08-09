@@ -65,7 +65,12 @@ export function CreateUserForm({ onClose }: CreateUserFormProps) {
   };
 
   return (
-    <UserSidePanel title="Utwórz użytkownika" description="Dodaj nowego użytkownika panelu." onClose={onClose}>
+    <UserSidePanel
+      title="Utwórz użytkownika"
+      description="Dodaj nowego użytkownika panelu."
+      onClose={onClose}
+      isDirty={form.formState.isDirty}
+    >
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className="sq-form space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"

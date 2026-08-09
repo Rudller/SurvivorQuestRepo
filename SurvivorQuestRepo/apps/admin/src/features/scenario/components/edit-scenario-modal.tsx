@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Scenario } from "../types/scenario";
 import type { Station } from "@/features/games/types/station";
+import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/scenario.api";
 
 interface EditScenarioModalProps {
@@ -33,12 +34,18 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
     }));
   }
 
+  const isDirty = useIsDirty(editValues);
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij edycję scenariusza"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
 

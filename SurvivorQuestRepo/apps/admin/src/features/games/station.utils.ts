@@ -283,7 +283,7 @@ export function isWordPuzzleStationType(stationType: StationType) {
 }
 
 export function supportsChallengeDifficulty(stationType: StationType) {
-  return stationType === "strong-password" || stationType === "mastermind";
+  return stationType === "strong-password" || stationType === "mastermind" || stationType === "mini-sudoku";
 }
 
 export function isMatchingStationType(stationType: StationType) {
@@ -304,6 +304,10 @@ export function isImageSupportedStationType(stationType: StationType) {
     stationType !== "strong-password" &&
     stationType !== "qr-hunt"
   );
+}
+
+export function hasVisibleQuizQuestionField(stationType: StationType) {
+  return stationType !== "mini-sudoku";
 }
 
 export function getQuizLikeStationCopy(stationType: StationType) {

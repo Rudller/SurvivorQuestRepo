@@ -9,7 +9,6 @@ type HangmanStationPanelProps = {
   stationId: string;
   hangmanMisses: string[];
   hangmanAttemptsLeft: number;
-  hangmanResult: string | null;
   guessedHangmanSet: Set<string>;
   isGuessDisabled: boolean;
   isSubmittingHangmanGuess: boolean;
@@ -53,7 +52,6 @@ export function HangmanStationPanel({
   stationId,
   hangmanMisses,
   hangmanAttemptsLeft,
-  hangmanResult,
   guessedHangmanSet,
   isGuessDisabled,
   isSubmittingHangmanGuess,
@@ -95,11 +93,18 @@ export function HangmanStationPanel({
           );
         })}
       </View>
-      {hangmanMisses.length > 0 ? (
-        <Text className="mt-2" style={{ color: EXPEDITION_THEME.danger, fontSize: layout.infoFontSize }}>
-          {text.wrongLetters}: {hangmanMisses.join(", ")}
-        </Text>
-      ) : null}
+      {/*
+        Fixed minHeight regardless of whether there are any misses yet, so
+        the keyboard below doesn't jump up when the first wrong letter
+        appears.
+      */}
+      <View className="mt-2" style={{ minHeight: Math.round(layout.infoFontSize * 1.5) }}>
+        {hangmanMisses.length > 0 ? (
+          <Text style={{ color: EXPEDITION_THEME.danger, fontSize: layout.infoFontSize }}>
+            {text.wrongLetters}: {hangmanMisses.join(", ")}
+          </Text>
+        ) : null}
+      </View>
 
       <View style={{ rowGap: keyboardGap, marginVertical: keyboardVerticalMargin }}>
         {HANGMAN_KEYBOARD_ROWS.map((row, rowIndex) => (
@@ -143,11 +148,6 @@ export function HangmanStationPanel({
           </View>
         ))}
       </View>
-      {hangmanResult ? (
-        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
-          {hangmanResult}
-        </Text>
-      ) : null}
     </View>
   );
 }

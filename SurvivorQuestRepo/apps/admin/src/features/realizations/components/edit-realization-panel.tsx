@@ -20,6 +20,7 @@ import {
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
+import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { FormSection } from "@/shared/components/form-section";
 import { SummaryCard } from "@/shared/components/summary-card";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
@@ -393,12 +394,28 @@ export function EditRealizationPanel({
     }
   }
 
+  const isDirty = useIsDirty({
+    editValues,
+    scenarioStations,
+    selectedLanguages,
+    customLanguageInput,
+    pendingLogoFileName: pendingLogoFile?.name ?? null,
+    logoInputMode,
+    pendingMapImageFileName: pendingMapImageFile?.name ?? null,
+    mapImageInputMode,
+    pendingOfferPdfFileName: pendingOfferPdfFile?.name ?? null,
+  });
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij edycję realizacji"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
 

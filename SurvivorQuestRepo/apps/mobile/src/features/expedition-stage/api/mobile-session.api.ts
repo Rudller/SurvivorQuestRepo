@@ -33,6 +33,7 @@ type MobileApiRequestOptions = { signal?: AbortSignal };
 
 export type MobileApiErrorCode =
   | "INVALID_COMPLETION_CODE"
+  | "INVALID_QR_CODE"
   | "TASK_ALREADY_COMPLETED"
   | "STATION_IN_USE"
   | "LOCATION_REQUIRED"
@@ -43,6 +44,12 @@ export type MobileApiErrorCode =
   | "BAD_REQUEST"
   | "CONFLICT"
   | "HTTP_ERROR";
+
+// Returned by qr-hunt-station-panel's handleDetected in place of the backend's
+// message for INVALID_QR_CODE — the buzzer sound alone communicates "wrong
+// code", so the (English-only, unlocalized) backend text is intentionally not
+// surfaced to the player.
+export const QR_SCAN_SILENT_FAILURE = "__qr_scan_silent_failure__";
 
 export class MobileApiHttpError extends Error {
   readonly statusCode: number;

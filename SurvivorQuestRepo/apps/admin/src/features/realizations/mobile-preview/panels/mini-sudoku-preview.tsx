@@ -10,7 +10,7 @@ const PINPAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 // Mirrors apps/mobile/.../station-panels/mini-sudoku-station-panel.tsx
 export function MiniSudokuPreview(props: StationPreviewProps) {
-  const puzzle = resolveMiniSudokuPuzzle(toPuzzleView(props));
+  const puzzle = resolveMiniSudokuPuzzle(toPuzzleView(props), props.challengeDifficulty ?? "medium");
   const [values, setValues] = useState<Record<number, string>>({});
   const editableIndexes = puzzle.given.map((value, index) => (value === null ? index : -1)).filter((index) => index >= 0);
   const [active, setActive] = useState<number | null>(editableIndexes[0] ?? null);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Keyboard, Pressable, Text, View } from "react-native";
+import { Animated, Keyboard, Platform, Pressable, Text, View } from "react-native";
 import { SvgUri } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
@@ -7,11 +7,14 @@ import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout
 import { MOBILE_UX_TOKENS } from "../../../../shared/ui/ux-tokens";
 import { AutoScrollingBox } from "../../../../shared/ui/auto-scrolling-box";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
+import { MiniSudokuKeypadSection } from "./station-panels/mini-sudoku-station-panel";
 import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
 import { useQrHuntScan, QrHuntProgressDots } from "./station-panels/qr-hunt-station-panel";
 import { InlineQrScanner } from "../qr-scanner-overlay";
 import type { MastermindAttempt } from "./station-panels/mastermind-station-panel";
 import { StationMediaPanel } from "./station-panels/station-media-panel";
+import { SimonMistakesRow } from "./station-panels/simon-station-panel";
+import { MemoryPairsRow } from "./station-panels/memory-station-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper, useStationPanelLayout } from "./station-panels/shared-ui";
@@ -192,7 +195,6 @@ type StationPreviewText = {
   hangmanLetterAlreadyChecked: string;
   hangmanNoAttempts: (secret: string) => string;
   hangmanFailedPopup: string;
-  hangmanGoodLetter: string;
   hangmanMiss: string;
   hangmanSolved: string;
   hangmanSolvedPopup: string;
@@ -329,7 +331,6 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   hangmanLetterAlreadyChecked: "This letter has already been checked.",
   hangmanNoAttempts: (secret: string) => `No attempts left. Phrase: ${secret}`,
   hangmanFailedPopup: "All Hangman attempts were used.",
-  hangmanGoodLetter: "Good letter!",
   hangmanMiss: "Miss.",
   hangmanSolved: "Great! Full phrase revealed.",
   hangmanSolvedPopup: "Phrase guessed. Task passed.",
@@ -468,7 +469,6 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   hangmanLetterAlreadyChecked: "Цю літеру вже перевіряли.",
   hangmanNoAttempts: (secret: string) => `Спроб не залишилося. Фраза: ${secret}`,
   hangmanFailedPopup: "Усі спроби у Шибениці використано.",
-  hangmanGoodLetter: "Добра літера!",
   hangmanMiss: "Промах.",
   hangmanSolved: "Чудово! Усю фразу відкрито.",
   hangmanSolvedPopup: "Фразу вгадано. Завдання зараховано.",
@@ -609,7 +609,6 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   hangmanLetterAlreadyChecked: "Эта буква уже проверялась.",
   hangmanNoAttempts: (secret: string) => `Попыток не осталось. Фраза: ${secret}`,
   hangmanFailedPopup: "Все попытки в Виселице использованы.",
-  hangmanGoodLetter: "Хорошая буква!",
   hangmanMiss: "Промах.",
   hangmanSolved: "Отлично! Вся фраза открыта.",
   hangmanSolvedPopup: "Фраза угадана. Задание зачтено.",
@@ -751,7 +750,6 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     hangmanLetterAlreadyChecked: "Ta litera była już sprawdzana.",
     hangmanNoAttempts: (secret: string) => `Brak prób. Hasło: ${secret}`,
     hangmanFailedPopup: "Wykorzystano wszystkie próby w Wisielcu.",
-    hangmanGoodLetter: "Dobra litera!",
     hangmanMiss: "Pudło.",
     hangmanSolved: "Brawo! Odkryto całe hasło.",
     hangmanSolvedPopup: "Hasło odgadnięte. Zadanie zaliczone.",
@@ -868,6 +866,28 @@ export function StationPreviewOverlay({
   const { height: viewportHeight, width: viewportWidth } = adaptiveLayout;
   const isTabletOverlay = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    // KeyboardAvoidingView measures its own on-screen position to compute
+    // its padding, but that measurement breaks under an animated ancestor
+    // with a `transform` (this overlay's slide-in translateY) — the
+    // measurement is taken pre-transform and the view ends up not moving at
+    // all. Tracking the raw keyboard height ourselves and applying it as a
+    // plain style value sidesteps that measurement entirely.
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
   const [quizResult, setQuizResult] = useState<string | null>(null);
   const [wordleInput, setWordleInput] = useState("");
@@ -877,7 +897,7 @@ export function StationPreviewOverlay({
   const [isWordleRevealAnimating, setIsWordleRevealAnimating] = useState(false);
   const [hangmanGuessedLetters, setHangmanGuessedLetters] = useState<string[]>([]);
   const [hangmanMisses, setHangmanMisses] = useState<string[]>([]);
-  const [hangmanResult, setHangmanResult] = useState<string | null>(null);
+  const [, setHangmanResult] = useState<string | null>(null);
   const [mastermindInput, setMastermindInput] = useState("");
   const [mastermindAttempts, setMastermindAttempts] = useState<MastermindAttempt[]>([]);
   const [, setMastermindResult] = useState<string | null>(null);
@@ -898,7 +918,7 @@ export function StationPreviewOverlay({
   const [simonActivePlaybackButtonId, setSimonActivePlaybackButtonId] = useState<string | null>(null);
   const [simonActiveInputButtonId, setSimonActiveInputButtonId] = useState<string | null>(null);
   const [isSimonPlaybackActive, setIsSimonPlaybackActive] = useState(false);
-  const [simonResult, setSimonResult] = useState<string | null>(null);
+  const [, setSimonResult] = useState<string | null>(null);
   const [rebusInput, setRebusInput] = useState("");
   const [rebusAttempts, setRebusAttempts] = useState(0);
   const [rebusResult, setRebusResult] = useState<string | null>(null);
@@ -913,6 +933,8 @@ export function StationPreviewOverlay({
     Array.from({ length: 81 }, () => ""),
   );
   const [miniSudokuResult, setMiniSudokuResult] = useState<string | null>(null);
+  const [miniSudokuActiveCellIndex, setMiniSudokuActiveCellIndex] = useState<number | null>(null);
+  const [selectedMiniSudokuDifficulty, setSelectedMiniSudokuDifficulty] = useState<ChallengeDifficulty | null>(null);
   const [matchingConnections, setMatchingConnections] = useState<Record<string, string>>({});
   const [matchingAttempts, setMatchingAttempts] = useState(0);
   const [matchingResult, setMatchingResult] = useState<string | null>(null);
@@ -1221,6 +1243,19 @@ export function StationPreviewOverlay({
     );
   }, [displayedStation?.challengeDifficulty, displayedStation?.challengeDifficultyMode, displayedStation?.stationId, displayedStation?.stationType]);
 
+  useEffect(() => {
+    if (!displayedStation || displayedStation.stationType !== "mini-sudoku") {
+      setSelectedMiniSudokuDifficulty(null);
+      return;
+    }
+
+    setSelectedMiniSudokuDifficulty(
+      displayedStation.challengeDifficultyMode === "player"
+        ? null
+        : displayedStation.challengeDifficulty ?? "medium",
+    );
+  }, [displayedStation?.challengeDifficulty, displayedStation?.challengeDifficultyMode, displayedStation?.stationId, displayedStation?.stationType]);
+
   useStationOverlayReset({
     displayedStation,
     stationResetKey: displayedStation?.stationId ?? null,
@@ -1276,6 +1311,7 @@ export function StationPreviewOverlay({
     setBoggleResult,
     setMiniSudokuValues,
     setMiniSudokuResult,
+    setMiniSudokuActiveCellIndex,
     setMatchingConnections,
     setMatchingAttempts,
     setMatchingResult,
@@ -1518,6 +1554,10 @@ export function StationPreviewOverlay({
     station.challengeDifficultyMode === "player"
       ? selectedMastermindDifficulty ?? station.challengeDifficulty ?? "medium"
       : station.challengeDifficulty ?? "medium";
+  const miniSudokuDifficulty: ChallengeDifficulty =
+    station.challengeDifficultyMode === "player"
+      ? selectedMiniSudokuDifficulty ?? station.challengeDifficulty ?? "medium"
+      : station.challengeDifficulty ?? "medium";
   const {
     isClassicQuizStation,
     isAudioQuizStation,
@@ -1599,7 +1639,6 @@ export function StationPreviewOverlay({
     miniSudokuAttemptedValues,
     miniSudokuConflictIndexes,
     miniSudokuHasConflicts,
-    miniSudokuDisplayResult,
     matchingPairs,
     matchingMatchedCount,
     matchingAllMatched,
@@ -1639,6 +1678,7 @@ export function StationPreviewOverlay({
     mastermindInput,
     mastermindAttempts,
     mastermindDifficulty,
+    miniSudokuDifficulty,
     anagramInput,
     anagramAttempts,
     caesarInput,
@@ -1757,6 +1797,7 @@ export function StationPreviewOverlay({
     normalizedMastermindInput,
     mastermindSecret,
     mastermindDifficulty,
+    miniSudokuDifficulty,
     mastermindCodeLength: mastermindConfig.codeLength,
     mastermindMaxAttempts: mastermindConfig.maxAttempts,
     mastermindSymbols: mastermindConfig.symbols,
@@ -1909,7 +1950,6 @@ export function StationPreviewOverlay({
       hangmanLetterAlreadyChecked: text.hangmanLetterAlreadyChecked,
       hangmanNoAttempts: text.hangmanNoAttempts,
       hangmanFailedPopup: text.hangmanFailedPopup,
-      hangmanGoodLetter: text.hangmanGoodLetter,
       hangmanMiss: text.hangmanMiss,
       hangmanSolved: text.hangmanSolved,
       hangmanSolvedPopup: text.hangmanSolvedPopup,
@@ -2031,12 +2071,9 @@ export function StationPreviewOverlay({
       simonSequence,
       simonTargetLength: simonRoundLength,
       simonProgress,
-      simonMistakes,
-      simonMaxMistakes: SIMON_MAX_MISTAKES,
       simonActivePlaybackButtonId,
       simonActiveInputButtonId,
       isSimonPlaybackActive,
-      simonResult,
       isInteractiveLocked,
       isSubmittingSimon,
       onPressButton: (buttonId) => {
@@ -2097,14 +2134,10 @@ export function StationPreviewOverlay({
       stationId: station.stationId,
       miniSudokuPuzzle,
       normalizedMiniSudokuValues,
-      miniSudokuResult: miniSudokuDisplayResult,
       conflictCellIndexes: miniSudokuConflictIndexes,
       isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku,
-      isSubmittingMiniSudoku,
-      onChangeCell: handleMiniSudokuChangeCell,
-      onSubmit: handleMiniSudokuSubmit,
-      isTabletOverlay,
-      quizSubmitError,
+      activeCellIndex: miniSudokuActiveCellIndex,
+      onSelectCell: setMiniSudokuActiveCellIndex,
     },
     matchingMediaSectionProps: {
       matchingAttemptsLeft,
@@ -2147,6 +2180,26 @@ export function StationPreviewOverlay({
     },
   });
   const renderedStationMedia = stationMediaRendererByType[station.stationType]?.() ?? null;
+  const miniSudokuKeypadSectionProps = {
+    stationId: station.stationId,
+    miniSudokuPuzzle,
+    activeCellIndex: miniSudokuActiveCellIndex,
+    onSelectCell: setMiniSudokuActiveCellIndex,
+    isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku,
+    isSubmittingMiniSudoku,
+    onChangeCell: handleMiniSudokuChangeCell,
+    onSubmit: handleMiniSudokuSubmit,
+    quizSubmitError,
+    miniSudokuDifficultyMode: station.challengeDifficultyMode ?? "admin",
+    selectedMiniSudokuDifficulty,
+    onSelectDifficulty: (difficulty: ChallengeDifficulty) => {
+      setSelectedMiniSudokuDifficulty(difficulty);
+      setMiniSudokuValues(Array.from({ length: 81 }, () => ""));
+      setMiniSudokuActiveCellIndex(null);
+      setMiniSudokuResult(null);
+      setQuizSubmitError(null);
+    },
+  };
   const quizStationRendererByType = buildQuizStationRendererByType({
     quizAudioPanelSharedProps: {
       station,
@@ -2207,7 +2260,6 @@ export function StationPreviewOverlay({
       stationId: station.stationId,
       hangmanMisses,
       hangmanAttemptsLeft,
-      hangmanResult,
       guessedHangmanSet,
       isGuessDisabled:
         station.status === "done" ||
@@ -2367,12 +2419,19 @@ export function StationPreviewOverlay({
           overlayPanelStyle,
         ]}
       >
-        <View
+        <Pressable
           className="flex-1 border"
+          onPress={() => {
+            // Tapping empty space anywhere in the card dismisses the
+            // keyboard; nested Pressables/TextInputs still claim their own
+            // touches first, so buttons and the input itself are unaffected.
+            Keyboard.dismiss();
+          }}
           style={{
             borderColor: EXPEDITION_THEME.border,
             backgroundColor: EXPEDITION_THEME.panel,
             borderRadius: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 30),
+            paddingBottom: keyboardHeight,
           }}
         >
           <View
@@ -2429,7 +2488,31 @@ export function StationPreviewOverlay({
               className="flex-1"
               style={{ paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22), overflow: "hidden" }}
             >
-              <View className="flex-1">
+              <View
+                className="flex-1"
+                style={{
+                  // Reserve space so station content never renders under the
+                  // absolutely-positioned timer/points footer below (this
+                  // used to be duplicated per-panel in code-station-panel.tsx
+                  // and wordle-station-panel.tsx — centralized here instead).
+                  marginBottom:
+                    requiresCode || isMiniSudokuStation || isOpenQuizStation
+                      ? 0
+                      : adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132),
+                }}
+              >
+                {isMemoryStation ? (
+                  <Text
+                    className="mb-2 px-1 text-center font-semibold"
+                    style={{
+                      color: EXPEDITION_THEME.textPrimary,
+                      fontSize: adaptiveLayout.fs(isTabletOverlay ? 17 : 12, 11, 21),
+                    }}
+                  >
+                    {stationQuizPrompt}
+                  </Text>
+                ) : null}
+
                 {station.stationType !== "strong-password" &&
                 !requiresQrScan &&
                 !isAnagramStation &&
@@ -2495,6 +2578,7 @@ export function StationPreviewOverlay({
                             cameraAccessTitle: photoTaskCapture.text.cameraAccessTitle,
                             cameraAccessDescription: photoTaskCapture.text.cameraAccessDescription,
                             enableCameraLabel: photoTaskCapture.text.enableCamera,
+                            switchCameraLabel: photoTaskCapture.text.switchCamera,
                             onCancelCapture: photoTaskCapture.closeCapture,
                             onConfirmCapture: photoTaskCapture.handleConfirmedCapture,
                           }
@@ -2502,6 +2586,18 @@ export function StationPreviewOverlay({
                     }
                   />
                 ) : null}
+
+              {isSimonStation ? (
+                <View className="mt-2 items-center">
+                  <SimonMistakesRow simonMistakes={simonMistakes} simonMaxMistakes={SIMON_MAX_MISTAKES} />
+                </View>
+              ) : null}
+
+              {isMemoryStation ? (
+                <View className="mt-2 items-center">
+                  <MemoryPairsRow memoryDeck={memoryDeck} memoryMatchedCount={memoryMatchedCount} />
+                </View>
+              ) : null}
 
               {requiresPhotoUpload ? (
                 <View
@@ -2565,21 +2661,22 @@ export function StationPreviewOverlay({
                     >
                       {qrHuntScan.canScan ? (
                         <Pressable
-                          className="items-center justify-center rounded-xl active:opacity-90"
+                          className="items-center justify-center rounded-2xl active:opacity-90"
                           style={{
                             backgroundColor: EXPEDITION_THEME.accent,
-                            minHeight: stationPanelLayout.actionMinHeight,
-                            paddingHorizontal: adaptiveLayout.s(24, 16, 32),
+                            minHeight: adaptiveLayout.s(isTabletOverlay ? 84 : 64, 56, 96),
+                            minWidth: adaptiveLayout.s(isTabletOverlay ? 260 : 200, 170, 300),
+                            paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 40 : 30, 24, 48),
                             opacity: qrHuntScan.isSubmitting ? MOBILE_UX_TOKENS.disabledOpacity : 1,
                           }}
                           onPress={qrHuntScan.openScanner}
                           disabled={qrHuntScan.isSubmitting}
                         >
                           <Text
-                            className="font-semibold"
+                            className="font-semibold text-center"
                             style={{
                               color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
-                              fontSize: stationPanelLayout.actionFontSize,
+                              fontSize: adaptiveLayout.fs(isTabletOverlay ? 20 : 16, 14, 24),
                             }}
                           >
                             {qrHuntScan.scannedCount > 0 ? qrHuntScan.text.scanNextCode : qrHuntScan.text.scanCode}
@@ -2620,7 +2717,7 @@ export function StationPreviewOverlay({
                     </Text>
                   </AutoScrollingBox>
                 </View>
-              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <AutoScrollingBox className="mt-1">
                   <Text
                     style={{
@@ -2656,17 +2753,43 @@ export function StationPreviewOverlay({
                 </Text>
               ) : null}
 
+              {isClassicQuizStation && stationDescription.length > 0 ? (
+                <AutoScrollingBox className="mt-2">
+                  <Text
+                    style={{
+                      color: EXPEDITION_THEME.textMuted,
+                      fontSize: stationPanelLayout.descriptionFontSize,
+                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
+                    }}
+                  >
+                    {stationDescription}
+                  </Text>
+                </AutoScrollingBox>
+              ) : null}
+
               {isQuizStation && !isMatchingStation && !isBoggleStation && !isMastermindStation && !isMemoryStation && !isMiniSudokuStation && !isSimonStation ? (
-                <StationQuizTaskWrapper
-                  className={isTabletOverlay ? "mt-3" : "mt-2"}
-                  prompt={stationQuizPrompt}
-                  hidePrompt={isRebusStation}
-                  isTabletOverlay={isTabletOverlay}
-                  error={quizSubmitError}
-                  errorPlacement="inside"
+                <View
+                  style={{
+                    // Open-quiz's own bordered card is the last thing in this
+                    // station's flow — reserve clearance after it (not inside
+                    // it, which would just stretch the border around blank
+                    // space) so it never renders under the absolutely-
+                    // positioned timer/points footer below, same treatment as
+                    // code-station-panel.tsx / mini-sudoku's keypad section.
+                    marginBottom: isOpenQuizStation ? adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132) : 0,
+                  }}
                 >
-                  {renderedQuizStation}
-                </StationQuizTaskWrapper>
+                  <StationQuizTaskWrapper
+                    className={isTabletOverlay ? "mt-3" : "mt-2"}
+                    prompt={stationQuizPrompt}
+                    hidePrompt={isRebusStation}
+                    isTabletOverlay={isTabletOverlay}
+                    error={quizSubmitError}
+                    errorPlacement="inside"
+                  >
+                    {renderedQuizStation}
+                  </StationQuizTaskWrapper>
+                </View>
               ) : null}
 
               {isAnagramStation && stationDescription.length > 0 ? (
@@ -2711,6 +2834,10 @@ export function StationPreviewOverlay({
                   setCodeResult(null);
                 }}
               />
+            ) : null}
+
+            {isMiniSudokuStation ? (
+              <MiniSudokuKeypadSection {...miniSudokuKeypadSectionProps} />
             ) : null}
 
           </View>
@@ -2769,35 +2896,12 @@ export function StationPreviewOverlay({
             )}
             <View className="items-end px-2 py-1">
               <Text
-                className="text-center uppercase tracking-widest"
-                style={{ color: pointsAccentColor, fontSize: adaptiveLayout.fs(isTabletOverlay ? 11 : 8, 7, 14) }}
-              >
-                {text.points}
-              </Text>
-              <Text
-                className="mt-0.5 text-center font-extrabold"
+                className="text-center font-extrabold"
                 style={{
                   color: pointsAccentColor,
                   fontSize: adaptiveLayout.fs(
-                    isTabletOverlay
-                      ? isNumericCodeStation
-                        ? 36
-                        : 46
-                      : isNumericCodeStation
-                        ? 20
-                        : 24,
-                    18,
-                    54,
-                  ),
-                  lineHeight: adaptiveLayout.s(
-                    isTabletOverlay
-                      ? isNumericCodeStation
-                        ? 40
-                        : 50
-                      : isNumericCodeStation
-                        ? 23
-                        : 27,
-                    20,
+                    isTabletOverlay ? (isNumericCodeStation ? 40 : 50) : isNumericCodeStation ? 30 : 36,
+                    26,
                     58,
                   ),
                 }}
@@ -2807,10 +2911,16 @@ export function StationPreviewOverlay({
               >
                 {shouldShowDynamicPoints ? dynamicAvailablePoints : station.points}
               </Text>
+              <Text
+                className="mt-1 text-center text-[10px] uppercase tracking-widest"
+                style={{ color: pointsAccentColor }}
+              >
+                {text.points}
+              </Text>
             </View>
           </View>
 
-        </View>
+        </Pressable>
       </Animated.View>
       <QuizOutcomePopupPanel
         popup={quizOutcomePopup}

@@ -58,6 +58,7 @@ export function EditUserForm({ user, onClose }: EditUserFormProps) {
       title="Edytuj użytkownika"
       description={`Zmieniasz dane: ${user.email}`}
       onClose={onClose}
+      isDirty={form.formState.isDirty}
     >
       <form
         onSubmit={form.handleSubmit(onSubmit)}

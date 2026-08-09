@@ -7,15 +7,21 @@ type UserSidePanelProps = {
   description?: string;
   onClose: () => void;
   children: ReactNode;
+  /** When true, an outside click is ignored instead of closing the panel — pass the form's dirty state so accidental clicks don't discard unsaved input. */
+  isDirty?: boolean;
 };
 
-export function UserSidePanel({ title, description, onClose, children }: UserSidePanelProps) {
+export function UserSidePanel({ title, description, onClose, children, isDirty = false }: UserSidePanelProps) {
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij panel"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
 

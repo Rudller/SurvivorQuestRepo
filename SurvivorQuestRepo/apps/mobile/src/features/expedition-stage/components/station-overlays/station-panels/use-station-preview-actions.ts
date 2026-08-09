@@ -93,6 +93,7 @@ type UseStationPreviewActionsArgs = {
   normalizedMastermindInput: string;
   mastermindSecret: string;
   mastermindDifficulty: "easy" | "medium" | "hard";
+  miniSudokuDifficulty: "easy" | "medium" | "hard";
   mastermindCodeLength: number;
   mastermindMaxAttempts: number;
   mastermindSymbols: readonly string[];
@@ -245,7 +246,6 @@ type UseStationPreviewActionsArgs = {
     hangmanLetterAlreadyChecked: string;
     hangmanNoAttempts: (secret: string) => string;
     hangmanFailedPopup: string;
-    hangmanGoodLetter: string;
     hangmanMiss: string;
     hangmanSolved: string;
     hangmanSolvedPopup: string;
@@ -446,7 +446,6 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
         hangmanLetterAlreadyChecked: args.text.hangmanLetterAlreadyChecked,
         hangmanNoAttempts: args.text.hangmanNoAttempts,
         hangmanFailedPopup: args.text.hangmanFailedPopup,
-        hangmanGoodLetter: args.text.hangmanGoodLetter,
         hangmanMiss: args.text.hangmanMiss,
         hangmanSolved: args.text.hangmanSolved,
         hangmanSolvedPopup: args.text.hangmanSolvedPopup,
@@ -768,6 +767,7 @@ export function createStationPreviewActions(args: UseStationPreviewActionsArgs) 
       isMiniSudokuStation: args.isMiniSudokuStation,
       hasMiniSudokuPuzzle: args.hasMiniSudokuPuzzle,
       miniSudokuGridMeta: args.miniSudokuGridMeta,
+      miniSudokuDifficulty: args.miniSudokuDifficulty,
       isInteractiveLocked: args.isInteractiveLocked,
       isSubmittingMiniSudoku: args.isSubmittingMiniSudoku,
       miniSudokuAttemptedValues: args.miniSudokuAttemptedValues,

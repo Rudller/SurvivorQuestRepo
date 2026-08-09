@@ -2,6 +2,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
 import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
@@ -58,10 +59,14 @@ export function OpenQuizStationPanel({
   const uiLanguage = useUiLanguage();
   const text = OPEN_QUIZ_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
   const actionLabelColor = resolveActionLabelColor(isActionDisabled);
+  // Reserve empty space below the panel so its content never renders under the
+  // absolutely-positioned timer/points footer (preview.tsx).
+  const footerClearance = adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
 
   return (
-    <View className="mt-3">
+    <View className="mt-3" style={{ marginBottom: footerClearance }}>
       <View className="mt-1">
         <AttemptsIndicator
           label={text.attemptsLeft}

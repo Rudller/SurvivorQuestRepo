@@ -573,7 +573,6 @@ type SubmitHangmanGuessControllerArgs = {
     hangmanLetterAlreadyChecked: string;
     hangmanNoAttempts: (secret: string) => string;
     hangmanFailedPopup: string;
-    hangmanGoodLetter: string;
     hangmanMiss: string;
     hangmanSolved: string;
     hangmanSolvedPopup: string;
@@ -658,7 +657,7 @@ export async function submitHangmanGuessController({
       return;
     }
 
-    setHangmanResult(isHit ? text.hangmanGoodLetter : text.hangmanMiss);
+    setHangmanResult(isHit ? null : text.hangmanMiss);
     return;
   }
 
@@ -1949,6 +1948,7 @@ type SubmitMiniSudokuControllerArgs = {
   isMiniSudokuStation: boolean;
   hasMiniSudokuPuzzle: boolean;
   miniSudokuGridMeta: { side: number; blockSide: number } | null;
+  miniSudokuDifficulty: ChallengeDifficulty;
   isInteractiveLocked: boolean;
   isSubmittingMiniSudoku: boolean;
   miniSudokuAttemptedValues: string[];
@@ -1974,6 +1974,7 @@ export async function submitMiniSudokuController({
   isMiniSudokuStation,
   hasMiniSudokuPuzzle,
   miniSudokuGridMeta,
+  miniSudokuDifficulty,
   isInteractiveLocked,
   isSubmittingMiniSudoku,
   miniSudokuAttemptedValues,
@@ -2032,7 +2033,7 @@ export async function submitMiniSudokuController({
   setIsSubmittingMiniSudoku(true);
   let error: string | null;
   try {
-    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined, miniSudokuDifficulty);
   } finally {
     setIsSubmittingMiniSudoku(false);
     releasePuzzleSubmitLock(submitLockKey);

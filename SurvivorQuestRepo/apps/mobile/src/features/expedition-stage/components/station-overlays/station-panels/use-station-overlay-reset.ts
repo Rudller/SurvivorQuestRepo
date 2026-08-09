@@ -62,6 +62,7 @@ type UseStationOverlayResetArgs = {
   setBoggleResult: Dispatch<SetStateAction<string | null>>;
   setMiniSudokuValues: Dispatch<SetStateAction<string[]>>;
   setMiniSudokuResult: Dispatch<SetStateAction<string | null>>;
+  setMiniSudokuActiveCellIndex: Dispatch<SetStateAction<number | null>>;
   setMatchingConnections: Dispatch<SetStateAction<Record<string, string>>>;
   setMatchingAttempts: Dispatch<SetStateAction<number>>;
   setMatchingResult: Dispatch<SetStateAction<string | null>>;
@@ -144,6 +145,7 @@ export function useStationOverlayReset({
   setBoggleResult,
   setMiniSudokuValues,
   setMiniSudokuResult,
+  setMiniSudokuActiveCellIndex,
   setMatchingConnections,
   setMatchingAttempts,
   setMatchingResult,
@@ -223,6 +225,16 @@ export function useStationOverlayReset({
         : Array.from({ length: 81 }, () => ""),
     );
     setMiniSudokuResult(null);
+    setMiniSudokuActiveCellIndex(
+      displayedStation?.stationType === "mini-sudoku"
+        ? (() => {
+            const firstEditableIndex = resolveMiniSudokuPuzzle(displayedStation).given.findIndex(
+              (value) => value === null,
+            );
+            return firstEditableIndex >= 0 ? firstEditableIndex : null;
+          })()
+        : null,
+    );
     setMatchingConnections({});
     setMatchingAttempts(0);
     setMatchingResult(null);

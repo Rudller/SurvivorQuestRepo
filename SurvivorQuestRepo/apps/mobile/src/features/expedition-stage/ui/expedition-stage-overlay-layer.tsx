@@ -1,5 +1,6 @@
 import { Modal, Pressable, Text, View } from "react-native";
 import {
+  AlreadyCompletedNoticeOverlay,
   QuizPrestartOverlay,
   RealizationFinishOverlay,
   StationPreviewOverlay,
@@ -128,6 +129,12 @@ export function ExpeditionStageOverlayLayer({
         onStart={() => {
           void overlayFlow.handleStartPendingTime();
         }}
+      />
+
+      <AlreadyCompletedNoticeOverlay
+        notice={overlayFlow.alreadyCompletedNotice}
+        isLightTheme={isLightTheme}
+        onDismiss={overlayFlow.dismissAlreadyCompletedNotice}
       />
 
       <QrScannerOverlay

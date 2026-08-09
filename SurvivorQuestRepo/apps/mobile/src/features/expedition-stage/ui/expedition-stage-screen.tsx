@@ -40,7 +40,6 @@ import { QuizOutcomePopupPanel } from "../components/station-overlays/station-pa
 import { ExpeditionStageOverlayProvider, ExpeditionStageSessionProvider } from "./expedition-stage-context";
 import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
 import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
-import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
 import { getMobileApiErrorCode, getMobileApiErrorStatusCode } from "../api/mobile-session.api";
 
 function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
@@ -110,6 +109,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskTimerStarted: string;
     taskAlreadyFailedAfterClose: string;
     taskCompleted: string;
+    stationAlreadyCompleted: string;
+    stationAlreadyFailed: string;
     timedTaskAlertTitle: string;
     timedTaskAlertBody: string;
     timedTaskAlertBack: string;
@@ -157,6 +158,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskTimerStarted: "Licznik zadania uruchomiony.",
     taskAlreadyFailedAfterClose: "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.",
     taskCompleted: "Zadanie zaliczone.",
+    stationAlreadyCompleted: "To zadanie zostało już wykonane.",
+    stationAlreadyFailed: "To zadanie zostało już oznaczone jako niezaliczone.",
     timedTaskAlertTitle: "Uwaga: opuszczenie stanowiska",
     timedTaskAlertBody: "Jeśli zamkniesz stanowisko bez ukończenia, zadanie zostanie oznaczone jako niezaliczone.",
     timedTaskAlertBack: "Wróć",
@@ -203,6 +206,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskTimerStarted: "Task timer started.",
     taskAlreadyFailedAfterClose: "This task was marked as failed after closing the station.",
     taskCompleted: "Task completed.",
+    stationAlreadyCompleted: "This task has already been completed.",
+    stationAlreadyFailed: "This task has already been marked as failed.",
     timedTaskAlertTitle: "Warning: leaving station",
     timedTaskAlertBody: "If you close the station before completion, the task will be marked as failed.",
     timedTaskAlertBack: "Back",
@@ -249,6 +254,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskTimerStarted: "Таймер завдання запущено.",
     taskAlreadyFailedAfterClose: "Це завдання позначено як незараховане після закриття станції.",
     taskCompleted: "Завдання зараховано.",
+    stationAlreadyCompleted: "Це завдання вже виконано.",
+    stationAlreadyFailed: "Це завдання вже позначено як невиконане.",
     timedTaskAlertTitle: "Увага: вихід зі станції",
     timedTaskAlertBody: "Якщо закрити станцію без завершення, завдання буде позначено як незараховане.",
     timedTaskAlertBack: "Назад",
@@ -295,6 +302,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     taskTimerStarted: "Таймер задания запущен.",
     taskAlreadyFailedAfterClose: "Это задание было отмечено как незачтённое после закрытия станции.",
     taskCompleted: "Задание зачтено.",
+    stationAlreadyCompleted: "Это задание уже выполнено.",
+    stationAlreadyFailed: "Это задание уже отмечено как невыполненное.",
     timedTaskAlertTitle: "Внимание: выход со станции",
     timedTaskAlertBody: "Если закрыть станцию без выполнения, задание будет отмечено как незачтённое.",
     timedTaskAlertBack: "Назад",
@@ -791,8 +800,6 @@ export function ExpeditionStageScreen({
   const {
     sessionState,
     isLoading,
-    errorMessage,
-    syncMessage,
     isSessionInvalid,
     sessionInvalidReason,
     startStationTask,
@@ -809,8 +816,8 @@ export function ExpeditionStageScreen({
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [, setActionMessage] = useState<string | null>(null);
+  const [, setActionError] = useState<string | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(false);
   const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
@@ -818,14 +825,7 @@ export function ExpeditionStageScreen({
   const autoLocationSyncTimestampRef = useRef(0);
   const uiChromeOpacity = useRef(new Animated.Value(1)).current;
   const tasksPanelExpansion = useRef(new Animated.Value(isTabletLayout ? 1 : 0)).current;
-  const { playerLocation, locationError, requestCurrentLocation } = usePlayerLocation();
-  const { transientPopup } = useExpeditionStageTransientPopup({
-    errorMessage,
-    locationError,
-    actionError,
-    actionMessage,
-    syncMessage,
-  });
+  const { playerLocation, requestCurrentLocation } = usePlayerLocation();
   const mapPlayerLocation = useMemo(() => {
     return playerLocation ?? null;
   }, [playerLocation]);
@@ -1024,12 +1024,6 @@ export function ExpeditionStageScreen({
     ],
   );
 
-  const selectedStationLabel = selectedStationId
-    ? formatStationLabelWithNumber(
-        resolveStationLabel(selectedStationId, stationMetadataMap[selectedStationId]?.name, text),
-        stationNumberById.get(selectedStationId),
-      )
-    : null;
   const completedTasks = sessionState.tasks.filter(
     (task) => task.status === "done" || failedTaskIds.has(task.stationId),
   ).length;
@@ -1250,6 +1244,8 @@ export function ExpeditionStageScreen({
       taskTimeExpired: text.taskTimeExpired,
       taskMarkedFailed: text.taskMarkedFailed,
       locationRequired: text.locationRequired,
+      stationAlreadyCompleted: text.stationAlreadyCompleted,
+      stationAlreadyFailed: text.stationAlreadyFailed,
     },
     startStationTask,
     completeStationTask,
@@ -1572,30 +1568,18 @@ export function ExpeditionStageScreen({
             )}
           </Pressable>
           )}
-
-          {shouldShowTopLeaderboard ? (
-            <View className="mt-2">
-              <TopLeaderboardStrip
-                entries={sessionState.leaderboard.entries}
-                currentTeamId={sessionState.team.id}
-                compact
-              />
-            </View>
-          ) : null}
           </View>
 
         </View>
       </View>
 
       <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 12 }}>
-        {selectedStationLabel ? (
-          <View
-            className="mb-2 rounded-full border px-3 py-1"
-            style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
-          >
-            <Text className="text-xs" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {selectedStationLabel}
-            </Text>
+        {shouldShowTopLeaderboard ? (
+          <View className="mb-2 w-full max-w-[560px]">
+            <TopLeaderboardStrip
+              entries={sessionState.leaderboard.entries}
+              currentTeamId={sessionState.team.id}
+            />
           </View>
         ) : null}
 
@@ -1610,33 +1594,6 @@ export function ExpeditionStageScreen({
           />
         </View>
       </View>
-
-      {transientPopup ? (
-        <View pointerEvents="none" className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 114 }}>
-          <View
-            className="w-full max-w-[560px] rounded-2xl border px-3 py-2"
-            style={{
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: transientPopup.tone === "error"
-                ? isLightTheme
-                  ? "rgba(185, 92, 87, 0.28)"
-                  : "rgba(127, 29, 29, 0.9)"
-                : transientPopup.tone === "info"
-                  ? isLightTheme
-                    ? "rgba(14, 116, 144, 0.2)"
-                    : "rgba(8, 47, 73, 0.9)"
-                : EXPEDITION_THEME.panel,
-            }}
-          >
-            <Text
-              className="text-center text-xs font-semibold"
-              style={{ color: transientPopup.tone === "error" ? "#fecaca" : transientPopup.tone === "info" ? "#bae6fd" : EXPEDITION_THEME.accentStrong }}
-            >
-              {transientPopup.message}
-            </Text>
-          </View>
-        </View>
-      ) : null}
 
       <ExpeditionStageOverlayLayer
         adaptiveLayout={adaptiveLayout}

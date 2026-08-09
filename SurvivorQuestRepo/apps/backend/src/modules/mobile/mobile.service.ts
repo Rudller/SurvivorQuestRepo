@@ -1637,7 +1637,7 @@ export class MobileService {
     }
 
     const difficultyMultiplier =
-      station.type === 'strong-password' || station.type === 'mastermind'
+      station.type === 'strong-password' || station.type === 'mastermind' || station.type === 'mini-sudoku'
         ? challengeDifficulty === 'easy'
           ? 0.5
           : challengeDifficulty === 'hard'

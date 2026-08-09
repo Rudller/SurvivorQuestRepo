@@ -16,6 +16,7 @@ type PhotoTaskText = {
   cameraAccessTitle: string;
   cameraAccessDescription: string;
   enableCamera: string;
+  switchCamera: string;
   pendingReviewPopupMessage: string;
 };
 
@@ -30,6 +31,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     cameraAccessTitle: "Dostęp do kamery",
     cameraAccessDescription: "Aby zrobić zdjęcie, włącz dostęp do kamery.",
     enableCamera: "Włącz kamerę",
+    switchCamera: "Zmień kamerę",
     pendingReviewPopupMessage:
       "Zadanie zostało wysłane. Organizator (Mistrz Gry) sprawdzi teraz, czy zdjęcie przedstawia to, co powinno, a potem będziesz mógł kontynuować grę.",
   },
@@ -43,6 +45,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     cameraAccessTitle: "Camera access",
     cameraAccessDescription: "Enable camera access to take a photo.",
     enableCamera: "Enable camera",
+    switchCamera: "Switch camera",
     pendingReviewPopupMessage:
       "The task has been submitted. The Game Master will now check whether the photo shows what it should, then you'll continue in the game.",
   },
@@ -56,6 +59,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     cameraAccessTitle: "Доступ до камери",
     cameraAccessDescription: "Щоб зробити фото, увімкніть доступ до камери.",
     enableCamera: "Увімкнути камеру",
+    switchCamera: "Змінити камеру",
     pendingReviewPopupMessage:
       "Завдання надіслано. Організатор тепер перевірить, чи фото показує потрібне, після чого ви зможете продовжити гру.",
   },
@@ -69,6 +73,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     cameraAccessTitle: "Доступ к камере",
     cameraAccessDescription: "Чтобы сделать фото, включите доступ к камере.",
     enableCamera: "Включить камеру",
+    switchCamera: "Сменить камеру",
     pendingReviewPopupMessage:
       "Задание отправлено. Организатор теперь проверит, соответствует ли фото заданию, после чего вы сможете продолжить игру.",
   },

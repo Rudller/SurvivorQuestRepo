@@ -1,85 +1,59 @@
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { translate } from 'google-translate-api-x';
 import { TranslationService } from './translation.service';
 
+jest.mock('google-translate-api-x', () => ({
+  translate: jest.fn(),
+}));
+
+const translateMock = translate as unknown as jest.Mock;
+
 describe('TranslationService.translateBatch', () => {
-  const originalEnv = process.env.DEEPL_API_KEY;
-  let fetchMock: jest.Mock;
-
   beforeEach(() => {
-    process.env.DEEPL_API_KEY = 'test-key:fx';
-    fetchMock = jest.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
+    translateMock.mockReset();
   });
 
-  afterEach(() => {
-    process.env.DEEPL_API_KEY = originalEnv;
-    jest.clearAllMocks();
-  });
-
-  it('calls the DeepL free-tier endpoint with mapped language codes and returns translated texts', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        translations: [{ text: 'Witaj' }, { text: 'Świat' }],
-      }),
-    });
+  it('calls the translation provider with mapped language codes and returns translated texts', async () => {
+    translateMock.mockResolvedValue([{ text: 'Witaj' }, { text: 'Świat' }]);
 
     const service = new TranslationService();
-    const result = await service.translateBatch(
-      ['Hello', 'World'],
-      'english',
-      'polish',
-    );
+    const result = await service.translateBatch(['Hello', 'World'], 'english', 'polish');
 
     expect(result).toEqual(['Witaj', 'Świat']);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api-free.deepl.com/v2/translate');
-    expect(init.headers.Authorization).toBe('DeepL-Auth-Key test-key:fx');
-    const body = init.body as URLSearchParams;
-    expect(body.getAll('text')).toEqual(['Hello', 'World']);
-    expect(body.get('source_lang')).toBe('EN');
-    expect(body.get('target_lang')).toBe('PL');
+    expect(translateMock).toHaveBeenCalledWith(
+      ['Hello', 'World'],
+      expect.objectContaining({ from: 'en', to: 'pl' }),
+    );
   });
 
-  it('uses EN-GB (not bare EN) when translating into English', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ translations: [{ text: 'Hello' }] }),
-    });
+  it('maps each configured language to its symmetric ISO code', async () => {
+    translateMock.mockResolvedValue([{ text: 'Hello' }]);
 
     const service = new TranslationService();
     await service.translateBatch(['Cześć'], 'polish', 'english');
 
-    const [, init] = fetchMock.mock.calls[0];
-    const body = init.body as URLSearchParams;
-    expect(body.get('target_lang')).toBe('EN-GB');
+    expect(translateMock).toHaveBeenCalledWith(
+      ['Cześć'],
+      expect.objectContaining({ from: 'pl', to: 'en' }),
+    );
   });
 
-  it('skips blank entries without spending quota and preserves their position', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ translations: [{ text: 'Witaj' }] }),
-    });
+  it('skips blank entries without spending a provider call on them and preserves their position', async () => {
+    translateMock.mockResolvedValue([{ text: 'Witaj' }]);
 
     const service = new TranslationService();
-    const result = await service.translateBatch(
-      ['', 'Hello', '   '],
-      'english',
-      'polish',
-    );
+    const result = await service.translateBatch(['', 'Hello', '   '], 'english', 'polish');
 
     expect(result).toEqual(['', 'Witaj', '']);
-    const [, init] = fetchMock.mock.calls[0];
-    const body = init.body as URLSearchParams;
-    expect(body.getAll('text')).toEqual(['Hello']);
+    expect(translateMock).toHaveBeenCalledWith(['Hello'], expect.anything());
   });
 
-  it('returns all-blank output without calling DeepL when every text is blank', async () => {
+  it('returns all-blank output without calling the provider when every text is blank', async () => {
     const service = new TranslationService();
     const result = await service.translateBatch(['', '  '], 'english', 'polish');
 
     expect(result).toEqual(['', '']);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(translateMock).not.toHaveBeenCalled();
   });
 
   it('rejects "other" as a source or target language', async () => {
@@ -91,39 +65,41 @@ describe('TranslationService.translateBatch', () => {
     await expect(
       service.translateBatch(['Hello'], 'english', 'other'),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(translateMock).not.toHaveBeenCalled();
   });
 
-  it('throws when DEEPL_API_KEY is not configured', async () => {
-    delete process.env.DEEPL_API_KEY;
+  it('retries once and succeeds if the first attempt fails', async () => {
+    translateMock
+      .mockRejectedValueOnce(new Error('network blip'))
+      .mockResolvedValueOnce([{ text: 'Witaj' }]);
+
+    const service = new TranslationService();
+    const result = await service.translateBatch(['Hello'], 'english', 'polish');
+
+    expect(result).toEqual(['Witaj']);
+    expect(translateMock).toHaveBeenCalledTimes(2);
+  }, 10000);
+
+  it('throws after both the initial attempt and the retry fail', async () => {
+    translateMock.mockRejectedValue(new Error('still down'));
     const service = new TranslationService();
 
     await expect(
       service.translateBatch(['Hello'], 'english', 'polish'),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+    expect(translateMock).toHaveBeenCalledTimes(2);
+  }, 10000);
 
-  it('throws when DeepL responds with a non-OK status', async () => {
-    fetchMock.mockResolvedValue({ ok: false, status: 456 });
-    const service = new TranslationService();
-
-    await expect(
-      service.translateBatch(['Hello'], 'english', 'polish'),
-    ).rejects.toBeInstanceOf(InternalServerErrorException);
-  });
-
-  it('uses the pro endpoint when the key has no :fx suffix', async () => {
-    process.env.DEEPL_API_KEY = 'pro-key';
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ translations: [{ text: 'Witaj' }] }),
-    });
+  it('splits large batches into multiple provider calls and reassembles results in order', async () => {
+    const texts = Array.from({ length: 150 }, (_, index) => `text-${index}`);
+    translateMock.mockImplementation(async (chunk: string[]) =>
+      chunk.map((text) => ({ text: `${text}-translated` })),
+    );
 
     const service = new TranslationService();
-    await service.translateBatch(['Hello'], 'english', 'polish');
+    const result = await service.translateBatch(texts, 'english', 'polish');
 
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.deepl.com/v2/translate');
+    expect(translateMock.mock.calls.length).toBeGreaterThan(1);
+    expect(result).toEqual(texts.map((text) => `${text}-translated`));
   });
 });

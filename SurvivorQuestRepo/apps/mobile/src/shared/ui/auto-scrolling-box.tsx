@@ -108,7 +108,11 @@ export function AutoScrollingBox({
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       className={className}
       contentContainerStyle={contentContainerStyle}
-      style={[{ flexShrink: 1 }, style]}
+      // RN's ScrollView defaults to flexGrow: 1 (styles.baseVertical) — without
+      // this override, the box silently expands to fill any flex-1 ancestor's
+      // remaining space instead of hugging its own content, pushing whatever
+      // renders after it far down (e.g. the quiz task card in preview.tsx).
+      style={[{ flexShrink: 1, flexGrow: 0 }, style]}
       scrollEventThrottle={16}
       onScroll={(event) => {
         currentYRef.current = event.nativeEvent.contentOffset.y;

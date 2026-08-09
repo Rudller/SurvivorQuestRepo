@@ -48,6 +48,9 @@ const QUIZ_PRESTART_TEXT: Record<
     mastermindEasyDescription: string;
     mastermindMediumDescription: string;
     mastermindHardDescription: string;
+    miniSudokuEasyDescription: string;
+    miniSudokuMediumDescription: string;
+    miniSudokuHardDescription: string;
     strongPasswordEasyDescription: string;
     strongPasswordMediumDescription: string;
     strongPasswordHardDescription: string;
@@ -92,6 +95,9 @@ const QUIZ_PRESTART_TEXT: Record<
     mastermindEasyDescription: "4 znaki z A-D, bez powtórzeń, 10 prób, 50% punktów",
     mastermindMediumDescription: "4 znaki z A-F, powtórzenia możliwe, 8 prób, 100% punktów",
     mastermindHardDescription: "5 znaków z A-F, powtórzenia możliwe, 6 prób, 150% punktów",
+    miniSudokuEasyDescription: "45 podpowiedzi na planszy, 50% punktów",
+    miniSudokuMediumDescription: "35 podpowiedzi na planszy, 100% punktów",
+    miniSudokuHardDescription: "25 podpowiedzi na planszy, 150% punktów",
     strongPasswordEasyDescription: "10 reguł hasła, 50% punktów",
     strongPasswordMediumDescription: "20 reguł hasła, 100% punktów",
     strongPasswordHardDescription: "30 reguł hasła, 150% punktów",
@@ -135,6 +141,9 @@ const QUIZ_PRESTART_TEXT: Record<
     mastermindEasyDescription: "4 symbols from A-D, no repeats, 10 attempts, 50% points",
     mastermindMediumDescription: "4 symbols from A-F, repeats allowed, 8 attempts, 100% points",
     mastermindHardDescription: "5 symbols from A-F, repeats allowed, 6 attempts, 150% points",
+    miniSudokuEasyDescription: "45 pre-filled cells, 50% points",
+    miniSudokuMediumDescription: "35 pre-filled cells, 100% points",
+    miniSudokuHardDescription: "25 pre-filled cells, 150% points",
     strongPasswordEasyDescription: "10 password rules, 50% points",
     strongPasswordMediumDescription: "20 password rules, 100% points",
     strongPasswordHardDescription: "30 password rules, 150% points",
@@ -178,6 +187,9 @@ const QUIZ_PRESTART_TEXT: Record<
     mastermindEasyDescription: "4 символи з A-D, без повторів, 10 спроб, 50% балів",
     mastermindMediumDescription: "4 символи з A-F, повтори дозволені, 8 спроб, 100% балів",
     mastermindHardDescription: "5 символів з A-F, повтори дозволені, 6 спроб, 150% балів",
+    miniSudokuEasyDescription: "45 підказок на полі, 50% балів",
+    miniSudokuMediumDescription: "35 підказок на полі, 100% балів",
+    miniSudokuHardDescription: "25 підказок на полі, 150% балів",
     strongPasswordEasyDescription: "10 правил пароля, 50% балів",
     strongPasswordMediumDescription: "20 правил пароля, 100% балів",
     strongPasswordHardDescription: "30 правил пароля, 150% балів",
@@ -221,6 +233,9 @@ const QUIZ_PRESTART_TEXT: Record<
     mastermindEasyDescription: "4 символа из A-D, без повторов, 10 попыток, 50% баллов",
     mastermindMediumDescription: "4 символа из A-F, повторы разрешены, 8 попыток, 100% баллов",
     mastermindHardDescription: "5 символов из A-F, повторы разрешены, 6 попыток, 150% баллов",
+    miniSudokuEasyDescription: "45 подсказок на поле, 50% баллов",
+    miniSudokuMediumDescription: "35 подсказок на поле, 100% баллов",
+    miniSudokuHardDescription: "25 подсказок на поле, 150% баллов",
     strongPasswordEasyDescription: "10 правил пароля, 50% баллов",
     strongPasswordMediumDescription: "20 правил пароля, 100% баллов",
     strongPasswordHardDescription: "30 правил пароля, 150% баллов",
@@ -381,7 +396,8 @@ export function QuizPrestartOverlay({
   const actionsGap = adaptiveLayout.s(isTabletLayout ? 14 : 8, 6, 18);
   const actionMinHeight = adaptiveLayout.hit(isTabletLayout ? 64 : 50);
   const actionFontSize = adaptiveLayout.fs(isTabletLayout ? 22 : 16, 14, 26);
-  const supportsDifficulty = stationType === "mastermind" || stationType === "strong-password";
+  const supportsDifficulty =
+    stationType === "mastermind" || stationType === "strong-password" || stationType === "mini-sudoku";
   const shouldChooseDifficulty = supportsDifficulty && challengeDifficultyMode === "player";
   const resolveDifficultyDescription = (difficulty: ChallengeDifficulty) => {
     if (stationType === "mastermind") {
@@ -392,6 +408,15 @@ export function QuizPrestartOverlay({
         return text.mastermindHardDescription;
       }
       return text.mastermindMediumDescription;
+    }
+    if (stationType === "mini-sudoku") {
+      if (difficulty === "easy") {
+        return text.miniSudokuEasyDescription;
+      }
+      if (difficulty === "hard") {
+        return text.miniSudokuHardDescription;
+      }
+      return text.miniSudokuMediumDescription;
     }
     if (stationType === "strong-password") {
       if (difficulty === "easy") {

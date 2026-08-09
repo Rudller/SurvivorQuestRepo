@@ -67,6 +67,11 @@ export const MASTERMIND_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, {
     allowDuplicates: true,
   },
 };
+export const MINI_SUDOKU_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, { givenCount: number }> = {
+  easy: { givenCount: 45 },
+  medium: { givenCount: 35 },
+  hard: { givenCount: 25 },
+};
 export const TEXT_PUZZLE_MAX_ATTEMPTS = 3;
 export const MEMORY_MAX_MISTAKES = 7;
 export const NUMERIC_PINPAD_LAYOUT = [
@@ -138,55 +143,29 @@ export const SIMON_BUTTONS = [
   { id: "8", label: "8", color: "#a855f7" },
   { id: "9", label: "9", color: "#ec4899" },
 ] as const;
-const MINI_SUDOKU_PUZZLES = [
-  {
-    given: [
-      "5", null, null, null, "7", null, null, null, null,
-      null, null, "2", "1", null, null, null, "4", null,
-      null, "9", null, null, null, "2", null, null, "7",
-      "8", null, null, "7", null, null, "4", null, null,
-      null, null, "6", null, null, null, "7", null, null,
-      null, "1", null, null, "2", "4", null, null, null,
-      "9", null, null, null, null, "7", null, null, "4",
-      null, null, "7", "4", null, null, null, null, null,
-      null, "4", null, null, "8", null, "1", null, null,
-    ] as (string | null)[],
-    solution: [
-      "5", "3", "4", "6", "7", "8", "9", "1", "2",
-      "6", "7", "2", "1", "9", "5", "3", "4", "8",
-      "1", "9", "8", "3", "4", "2", "5", "6", "7",
-      "8", "5", "9", "7", "6", "1", "4", "2", "3",
-      "4", "2", "6", "8", "5", "3", "7", "9", "1",
-      "7", "1", "3", "9", "2", "4", "8", "5", "6",
-      "9", "6", "1", "5", "3", "7", "2", "8", "4",
-      "2", "8", "7", "4", "1", "9", "6", "3", "5",
-      "3", "4", "5", "2", "8", "6", "1", "7", "9",
-    ] as string[],
-  },
-  {
-    given: [
-      null, "2", null, null, "5", null, null, null, "9",
-      "4", null, null, "7", null, null, "1", null, null,
-      null, null, "9", null, "2", null, null, "5", null,
-      "2", null, null, null, "6", "7", null, null, "1",
-      null, "6", null, "8", null, null, "2", null, null,
-      null, null, "1", null, "3", null, null, "6", null,
-      "3", null, null, "6", null, "8", null, null, "2",
-      null, "7", null, null, "1", null, "3", null, null,
-      "9", null, "2", null, null, "5", null, "7", null,
-    ] as (string | null)[],
-    solution: [
-      "1", "2", "3", "4", "5", "6", "7", "8", "9",
-      "4", "5", "6", "7", "8", "9", "1", "2", "3",
-      "7", "8", "9", "1", "2", "3", "4", "5", "6",
-      "2", "3", "4", "5", "6", "7", "8", "9", "1",
-      "5", "6", "7", "8", "9", "1", "2", "3", "4",
-      "8", "9", "1", "2", "3", "4", "5", "6", "7",
-      "3", "4", "5", "6", "7", "8", "9", "1", "2",
-      "6", "7", "8", "9", "1", "2", "3", "4", "5",
-      "9", "1", "2", "3", "4", "5", "6", "7", "8",
-    ] as string[],
-  },
+const MINI_SUDOKU_SOLUTIONS: string[][] = [
+  [
+    "5", "3", "4", "6", "7", "8", "9", "1", "2",
+    "6", "7", "2", "1", "9", "5", "3", "4", "8",
+    "1", "9", "8", "3", "4", "2", "5", "6", "7",
+    "8", "5", "9", "7", "6", "1", "4", "2", "3",
+    "4", "2", "6", "8", "5", "3", "7", "9", "1",
+    "7", "1", "3", "9", "2", "4", "8", "5", "6",
+    "9", "6", "1", "5", "3", "7", "2", "8", "4",
+    "2", "8", "7", "4", "1", "9", "6", "3", "5",
+    "3", "4", "5", "2", "8", "6", "1", "7", "9",
+  ],
+  [
+    "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "4", "5", "6", "7", "8", "9", "1", "2", "3",
+    "7", "8", "9", "1", "2", "3", "4", "5", "6",
+    "2", "3", "4", "5", "6", "7", "8", "9", "1",
+    "5", "6", "7", "8", "9", "1", "2", "3", "4",
+    "8", "9", "1", "2", "3", "4", "5", "6", "7",
+    "3", "4", "5", "6", "7", "8", "9", "1", "2",
+    "6", "7", "8", "9", "1", "2", "3", "4", "5",
+    "9", "1", "2", "3", "4", "5", "6", "7", "8",
+  ],
 ];
 export const HANGMAN_ALPHABET = [
   "A",
@@ -646,9 +625,21 @@ export function canTraceWordOnBoggle(board: string[], targetWord: string) {
   return board.some((_, index) => walk(index, 0));
 }
 
-export function resolveMiniSudokuPuzzle(station: StationPuzzleViewModel) {
-  const index = resolveSeed(station.stationId) % MINI_SUDOKU_PUZZLES.length;
-  return MINI_SUDOKU_PUZZLES[index];
+export function resolveMiniSudokuPuzzle(
+  station: StationPuzzleViewModel,
+  difficulty: ChallengeDifficulty = "medium",
+) {
+  const solution = MINI_SUDOKU_SOLUTIONS[resolveSeed(station.stationId) % MINI_SUDOKU_SOLUTIONS.length];
+  const givenCount =
+    MINI_SUDOKU_DIFFICULTY_CONFIG[difficulty]?.givenCount ?? MINI_SUDOKU_DIFFICULTY_CONFIG.medium.givenCount;
+  const revealedIndexes = new Set(
+    shuffleDeterministic(
+      solution.map((_, index) => index),
+      `${station.stationId}-mini-sudoku-${difficulty}`,
+    ).slice(0, givenCount),
+  );
+  const given = solution.map((value, index) => (revealedIndexes.has(index) ? value : null));
+  return { given, solution };
 }
 
 export function resolveMatchingPairs(

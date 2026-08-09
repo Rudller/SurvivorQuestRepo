@@ -33,6 +33,7 @@ import {
   isValidCompletionCodeForMode,
   getQuizLikeStationCopy,
   supportsChallengeDifficulty,
+  hasVisibleQuizQuestionField,
   MEMORY_SYSTEM_STATION_PROMPT,
   MINI_SUDOKU_SYSTEM_STATION_PROMPT,
   MATCHING_SYSTEM_STATION_PROMPT,
@@ -79,10 +80,6 @@ const supportedStationTranslationLanguages: RealizationLanguage[] = [
   "other",
 ];
 const UNCATEGORIZED_FILTER_LABEL = "Bez kategorii";
-// Auto-tłumacz jest w pełni zaimplementowany (backend + frontend), ale ukryty w UI —
-// wymaga klucza DEEPL_API_KEY do zewnętrznego API, którego użycie ponad darmowy limit
-// wymaga płatnej subskrypcji. Ustaw na true, aby przywrócić przycisk w edytorze.
-const AUTO_TRANSLATE_UI_ENABLED = false;
 
 function isRealizationLanguage(value: string): value is RealizationLanguage {
   return (
@@ -1141,25 +1138,23 @@ export function RealizationStationsEditor({
             ))}
           </select>
         </label>
-        {AUTO_TRANSLATE_UI_ENABLED ? (
-          <button
-            type="button"
-            onClick={handleAutoTranslate}
-            disabled={isAutoTranslating || editingLanguage === baseLanguage || editingLanguage === "other" || baseLanguage === "other"}
-            title={
-              editingLanguage === baseLanguage
-                ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
-                : editingLanguage === "other" || baseLanguage === "other"
-                  ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
-                  : undefined
-            }
-            className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={handleAutoTranslate}
+          disabled={isAutoTranslating || editingLanguage === baseLanguage || editingLanguage === "other" || baseLanguage === "other"}
+          title={
+            editingLanguage === baseLanguage
+              ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+              : editingLanguage === "other" || baseLanguage === "other"
+                ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                : undefined
+          }
+          className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
+        </button>
       </div>
-      {AUTO_TRANSLATE_UI_ENABLED && autoTranslateMessage ? (
+      {autoTranslateMessage ? (
         <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>
       ) : null}
 
@@ -1736,47 +1731,45 @@ export function RealizationStationsEditor({
                           {audioError ? <p className="text-xs text-red-300">{audioError}</p> : null}
                         </div>
                       ) : null}
-                      <label className="space-y-1.5">
-                        <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
-                        <textarea
-                          rows={2}
-                          value={
-                            station.type === "memory"
-                              ? selectedStationQuiz?.question?.trim() || MEMORY_SYSTEM_STATION_PROMPT
-                              : station.type === "mini-sudoku"
-                                ? selectedStationQuiz?.question?.trim() || MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                      {hasVisibleQuizQuestionField(station.type) ? (
+                        <label className="space-y-1.5">
+                          <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
+                          <textarea
+                            rows={2}
+                            value={
+                              station.type === "memory"
+                                ? selectedStationQuiz?.question?.trim() || MEMORY_SYSTEM_STATION_PROMPT
                                 : station.type === "matching"
                                   ? selectedStationQuiz?.question?.trim() || MATCHING_SYSTEM_STATION_PROMPT
-                              : selectedStationQuiz?.question ?? ""
-                          }
-                          onChange={(event) =>
-                            updateStationForSelectedLanguage(stationIndex, {
-                                quiz: {
-                                  question:
-                                    station.type === "memory" && !event.target.value.trim()
-                                      ? MEMORY_SYSTEM_STATION_PROMPT
-                                      : station.type === "mini-sudoku" && !event.target.value.trim()
-                                        ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                                : selectedStationQuiz?.question ?? ""
+                            }
+                            onChange={(event) =>
+                              updateStationForSelectedLanguage(stationIndex, {
+                                  quiz: {
+                                    question:
+                                      station.type === "memory" && !event.target.value.trim()
+                                        ? MEMORY_SYSTEM_STATION_PROMPT
                                         : station.type === "matching" && !event.target.value.trim()
                                           ? MATCHING_SYSTEM_STATION_PROMPT
-                                        : station.type === "simon"
-                                          ? normalizeSimonSequenceInput(event.target.value)
-                                        : event.target.value,
-                                  answers: selectedStationQuizAnswers,
-                                  correctAnswerIndex: selectedStationCorrectAnswerIndex,
-                                  audioUrl: selectedStationQuiz?.audioUrl,
-                                  acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
-                                },
-                              })
-                            }
-                          className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                            shouldValidateLanguageFields && stationValidation.invalidQuiz
-                              ? "border-red-500/70 focus:border-red-400/80"
-                              : "border-zinc-700 focus:border-amber-400/80"
-                          }`}
-                          placeholder={quizLikeCopy.questionPlaceholder}
-                        />
-                      </label>
+                                          : station.type === "simon"
+                                            ? normalizeSimonSequenceInput(event.target.value)
+                                          : event.target.value,
+                                    answers: selectedStationQuizAnswers,
+                                    correctAnswerIndex: selectedStationCorrectAnswerIndex,
+                                    audioUrl: selectedStationQuiz?.audioUrl,
+                                    acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
+                                  },
+                                })
+                              }
+                            className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                              shouldValidateLanguageFields && stationValidation.invalidQuiz
+                                ? "border-red-500/70 focus:border-red-400/80"
+                                : "border-zinc-700 focus:border-amber-400/80"
+                            }`}
+                            placeholder={quizLikeCopy.questionPlaceholder}
+                          />
+                        </label>
+                      ) : null}
                       {station.type === "simon" ? (
                         <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
                           <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>

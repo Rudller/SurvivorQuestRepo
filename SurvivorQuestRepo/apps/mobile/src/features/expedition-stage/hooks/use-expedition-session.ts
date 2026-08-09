@@ -5,6 +5,7 @@ import { useUiLanguage } from "../../i18n/ui-language-context";
 import {
   fetchMobileSessionState,
   getApiErrorMessage,
+  getMobileApiErrorCode,
   isSessionTokenInvalidError,
   postMobileCompleteTask,
   postMobileFailTask,
@@ -13,6 +14,7 @@ import {
   postMobileTeamLocation,
   postMobileUploadTaskPhoto,
   postMobileSubmitQrScan,
+  QR_SCAN_SILENT_FAILURE,
 } from "../api/mobile-session.api";
 import {
   buildInitialSessionState,
@@ -1117,6 +1119,9 @@ export function useExpeditionSession(
           text.requestTimedOut,
         );
       } catch (error) {
+        if (getMobileApiErrorCode(error) === "INVALID_QR_CODE") {
+          return QR_SCAN_SILENT_FAILURE;
+        }
         return getApiErrorMessage(error, text.submitQrScanFailed);
       }
 

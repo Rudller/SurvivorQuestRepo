@@ -12,6 +12,7 @@ import type {
   StationType,
 } from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import { useIsDirty } from "../../../shared/lib/use-is-dirty";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -24,6 +25,7 @@ import {
   useUploadStationAudioMutation,
   useUploadStationImageMutation,
 } from "../api/station.api";
+import { useTranslateRealizationTextsMutation } from "../../realizations/api/realization.api";
 import {
   imageModeOptions,
   type ImageInputMode,
@@ -59,6 +61,7 @@ import {
   challengeDifficultyModeOptions,
   challengeDifficultyOptions,
   supportsChallengeDifficulty,
+  hasVisibleQuizQuestionField,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -162,6 +165,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
   const { data: allStations } = useGetStationsQuery();
   const qrEntryCodeSuggestions = useMemo(() => {
     const codes = new Set<string>();
@@ -337,8 +342,152 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     setTranslationAcceptedAnswersInputs((prev) => ({ ...prev, [editingLanguage]: value }));
   }
 
-  function showAutoTranslateNotImplemented() {
-    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
+  async function handleAutoTranslate() {
+    if (isEditingBaseLanguage || editingLanguage === "other" || baseLanguage === "other") {
+      return;
+    }
+
+    type PendingField =
+      | { kind: "name" }
+      | { kind: "description" }
+      | { kind: "question" }
+      | { kind: "answer"; answerIndex: number }
+      | { kind: "matchingLeft"; pairIndex: number }
+      | { kind: "matchingRight"; pairIndex: number };
+
+    const pendingFields: PendingField[] = [];
+    const texts: string[] = [];
+
+    function queue(field: PendingField, text: string) {
+      pendingFields.push(field);
+      texts.push(text);
+    }
+
+    const hasQuiz = isQuizStationType(editValues.type);
+    const nameFilled = Boolean(activeTranslation?.name?.trim());
+    const descriptionFilled = Boolean(activeTranslation?.description?.trim());
+    const questionFilled = Boolean(activeTranslation?.quiz?.question?.trim());
+    const alreadyTranslated = hasQuiz
+      ? nameFilled && descriptionFilled && questionFilled
+      : nameFilled && descriptionFilled;
+
+    if (alreadyTranslated) {
+      setAutoTranslateMessage("To stanowisko ma już tłumaczenie dla tego języka.");
+      return;
+    }
+
+    if (!nameFilled && editValues.name.trim()) {
+      queue({ kind: "name" }, editValues.name);
+    }
+    if (!descriptionFilled && editValues.description.trim()) {
+      queue({ kind: "description" }, editValues.description);
+    }
+
+    if (hasQuiz && !questionFilled && editValues.type !== "simon" && editValues.quizQuestion.trim()) {
+      queue({ kind: "question" }, editValues.quizQuestion);
+
+      if (editValues.type === "quiz" || editValues.type === "audio-quiz") {
+        editValues.quizAnswers.forEach((answer, answerIndex) => {
+          if (answer.trim()) {
+            queue({ kind: "answer", answerIndex }, answer);
+          }
+        });
+      } else if (isOpenQuizStationType(editValues.type)) {
+        const correctAnswer = editValues.quizAnswers[0] ?? "";
+        if (correctAnswer.trim()) {
+          queue({ kind: "answer", answerIndex: 0 }, correctAnswer);
+        }
+      } else if (isMatchingStationType(editValues.type)) {
+        editValues.quizAnswers.forEach((answer, pairIndex) => {
+          const pair = splitMatchingPairAnswer(answer);
+          if (pair.left) {
+            queue({ kind: "matchingLeft", pairIndex }, pair.left);
+          }
+          if (pair.right) {
+            queue({ kind: "matchingRight", pairIndex }, pair.right);
+          }
+        });
+      }
+      // word-puzzle types skip answers entirely: normalizeStationQuizForType always
+      // rebuilds them from the translated question.
+    }
+
+    if (texts.length === 0) {
+      setAutoTranslateMessage("Brak treści do przetłumaczenia w języku podstawowym.");
+      return;
+    }
+
+    setAutoTranslateMessage(null);
+
+    let translatedTexts: string[];
+    try {
+      const response = await translateRealizationTexts({
+        sourceLanguage: baseLanguage,
+        targetLanguage: editingLanguage,
+        texts,
+      }).unwrap();
+      translatedTexts = response.texts;
+    } catch {
+      setAutoTranslateMessage("Nie udało się przetłumaczyć stanowiska. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+      return;
+    }
+
+    const patch: Partial<StationTranslation> = {};
+    let translatedQuestion: string | undefined;
+    const answers = createEmptyQuizAnswers();
+    const matchingLeft = new Map<number, string>();
+    const matchingRight = new Map<number, string>();
+
+    pendingFields.forEach((field, position) => {
+      const translated = translatedTexts[position]?.trim();
+      if (!translated) {
+        return;
+      }
+
+      if (field.kind === "name") {
+        patch.name = translated;
+      } else if (field.kind === "description") {
+        patch.description = translated;
+      } else if (field.kind === "question") {
+        translatedQuestion = translated;
+      } else if (field.kind === "answer") {
+        answers[field.answerIndex] = translated;
+      } else if (field.kind === "matchingLeft") {
+        matchingLeft.set(field.pairIndex, translated);
+      } else if (field.kind === "matchingRight") {
+        matchingRight.set(field.pairIndex, translated);
+      }
+    });
+
+    if (translatedQuestion) {
+      const finalAnswers = isMatchingStationType(editValues.type)
+        ? editValues.quizAnswers.map((originalAnswer, pairIndex) => {
+            const originalPair = splitMatchingPairAnswer(originalAnswer);
+            const left = matchingLeft.get(pairIndex) ?? originalPair.left;
+            const right = matchingRight.get(pairIndex) ?? originalPair.right;
+            return joinMatchingPairAnswer(left, right);
+          })
+        : answers;
+
+      const translatedQuiz = normalizeStationQuizForType(editValues.type, {
+        question: translatedQuestion,
+        answers: finalAnswers,
+        correctAnswerIndex: 0,
+        audioUrl: activeTranslation?.quiz?.audioUrl,
+        acceptedAnswers: activeTranslation?.quiz?.acceptedAnswers,
+      });
+
+      if (translatedQuiz) {
+        patch.quiz = translatedQuiz;
+      }
+    }
+
+    if (Object.keys(patch).length > 0) {
+      updateActiveTranslation(patch);
+      setAutoTranslateMessage("Przetłumaczono stanowisko.");
+    } else {
+      setAutoTranslateMessage("Nie udało się uzupełnić żadnego pola — spróbuj ponownie.");
+    }
   }
 
   const addCategory = () => {
@@ -354,22 +503,40 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     setCategoryInput("");
   };
 
+  const isDirty = useIsDirty({
+    editValues,
+    qrScanCodesInput,
+    qrEntryCode,
+    openQuizAcceptedAnswersInput,
+    translationAcceptedAnswersInputs,
+    baseLanguage,
+    editingLanguage,
+    completionCodeMode,
+    editImageMode,
+    editAudioMode,
+    editAudioFileName: editAudioFile?.name ?? null,
+  });
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij edycję"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
 
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
-        <div className="space-y-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-zinc-100">Edytuj stanowisko</h2>
-              <p className="mt-1 text-sm text-zinc-400">Zmieniasz dane stanowiska: {station.name}</p>
-            </div>
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-2xl flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-zinc-800 bg-zinc-950 p-4 sm:px-6">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-100">Edytuj stanowisko</h2>
+            <p className="mt-1 text-sm text-zinc-400">Zmieniasz dane stanowiska: {station.name}</p>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -377,9 +544,27 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             >
               Zamknij
             </button>
+            <button
+              type="submit"
+              form="edit-station-form"
+              disabled={isUpdating || isUploadingImage || isUploadingAudio}
+              className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+            >
+              {isUpdating
+                ? "Zapisywanie..."
+                : isUploadingImage
+                  ? "Przesyłanie obrazu..."
+                  : isUploadingAudio
+                    ? "Przesyłanie audio..."
+                    : "Zapisz"}
+            </button>
           </div>
+        </div>
 
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-5">
           <form
+            id="edit-station-form"
             onSubmit={async (event) => {
               event.preventDefault();
               setEditFormError(null);
@@ -411,7 +596,10 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               const quizConfig =
                 isQuizStationType(editValues.type)
                   ? normalizeStationQuizForType(editValues.type, {
-                      question: editValues.quizQuestion,
+                      question:
+                        editValues.type === "mini-sudoku"
+                          ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                          : editValues.quizQuestion,
                       answers: editValues.quizAnswers,
                       correctAnswerIndex: editValues.quizCorrectAnswerIndex,
                       audioUrl: editValues.type === "audio-quiz" ? editValues.quizAudioUrl : undefined,
@@ -570,12 +758,23 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </label>
               <button
                 type="button"
-                onClick={showAutoTranslateNotImplemented}
-                className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
+                onClick={() => void handleAutoTranslate()}
+                disabled={isAutoTranslating || isEditingBaseLanguage || editingLanguage === "other" || baseLanguage === "other"}
+                title={
+                  isEditingBaseLanguage
+                    ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+                    : editingLanguage === "other" || baseLanguage === "other"
+                      ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                      : undefined
+                }
+                className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Auto-tłumacz
+                {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
               </button>
             </div>
+            {autoTranslateMessage ? (
+              <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>
+            ) : null}
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
@@ -909,29 +1108,29 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
                   </div>
                 ) : null}
-                <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
-                  <textarea
-                    value={activeQuizQuestion}
-                    onChange={(event) => {
-                      const rawValue = event.target.value;
-                      const nextValue =
-                        editValues.type === "memory" && !rawValue.trim()
-                          ? MEMORY_SYSTEM_STATION_PROMPT
-                          : editValues.type === "mini-sudoku" && !rawValue.trim()
-                            ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
+                {hasVisibleQuizQuestionField(editValues.type) ? (
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
+                    <textarea
+                      value={activeQuizQuestion}
+                      onChange={(event) => {
+                        const rawValue = event.target.value;
+                        const nextValue =
+                          editValues.type === "memory" && !rawValue.trim()
+                            ? MEMORY_SYSTEM_STATION_PROMPT
                             : editValues.type === "matching" && !rawValue.trim()
                               ? MATCHING_SYSTEM_STATION_PROMPT
-                          : editValues.type === "simon"
-                            ? normalizeSimonSequenceInput(rawValue)
-                            : rawValue;
-                      setActiveQuizField({ question: nextValue });
-                    }}
-                    rows={2}
-                    placeholder={quizLikeCopy.questionPlaceholder}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                </label>
+                            : editValues.type === "simon"
+                              ? normalizeSimonSequenceInput(rawValue)
+                              : rawValue;
+                        setActiveQuizField({ question: nextValue });
+                      }}
+                      rows={2}
+                      placeholder={quizLikeCopy.questionPlaceholder}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                ) : null}
                 {editValues.type === "simon" ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
                     <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
@@ -1368,29 +1567,6 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
             </div>
 
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
-              >
-                Anuluj
-              </button>
-              <button
-                type="submit"
-                disabled={isUpdating || isUploadingImage || isUploadingAudio}
-                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-              >
-                {isUpdating
-                  ? "Zapisywanie..."
-                  : isUploadingImage
-                    ? "Przesyłanie obrazu..."
-                    : isUploadingAudio
-                      ? "Przesyłanie audio..."
-                      : "Zapisz"}
-              </button>
-            </div>
-
             {editFormError && <p className="text-sm text-red-300">{editFormError}</p>}
           </form>
 
@@ -1435,6 +1611,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             </button>
             {deleteError && <p className="text-sm text-red-200">{deleteError}</p>}
           </section>
+        </div>
         </div>
       </aside>
     </>

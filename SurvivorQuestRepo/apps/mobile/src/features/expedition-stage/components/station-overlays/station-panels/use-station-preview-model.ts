@@ -138,6 +138,7 @@ type UseStationPreviewModelArgs = {
   mastermindInput: string;
   mastermindAttempts: MastermindAttempt[];
   mastermindDifficulty: ChallengeDifficulty;
+  miniSudokuDifficulty: ChallengeDifficulty;
   anagramInput: string;
   anagramAttempts: number;
   caesarInput: string;
@@ -201,6 +202,7 @@ export function buildStationPreviewModel({
   mastermindInput,
   mastermindAttempts,
   mastermindDifficulty,
+  miniSudokuDifficulty,
   anagramInput,
   anagramAttempts,
   caesarInput,
@@ -296,31 +298,35 @@ export function buildStationPreviewModel({
         ? Math.max(128, Math.round(viewportHeight * 0.2))
         : Math.max(92, Math.round(viewportHeight * 0.14));
     }
-    if (isWordleStation) {
-      return isTabletOverlay
-        ? Math.max(230, Math.round(viewportHeight * 0.4))
-        : Math.max(290, Math.round(viewportHeight * 0.38));
-    }
+    // isWordleStation has no branch here: its media box now flexes
+    // (station-media-panel.tsx) instead of using a fixed height computed
+    // from the viewport, so the guess grid shrinks when the station
+    // description needs room, same treatment as mini-sudoku.
     if (isAnagramStation) {
       return isTabletOverlay
         ? Math.max(210, Math.round(availableMediaHeight * 0.34))
         : Math.max(100, Math.round(availableMediaHeight * 0.16));
     }
     if (isSimonStation) {
+      // The mistake dots, status, and progress row that used to live in this
+      // box now render below it (preview.tsx) — only the 3x3 button grid is
+      // left in here, so it needs much less height than before.
       return isTabletOverlay
-        ? Math.max(540, Math.round(availableMediaHeight * 0.72))
-        : Math.max(420, Math.round(availableMediaHeight * 0.56));
+        ? Math.max(300, Math.round(availableMediaHeight * 0.65))
+        : Math.max(220, Math.round(availableMediaHeight * 0.55));
     }
     if (isMemoryStation) {
+      // The prompt and pairs-found indicator that used to live in this box
+      // now render above/below it (preview.tsx) — only the card grid is
+      // left in here, so it needs less height than before.
       return isTabletOverlay
-        ? Math.max(560, Math.round(availableMediaHeight * 0.8))
-        : Math.max(180, Math.round(availableMediaHeight * 0.28));
+        ? Math.max(460, Math.round(availableMediaHeight * 0.66))
+        : Math.max(150, Math.round(availableMediaHeight * 0.22));
     }
-    if (isMiniSudokuStation) {
-      return isTabletOverlay
-        ? Math.max(560, Math.round(availableMediaHeight * 0.74))
-        : Math.max(300, Math.round(availableMediaHeight * 0.45));
-    }
+    // isMiniSudokuStation has no branch here: its media box now flexes
+    // (station-media-panel.tsx) and its grid self-sizes off the box's
+    // measured layout (mini-sudoku-station-panel.tsx), instead of using a
+    // fixed height computed from the viewport.
     if (isMastermindStation) {
       return isTabletOverlay
         ? Math.max(340, Math.round(availableMediaHeight * 0.56))
@@ -471,7 +477,7 @@ export function buildStationPreviewModel({
   const boggleBoardSide = Math.sqrt(boggleBoardLetters.length);
   const normalizedBoggleInput = normalizePuzzleWord(boggleInput);
   const boggleAttemptsLeft = Math.max(0, TEXT_PUZZLE_MAX_ATTEMPTS - boggleAttempts);
-  const miniSudokuPuzzle = isMiniSudokuStation ? resolveMiniSudokuPuzzle(station) : null;
+  const miniSudokuPuzzle = isMiniSudokuStation ? resolveMiniSudokuPuzzle(station, miniSudokuDifficulty) : null;
   const normalizedMiniSudokuValues = miniSudokuValues;
   const miniSudokuGridMeta = miniSudokuPuzzle ? resolveMiniSudokuGridMeta(miniSudokuPuzzle.solution.length) : null;
   const miniSudokuAttemptedValues =
@@ -487,7 +493,6 @@ export function buildStationPreviewModel({
         )
       : [];
   const miniSudokuHasConflicts = miniSudokuConflictIndexes.length > 0;
-  const miniSudokuDisplayResult = miniSudokuHasConflicts ? text.miniSudokuIncorrect : miniSudokuResult;
   const matchingPairs = isMatchingStation ? resolveMatchingPairs(station, uiLanguage) : [];
   const matchingAllRightOptions = isMatchingStation
     ? shuffleDeterministic(
@@ -660,7 +665,6 @@ export function buildStationPreviewModel({
     miniSudokuAttemptedValues,
     miniSudokuConflictIndexes,
     miniSudokuHasConflicts,
-    miniSudokuDisplayResult,
     matchingPairs,
     matchingMatchedCount,
     matchingAllMatched,

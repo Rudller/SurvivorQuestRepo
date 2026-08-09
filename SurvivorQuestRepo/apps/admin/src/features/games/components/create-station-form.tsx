@@ -12,6 +12,7 @@ import type {
   StationType,
 } from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import { useIsDirty } from "../../../shared/lib/use-is-dirty";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -23,6 +24,7 @@ import {
   useUploadStationAudioMutation,
   useUploadStationImageMutation,
 } from "../api/station.api";
+import { useTranslateRealizationTextsMutation } from "../../realizations/api/realization.api";
 import {
   imageModeOptions,
   type ImageInputMode,
@@ -60,6 +62,7 @@ import {
   challengeDifficultyModeOptions,
   challengeDifficultyOptions,
   supportsChallengeDifficulty,
+  hasVisibleQuizQuestionField,
   type CompletionCodeGeneratorMode,
   completionCodeModeOptions,
 } from "../station.utils";
@@ -159,6 +162,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
   const { data: allStations } = useGetStationsQuery();
   const qrEntryCodeSuggestions = useMemo(() => {
     const codes = new Set<string>();
@@ -312,8 +317,152 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
     setTranslationAcceptedAnswersInputs((prev) => ({ ...prev, [editingLanguage]: value }));
   }
 
-  function showAutoTranslateNotImplemented() {
-    window.alert("Auto-translate nie jest jeszcze zaimplementowany.");
+  async function handleAutoTranslate() {
+    if (isEditingBaseLanguage || editingLanguage === "other" || baseLanguage === "other") {
+      return;
+    }
+
+    type PendingField =
+      | { kind: "name" }
+      | { kind: "description" }
+      | { kind: "question" }
+      | { kind: "answer"; answerIndex: number }
+      | { kind: "matchingLeft"; pairIndex: number }
+      | { kind: "matchingRight"; pairIndex: number };
+
+    const pendingFields: PendingField[] = [];
+    const texts: string[] = [];
+
+    function queue(field: PendingField, text: string) {
+      pendingFields.push(field);
+      texts.push(text);
+    }
+
+    const hasQuiz = isQuizStationType(type);
+    const nameFilled = Boolean(activeTranslation?.name?.trim());
+    const descriptionFilled = Boolean(activeTranslation?.description?.trim());
+    const questionFilled = Boolean(activeTranslation?.quiz?.question?.trim());
+    const alreadyTranslated = hasQuiz
+      ? nameFilled && descriptionFilled && questionFilled
+      : nameFilled && descriptionFilled;
+
+    if (alreadyTranslated) {
+      setAutoTranslateMessage("To stanowisko ma już tłumaczenie dla tego języka.");
+      return;
+    }
+
+    if (!nameFilled && name.trim()) {
+      queue({ kind: "name" }, name);
+    }
+    if (!descriptionFilled && description.trim()) {
+      queue({ kind: "description" }, description);
+    }
+
+    if (hasQuiz && !questionFilled && type !== "simon" && quizQuestion.trim()) {
+      queue({ kind: "question" }, quizQuestion);
+
+      if (type === "quiz" || type === "audio-quiz") {
+        quizAnswers.forEach((answer, answerIndex) => {
+          if (answer.trim()) {
+            queue({ kind: "answer", answerIndex }, answer);
+          }
+        });
+      } else if (isOpenQuizStationType(type)) {
+        const correctAnswer = quizAnswers[0] ?? "";
+        if (correctAnswer.trim()) {
+          queue({ kind: "answer", answerIndex: 0 }, correctAnswer);
+        }
+      } else if (isMatchingStationType(type)) {
+        quizAnswers.forEach((answer, pairIndex) => {
+          const pair = splitMatchingPairAnswer(answer);
+          if (pair.left) {
+            queue({ kind: "matchingLeft", pairIndex }, pair.left);
+          }
+          if (pair.right) {
+            queue({ kind: "matchingRight", pairIndex }, pair.right);
+          }
+        });
+      }
+      // word-puzzle types skip answers entirely: normalizeStationQuizForType always
+      // rebuilds them from the translated question.
+    }
+
+    if (texts.length === 0) {
+      setAutoTranslateMessage("Brak treści do przetłumaczenia w języku podstawowym.");
+      return;
+    }
+
+    setAutoTranslateMessage(null);
+
+    let translatedTexts: string[];
+    try {
+      const response = await translateRealizationTexts({
+        sourceLanguage: baseLanguage,
+        targetLanguage: editingLanguage,
+        texts,
+      }).unwrap();
+      translatedTexts = response.texts;
+    } catch {
+      setAutoTranslateMessage("Nie udało się przetłumaczyć stanowiska. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+      return;
+    }
+
+    const patch: Partial<StationTranslation> = {};
+    let translatedQuestion: string | undefined;
+    const answers = createEmptyQuizAnswers();
+    const matchingLeft = new Map<number, string>();
+    const matchingRight = new Map<number, string>();
+
+    pendingFields.forEach((field, position) => {
+      const translated = translatedTexts[position]?.trim();
+      if (!translated) {
+        return;
+      }
+
+      if (field.kind === "name") {
+        patch.name = translated;
+      } else if (field.kind === "description") {
+        patch.description = translated;
+      } else if (field.kind === "question") {
+        translatedQuestion = translated;
+      } else if (field.kind === "answer") {
+        answers[field.answerIndex] = translated;
+      } else if (field.kind === "matchingLeft") {
+        matchingLeft.set(field.pairIndex, translated);
+      } else if (field.kind === "matchingRight") {
+        matchingRight.set(field.pairIndex, translated);
+      }
+    });
+
+    if (translatedQuestion) {
+      const finalAnswers = isMatchingStationType(type)
+        ? quizAnswers.map((originalAnswer, pairIndex) => {
+            const originalPair = splitMatchingPairAnswer(originalAnswer);
+            const left = matchingLeft.get(pairIndex) ?? originalPair.left;
+            const right = matchingRight.get(pairIndex) ?? originalPair.right;
+            return joinMatchingPairAnswer(left, right);
+          })
+        : answers;
+
+      const translatedQuiz = normalizeStationQuizForType(type, {
+        question: translatedQuestion,
+        answers: finalAnswers,
+        correctAnswerIndex: 0,
+        audioUrl: activeTranslation?.quiz?.audioUrl,
+        acceptedAnswers: activeTranslation?.quiz?.acceptedAnswers,
+      });
+
+      if (translatedQuiz) {
+        patch.quiz = translatedQuiz;
+      }
+    }
+
+    if (Object.keys(patch).length > 0) {
+      updateActiveTranslation(patch);
+      setAutoTranslateMessage("Przetłumaczono stanowisko.");
+    } else {
+      setAutoTranslateMessage("Nie udało się uzupełnić żadnego pola — spróbuj ponownie.");
+    }
   }
 
   const addCategory = () => {
@@ -326,17 +475,55 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
     setCategoryInput("");
   };
 
+  const isDirty = useIsDirty({
+    name,
+    type,
+    categories,
+    description,
+    imageUrl,
+    imageFileName: imageFile?.name ?? null,
+    points,
+    timeLimitSeconds,
+    completionCode,
+    completionCodeMode,
+    qrEntryCode,
+    qrScanCodesInput,
+    quizQuestion,
+    quizAnswers,
+    quizCorrectAnswerIndex,
+    quizAudioUrl,
+    openQuizAcceptedAnswersInput,
+    translations,
+    translationAcceptedAnswersInputs,
+    baseLanguage,
+    editingLanguage,
+    challengeDifficultyMode,
+    challengeDifficulty,
+    completionStopwatchEnabled,
+    allowConcurrentTeams,
+    fastestCompletionBonusPoints,
+    audioFileName: audioFile?.name ?? null,
+    latitude,
+    longitude,
+    createImageMode,
+    createAudioMode,
+  });
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij panel tworzenia stanowiska"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-2xl flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950">
         <form
-          className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5"
+          className="flex h-full min-h-0 flex-col"
           onSubmit={async (event) => {
             event.preventDefault();
             setFormError(null);
@@ -368,7 +555,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               const quizConfig =
                isQuizStationType(type)
                  ? normalizeStationQuizForType(type, {
-                     question: quizQuestion,
+                     question: type === "mini-sudoku" ? MINI_SUDOKU_SYSTEM_STATION_PROMPT : quizQuestion,
                      answers: quizAnswers,
                      correctAnswerIndex: quizCorrectAnswerIndex,
                      audioUrl: type === "audio-quiz" ? quizAudioUrl : undefined,
@@ -502,9 +689,9 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
             }
           }}
         >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Nowe stanowisko</h2>
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-950 p-4 sm:px-6">
+        <h2 className="text-lg font-semibold">Nowe stanowisko</h2>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -512,8 +699,18 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
           >
             Zamknij
           </button>
+          <button
+            type="submit"
+            disabled={isBusy}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+          >
+            {isCreating ? "Dodawanie..." : isUploadingImage ? "Przesyłanie obrazu..." : "Dodaj stanowisko"}
+          </button>
         </div>
+      </div>
 
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+        <div className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/80 p-5">
         <div className="grid gap-4">
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
             <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-200">
@@ -561,12 +758,23 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
             </label>
             <button
               type="button"
-              onClick={showAutoTranslateNotImplemented}
-              className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300"
+              onClick={() => void handleAutoTranslate()}
+              disabled={isAutoTranslating || isEditingBaseLanguage || editingLanguage === "other" || baseLanguage === "other"}
+              title={
+                isEditingBaseLanguage
+                  ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+                  : editingLanguage === "other" || baseLanguage === "other"
+                    ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                    : undefined
+              }
+              className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Auto-tłumacz
+              {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
             </button>
           </div>
+          {autoTranslateMessage ? (
+            <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>
+          ) : null}
 
           <label className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa stanowiska</span>
@@ -892,29 +1100,29 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
                 </div>
               ) : null}
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
-                <textarea
-                  value={activeQuizQuestion}
-                  onChange={(event) => {
-                    const rawValue = event.target.value;
-                    const nextValue =
-                      type === "memory" && !rawValue.trim()
-                        ? MEMORY_SYSTEM_STATION_PROMPT
-                        : type === "mini-sudoku" && !rawValue.trim()
-                          ? MINI_SUDOKU_SYSTEM_STATION_PROMPT
-                        : type === "matching" && !rawValue.trim()
-                          ? MATCHING_SYSTEM_STATION_PROMPT
-                        : type === "simon"
-                          ? normalizeSimonSequenceInput(rawValue)
-                          : rawValue;
-                    setActiveQuizField({ question: nextValue });
-                  }}
-                  rows={2}
-                  placeholder={quizLikeCopy.questionPlaceholder}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
+              {hasVisibleQuizQuestionField(type) ? (
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
+                  <textarea
+                    value={activeQuizQuestion}
+                    onChange={(event) => {
+                      const rawValue = event.target.value;
+                      const nextValue =
+                        type === "memory" && !rawValue.trim()
+                          ? MEMORY_SYSTEM_STATION_PROMPT
+                          : type === "matching" && !rawValue.trim()
+                            ? MATCHING_SYSTEM_STATION_PROMPT
+                          : type === "simon"
+                            ? normalizeSimonSequenceInput(rawValue)
+                            : rawValue;
+                      setActiveQuizField({ question: nextValue });
+                    }}
+                    rows={2}
+                    placeholder={quizLikeCopy.questionPlaceholder}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+              ) : null}
               {type === "simon" ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
                   <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
@@ -1393,22 +1601,6 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
         </div>
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
-
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
-          >
-            Anuluj
-          </button>
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-          >
-            {isCreating ? "Dodawanie..." : isUploadingImage ? "Przesyłanie obrazu..." : "Dodaj stanowisko"}
-          </button>
         </div>
       </div>
         </form>

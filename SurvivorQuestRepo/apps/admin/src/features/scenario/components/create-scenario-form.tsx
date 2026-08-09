@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Station } from "@/features/games/types/station";
 import { stationTypeOptions } from "@/features/games/types/station";
+import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useCreateScenarioMutation } from "../api/scenario.api";
 
 interface CreateScenarioFormProps {
@@ -29,12 +30,18 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
     );
   }
 
+  const isDirty = useIsDirty({ name, description, selectedStationIds });
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij panel tworzenia scenariusza"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
       <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4 sm:p-6">

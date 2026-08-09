@@ -3,6 +3,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 
 const CORRECT_SCAN_ASSET: number = require("../assets/qr-scan-sfx/correct.wav");
 const INCORRECT_SCAN_ASSET: number = require("../assets/qr-scan-sfx/incorrect.wav");
+const STATION_OPENED_ASSET: number = CORRECT_SCAN_ASSET;
 
 function removePlayer(player: AudioPlayer) {
   try {
@@ -20,20 +21,26 @@ function removePlayer(player: AudioPlayer) {
 export function useQrScanFeedbackSound() {
   const correctPlayerRef = useRef<AudioPlayer | null>(null);
   const incorrectPlayerRef = useRef<AudioPlayer | null>(null);
-  const isAudioModeReadyRef = useRef(false);
+  const stationOpenedPlayerRef = useRef<AudioPlayer | null>(null);
+  // A ref holding the in-flight setup promise (rather than a boolean flag
+  // flipped before the await resolves) so overlapping playCorrect/playIncorrect
+  // calls made while setup is still pending await the SAME promise instead of
+  // racing ahead of a not-yet-configured audio session.
+  const audioModeReadyPromiseRef = useRef<Promise<void> | null>(null);
 
-  const ensureAudioMode = useCallback(async () => {
-    if (isAudioModeReadyRef.current) {
-      return;
+  const ensureAudioMode = useCallback(() => {
+    if (!audioModeReadyPromiseRef.current) {
+      audioModeReadyPromiseRef.current = setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: "duckOthers",
+        shouldRouteThroughEarpiece: false,
+        shouldPlayInBackground: false,
+      })
+        .then(() => undefined)
+        .catch(() => undefined);
     }
-    isAudioModeReadyRef.current = true;
-    await setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-      interruptionMode: "duckOthers",
-      shouldRouteThroughEarpiece: false,
-      shouldPlayInBackground: false,
-    }).catch(() => undefined);
+    return audioModeReadyPromiseRef.current;
   }, []);
 
   const playAsset = useCallback(
@@ -74,6 +81,10 @@ export function useQrScanFeedbackSound() {
     void playAsset(incorrectPlayerRef, INCORRECT_SCAN_ASSET);
   }, [playAsset]);
 
+  const playStationOpened = useCallback(() => {
+    void playAsset(stationOpenedPlayerRef, STATION_OPENED_ASSET);
+  }, [playAsset]);
+
   useEffect(() => {
     return () => {
       if (correctPlayerRef.current) {
@@ -84,8 +95,12 @@ export function useQrScanFeedbackSound() {
         removePlayer(incorrectPlayerRef.current);
         incorrectPlayerRef.current = null;
       }
+      if (stationOpenedPlayerRef.current) {
+        removePlayer(stationOpenedPlayerRef.current);
+        stationOpenedPlayerRef.current = null;
+      }
     };
   }, []);
 
-  return { playCorrect, playIncorrect };
+  return { playCorrect, playIncorrect, playStationOpened };
 }

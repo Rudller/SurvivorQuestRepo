@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
+import { QR_SCAN_SILENT_FAILURE } from "../../../api/mobile-session.api";
 import type { StationTestViewModel } from "../types";
 import { useStationPanelLayout } from "./shared-ui";
 import { useQrScanFeedbackSound } from "./use-qr-scan-feedback-sound";
@@ -91,7 +92,9 @@ export function useQrHuntScan(
 
     if (error) {
       feedbackSound.playIncorrect();
-      setSubmitError(error);
+      if (error !== QR_SCAN_SILENT_FAILURE) {
+        setSubmitError(error);
+      }
       return;
     }
 

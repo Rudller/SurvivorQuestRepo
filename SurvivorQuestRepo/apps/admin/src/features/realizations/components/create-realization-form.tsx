@@ -23,6 +23,7 @@ import {
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
+import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { FormSection } from "@/shared/components/form-section";
 import { SummaryCard } from "@/shared/components/summary-card";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
@@ -415,12 +416,52 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     input.click();
   }
 
+  const isDirty = useIsDirty({
+    companyName,
+    location,
+    contactPerson,
+    contactPhone,
+    contactEmail,
+    selectedLanguages,
+    customLanguage,
+    introText,
+    gameRules,
+    instructors,
+    selectedType,
+    logoFileName: logoFile?.name ?? null,
+    logoUrl,
+    logoInputMode,
+    hideMap,
+    mapImageFileName: mapImageFile?.name ?? null,
+    mapImageUrl,
+    mapImageInputMode,
+    offerPdfFileName: offerPdfFile?.name ?? null,
+    offerPdfUrl,
+    offerPdfName,
+    selectedScenarioId,
+    teamCount,
+    peopleCount,
+    durationMinutes,
+    showLeaderboardDuringGame,
+    showLeaderboardOnFinish,
+    teamStationNumberingEnabled,
+    timedStationPointsDecayEnabled,
+    hideTaskList,
+    status,
+    scheduledAt,
+    scenarioStations,
+  });
+
   return (
     <>
       <button
         type="button"
         aria-label="Zamknij panel tworzenia realizacji"
-        onClick={onClose}
+        onClick={() => {
+          if (!isDirty) {
+            onClose();
+          }
+        }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
       <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950 lg:w-1/2">

@@ -97,6 +97,12 @@ type StationQuizTaskWrapperProps = {
   showBorder?: boolean;
   className?: string;
   footer?: ReactNode;
+  // Opt-in: makes every box in the chain (outer wrapper, bordered panel,
+  // children padding box) flex-1, so `children` receives the wrapper's full
+  // height as a definite size instead of hugging its own content. Needed by
+  // panels whose content sizes itself off the available height (e.g. the
+  // memory grid) — off by default so existing callers keep hugging content.
+  fillHeight?: boolean;
 };
 
 export function StationQuizTaskWrapper({
@@ -109,6 +115,7 @@ export function StationQuizTaskWrapper({
   showBorder = true,
   className,
   footer,
+  fillHeight = false,
 }: StationQuizTaskWrapperProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const { promptFontSize } = useStationPanelLayout();
@@ -122,9 +129,9 @@ export function StationQuizTaskWrapper({
   ) : null;
 
   return (
-    <View className={className}>
+    <View className={`${fillHeight ? "flex-1 " : ""}${className ?? ""}`}>
       <View
-        className={`rounded-2xl${showBorder ? " border" : ""}`}
+        className={`rounded-2xl${showBorder ? " border" : ""}${fillHeight ? " flex-1" : ""}`}
         style={{
           ...(showBorder ? { borderColor: EXPEDITION_THEME.border } : {}),
           backgroundColor: EXPEDITION_THEME.panelMuted,
@@ -144,6 +151,7 @@ export function StationQuizTaskWrapper({
           </Text>
         ) : null}
         <View
+          className={fillHeight ? "flex-1" : undefined}
           style={{
             paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
             paddingBottom: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 7, 16),
