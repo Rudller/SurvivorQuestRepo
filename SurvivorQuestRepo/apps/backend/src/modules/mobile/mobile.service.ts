@@ -655,9 +655,7 @@ export class MobileService {
       );
     }
 
-    const station = await this.stationService.findStationById(
-      input.stationId,
-    );
+    const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
       throw new NotFoundException('Station not found');
     }
@@ -761,9 +759,7 @@ export class MobileService {
       );
     }
 
-    const station = await this.stationService.findStationById(
-      input.stationId,
-    );
+    const station = await this.stationService.findStationById(input.stationId);
     if (!station || station.realizationId !== realization.id) {
       throw new NotFoundException('Station not found');
     }
@@ -874,7 +870,8 @@ export class MobileService {
     const finishedAt = parseMobileTaskTimestamp(input.scannedAt, new Date());
     const finishedAtIso = finishedAt.toISOString();
     const shouldApplyTimedPointsDecay = hasTimedPointsDecay({
-      timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
+      timedStationPointsDecayEnabled:
+        realization.timedStationPointsDecayEnabled,
       timeLimitSeconds: station.timeLimitSeconds,
     });
     const elapsedSeconds = Math.max(
@@ -1359,15 +1356,16 @@ export class MobileService {
     }
 
     if (!station.allowConcurrentTeams) {
-      const activeOtherTeamProgress = await this.prisma.teamTaskProgress.findFirst({
-        where: {
-          realizationId: realization.id,
-          stationId: input.stationId,
-          status: TaskStatus.IN_PROGRESS,
-          teamId: { not: team.id },
-        },
-        select: { id: true },
-      });
+      const activeOtherTeamProgress =
+        await this.prisma.teamTaskProgress.findFirst({
+          where: {
+            realizationId: realization.id,
+            stationId: input.stationId,
+            status: TaskStatus.IN_PROGRESS,
+            teamId: { not: team.id },
+          },
+          select: { id: true },
+        });
 
       if (activeOtherTeamProgress) {
         throw new ConflictException({
@@ -1379,8 +1377,7 @@ export class MobileService {
     }
 
     const startedAtIso =
-      existingProgress?.startedAt?.toISOString() ||
-      startedAt.toISOString();
+      existingProgress?.startedAt?.toISOString() || startedAt.toISOString();
 
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
@@ -1488,8 +1485,7 @@ export class MobileService {
       }
     }
 
-    const startedAtSource =
-      existingProgress?.startedAt?.toISOString() || null;
+    const startedAtSource = existingProgress?.startedAt?.toISOString() || null;
 
     const shouldApplyTimedPointsDecay = hasTimedPointsDecay({
       timedStationPointsDecayEnabled:
@@ -1497,7 +1493,8 @@ export class MobileService {
       timeLimitSeconds: station.timeLimitSeconds,
     });
     const requiresStartedAt =
-      isTimedStartRequiredStationType(station.type) || shouldApplyTimedPointsDecay;
+      isTimedStartRequiredStationType(station.type) ||
+      shouldApplyTimedPointsDecay;
 
     if (requiresStartedAt && !startedAtSource) {
       throw new BadRequestException('Task timer not started');
@@ -1623,15 +1620,17 @@ export class MobileService {
 
     let fastestBonusPoints = 0;
     if (isBonusEligibleStation) {
-      const otherTeamAlreadyDone = await this.prisma.teamTaskProgress.findFirst({
-        where: {
-          realizationId,
-          stationId,
-          status: TaskStatus.DONE,
-          teamId: { not: teamId },
+      const otherTeamAlreadyDone = await this.prisma.teamTaskProgress.findFirst(
+        {
+          where: {
+            realizationId,
+            stationId,
+            status: TaskStatus.DONE,
+            teamId: { not: teamId },
+          },
+          select: { id: true },
         },
-        select: { id: true },
-      });
+      );
 
       if (!otherTeamAlreadyDone) {
         fastestBonusPoints = station.fastestCompletionBonusPoints;
@@ -1639,7 +1638,9 @@ export class MobileService {
     }
 
     const difficultyMultiplier =
-      station.type === 'strong-password' || station.type === 'mastermind' || station.type === 'mini-sudoku'
+      station.type === 'strong-password' ||
+      station.type === 'mastermind' ||
+      station.type === 'mini-sudoku'
         ? challengeDifficulty === 'easy'
           ? 0.5
           : challengeDifficulty === 'hard'
@@ -1647,14 +1648,15 @@ export class MobileService {
             : 1
         : 1;
     const baseAwardedPoints =
-      shouldApplyTimedPointsDecay || isTimedStartRequiredStationType(station.type)
-      ? this.computeLinearTimePoints({
-          basePoints: station.points,
-          timeLimitSeconds: station.timeLimitSeconds,
-          startedAtIso: startedAtSource || finishedAtIso,
-          finishedAtIso,
-        })
-      : Math.max(0, Math.round(station.points));
+      shouldApplyTimedPointsDecay ||
+      isTimedStartRequiredStationType(station.type)
+        ? this.computeLinearTimePoints({
+            basePoints: station.points,
+            timeLimitSeconds: station.timeLimitSeconds,
+            startedAtIso: startedAtSource || finishedAtIso,
+            finishedAtIso,
+          })
+        : Math.max(0, Math.round(station.points));
     const awardedPoints =
       Math.max(0, Math.round(baseAwardedPoints * difficultyMultiplier)) +
       fastestBonusPoints;
@@ -1688,23 +1690,24 @@ export class MobileService {
     }
 
     const scoringMeta =
-      shouldApplyTimedPointsDecay || isTimedStartRequiredStationType(station.type)
-      ? {
-          mode: 'time-linear',
-          basePoints: station.points,
-          timeLimitSeconds: station.timeLimitSeconds,
-          elapsedSeconds,
-          difficulty: challengeDifficulty,
-          difficultyMultiplier,
-          fastestBonusPoints,
-        }
-      : {
-          mode: 'fixed',
-          basePoints: station.points,
-          difficulty: challengeDifficulty,
-          difficultyMultiplier,
-          fastestBonusPoints,
-        };
+      shouldApplyTimedPointsDecay ||
+      isTimedStartRequiredStationType(station.type)
+        ? {
+            mode: 'time-linear',
+            basePoints: station.points,
+            timeLimitSeconds: station.timeLimitSeconds,
+            elapsedSeconds,
+            difficulty: challengeDifficulty,
+            difficultyMultiplier,
+            fastestBonusPoints,
+          }
+        : {
+            mode: 'fixed',
+            basePoints: station.points,
+            difficulty: challengeDifficulty,
+            difficultyMultiplier,
+            fastestBonusPoints,
+          };
 
     await this.emitEvent({
       realizationId,
@@ -1789,8 +1792,7 @@ export class MobileService {
       throw new ConflictException('Task already completed');
     }
 
-    const startedAtSource =
-      existingProgress?.startedAt?.toISOString() || null;
+    const startedAtSource = existingProgress?.startedAt?.toISOString() || null;
     const failureReason = this.resolveTaskFailureReason(input.reason);
 
     if (existingProgress) {
@@ -2588,7 +2590,10 @@ export class MobileService {
       },
     });
 
-    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
 
     return {
       realizationId: realization.id,
@@ -2664,7 +2669,10 @@ export class MobileService {
       },
     });
 
-    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
 
     return {
       realizationId: realization.id,
@@ -2730,7 +2738,10 @@ export class MobileService {
       },
     });
 
-    const pointsTotal = await this.recalculateTeamPoints(team.id, realization.id);
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
 
     return {
       realizationId: realization.id,
@@ -2987,7 +2998,9 @@ export class MobileService {
       ]),
     );
     const teamById = new Map(teams.map((team) => [team.id, team]));
-    const stationById = new Map(stations.map((station) => [station.id, station]));
+    const stationById = new Map(
+      stations.map((station) => [station.id, station]),
+    );
 
     const latestPhotoByKey = new Map<string, (typeof photos)[number]>();
     for (const photo of photos) {
@@ -3075,7 +3088,8 @@ export class MobileService {
       customLanguage: item.customLanguage,
       locationRequired:
         rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
-      showLeaderboard: rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
+      showLeaderboard:
+        rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
       showLeaderboardDuringGame:
         rowById.get(item.id)?.showLeaderboardDuringGame ??
         item.showLeaderboardDuringGame ??
@@ -3270,11 +3284,9 @@ export class MobileService {
       languageContext,
     );
     const quizAudioUrl =
-      (
-        (localized.quiz?.audioUrl &&
-          localized.quiz.audioUrl.trim()) ||
-        (station.quiz?.audioUrl && station.quiz.audioUrl.trim())
-      ) || undefined;
+      (localized.quiz?.audioUrl && localized.quiz.audioUrl.trim()) ||
+      (station.quiz?.audioUrl && station.quiz.audioUrl.trim()) ||
+      undefined;
     const parsedCompletionCode = parseCompletionCode(
       station.completionCode ?? '',
     );
@@ -3349,7 +3361,10 @@ export class MobileService {
       include: { pointsQrCode: { select: { points: true } } },
     });
 
-    const taskPoints = doneTasks.reduce((sum, item) => sum + item.pointsAwarded, 0);
+    const taskPoints = doneTasks.reduce(
+      (sum, item) => sum + item.pointsAwarded,
+      0,
+    );
     const pointsQrPoints = pointsQrClaims.reduce(
       (sum, claim) => sum + claim.pointsQrCode.points,
       0,
@@ -3389,7 +3404,8 @@ export class MobileService {
       completionStopwatchEnabled: station?.completionStopwatchEnabled ?? false,
       fastestCompletionBonusPoints: station?.fastestCompletionBonusPoints ?? 0,
       latitude:
-        typeof station?.latitude === 'number' && Number.isFinite(station.latitude)
+        typeof station?.latitude === 'number' &&
+        Number.isFinite(station.latitude)
           ? station.latitude
           : null,
       longitude:
@@ -3415,7 +3431,9 @@ export class MobileService {
       input.realizationId,
     );
     if (!realization.stationIds.includes(stationId)) {
-      throw new BadRequestException('Station not available in this realization');
+      throw new BadRequestException(
+        'Station not available in this realization',
+      );
     }
 
     const [team, station, existingProgress] = await Promise.all([
@@ -3516,7 +3534,9 @@ export class MobileService {
     }
 
     if (endState.reason === 'all-tasks-completed') {
-      throw new ConflictException('All tasks are already completed for this team');
+      throw new ConflictException(
+        'All tasks are already completed for this team',
+      );
     }
 
     throw new ConflictException('Realization has been finished');
@@ -3549,7 +3569,8 @@ export class MobileService {
 
     const stationCount = uniqueStationIds.length;
     const slotOffset =
-      ((Math.max(1, Math.round(slotNumber)) - 1) % stationCount + stationCount) %
+      (((Math.max(1, Math.round(slotNumber)) - 1) % stationCount) +
+        stationCount) %
       stationCount;
 
     return uniqueStationIds.map((_, index) => {
@@ -3639,7 +3660,9 @@ export class MobileService {
         return {
           isEnded: true,
           reason: 'all-tasks-completed' as MobileSessionEndReason,
-          endedAt: latestDoneTask?.finishedAt?.toISOString() || new Date().toISOString(),
+          endedAt:
+            latestDoneTask?.finishedAt?.toISOString() ||
+            new Date().toISOString(),
         };
       }
     }

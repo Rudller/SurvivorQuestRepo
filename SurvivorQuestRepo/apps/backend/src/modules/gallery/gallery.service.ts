@@ -54,7 +54,9 @@ export class GalleryService {
   async getPhotos(realizationId: string, accessToken: string) {
     const verified = verifyGalleryToken(accessToken, getGalleryTokenSecret());
     if (!verified.ok || verified.payload.realizationId !== realizationId) {
-      throw new UnauthorizedException('Invalid or expired gallery access token');
+      throw new UnauthorizedException(
+        'Invalid or expired gallery access token',
+      );
     }
 
     const realization = await this.prisma.realization.findUnique({
@@ -89,7 +91,9 @@ export class GalleryService {
     ]);
 
     const teamById = new Map(teams.map((team) => [team.id, team]));
-    const stationById = new Map(stations.map((station) => [station.id, station]));
+    const stationById = new Map(
+      stations.map((station) => [station.id, station]),
+    );
 
     const latestOutcomeByKey = new Map<string, 'done' | 'failed'>();
     for (const log of taskOutcomeLogs) {

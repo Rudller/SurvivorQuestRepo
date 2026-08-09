@@ -448,7 +448,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(40);
 
     stationService.findStationById.mockResolvedValue({
@@ -517,7 +519,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(75);
 
     stationService.findStationById.mockResolvedValue({
@@ -572,7 +576,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
 
     stationService.findStationById.mockResolvedValue({
@@ -624,7 +630,11 @@ describe('MobileService task scoring', () => {
   ) {
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
       assignment: { deviceId: 'device-1' },
-      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
       realization: {
         id: 'realization-1',
         status: 'in-progress',
@@ -636,7 +646,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
 
     stationService.findStationById.mockResolvedValue({
@@ -647,7 +659,8 @@ describe('MobileService task scoring', () => {
       points: 50,
       timeLimitSeconds: overrides.timeLimitSeconds ?? 0,
       completionStopwatchEnabled: overrides.completionStopwatchEnabled ?? true,
-      fastestCompletionBonusPoints: overrides.fastestCompletionBonusPoints ?? 15,
+      fastestCompletionBonusPoints:
+        overrides.fastestCompletionBonusPoints ?? 15,
     });
     prisma.teamTaskProgress.findUnique.mockResolvedValue(null);
     prisma.teamTaskProgress.findFirst.mockResolvedValue(
@@ -676,13 +689,17 @@ describe('MobileService task scoring', () => {
     expect(result.fastestBonusPoints).toBe(15);
     expect(result.pointsAwarded).toBe(65);
     expect(prisma.teamTaskProgress.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ pointsAwarded: 65 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ pointsAwarded: 65 }),
+      }),
     );
   });
 
   it('does not award the bonus to the second team completing the same stopwatch station', async () => {
     const { service, prisma, stationService } = createService();
-    mockBonusEligibleCompletion(prisma, stationService, service, { otherTeamAlreadyDone: true });
+    mockBonusEligibleCompletion(prisma, stationService, service, {
+      otherTeamAlreadyDone: true,
+    });
 
     const result = await service.completeMobileTask({
       sessionToken: 'session-token',
@@ -695,7 +712,9 @@ describe('MobileService task scoring', () => {
 
   it('does not award the bonus when completionStopwatchEnabled is false', async () => {
     const { service, prisma, stationService } = createService();
-    mockBonusEligibleCompletion(prisma, stationService, service, { completionStopwatchEnabled: false });
+    mockBonusEligibleCompletion(prisma, stationService, service, {
+      completionStopwatchEnabled: false,
+    });
 
     const result = await service.completeMobileTask({
       sessionToken: 'session-token',
@@ -709,7 +728,9 @@ describe('MobileService task scoring', () => {
 
   it('does not award the bonus when fastestCompletionBonusPoints is 0', async () => {
     const { service, prisma, stationService } = createService();
-    mockBonusEligibleCompletion(prisma, stationService, service, { fastestCompletionBonusPoints: 0 });
+    mockBonusEligibleCompletion(prisma, stationService, service, {
+      fastestCompletionBonusPoints: 0,
+    });
 
     const result = await service.completeMobileTask({
       sessionToken: 'session-token',
@@ -723,7 +744,9 @@ describe('MobileService task scoring', () => {
 
   it('does not award the bonus when timeLimitSeconds > 0 even if completionStopwatchEnabled is true', async () => {
     const { service, prisma, stationService } = createService();
-    mockBonusEligibleCompletion(prisma, stationService, service, { timeLimitSeconds: 30 });
+    mockBonusEligibleCompletion(prisma, stationService, service, {
+      timeLimitSeconds: 30,
+    });
 
     const result = await service.completeMobileTask({
       sessionToken: 'session-token',
@@ -741,13 +764,21 @@ describe('MobileService task scoring', () => {
     service: ReturnType<typeof createService>['service'],
     overrides: {
       qrScanCodes?: string[];
-      existingProgress?: { id: string; status: TaskStatus; startedAt: Date | null } | null;
+      existingProgress?: {
+        id: string;
+        status: TaskStatus;
+        startedAt: Date | null;
+      } | null;
       scannedCountAfterInsert?: number;
     } = {},
   ) {
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
       assignment: { deviceId: 'device-1' },
-      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
       realization: {
         id: 'realization-1',
         status: 'in-progress',
@@ -759,7 +790,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
 
     stationService.findStationById.mockResolvedValue({
@@ -775,19 +808,27 @@ describe('MobileService task scoring', () => {
     });
 
     prisma.teamTaskProgress.findUnique.mockResolvedValue(
-      overrides.existingProgress === undefined ? null : overrides.existingProgress,
+      overrides.existingProgress === undefined
+        ? null
+        : overrides.existingProgress,
     );
     prisma.teamStationScan.create.mockResolvedValue({});
     prisma.teamTaskProgress.upsert.mockResolvedValue({
       id: 'progress-1',
-      startedAt: overrides.existingProgress?.startedAt ?? new Date('2026-05-10T10:00:00.000Z'),
+      startedAt:
+        overrides.existingProgress?.startedAt ??
+        new Date('2026-05-10T10:00:00.000Z'),
     });
-    prisma.teamStationScan.count.mockResolvedValue(overrides.scannedCountAfterInsert ?? 1);
+    prisma.teamStationScan.count.mockResolvedValue(
+      overrides.scannedCountAfterInsert ?? 1,
+    );
   }
 
   it('records the first valid QR scan and keeps the task in progress', async () => {
     const { service, prisma, stationService } = createService();
-    mockQrHuntStation(prisma, stationService, service, { scannedCountAfterInsert: 1 });
+    mockQrHuntStation(prisma, stationService, service, {
+      scannedCountAfterInsert: 1,
+    });
 
     const result = await service.submitStationQrScan({
       sessionToken: 'session-token',
@@ -811,7 +852,9 @@ describe('MobileService task scoring', () => {
 
   it('treats re-scanning an already-scanned code as an idempotent no-op', async () => {
     const { service, prisma, stationService } = createService();
-    mockQrHuntStation(prisma, stationService, service, { scannedCountAfterInsert: 1 });
+    mockQrHuntStation(prisma, stationService, service, {
+      scannedCountAfterInsert: 1,
+    });
     prisma.teamStationScan.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
@@ -861,7 +904,10 @@ describe('MobileService task scoring', () => {
     expect(result.pointsAwarded).toBe(50);
     expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
       where: { id: 'progress-1' },
-      data: expect.objectContaining({ status: TaskStatus.DONE, pointsAwarded: 50 }),
+      data: expect.objectContaining({
+        status: TaskStatus.DONE,
+        pointsAwarded: 50,
+      }),
     });
   });
 
@@ -869,7 +915,11 @@ describe('MobileService task scoring', () => {
     const { service, prisma, stationService } = createService();
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
       assignment: { deviceId: 'device-1' },
-      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
       realization: {
         id: 'realization-1',
         status: 'in-progress',
@@ -881,7 +931,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     stationService.findStationById.mockResolvedValue({
       id: 'station-1',
       realizationId: 'realization-1',
@@ -905,7 +957,11 @@ describe('MobileService task scoring', () => {
     const { service, stationService } = createService();
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
       assignment: { deviceId: 'device-1' },
-      team: { id: 'team-1', points: 0, lastLocationAt: new Date('2026-05-10T09:59:00.000Z') },
+      team: {
+        id: 'team-1',
+        points: 0,
+        lastLocationAt: new Date('2026-05-10T09:59:00.000Z'),
+      },
       realization: {
         id: 'realization-1',
         status: 'in-progress',
@@ -917,7 +973,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     stationService.findStationById.mockResolvedValue({
       id: 'station-1',
       realizationId: 'realization-1',
@@ -958,7 +1016,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
 
     await expect(
       service.startMobileTask({
@@ -990,7 +1050,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     stationService.findStationById.mockResolvedValue({
       id: 'station-1',
       realizationId: 'realization-1',
@@ -1035,7 +1097,9 @@ describe('MobileService task scoring', () => {
         updatedAt: '2026-05-10T09:00:00.000Z',
       },
     });
-    jest.spyOn(service as never, 'assertGameplayAllowed').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
     stationService.findStationById.mockResolvedValue({
       id: 'station-1',
       realizationId: 'realization-1',
@@ -1059,7 +1123,10 @@ describe('MobileService task scoring', () => {
     expect(prisma.teamTaskProgress.findFirst).not.toHaveBeenCalled();
     expect(prisma.teamTaskProgress.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ teamId: 'team-1', stationId: 'station-1' }),
+        data: expect.objectContaining({
+          teamId: 'team-1',
+          stationId: 'station-1',
+        }),
       }),
     );
   });
@@ -1520,7 +1587,9 @@ describe('MobileService resolveMobileStationQr', () => {
   it('awards points and creates a claim when the code matches a PER_TEAM points QR code', async () => {
     const { service, prisma, stationService } = createService();
     stubSession(service, 'realization-1');
-    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(
+      null,
+    );
     prisma.pointsQrCode.findUnique.mockResolvedValue({
       id: 'points-qr-1',
       realizationId: 'realization-1',
@@ -1528,7 +1597,9 @@ describe('MobileService resolveMobileStationQr', () => {
       points: 25,
       claimMode: 'PER_TEAM',
     });
-    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(125);
+    jest
+      .spyOn(service as never, 'recalculateTeamPoints')
+      .mockResolvedValue(125);
 
     const result = await service.resolveMobileStationQr({
       sessionToken: 'session-token',
@@ -1553,7 +1624,9 @@ describe('MobileService resolveMobileStationQr', () => {
   it('treats re-scanning an already-claimed points QR code as an idempotent no-op', async () => {
     const { service, prisma, stationService } = createService();
     stubSession(service, 'realization-1');
-    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(
+      null,
+    );
     prisma.pointsQrCode.findUnique.mockResolvedValue({
       id: 'points-qr-1',
       realizationId: 'realization-1',
@@ -1581,7 +1654,9 @@ describe('MobileService resolveMobileStationQr', () => {
   it('rejects a FIRST_TEAM points QR code already claimed by a different team', async () => {
     const { service, prisma, stationService } = createService();
     stubSession(service, 'realization-1');
-    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(
+      null,
+    );
     prisma.pointsQrCode.findUnique.mockResolvedValue({
       id: 'points-qr-1',
       realizationId: 'realization-1',
@@ -1590,7 +1665,9 @@ describe('MobileService resolveMobileStationQr', () => {
       claimMode: 'FIRST_TEAM',
     });
     prisma.pointsQrCodeClaim.findUnique.mockResolvedValue(null);
-    prisma.pointsQrCodeClaim.findFirst.mockResolvedValue({ id: 'claim-other-team' });
+    prisma.pointsQrCodeClaim.findFirst.mockResolvedValue({
+      id: 'claim-other-team',
+    });
 
     const result = await service.resolveMobileStationQr({
       sessionToken: 'session-token',
@@ -1610,7 +1687,9 @@ describe('MobileService resolveMobileStationQr', () => {
   it('rejects a code that matches neither a station nor a points QR code', async () => {
     const { service, stationService } = createService();
     stubSession(service, 'realization-1');
-    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(
+      null,
+    );
 
     await expect(
       service.resolveMobileStationQr({

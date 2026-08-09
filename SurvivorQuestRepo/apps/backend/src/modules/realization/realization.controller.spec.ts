@@ -69,7 +69,10 @@ describe('RealizationController roles', () => {
   it('forbids instructors from creating realizations', async () => {
     app = await createApp('instructor');
 
-    await request(app.getHttpServer()).post('/realizations').send({}).expect(403);
+    await request(app.getHttpServer())
+      .post('/realizations')
+      .send({})
+      .expect(403);
     expect(realizationService.createRealization).not.toHaveBeenCalled();
   });
 });

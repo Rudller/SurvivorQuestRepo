@@ -273,7 +273,9 @@ export function normalizeStationDraft(
       input.challengeDifficulty,
     ),
     completionStopwatchEnabled: normalizedCompletionStopwatchEnabled,
-    allowConcurrentTeams: normalizeAllowConcurrentTeams(input.allowConcurrentTeams),
+    allowConcurrentTeams: normalizeAllowConcurrentTeams(
+      input.allowConcurrentTeams,
+    ),
     fastestCompletionBonusPoints: normalizeFastestCompletionBonusPoints(
       input.fastestCompletionBonusPoints,
       normalizedCompletionStopwatchEnabled,

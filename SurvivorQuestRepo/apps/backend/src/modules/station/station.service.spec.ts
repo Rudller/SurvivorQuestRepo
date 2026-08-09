@@ -183,8 +183,38 @@ describe('StationService.updateScenarioStationInstance', () => {
       timeLimitSeconds: 0,
     });
 
-    expect(prisma.station.update.mock.calls[0][0].data.qrEntryCode).toBeUndefined();
+    expect(
+      prisma.station.update.mock.calls[0][0].data.qrEntryCode,
+    ).toBeUndefined();
     expect(updated?.qrEntryCode).toBe('EXISTING1');
+  });
+
+  it('falls back to a freshly generated code when the requested one collides, instead of throwing', async () => {
+    const { service, prisma } = createServiceWithUpdate();
+    prisma.station.findUnique.mockResolvedValue(baseCurrentRow);
+    prisma.station.update
+      .mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['realizationId', 'qrEntryCode'] },
+        }),
+      )
+      .mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({ ...baseCurrentRow, ...data }),
+      );
+
+    const updated = await service.updateScenarioStationInstance('station-1', {
+      name: 'Stanowisko',
+      type: 'photo-task',
+      description: 'Opis',
+      points: 100,
+      timeLimitSeconds: 0,
+      qrEntryCode: 'DUPLICATE',
+    });
+
+    expect(prisma.station.update).toHaveBeenCalledTimes(2);
+    expect(updated?.qrEntryCode).not.toBe('DUPLICATE');
   });
 
   it('throws a friendly conflict error when the new code is already used in the same realization', async () => {

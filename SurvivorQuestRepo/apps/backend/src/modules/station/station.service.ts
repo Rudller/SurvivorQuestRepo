@@ -183,9 +183,11 @@ export class StationService {
             ),
             challengeDifficultyMode: updatedStation.challengeDifficultyMode,
             challengeDifficulty: updatedStation.challengeDifficulty,
-            completionStopwatchEnabled: updatedStation.completionStopwatchEnabled,
+            completionStopwatchEnabled:
+              updatedStation.completionStopwatchEnabled,
             allowConcurrentTeams: updatedStation.allowConcurrentTeams,
-            fastestCompletionBonusPoints: updatedStation.fastestCompletionBonusPoints,
+            fastestCompletionBonusPoints:
+              updatedStation.fastestCompletionBonusPoints,
             qrScanCodes: updatedStation.qrScanCodes,
             color: updatedStation.color,
             latitude: updatedStation.latitude,
@@ -323,46 +325,66 @@ export class StationService {
     }
 
     const normalized = normalizeStationDraft(input, current.id);
-    try {
+    const buildData = (
+      qrEntryCode?: string,
+    ): Prisma.StationUncheckedUpdateInput => ({
+      name: normalized.name,
+      type: toPrismaStationType(normalized.type),
+      categories: normalized.categories ?? current.categories,
+      description: normalized.description,
+      imageUrl: normalized.imageUrl,
+      points: normalized.points,
+      timeLimitSeconds: normalized.timeLimitSeconds,
+      completionCode: normalized.completionCode,
+      qrEntryCode,
+      quizData: toPrismaStationQuizData(normalized.quiz),
+      translations: toPrismaStationTranslationsData(normalized.translations),
+      challengeDifficultyMode: normalized.challengeDifficultyMode,
+      challengeDifficulty: normalized.challengeDifficulty,
+      completionStopwatchEnabled: normalized.completionStopwatchEnabled,
+      allowConcurrentTeams: normalized.allowConcurrentTeams,
+      fastestCompletionBonusPoints: normalized.fastestCompletionBonusPoints,
+      qrScanCodes: normalized.qrScanCodes,
+      color: normalized.color,
+      latitude: normalized.latitude,
+      longitude: normalized.longitude,
+      sourceTemplateId: normalized.sourceTemplateId ?? current.sourceTemplateId,
+    });
+
+    if (!normalized.qrEntryCode) {
       return mapStation(
         await this.prisma.station.update({
           where: { id },
-          data: {
-            name: normalized.name,
-            type: toPrismaStationType(normalized.type),
-            categories: normalized.categories ?? current.categories,
-            description: normalized.description,
-            imageUrl: normalized.imageUrl,
-            points: normalized.points,
-            timeLimitSeconds: normalized.timeLimitSeconds,
-            completionCode: normalized.completionCode,
-            qrEntryCode: normalized.qrEntryCode,
-            quizData: toPrismaStationQuizData(normalized.quiz),
-            translations: toPrismaStationTranslationsData(
-              normalized.translations,
-            ),
-            challengeDifficultyMode: normalized.challengeDifficultyMode,
-            challengeDifficulty: normalized.challengeDifficulty,
-            completionStopwatchEnabled: normalized.completionStopwatchEnabled,
-            allowConcurrentTeams: normalized.allowConcurrentTeams,
-            fastestCompletionBonusPoints: normalized.fastestCompletionBonusPoints,
-            qrScanCodes: normalized.qrScanCodes,
-            color: normalized.color,
-            latitude: normalized.latitude,
-            longitude: normalized.longitude,
-            sourceTemplateId:
-              normalized.sourceTemplateId ?? current.sourceTemplateId,
-          },
+          data: buildData(undefined),
         }),
       );
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        throw new ConflictException(
-          'Ten kod QR jest już używany przez inne stanowisko w tej realizacji.',
-        );
-      }
-      throw error;
     }
+
+    const candidateCodes = [
+      normalized.qrEntryCode,
+      ...Array.from({ length: QR_ENTRY_CODE_MAX_ATTEMPTS }, () =>
+        generateRandomCode(QR_ENTRY_CODE_LENGTH),
+      ),
+    ];
+
+    for (const qrEntryCode of candidateCodes) {
+      try {
+        return mapStation(
+          await this.prisma.station.update({
+            where: { id },
+            data: buildData(qrEntryCode),
+          }),
+        );
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    throw new ConflictException(
+      'Ten kod QR jest już używany przez inne stanowisko w tej realizacji.',
+    );
   }
 }
 

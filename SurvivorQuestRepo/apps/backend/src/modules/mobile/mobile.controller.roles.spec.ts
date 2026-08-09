@@ -58,7 +58,9 @@ describe('MobileController admin endpoint roles', () => {
 
   it('allows instructors to read realization overview and station QR codes', async () => {
     app = await createApp('instructor');
-    mobileService.getMobileAdminRealizationOverview.mockResolvedValue({ ok: true });
+    mobileService.getMobileAdminRealizationOverview.mockResolvedValue({
+      ok: true,
+    });
     mobileService.getMobileAdminStationQrs.mockResolvedValue({ entries: [] });
 
     await request(app.getHttpServer())
@@ -68,9 +70,9 @@ describe('MobileController admin endpoint roles', () => {
       .get('/mobile/admin/realizations/current/station-qr')
       .expect(200);
 
-    expect(mobileService.getMobileAdminRealizationOverview).toHaveBeenCalledWith(
-      'current',
-    );
+    expect(
+      mobileService.getMobileAdminRealizationOverview,
+    ).toHaveBeenCalledWith('current');
     expect(mobileService.getMobileAdminStationQrs).toHaveBeenCalledWith(
       'current',
     );

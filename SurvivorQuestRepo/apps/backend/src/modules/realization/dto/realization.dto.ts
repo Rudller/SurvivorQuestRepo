@@ -96,7 +96,10 @@ export function validateTranslateRealizationTextsPayload(
     throw new BadRequestException('Invalid source or target language.');
   }
 
-  if (payload.sourceLanguage === 'other' || payload.targetLanguage === 'other') {
+  if (
+    payload.sourceLanguage === 'other' ||
+    payload.targetLanguage === 'other'
+  ) {
     throw new BadRequestException(
       'Automatic translation is not available for a custom language.',
     );

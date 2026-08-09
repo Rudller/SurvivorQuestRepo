@@ -36,7 +36,10 @@ describe('UsersController roles', () => {
   async function createApp(role: 'admin' | 'instructor') {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [RolesGuard, { provide: UsersService, useValue: usersService }],
+      providers: [
+        RolesGuard,
+        { provide: UsersService, useValue: usersService },
+      ],
     })
       .overrideGuard(AuthenticatedSessionGuard)
       .useValue(createSessionGuard(role))

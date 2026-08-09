@@ -12,7 +12,11 @@ export function isCodeProtectedStationType(stationType: string) {
 }
 
 export function isTimedStartRequiredStationType(stationType: string) {
-  return stationType === 'time' || stationType === 'wordle' || stationType === 'strong-password';
+  return (
+    stationType === 'time' ||
+    stationType === 'wordle' ||
+    stationType === 'strong-password'
+  );
 }
 
 export function parseCompletionCode(value?: string | null) {

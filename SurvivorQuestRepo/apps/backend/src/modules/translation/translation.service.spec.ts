@@ -1,4 +1,7 @@
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { translate } from 'google-translate-api-x';
 import { TranslationService } from './translation.service';
 
@@ -17,7 +20,11 @@ describe('TranslationService.translateBatch', () => {
     translateMock.mockResolvedValue([{ text: 'Witaj' }, { text: 'Świat' }]);
 
     const service = new TranslationService();
-    const result = await service.translateBatch(['Hello', 'World'], 'english', 'polish');
+    const result = await service.translateBatch(
+      ['Hello', 'World'],
+      'english',
+      'polish',
+    );
 
     expect(result).toEqual(['Witaj', 'Świat']);
     expect(translateMock).toHaveBeenCalledWith(
@@ -42,7 +49,11 @@ describe('TranslationService.translateBatch', () => {
     translateMock.mockResolvedValue([{ text: 'Witaj' }]);
 
     const service = new TranslationService();
-    const result = await service.translateBatch(['', 'Hello', '   '], 'english', 'polish');
+    const result = await service.translateBatch(
+      ['', 'Hello', '   '],
+      'english',
+      'polish',
+    );
 
     expect(result).toEqual(['', 'Witaj', '']);
     expect(translateMock).toHaveBeenCalledWith(['Hello'], expect.anything());
@@ -50,7 +61,11 @@ describe('TranslationService.translateBatch', () => {
 
   it('returns all-blank output without calling the provider when every text is blank', async () => {
     const service = new TranslationService();
-    const result = await service.translateBatch(['', '  '], 'english', 'polish');
+    const result = await service.translateBatch(
+      ['', '  '],
+      'english',
+      'polish',
+    );
 
     expect(result).toEqual(['', '']);
     expect(translateMock).not.toHaveBeenCalled();

@@ -640,7 +640,8 @@ export function toUpdateStationEntity(
     challengeDifficultyMode: dto.challengeDifficultyMode ?? 'admin',
     challengeDifficulty: dto.challengeDifficulty ?? 'medium',
     completionStopwatchEnabled: dto.completionStopwatchEnabled ?? false,
-    allowConcurrentTeams: dto.allowConcurrentTeams ?? current.allowConcurrentTeams,
+    allowConcurrentTeams:
+      dto.allowConcurrentTeams ?? current.allowConcurrentTeams,
     fastestCompletionBonusPoints: dto.fastestCompletionBonusPoints ?? 0,
     color: dto.color ?? current.color,
     latitude: dto.latitude,

@@ -170,7 +170,8 @@ export class StationStorageService {
           key: item.Key,
           url: `${publicBaseUrl}/${item.Key}`,
           size: item.Size ?? 0,
-          lastModifiedAt: item.LastModified?.toISOString() ?? new Date(0).toISOString(),
+          lastModifiedAt:
+            item.LastModified?.toISOString() ?? new Date(0).toISOString(),
         });
       }
 

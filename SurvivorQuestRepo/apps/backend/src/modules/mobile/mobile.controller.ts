@@ -192,9 +192,7 @@ export class MobileController {
   }
 
   @Post('team/customization')
-  async updateMobileTeamCustomization(
-    @Body() rawPayload: unknown,
-  ) {
+  async updateMobileTeamCustomization(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.mobileService.updateMobileTeamCustomization({
       sessionToken: requireString(payload, 'sessionToken'),

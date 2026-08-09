@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { translate } from 'google-translate-api-x';
 import type { RealizationLanguage } from '../realization/entities/realization.entity';
 
@@ -8,7 +12,9 @@ import type { RealizationLanguage } from '../realization/entities/realization.en
 // changes that endpoint, and is more likely than an individual user to get rate-limited
 // since every request comes from this server's one IP. If that becomes a problem, swap
 // this service for the official Cloud Translation API or DeepL.
-const GOOGLE_TRANSLATE_LANGUAGE_CODES: Partial<Record<RealizationLanguage, string>> = {
+const GOOGLE_TRANSLATE_LANGUAGE_CODES: Partial<
+  Record<RealizationLanguage, string>
+> = {
   polish: 'pl',
   english: 'en',
   ukrainian: 'uk',
@@ -27,7 +33,8 @@ function chunkEntries(entries: string[]): string[][] {
   for (const entry of entries) {
     const wouldOverflow =
       currentChunk.length > 0 &&
-      (currentChunk.length >= CHUNK_MAX_ITEMS || currentChars + entry.length > CHUNK_MAX_CHARS);
+      (currentChunk.length >= CHUNK_MAX_ITEMS ||
+        currentChars + entry.length > CHUNK_MAX_CHARS);
 
     if (wouldOverflow) {
       chunks.push(currentChunk);
@@ -77,7 +84,11 @@ export class TranslationService {
     const chunks = chunkEntries(nonBlankEntries.map((entry) => entry.text));
     const translated: string[] = [];
     for (const chunk of chunks) {
-      const chunkResult = await this.callGoogleTranslate(chunk, sourceCode, targetCode);
+      const chunkResult = await this.callGoogleTranslate(
+        chunk,
+        sourceCode,
+        targetCode,
+      );
       translated.push(...chunkResult);
     }
 
@@ -89,7 +100,11 @@ export class TranslationService {
     return results;
   }
 
-  private async callGoogleTranslate(texts: string[], sourceCode: string, targetCode: string) {
+  private async callGoogleTranslate(
+    texts: string[],
+    sourceCode: string,
+    targetCode: string,
+  ) {
     try {
       return await this.requestGoogleTranslate(texts, sourceCode, targetCode);
     } catch {
@@ -107,7 +122,11 @@ export class TranslationService {
     }
   }
 
-  private async requestGoogleTranslate(texts: string[], sourceCode: string, targetCode: string) {
+  private async requestGoogleTranslate(
+    texts: string[],
+    sourceCode: string,
+    targetCode: string,
+  ) {
     const responses = await translate(texts, {
       from: sourceCode,
       to: targetCode,
@@ -115,6 +134,8 @@ export class TranslationService {
       forceTo: true,
     });
 
-    return responses.map((item) => (typeof item.text === 'string' ? item.text : ''));
+    return responses.map((item) =>
+      typeof item.text === 'string' ? item.text : '',
+    );
   }
 }
