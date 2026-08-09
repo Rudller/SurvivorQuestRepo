@@ -161,6 +161,8 @@ model Scenario {
   id               String           @id @default(uuid())
   name             String
   description      String
+  introText        String?
+  gameRules        String?
   sourceTemplateId String?
   realizationId    String?
   createdAt        DateTime         @default(now())
