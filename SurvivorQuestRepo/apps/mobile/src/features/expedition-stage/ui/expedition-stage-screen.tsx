@@ -101,6 +101,9 @@ const EXPEDITION_STAGE_TEXT: Record<
     qrTokenReadFailed: string;
     processQrFailed: string;
     scannedStation: string;
+    pointsQrClaimed: string;
+    pointsQrAlreadyClaimed: string;
+    pointsQrClaimedByOtherTeam: string;
     realizationEndedCannotOpenStations: string;
     noStationsForPopupPreview: string;
     successPopupPreview: string;
@@ -150,6 +153,9 @@ const EXPEDITION_STAGE_TEXT: Record<
     qrTokenReadFailed: "Nie udało się odczytać tokenu z kodu QR.",
     processQrFailed: "Nie udało się przetworzyć kodu QR.",
     scannedStation: "Zeskanowano stanowisko: {name}",
+    pointsQrClaimed: "Zdobyto {points} pkt!",
+    pointsQrAlreadyClaimed: "Ten kod został już zaliczony.",
+    pointsQrClaimedByOtherTeam: "Ten kod został już wykorzystany przez inną drużynę.",
     realizationEndedCannotOpenStations: "Realizacja została zakończona. Nie można otwierać stanowisk.",
     noStationsForPopupPreview: "Brak stanowisk do podglądu popupu.",
     successPopupPreview: "Podgląd popupu zaliczonego zadania.",
@@ -198,6 +204,9 @@ const EXPEDITION_STAGE_TEXT: Record<
     qrTokenReadFailed: "Could not read a token from the QR code.",
     processQrFailed: "Could not process the QR code.",
     scannedStation: "Scanned station: {name}",
+    pointsQrClaimed: "You earned {points} pts!",
+    pointsQrAlreadyClaimed: "This code has already been claimed.",
+    pointsQrClaimedByOtherTeam: "This code has already been claimed by another team.",
     realizationEndedCannotOpenStations: "The realization has ended. Stations cannot be opened.",
     noStationsForPopupPreview: "No stations available for popup preview.",
     successPopupPreview: "Preview of passed task popup.",
@@ -246,6 +255,9 @@ const EXPEDITION_STAGE_TEXT: Record<
     qrTokenReadFailed: "Не вдалося зчитати токен із QR-коду.",
     processQrFailed: "Не вдалося обробити QR-код.",
     scannedStation: "Скановано станцію: {name}",
+    pointsQrClaimed: "Отримано {points} б.!",
+    pointsQrAlreadyClaimed: "Цей код вже було зараховано.",
+    pointsQrClaimedByOtherTeam: "Цей код вже використала інша команда.",
     realizationEndedCannotOpenStations: "Реалізацію завершено. Не можна відкривати станції.",
     noStationsForPopupPreview: "Немає станцій для попереднього перегляду popup.",
     successPopupPreview: "Попередній перегляд popup зарахованого завдання.",
@@ -294,6 +306,9 @@ const EXPEDITION_STAGE_TEXT: Record<
     qrTokenReadFailed: "Не удалось считать токен из QR-кода.",
     processQrFailed: "Не удалось обработать QR-код.",
     scannedStation: "Сканирована станция: {name}",
+    pointsQrClaimed: "Получено {points} очк.!",
+    pointsQrAlreadyClaimed: "Этот код уже был зачтён.",
+    pointsQrClaimedByOtherTeam: "Этот код уже использовала другая команда.",
     realizationEndedCannotOpenStations: "Реализация завершена. Нельзя открывать станции.",
     noStationsForPopupPreview: "Нет станций для предпросмотра popup.",
     successPopupPreview: "Предпросмотр popup зачтённого задания.",
@@ -1276,6 +1291,9 @@ export function ExpeditionStageScreen({
       qrTokenReadFailed: text.qrTokenReadFailed,
       processQrFailed: text.processQrFailed,
       scannedStation: text.scannedStation,
+      pointsQrClaimed: text.pointsQrClaimed,
+      pointsQrAlreadyClaimed: text.pointsQrAlreadyClaimed,
+      pointsQrClaimedByOtherTeam: text.pointsQrClaimedByOtherTeam,
       qrScanCanceled: text.qrScanCanceled,
       locationRequired: text.locationRequired,
     },

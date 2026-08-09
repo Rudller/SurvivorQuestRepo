@@ -2,7 +2,7 @@
   "expo": {
     "name": "SurvivorQuest",
     "slug": "survivorquest",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/survivor_icon_1024.png",
     "userInterfaceStyle": "light",

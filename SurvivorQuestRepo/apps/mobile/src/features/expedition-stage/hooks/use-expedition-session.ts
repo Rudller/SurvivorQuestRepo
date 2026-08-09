@@ -1300,47 +1300,52 @@ export function useExpeditionSession(
           timeoutMessage: text.requestTimedOut,
           retryDelaysMs: TASK_REQUEST_RETRY_DELAYS_MS,
         });
-        setSessionState((current) => {
-          const normalizedCompletionCodeLength =
-            typeof response.station.completionCodeLength === "number" &&
-            Number.isFinite(response.station.completionCodeLength) &&
-            response.station.completionCodeLength > 0
-              ? Math.min(32, Math.round(response.station.completionCodeLength))
-              : undefined;
+        if (response.kind !== "points") {
+          setSessionState((current) => {
+            const normalizedCompletionCodeLength =
+              typeof response.station.completionCodeLength === "number" &&
+              Number.isFinite(response.station.completionCodeLength) &&
+              response.station.completionCodeLength > 0
+                ? Math.min(32, Math.round(response.station.completionCodeLength))
+                : undefined;
 
-          const nextStation = {
-            id: response.station.id,
-            name: response.station.name,
-            type: response.station.type,
-            description: response.station.description,
-            imageUrl: response.station.imageUrl,
-            points: response.station.points,
-            timeLimitSeconds: response.station.timeLimitSeconds,
-            completionCodeInputMode: response.station.completionCodeInputMode ?? "alphanumeric",
-            completionCodeLength: normalizedCompletionCodeLength,
-            quiz: response.station.quiz,
-            latitude: response.station.latitude,
-            longitude: response.station.longitude,
-          };
+            const nextStation = {
+              id: response.station.id,
+              name: response.station.name,
+              type: response.station.type,
+              description: response.station.description,
+              imageUrl: response.station.imageUrl,
+              points: response.station.points,
+              timeLimitSeconds: response.station.timeLimitSeconds,
+              completionCodeInputMode: response.station.completionCodeInputMode ?? "alphanumeric",
+              completionCodeLength: normalizedCompletionCodeLength,
+              quiz: response.station.quiz,
+              latitude: response.station.latitude,
+              longitude: response.station.longitude,
+            };
 
-          const existingStationIndex = current.realization.stations.findIndex(
-            (station) => station.id === response.station.id,
-          );
-          const nextStations =
-            existingStationIndex >= 0
-              ? current.realization.stations.map((station, index) =>
-                  index === existingStationIndex ? { ...station, ...nextStation } : station,
-                )
-              : [...current.realization.stations, nextStation];
+            const existingStationIndex = current.realization.stations.findIndex(
+              (station) => station.id === response.station.id,
+            );
+            const nextStations =
+              existingStationIndex >= 0
+                ? current.realization.stations.map((station, index) =>
+                    index === existingStationIndex ? { ...station, ...nextStation } : station,
+                  )
+                : [...current.realization.stations, nextStation];
 
-          return {
-            ...current,
-            realization: {
-              ...current.realization,
-              stations: nextStations,
-            },
-          };
-        });
+            return {
+              ...current,
+              realization: {
+                ...current.realization,
+                stations: nextStations,
+              },
+            };
+          });
+        }
+        // Points-QR claims already update Team.points server-side; refreshing
+        // session state here picks that up for both branches so the top panel's
+        // points counter animates to the new total either way.
         await refreshSessionState();
         return response;
       } catch (error) {

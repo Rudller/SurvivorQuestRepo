@@ -46,6 +46,7 @@ import {
 } from "./realization-stations-editor";
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
+import { PointsQrCodesManager } from "./points-qr-codes-manager";
 import { geocodeLocation } from "../realization-geocoding";
 import {
   REALIZATION_FORM_TAB_LABELS,
@@ -1197,6 +1198,10 @@ export function EditRealizationPanel({
                   <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
                 ) : null}
               </div>
+            )}
+
+            {activeTab === "pointsQr" && (
+              <PointsQrCodesManager realizationId={realization.id} realizationName={realization.companyName} />
             )}
 
             {activeTab === "summary" && (

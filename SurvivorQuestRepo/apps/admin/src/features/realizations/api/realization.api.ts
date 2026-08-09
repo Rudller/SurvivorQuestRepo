@@ -139,6 +139,12 @@ type CreateRealizationPayload = {
   scheduledAt: string;
   changedBy?: string;
   scenarioStations?: RealizationStationDraft[];
+  pointsQrCodes?: Array<{
+    points: number;
+    label?: string;
+    code?: string;
+    claimMode?: "PER_TEAM" | "FIRST_TEAM";
+  }>;
 };
 
 type UpdateRealizationPayload = {

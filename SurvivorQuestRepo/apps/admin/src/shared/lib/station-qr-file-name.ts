@@ -25,3 +25,9 @@ export function buildStationQrArchiveFileName(realizationName: string) {
   const safeRealizationName = sanitizeFileNamePart(realizationName, "realizacja");
   return `${safeRealizationName} - kody-qr.zip`;
 }
+
+export function buildPointsQrCodeFileName(realizationName: string, label: string | null, code: string) {
+  const safeRealizationName = sanitizeFileNamePart(realizationName, "realizacja");
+  const safeLabel = sanitizeFileNamePart(label ?? code, "kod-punktowy");
+  return `${safeRealizationName} - Punkty - ${safeLabel}.png`;
+}

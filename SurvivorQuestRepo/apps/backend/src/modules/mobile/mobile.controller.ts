@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
+import { PointsQrClaimMode } from '@prisma/client';
 import type { Express } from 'express';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
@@ -32,6 +34,13 @@ const ALLOWED_TEAM_PHOTO_MIME_TYPES = new Set([
 
 type AdminFailTaskPayload = {
   reason?: string;
+};
+
+type CreatePointsQrCodePayload = {
+  points?: number;
+  label?: string;
+  code?: string;
+  claimMode?: 'PER_TEAM' | 'FIRST_TEAM';
 };
 
 type MobilePayload = Record<string, unknown>;
@@ -334,6 +343,49 @@ export class MobileController {
     return this.mobileService.getMobileAdminStationQrs('current');
   }
 
+  @Get('admin/realizations/current/points-qr-codes')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getMobileAdminCurrentPointsQrCodes() {
+    return this.mobileService.listMobileAdminPointsQrCodes('current');
+  }
+
+  @Post('admin/realizations/current/points-qr-codes')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async createMobileAdminCurrentPointsQrCode(
+    @Body() payload: CreatePointsQrCodePayload,
+  ) {
+    return this.mobileService.createMobileAdminPointsQrCode('current', {
+      points: Number(payload?.points),
+      label: payload?.label,
+      code: payload?.code,
+      claimMode:
+        payload?.claimMode === 'FIRST_TEAM'
+          ? PointsQrClaimMode.FIRST_TEAM
+          : PointsQrClaimMode.PER_TEAM,
+    });
+  }
+
+  @Delete('admin/realizations/current/points-qr-codes/:pointsQrCodeId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async deleteMobileAdminCurrentPointsQrCode(
+    @Param('pointsQrCodeId') pointsQrCodeId: string,
+  ) {
+    return this.mobileService.deleteMobileAdminPointsQrCode(
+      'current',
+      pointsQrCodeId,
+    );
+  }
+
+  @Get('admin/points-qr-codes/suggestions')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getMobileAdminPointsQrCodeSuggestions() {
+    return this.mobileService.listMobileAdminPointsQrCodeSuggestions();
+  }
+
   @Post('admin/realizations/current/teams/:teamId/tasks/:stationId/reset')
   @AdminOnly()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
@@ -446,6 +498,46 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminStationQrs(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/points-qr-codes')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getMobileAdminRealizationPointsQrCodes(
+    @Param('realizationId') realizationId: string,
+  ) {
+    return this.mobileService.listMobileAdminPointsQrCodes(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/points-qr-codes')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async createMobileAdminRealizationPointsQrCode(
+    @Param('realizationId') realizationId: string,
+    @Body() payload: CreatePointsQrCodePayload,
+  ) {
+    return this.mobileService.createMobileAdminPointsQrCode(realizationId, {
+      points: Number(payload?.points),
+      label: payload?.label,
+      code: payload?.code,
+      claimMode:
+        payload?.claimMode === 'FIRST_TEAM'
+          ? PointsQrClaimMode.FIRST_TEAM
+          : PointsQrClaimMode.PER_TEAM,
+    });
+  }
+
+  @Delete('admin/realizations/:realizationId/points-qr-codes/:pointsQrCodeId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async deleteMobileAdminRealizationPointsQrCode(
+    @Param('realizationId') realizationId: string,
+    @Param('pointsQrCodeId') pointsQrCodeId: string,
+  ) {
+    return this.mobileService.deleteMobileAdminPointsQrCode(
+      realizationId,
+      pointsQrCodeId,
+    );
   }
 
   @Get('admin/realizations/:realizationId/photo-reviews')

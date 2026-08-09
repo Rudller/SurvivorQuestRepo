@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   EventActorType,
+  PointsQrClaimMode,
   Prisma,
   RealizationStatus as PrismaRealizationStatus,
   TaskStatus,
@@ -19,6 +20,7 @@ import {
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
 import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
+import { generateRandomCode } from '../../shared/lib/random-code';
 import {
   RealizationService,
   type RealizationStatus,
@@ -1945,6 +1947,123 @@ export class MobileService {
     };
   }
 
+  async listMobileAdminPointsQrCodes(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    const codes = await this.prisma.pointsQrCode.findMany({
+      where: { realizationId: realization.id },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { claims: true } } },
+    });
+
+    return {
+      realizationId: realization.id,
+      entries: codes.map((code) => ({
+        id: code.id,
+        code: code.code,
+        points: code.points,
+        label: code.label,
+        claimMode: code.claimMode,
+        claimCount: code._count.claims,
+        createdAt: code.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Distinct points-QR codes used across ALL realizations, for the admin UI's
+   * "reuse an already-printed sticker" suggestions — mirrors how station
+   * qrEntryCode suggestions are pulled from every template station.
+   */
+  async listMobileAdminPointsQrCodeSuggestions() {
+    const codes = await this.prisma.pointsQrCode.findMany({
+      distinct: ['code'],
+      orderBy: { createdAt: 'desc' },
+      select: { code: true, label: true, points: true },
+      take: 200,
+    });
+
+    return { entries: codes };
+  }
+
+  async createMobileAdminPointsQrCode(
+    realizationId: string,
+    input: {
+      points: number;
+      label?: string;
+      claimMode?: PointsQrClaimMode;
+      code?: string;
+    },
+  ) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    if (!Number.isFinite(input.points) || input.points <= 0) {
+      throw new BadRequestException('Points must be a positive number');
+    }
+
+    const claimMode =
+      input.claimMode === PointsQrClaimMode.FIRST_TEAM
+        ? PointsQrClaimMode.FIRST_TEAM
+        : PointsQrClaimMode.PER_TEAM;
+    const label = input.label?.trim() || null;
+    const preferredCode = input.code?.trim().toUpperCase() || undefined;
+
+    const candidateCodes = [
+      ...(preferredCode ? [preferredCode] : []),
+      ...Array.from({ length: 5 }, () => generateRandomCode(8)),
+    ];
+
+    for (const code of candidateCodes) {
+      try {
+        const created = await this.prisma.pointsQrCode.create({
+          data: {
+            realizationId: realization.id,
+            code,
+            points: Math.round(input.points),
+            label,
+            claimMode,
+          },
+        });
+
+        return {
+          id: created.id,
+          code: created.code,
+          points: created.points,
+          label: created.label,
+          claimMode: created.claimMode,
+          claimCount: 0,
+          createdAt: created.createdAt.toISOString(),
+        };
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error('Failed to generate a unique points QR code');
+  }
+
+  async deleteMobileAdminPointsQrCode(
+    realizationId: string,
+    pointsQrCodeId: string,
+  ) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    const deleted = await this.prisma.pointsQrCode.deleteMany({
+      where: { id: pointsQrCodeId, realizationId: realization.id },
+    });
+
+    if (deleted.count === 0) {
+      throw new NotFoundException('Points QR code not found');
+    }
+
+    return { ok: true };
+  }
+
   async resolveMobileStationQr(input: {
     sessionToken: string;
     token: string;
@@ -1975,6 +2094,16 @@ export class MobileService {
         normalizedCode,
       );
     if (!station) {
+      const pointsQrResult = await this.claimPointsQrCode({
+        realization,
+        team,
+        assignment,
+        code: normalizedCode,
+      });
+      if (pointsQrResult) {
+        return pointsQrResult;
+      }
+
       await this.emitEvent({
         realizationId: realization.id,
         teamId: team.id,
@@ -2013,6 +2142,7 @@ export class MobileService {
     });
 
     return {
+      kind: 'station' as const,
       realizationId: realization.id,
       station: this.toMobileStationPayload(station, languageContext),
       task: {
@@ -2026,6 +2156,111 @@ export class MobileService {
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
       },
+    };
+  }
+
+  /**
+   * Scanned codes that don't match any station's qrEntryCode fall back to a
+   * lookup against standalone "points bonus" QR codes — independent of the
+   * Station/TeamTaskProgress system, so they never show up on a team's task
+   * list and never count toward "all tasks completed". Returns null when the
+   * code doesn't match a points QR code either, so the caller can fall
+   * through to its normal "station not found" handling.
+   */
+  private async claimPointsQrCode(input: {
+    realization: { id: string };
+    team: { id: string; points: number };
+    assignment: { deviceId: string };
+    code: string;
+  }) {
+    const pointsQrCode = await this.prisma.pointsQrCode.findUnique({
+      where: {
+        realizationId_code: {
+          realizationId: input.realization.id,
+          code: input.code,
+        },
+      },
+    });
+
+    if (!pointsQrCode) {
+      return null;
+    }
+
+    const existingClaim = await this.prisma.pointsQrCodeClaim.findUnique({
+      where: {
+        pointsQrCodeId_teamId: {
+          pointsQrCodeId: pointsQrCode.id,
+          teamId: input.team.id,
+        },
+      },
+    });
+
+    if (existingClaim) {
+      return {
+        kind: 'points' as const,
+        realizationId: input.realization.id,
+        pointsAwarded: 0,
+        teamPoints: input.team.points,
+        alreadyClaimed: true,
+      };
+    }
+
+    if (pointsQrCode.claimMode === PointsQrClaimMode.FIRST_TEAM) {
+      const anyClaim = await this.prisma.pointsQrCodeClaim.findFirst({
+        where: { pointsQrCodeId: pointsQrCode.id },
+      });
+      if (anyClaim) {
+        await this.emitEvent({
+          realizationId: input.realization.id,
+          teamId: input.team.id,
+          actorType: EventActorType.MOBILE_DEVICE,
+          actorId: input.assignment.deviceId,
+          eventType: 'points_qr_rejected',
+          payload: {
+            pointsQrCodeId: pointsQrCode.id,
+            reason: 'already_claimed_by_other_team',
+          },
+        });
+        return {
+          kind: 'points' as const,
+          realizationId: input.realization.id,
+          pointsAwarded: 0,
+          teamPoints: input.team.points,
+          alreadyClaimedByOtherTeam: true,
+        };
+      }
+    }
+
+    await this.prisma.pointsQrCodeClaim.create({
+      data: {
+        pointsQrCodeId: pointsQrCode.id,
+        teamId: input.team.id,
+        realizationId: input.realization.id,
+      },
+    });
+
+    const teamPoints = await this.recalculateTeamPoints(
+      input.team.id,
+      input.realization.id,
+    );
+
+    await this.emitEvent({
+      realizationId: input.realization.id,
+      teamId: input.team.id,
+      actorType: EventActorType.MOBILE_DEVICE,
+      actorId: input.assignment.deviceId,
+      eventType: 'points_qr_claimed',
+      payload: {
+        pointsQrCodeId: pointsQrCode.id,
+        pointsAwarded: pointsQrCode.points,
+      },
+    });
+
+    return {
+      kind: 'points' as const,
+      realizationId: input.realization.id,
+      pointsAwarded: pointsQrCode.points,
+      teamPoints,
     };
   }
 
@@ -3109,7 +3344,17 @@ export class MobileService {
       },
     });
 
-    const points = doneTasks.reduce((sum, item) => sum + item.pointsAwarded, 0);
+    const pointsQrClaims = await this.prisma.pointsQrCodeClaim.findMany({
+      where: { teamId },
+      include: { pointsQrCode: { select: { points: true } } },
+    });
+
+    const taskPoints = doneTasks.reduce((sum, item) => sum + item.pointsAwarded, 0);
+    const pointsQrPoints = pointsQrClaims.reduce(
+      (sum, claim) => sum + claim.pointsQrCode.points,
+      0,
+    );
+    const points = taskPoints + pointsQrPoints;
 
     await this.prisma.team.update({
       where: { id: teamId },

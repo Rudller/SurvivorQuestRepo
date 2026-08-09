@@ -1,10 +1,18 @@
-export type RealizationFormTabId = "basic" | "gameplay" | "scenario" | "stations" | "summary" | "history";
+export type RealizationFormTabId =
+  | "basic"
+  | "gameplay"
+  | "scenario"
+  | "stations"
+  | "pointsQr"
+  | "summary"
+  | "history";
 
 export const REALIZATION_FORM_TAB_ORDER: RealizationFormTabId[] = [
   "basic",
   "gameplay",
   "scenario",
   "stations",
+  "pointsQr",
   "summary",
   "history",
 ];
@@ -14,6 +22,7 @@ export const REALIZATION_FORM_TAB_LABELS: Record<RealizationFormTabId, string> =
   gameplay: "Ustawienia rozgrywki",
   scenario: "Scenariusz i treści",
   stations: "Stanowiska",
+  pointsQr: "Kody punktowe",
   summary: "Podsumowanie",
   history: "Historia zmian",
 };

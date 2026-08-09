@@ -3,8 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EventActorType } from '@prisma/client';
+import { EventActorType, PointsQrClaimMode } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { generateRandomCode } from '../../shared/lib/random-code';
+import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
 import {
   requireRealizationId,
   validateRealizationPayload,
@@ -13,7 +15,10 @@ import {
   type TranslateRealizationTextsDto,
   type UpdateRealizationDto,
 } from './dto/realization.dto';
-import type { ScenarioStationDraftPayload } from './entities/realization.entity';
+import type {
+  PointsQrCodeDraftPayload,
+  ScenarioStationDraftPayload,
+} from './entities/realization.entity';
 import {
   buildRealizationEntity,
   calculateRequiredDevices,
@@ -162,6 +167,13 @@ export class RealizationService {
         ).storedCode,
       },
     });
+
+    if (validated.pointsQrCodeDrafts?.length) {
+      await this.createPointsQrCodes(
+        realizationId,
+        validated.pointsQrCodeDrafts,
+      );
+    }
 
     await this.createLog(
       realizationId,
@@ -314,6 +326,49 @@ export class RealizationService {
     const key = this.stationStorageService.getObjectKeyFromUrl(url);
     if (key) {
       await this.stationStorageService.deleteObject(key);
+    }
+  }
+
+  /**
+   * Bulk-creates points-only QR codes queued as local drafts while a
+   * realization was still being created (mirrors the station-drafts flow —
+   * `PointsQrCode.realizationId` is a real FK, so this must run after the
+   * Realization row exists, unlike scenario stations which tolerate a
+   * not-yet-created parent since their `realizationId` column has no FK).
+   */
+  private async createPointsQrCodes(
+    realizationId: string,
+    drafts: PointsQrCodeDraftPayload[],
+  ) {
+    for (const draft of drafts) {
+      const points = Math.round(Number(draft.points));
+      if (!Number.isFinite(points) || points <= 0) {
+        continue;
+      }
+
+      const claimMode =
+        draft.claimMode === PointsQrClaimMode.FIRST_TEAM
+          ? PointsQrClaimMode.FIRST_TEAM
+          : PointsQrClaimMode.PER_TEAM;
+      const label = draft.label?.trim() || null;
+      const preferredCode = draft.code?.trim().toUpperCase() || undefined;
+      const candidateCodes = [
+        ...(preferredCode ? [preferredCode] : []),
+        ...Array.from({ length: 5 }, () => generateRandomCode(8)),
+      ];
+
+      for (const code of candidateCodes) {
+        try {
+          await this.prisma.pointsQrCode.create({
+            data: { realizationId, code, points, label, claimMode },
+          });
+          break;
+        } catch (error) {
+          if (!isUniqueConstraintError(error)) {
+            throw error;
+          }
+        }
+      }
     }
   }
 

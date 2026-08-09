@@ -1407,6 +1407,14 @@ describe('MobileService resolveMobileStationQr', () => {
       teamTaskProgress: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
+      pointsQrCode: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      pointsQrCodeClaim: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+      },
       eventLog: {
         create: jest.fn(),
       },
@@ -1427,7 +1435,7 @@ describe('MobileService resolveMobileStationQr', () => {
   function stubSession(service: MobileService, realizationId: string) {
     jest.spyOn(service as never, 'requireSession').mockResolvedValue({
       assignment: { deviceId: 'device-1' },
-      team: { id: 'team-1' },
+      team: { id: 'team-1', points: 100 },
       realization: {
         id: realizationId,
         language: 'polish',
@@ -1466,6 +1474,10 @@ describe('MobileService resolveMobileStationQr', () => {
     expect(
       stationService.findStationByRealizationAndQrEntryCode,
     ).toHaveBeenCalledWith('realization-1', 'K3M9QXZ7');
+    expect(result.kind).toBe('station');
+    if (result.kind !== 'station') {
+      throw new Error('expected a station result');
+    }
     expect(result.station.id).toBe('station-1');
   });
 
@@ -1503,5 +1515,108 @@ describe('MobileService resolveMobileStationQr', () => {
     expect(
       stationService.findStationByRealizationAndQrEntryCode,
     ).not.toHaveBeenCalled();
+  });
+
+  it('awards points and creates a claim when the code matches a PER_TEAM points QR code', async () => {
+    const { service, prisma, stationService } = createService();
+    stubSession(service, 'realization-1');
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    prisma.pointsQrCode.findUnique.mockResolvedValue({
+      id: 'points-qr-1',
+      realizationId: 'realization-1',
+      code: 'BONUS01',
+      points: 25,
+      claimMode: 'PER_TEAM',
+    });
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(125);
+
+    const result = await service.resolveMobileStationQr({
+      sessionToken: 'session-token',
+      token: 'bonus01',
+    });
+
+    expect(result).toEqual({
+      kind: 'points',
+      realizationId: 'realization-1',
+      pointsAwarded: 25,
+      teamPoints: 125,
+    });
+    expect(prisma.pointsQrCodeClaim.create).toHaveBeenCalledWith({
+      data: {
+        pointsQrCodeId: 'points-qr-1',
+        teamId: 'team-1',
+        realizationId: 'realization-1',
+      },
+    });
+  });
+
+  it('treats re-scanning an already-claimed points QR code as an idempotent no-op', async () => {
+    const { service, prisma, stationService } = createService();
+    stubSession(service, 'realization-1');
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    prisma.pointsQrCode.findUnique.mockResolvedValue({
+      id: 'points-qr-1',
+      realizationId: 'realization-1',
+      code: 'BONUS01',
+      points: 25,
+      claimMode: 'PER_TEAM',
+    });
+    prisma.pointsQrCodeClaim.findUnique.mockResolvedValue({ id: 'claim-1' });
+
+    const result = await service.resolveMobileStationQr({
+      sessionToken: 'session-token',
+      token: 'BONUS01',
+    });
+
+    expect(result).toEqual({
+      kind: 'points',
+      realizationId: 'realization-1',
+      pointsAwarded: 0,
+      teamPoints: 100,
+      alreadyClaimed: true,
+    });
+    expect(prisma.pointsQrCodeClaim.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a FIRST_TEAM points QR code already claimed by a different team', async () => {
+    const { service, prisma, stationService } = createService();
+    stubSession(service, 'realization-1');
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+    prisma.pointsQrCode.findUnique.mockResolvedValue({
+      id: 'points-qr-1',
+      realizationId: 'realization-1',
+      code: 'BONUS01',
+      points: 25,
+      claimMode: 'FIRST_TEAM',
+    });
+    prisma.pointsQrCodeClaim.findUnique.mockResolvedValue(null);
+    prisma.pointsQrCodeClaim.findFirst.mockResolvedValue({ id: 'claim-other-team' });
+
+    const result = await service.resolveMobileStationQr({
+      sessionToken: 'session-token',
+      token: 'BONUS01',
+    });
+
+    expect(result).toEqual({
+      kind: 'points',
+      realizationId: 'realization-1',
+      pointsAwarded: 0,
+      teamPoints: 100,
+      alreadyClaimedByOtherTeam: true,
+    });
+    expect(prisma.pointsQrCodeClaim.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a code that matches neither a station nor a points QR code', async () => {
+    const { service, stationService } = createService();
+    stubSession(service, 'realization-1');
+    stationService.findStationByRealizationAndQrEntryCode.mockResolvedValue(null);
+
+    await expect(
+      service.resolveMobileStationQr({
+        sessionToken: 'session-token',
+        token: 'UNKNOWN01',
+      }),
+    ).rejects.toThrow('Station not found');
   });
 });

@@ -1000,54 +1000,65 @@ export async function postMobileResolveStationQr(
   },
   options?: MobileApiRequestOptions,
 ) {
-  return requestMobileApi<{
-    realizationId: string;
-      station: {
-        id: string;
-        name: string;
-        type:
-          | "quiz"
-          | "audio-quiz"
-          | "time"
-          | "points"
-          | "wordle"
-          | "hangman"
-          | "mastermind"
-          | "anagram"
-          | "caesar-cipher"
-          | "memory"
-          | "simon"
-          | "rebus"
-          | "boggle"
-          | "mini-sudoku"
-          | "matching";
-        description: string;
-        imageUrl: string;
-        points: number;
-      timeLimitSeconds: number;
-      completionCodeInputMode?: "numeric" | "alphanumeric";
-      completionCodeLength?: number;
-      quiz?: {
-        question: string;
-        answers: [string, string, string, string];
-        correctAnswerIndex: number;
-        audioUrl?: string;
-      };
-      latitude?: number;
-      longitude?: number;
-    };
-    task: {
-      stationId: string;
-      status: "todo" | "in-progress" | "done" | "failed";
-      pointsAwarded: number;
-      startedAt: string | null;
-      finishedAt: string | null;
-    };
-    qr: {
-      issuedAt: string;
-      expiresAt: string;
-    };
-  }>(apiBaseUrl, "/api/mobile/station/resolve-qr", {
+  return requestMobileApi<
+    | {
+        kind?: "station";
+        realizationId: string;
+        station: {
+          id: string;
+          name: string;
+          type:
+            | "quiz"
+            | "audio-quiz"
+            | "time"
+            | "points"
+            | "wordle"
+            | "hangman"
+            | "mastermind"
+            | "anagram"
+            | "caesar-cipher"
+            | "memory"
+            | "simon"
+            | "rebus"
+            | "boggle"
+            | "mini-sudoku"
+            | "matching";
+          description: string;
+          imageUrl: string;
+          points: number;
+          timeLimitSeconds: number;
+          completionCodeInputMode?: "numeric" | "alphanumeric";
+          completionCodeLength?: number;
+          quiz?: {
+            question: string;
+            answers: [string, string, string, string];
+            correctAnswerIndex: number;
+            audioUrl?: string;
+          };
+          latitude?: number;
+          longitude?: number;
+        };
+        task: {
+          stationId: string;
+          status: "todo" | "in-progress" | "done" | "failed";
+          pointsAwarded: number;
+          startedAt: string | null;
+          finishedAt: string | null;
+        };
+        qr: {
+          issuedAt: string;
+          expiresAt: string;
+        };
+      }
+    | {
+        kind: "points";
+        realizationId: string;
+        pointsAwarded: number;
+        teamPoints: number;
+        alreadyClaimed?: boolean;
+        alreadyClaimedByOtherTeam?: boolean;
+      }
+  >(apiBaseUrl, "/api/mobile/station/resolve-qr", {
     method: "POST",
     body: JSON.stringify({
       sessionToken: payload.sessionToken,

@@ -209,6 +209,64 @@ type TeamTaskAdminMutationResponse = {
   updatedAt: string;
 };
 
+export type PointsQrClaimMode = "PER_TEAM" | "FIRST_TEAM";
+
+export type PointsQrCodeEntry = {
+  id: string;
+  code: string;
+  points: number;
+  label: string | null;
+  claimMode: PointsQrClaimMode;
+  claimCount: number;
+  createdAt: string;
+};
+
+export type PointsQrCodesResponse = {
+  realizationId: string;
+  entries: PointsQrCodeEntry[];
+};
+
+export type PointsQrCodeSuggestion = {
+  code: string;
+  label: string | null;
+  points: number;
+};
+
+function normalizePointsQrCodeSuggestions(raw: unknown): PointsQrCodeSuggestion[] {
+  const source = asRecord(raw);
+
+  return asArray(source.entries).map((value) => {
+    const item = asRecord(value);
+    return {
+      code: asString(item.code),
+      label: typeof item.label === "string" ? item.label : null,
+      points: asNumber(item.points),
+    };
+  });
+}
+
+function normalizePointsQrCodesResponse(raw: unknown): PointsQrCodesResponse {
+  const source = asRecord(raw);
+
+  return {
+    realizationId: asString(source.realizationId),
+    entries: asArray(source.entries).map((value) => {
+      const item = asRecord(value);
+      const claimMode = item.claimMode === "FIRST_TEAM" ? "FIRST_TEAM" : "PER_TEAM";
+
+      return {
+        id: asString(item.id),
+        code: asString(item.code),
+        points: asNumber(item.points),
+        label: typeof item.label === "string" ? item.label : null,
+        claimMode,
+        claimCount: asNumber(item.claimCount),
+        createdAt: asString(item.createdAt),
+      };
+    }),
+  };
+}
+
 export type PendingPhotoReview = {
   teamId: string;
   teamName: string;
@@ -297,6 +355,48 @@ export const currentRealizationApi = baseApi.injectEndpoints({
     >({
       query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/station-qr"),
     }),
+    getCurrentRealizationPointsQrCodes: build.query<
+      PointsQrCodesResponse,
+      { realizationId?: string } | void
+    >({
+      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/points-qr-codes"),
+      transformResponse: (response: unknown) => normalizePointsQrCodesResponse(response),
+      providesTags: ["Realization"],
+    }),
+    createCurrentRealizationPointsQrCode: build.mutation<
+      PointsQrCodeEntry,
+      {
+        realizationId?: string;
+        points: number;
+        label?: string;
+        code?: string;
+        claimMode?: PointsQrClaimMode;
+      }
+    >({
+      query: ({ realizationId, points, label, code, claimMode }) => ({
+        url: toMobileAdminRealizationPath(realizationId, "/points-qr-codes"),
+        method: "POST",
+        body: { points, label, code, claimMode },
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    getPointsQrCodeSuggestions: build.query<PointsQrCodeSuggestion[], void>({
+      query: () => buildApiPath("/mobile/admin/points-qr-codes/suggestions"),
+      transformResponse: (response: unknown) => normalizePointsQrCodeSuggestions(response),
+    }),
+    deleteCurrentRealizationPointsQrCode: build.mutation<
+      { ok: boolean },
+      { realizationId?: string; pointsQrCodeId: string }
+    >({
+      query: ({ realizationId, pointsQrCodeId }) => ({
+        url: toMobileAdminRealizationPath(
+          realizationId,
+          `/points-qr-codes/${encodeURIComponent(pointsQrCodeId)}`,
+        ),
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
     resetCurrentRealizationTeamTask: build.mutation<
       TeamTaskAdminMutationResponse,
       { realizationId?: string; teamId: string; stationId: string }
@@ -346,6 +446,10 @@ export const {
   useFinishCurrentRealizationMutation,
   useResetCurrentRealizationMutation,
   useGetCurrentRealizationStationQrsQuery,
+  useGetCurrentRealizationPointsQrCodesQuery,
+  useCreateCurrentRealizationPointsQrCodeMutation,
+  useDeleteCurrentRealizationPointsQrCodeMutation,
+  useGetPointsQrCodeSuggestionsQuery,
   useResetCurrentRealizationTeamTaskMutation,
   useCompleteCurrentRealizationTeamTaskMutation,
   useFailCurrentRealizationTeamTaskMutation,

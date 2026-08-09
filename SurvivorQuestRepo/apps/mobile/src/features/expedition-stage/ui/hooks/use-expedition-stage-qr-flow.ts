@@ -13,6 +13,9 @@ type QrFlowText = {
   scannedStation: string;
   qrScanCanceled: string;
   locationRequired: string;
+  pointsQrClaimed: string;
+  pointsQrAlreadyClaimed: string;
+  pointsQrClaimedByOtherTeam: string;
 };
 
 type UseExpeditionStageQrFlowArgs = {
@@ -28,11 +31,18 @@ type UseExpeditionStageQrFlowArgs = {
   ) => Promise<
     | string
     | {
+        kind?: "station";
         station: {
           id: string;
           name: string;
           type: ExpeditionStationType;
         };
+      }
+    | {
+        kind: "points";
+        pointsAwarded: number;
+        alreadyClaimed?: boolean;
+        alreadyClaimedByOtherTeam?: boolean;
       }
   >;
   setActionError: Dispatch<SetStateAction<string | null>>;
@@ -142,6 +152,22 @@ export function useExpeditionStageQrFlow({
           return;
         }
 
+        if (result.kind === "points") {
+          setIsQrScannerOpen(false);
+          if (result.alreadyClaimedByOtherTeam) {
+            feedbackSound.playIncorrect();
+            setActionError(text.pointsQrClaimedByOtherTeam);
+            return;
+          }
+          feedbackSound.playStationOpened();
+          setActionMessage(
+            result.alreadyClaimed
+              ? text.pointsQrAlreadyClaimed
+              : interpolate(text.pointsQrClaimed, { points: String(result.pointsAwarded) }),
+          );
+          return;
+        }
+
         const scannedStationId = result.station.id;
         feedbackSound.playStationOpened();
         setSelectedStationId(scannedStationId);
@@ -173,6 +199,9 @@ export function useExpeditionStageQrFlow({
       text.qrTokenReadFailed,
       text.realizationEndedTasksBlocked,
       text.scannedStation,
+      text.pointsQrClaimed,
+      text.pointsQrAlreadyClaimed,
+      text.pointsQrClaimedByOtherTeam,
     ],
   );
 

@@ -86,6 +86,11 @@ enum EventActorType {
   SYSTEM
 }
 
+enum PointsQrClaimMode {
+  PER_TEAM
+  FIRST_TEAM
+}
+
 model User {
   id           String        @id @default(uuid())
   displayName  String
@@ -224,6 +229,7 @@ model Realization {
   eventLogs           EventLog[]
   photos              TeamPhoto[]
   stationScans        TeamStationScan[]
+  pointsQrCodes       PointsQrCode[]
 }
 
 model Team {
@@ -250,6 +256,7 @@ model Team {
   eventLogs          EventLog[]
   photos             TeamPhoto[]
   stationScans       TeamStationScan[]
+  pointsQrClaims     PointsQrCodeClaim[]
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -325,6 +332,33 @@ model TeamStationScan {
 
   @@unique([realizationId, teamId, stationId, code])
   @@index([realizationId, teamId, stationId])
+}
+
+model PointsQrCode {
+  id            String              @id @default(uuid())
+  realizationId String
+  code          String
+  points        Int
+  label         String?
+  claimMode     PointsQrClaimMode   @default(PER_TEAM)
+  createdAt     DateTime            @default(now())
+  realization   Realization         @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  claims        PointsQrCodeClaim[]
+
+  @@unique([realizationId, code])
+}
+
+model PointsQrCodeClaim {
+  id             String       @id @default(uuid())
+  pointsQrCodeId String
+  teamId         String
+  realizationId  String
+  claimedAt      DateTime     @default(now())
+  pointsQrCode   PointsQrCode @relation(fields: [pointsQrCodeId], references: [id], onDelete: Cascade)
+  team           Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([pointsQrCodeId, teamId])
+  @@index([teamId])
 }
 
 model EventLog {

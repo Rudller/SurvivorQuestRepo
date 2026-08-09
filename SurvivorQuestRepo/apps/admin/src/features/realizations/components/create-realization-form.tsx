@@ -44,6 +44,7 @@ import {
 } from "./realization-stations-editor";
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
+import { PointsQrCodesDraftEditor, type PointsQrCodeDraft } from "./points-qr-codes-draft-editor";
 import {
   getDistinctUsedAssets,
   getStatusLabel,
@@ -222,6 +223,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
   const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
   const [scenarioStations, setScenarioStations] = useState(() => [] as ReturnType<typeof mapScenarioStations>);
+  const [pointsQrCodeDrafts, setPointsQrCodeDrafts] = useState<PointsQrCodeDraft[]>([]);
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isCreating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
@@ -450,6 +452,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     status,
     scheduledAt,
     scenarioStations,
+    pointsQrCodeDrafts,
   });
 
   return (
@@ -580,6 +583,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
+                pointsQrCodes: pointsQrCodeDrafts.map((draft) => ({
+                  points: draft.points,
+                  label: draft.label || undefined,
+                  code: draft.code || undefined,
+                  claimMode: draft.claimMode,
+                })),
                 changedBy: userEmail,
               }).unwrap();
               onSaved?.(createdRealization);
@@ -615,6 +624,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setOfferPdfName(undefined);
               setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
               setScenarioStations([]);
+              setPointsQrCodeDrafts([]);
               setSubmitAttempted(false);
               setActiveTab("basic");
               onClose();
@@ -1201,6 +1211,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
                 ) : null}
               </div>
+            )}
+
+            {activeTab === "pointsQr" && (
+              <PointsQrCodesDraftEditor drafts={pointsQrCodeDrafts} onChange={setPointsQrCodeDrafts} />
             )}
 
             {activeTab === "summary" && (

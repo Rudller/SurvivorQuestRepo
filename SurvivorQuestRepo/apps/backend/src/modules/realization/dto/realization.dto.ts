@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type {
+  PointsQrCodeDraftPayload,
   RealizationLanguage,
   RealizationEntity,
   RealizationStatus,
@@ -63,6 +64,7 @@ export type CreateRealizationDto = {
   hideTaskList?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
+  pointsQrCodes?: unknown;
 };
 
 export type UpdateRealizationDto = CreateRealizationDto & {
@@ -266,6 +268,17 @@ export function validateRealizationPayload(
     );
   }
 
+  let pointsQrCodeDrafts: PointsQrCodeDraftPayload[] | undefined;
+  if (typeof payload.pointsQrCodes !== 'undefined') {
+    if (!Array.isArray(payload.pointsQrCodes)) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    pointsQrCodeDrafts = payload.pointsQrCodes.map(
+      (item) => (item || {}) as PointsQrCodeDraftPayload,
+    );
+  }
+
   const resolvedShowLeaderboardDuringGame =
     typeof payload.showLeaderboardDuringGame === 'boolean'
       ? payload.showLeaderboardDuringGame
@@ -313,6 +326,7 @@ export function validateRealizationPayload(
     scheduledAt,
     changedBy: payload.changedBy?.trim() || 'admin@local',
     stationDrafts,
+    pointsQrCodeDrafts,
   };
 }
 

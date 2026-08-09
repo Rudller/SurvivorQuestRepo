@@ -96,6 +96,13 @@ export type ScenarioStationDraftPayload = {
   sourceTemplateId?: string;
 };
 
+export type PointsQrCodeDraftPayload = {
+  points?: number;
+  label?: string;
+  code?: string;
+  claimMode?: 'PER_TEAM' | 'FIRST_TEAM';
+};
+
 export type ValidatedRealizationPayload = {
   companyName: string;
   location?: string;
@@ -128,4 +135,5 @@ export type ValidatedRealizationPayload = {
   scheduledAt: string;
   changedBy: string;
   stationDrafts?: ScenarioStationDraftPayload[];
+  pointsQrCodeDrafts?: PointsQrCodeDraftPayload[];
 };
