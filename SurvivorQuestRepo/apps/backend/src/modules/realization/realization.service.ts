@@ -279,6 +279,15 @@ export class RealizationService {
       },
     });
 
+    if (
+      currentScenario &&
+      currentScenario.id !== scenario.id &&
+      currentScenario.realizationId === realizationId
+    ) {
+      await this.stationService.removeStationsByIds(currentScenario.stationIds);
+      await this.scenarioService.removeScenario(currentScenario.id);
+    }
+
     await this.createLog(
       realizationId,
       validated.changedBy,
