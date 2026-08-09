@@ -212,15 +212,30 @@ export class RealizationService {
     );
     const currentScenarioTemplateId =
       currentScenario?.sourceTemplateId ?? currentScenario?.id;
+    const isReusingCurrentScenarioInstance =
+      requestedScenario.id === current.scenarioId ||
+      (currentScenarioTemplateId === requestedScenario.id && !!currentScenario);
+    const isDiscardingCurrentScenarioInstance =
+      !isReusingCurrentScenarioInstance &&
+      !!currentScenario &&
+      currentScenario.realizationId === realizationId;
 
-    const scenario =
-      requestedScenario.id === current.scenarioId
-        ? requestedScenario
-        : currentScenarioTemplateId === requestedScenario.id && currentScenario
-          ? currentScenario
-          : await this.scenarioService.cloneScenario(requestedScenario.id, {
-              realizationId,
-            });
+    if (isDiscardingCurrentScenarioInstance) {
+      // Remove the old scenario instance's stations *before* cloning the new
+      // one, so the clone's preferred (template) qrEntryCodes can't collide
+      // with the soon-to-be-replaced rows within this same realizationId.
+      // The Scenario row itself can only be deleted once Realization.scenarioId
+      // stops referencing it (FK), so that happens later, after the update below.
+      await this.stationService.removeStationsByIds(currentScenario.stationIds);
+    }
+
+    const scenario = isReusingCurrentScenarioInstance
+      ? (requestedScenario.id === current.scenarioId
+          ? requestedScenario
+          : currentScenario)!
+      : await this.scenarioService.cloneScenario(requestedScenario.id, {
+          realizationId,
+        });
 
     if (!scenario) {
       throw new BadRequestException('Scenario not found');
@@ -279,12 +294,7 @@ export class RealizationService {
       },
     });
 
-    if (
-      currentScenario &&
-      currentScenario.id !== scenario.id &&
-      currentScenario.realizationId === realizationId
-    ) {
-      await this.stationService.removeStationsByIds(currentScenario.stationIds);
+    if (isDiscardingCurrentScenarioInstance) {
       await this.scenarioService.removeScenario(currentScenario.id);
     }
 
