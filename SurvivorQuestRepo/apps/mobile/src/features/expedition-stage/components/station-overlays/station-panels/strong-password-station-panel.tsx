@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { buildStrongPasswordRules, getDifficultyPointsMultiplier, type ChallengeDifficulty } from "./strong-password-rules";
 import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
@@ -14,6 +15,57 @@ type Props = {
   onComplete: (difficulty: ChallengeDifficulty) => void;
 };
 
+type StrongPasswordStationText = {
+  difficultyLabel: Record<ChallengeDifficulty, string>;
+  ruleCount: string;
+  pointsPercent: string;
+  passwordPlaceholder: string;
+  level: string;
+  points: string;
+  submit: string;
+};
+
+const STRONG_PASSWORD_STATION_TEXT_ENGLISH: StrongPasswordStationText = {
+  difficultyLabel: { easy: "Easy", medium: "Medium", hard: "Hard" },
+  ruleCount: "rules",
+  pointsPercent: "% points",
+  passwordPlaceholder: "Enter password",
+  level: "Level",
+  points: "Points",
+  submit: "Confirm strong password",
+};
+
+const STRONG_PASSWORD_STATION_TEXT: Record<UiLanguage, StrongPasswordStationText> = {
+  polish: {
+    difficultyLabel: { easy: "Łatwy", medium: "Średni", hard: "Trudny" },
+    ruleCount: "reguł",
+    pointsPercent: "% punktów",
+    passwordPlaceholder: "Wprowadź hasło",
+    level: "Poziom",
+    points: "Punkty",
+    submit: "Zatwierdź mocne hasło",
+  },
+  english: STRONG_PASSWORD_STATION_TEXT_ENGLISH,
+  ukrainian: {
+    difficultyLabel: { easy: "Легкий", medium: "Середній", hard: "Важкий" },
+    ruleCount: "правил",
+    pointsPercent: "% балів",
+    passwordPlaceholder: "Введіть пароль",
+    level: "Рівень",
+    points: "Бали",
+    submit: "Підтвердити надійний пароль",
+  },
+  russian: {
+    difficultyLabel: { easy: "Лёгкий", medium: "Средний", hard: "Сложный" },
+    ruleCount: "правил",
+    pointsPercent: "% очков",
+    passwordPlaceholder: "Введите пароль",
+    level: "Уровень",
+    points: "Очки",
+    submit: "Подтвердить надёжный пароль",
+  },
+};
+
 export function StrongPasswordStationPanel({
   stationId,
   configuredDifficulty,
@@ -24,12 +76,17 @@ export function StrongPasswordStationPanel({
   onComplete,
 }: Props) {
   const layout = useStationPanelLayout();
+  const uiLanguage = useUiLanguage();
+  const text = STRONG_PASSWORD_STATION_TEXT[uiLanguage];
   const [selectedDifficulty, setSelectedDifficulty] = useState<ChallengeDifficulty | null>(
     difficultyMode === "admin" ? configuredDifficulty : null,
   );
   const [password, setPassword] = useState("");
   const difficulty = selectedDifficulty ?? configuredDifficulty;
-  const rules = useMemo(() => buildStrongPasswordRules(stationId, difficulty), [difficulty, stationId]);
+  const rules = useMemo(
+    () => buildStrongPasswordRules(stationId, difficulty, uiLanguage),
+    [difficulty, stationId, uiLanguage],
+  );
   const maxVisibleRef = useRef<{ key: string; count: number }>({ key: "", count: 0 });
   const ruleSetKey = `${stationId}-${difficulty}`;
   if (maxVisibleRef.current.key !== ruleSetKey) {
@@ -58,10 +115,11 @@ export function StrongPasswordStationPanel({
             onPress={() => setSelectedDifficulty(option)}
           >
             <Text className="font-bold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: layout.actionFontSize }}>
-              {option === "easy" ? "Łatwy" : option === "hard" ? "Trudny" : "Średni"}
+              {text.difficultyLabel[option]}
             </Text>
             <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-              {rules.length} reguł • {Math.round(getDifficultyPointsMultiplier(option) * 100)}% punktów
+              {rules.length} {text.ruleCount} • {Math.round(getDifficultyPointsMultiplier(option) * 100)}
+              {text.pointsPercent}
             </Text>
           </Pressable>
         ))}
@@ -80,7 +138,7 @@ export function StrongPasswordStationPanel({
           fontSize: layout.inputFontSize,
           paddingVertical: layout.isTablet ? 14 : 10,
         }}
-        placeholder="Wprowadź hasło"
+        placeholder={text.passwordPlaceholder}
         placeholderTextColor={EXPEDITION_THEME.textSubtle}
         value={password}
         onChangeText={setPassword}
@@ -89,7 +147,7 @@ export function StrongPasswordStationPanel({
         autoCorrect={false}
       />
       <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        Poziom: {difficulty === "easy" ? "łatwy" : difficulty === "hard" ? "trudny" : "średni"} • Punkty: {awardedPoints}
+        {text.level}: {text.difficultyLabel[difficulty]} • {text.points}: {awardedPoints}
       </Text>
       <View className="mt-3 gap-2">
         {[...visibleRules].reverse().map((rule) => {
@@ -110,7 +168,7 @@ export function StrongPasswordStationPanel({
         onPress={() => onComplete(difficulty)}
       >
         <Text className="font-semibold" style={{ color: resolveActionLabelColor(!isSolved || isActionDisabled), fontSize: layout.actionFontSize }}>
-          Zatwierdź mocne hasło
+          {text.submit}
         </Text>
       </Pressable>
     </View>
