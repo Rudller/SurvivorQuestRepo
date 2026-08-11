@@ -111,6 +111,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [gameRules, setGameRules] = useState("");
   const [instructors, setInstructors] = useState<string[]>([]);
   const [instructorInput, setInstructorInput] = useState("");
+  const [notes, setNotes] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
@@ -340,6 +341,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setGameRules(data.realization.gameRules ?? "");
     setInstructors(data.realization.instructors);
     setInstructorInput("");
+    setNotes(data.realization.notes ?? "");
     setSelectedType(data.realization.type);
     setLogoFile(null);
     setLogoUrl(data.realization.logoUrl);
@@ -429,6 +431,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     introText,
     gameRules,
     instructors,
+    notes,
     selectedType,
     logoFileName: logoFile?.name ?? null,
     logoUrl,
@@ -563,6 +566,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 contactPhone: normalizedContactPhone,
                 contactEmail: normalizedContactEmail,
                 instructors,
+                notes: notes.trim() || undefined,
                 type: selectedType,
                 logoUrl: finalLogoUrl,
                 hideMap,
@@ -604,6 +608,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setGameRules("");
               setInstructors([]);
               setInstructorInput("");
+              setNotes("");
               setStatus("planned");
               setTimedStationPointsDecayEnabled(false);
               setSelectedScenarioId("");
@@ -898,6 +903,20 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     ))}
                     {instructors.length === 0 && <p className="text-xs text-zinc-500">Brak dodanych instruktorów.</p>}
                   </div>
+                </FormSection>
+
+                <FormSection title="Notatki">
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Notatki wewnętrzne</span>
+                    <textarea
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      placeholder="Notatki robocze widoczne tylko w panelu admina."
+                      rows={4}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    <p className="text-xs text-zinc-500">Widoczne tylko w panelu admina, nie w aplikacji mobilnej.</p>
+                  </label>
                 </FormSection>
 
                 <FormSection title="Harmonogram i status">
@@ -1287,6 +1306,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </p>
                   <p>
                     <span className="text-zinc-500">Instruktorzy:</span> {instructors.length}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Notatki:</span> {notes.trim() ? "Tak" : "Nie"}
                   </p>
                 </div>
               </SummaryCard>

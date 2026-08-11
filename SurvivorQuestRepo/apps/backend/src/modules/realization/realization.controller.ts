@@ -17,6 +17,7 @@ import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { StationStorageService } from '../station/station-storage.service';
 import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
+import { parseDeleteRealizationDto } from './dto/realization.dto';
 import type {
   CreateRealizationDto,
   TranslateRealizationTextsDto,
@@ -166,5 +167,12 @@ export class RealizationController {
   @AdminOnly()
   async updateRealization(@Body() payload: UpdateRealizationDto) {
     return this.realizationService.updateRealization(payload);
+  }
+
+  @Delete()
+  @AdminOnly()
+  async deleteRealization(@Body() payload: unknown) {
+    const dto = parseDeleteRealizationDto(payload);
+    return this.realizationService.deleteRealization(dto);
   }
 }

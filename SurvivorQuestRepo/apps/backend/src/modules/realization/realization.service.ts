@@ -12,6 +12,7 @@ import {
   validateRealizationPayload,
   validateTranslateRealizationTextsPayload,
   type CreateRealizationDto,
+  type DeleteRealizationDto,
   type TranslateRealizationTextsDto,
   type UpdateRealizationDto,
 } from './dto/realization.dto';
@@ -22,6 +23,7 @@ import type {
 import {
   buildRealizationEntity,
   calculateRequiredDevices,
+  fromPrismaRealizationStatus,
   mapRealizationLogs,
   resolveRealizationStatus,
   toPrismaRealizationLanguage,
@@ -117,6 +119,7 @@ export class RealizationService {
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
         instructors: validated.instructors,
+        notes: validated.notes,
         type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
         hideMap: validated.hideMap,
@@ -264,6 +267,7 @@ export class RealizationService {
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
         instructors: validated.instructors,
+        notes: validated.notes,
         type: toPrismaRealizationType(validated.type),
         logoUrl: validated.logoUrl,
         hideMap: validated.hideMap,
@@ -311,6 +315,48 @@ export class RealizationService {
     }
 
     return entity;
+  }
+
+  async deleteRealization(dto: DeleteRealizationDto) {
+    const realization = await this.prisma.realization.findUnique({
+      where: { id: dto.id },
+    });
+    if (!realization) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    const effectiveStatus = resolveRealizationStatus(
+      fromPrismaRealizationStatus(realization.status),
+      realization.scheduledAt.toISOString(),
+      realization.durationMinutes,
+    );
+    if (effectiveStatus === 'in-progress') {
+      throw new BadRequestException(
+        'Cannot delete a realization that is in progress',
+      );
+    }
+
+    if (realization.companyName !== dto.confirmName) {
+      throw new BadRequestException(
+        'Realization name confirmation does not match',
+      );
+    }
+
+    const scenario = await this.scenarioService.findScenarioById(
+      realization.scenarioId,
+    );
+
+    if (scenario) {
+      await this.stationService.removeStationsByIds(scenario.stationIds);
+    }
+
+    await this.prisma.realization.delete({ where: { id: dto.id } });
+
+    if (scenario && scenario.realizationId === dto.id) {
+      await this.scenarioService.removeScenario(scenario.id);
+    }
+
+    return { id: dto.id };
   }
 
   async translateTexts(payload: TranslateRealizationTextsDto) {

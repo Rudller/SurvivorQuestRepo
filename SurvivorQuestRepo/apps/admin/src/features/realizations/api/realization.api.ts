@@ -76,6 +76,7 @@ type RealizationDto = {
   contactPhone?: string;
   contactEmail?: string;
   instructors?: string[];
+  notes?: string;
   type?: RealizationType;
   logoUrl?: string;
   hideMap?: boolean;
@@ -118,6 +119,7 @@ type CreateRealizationPayload = {
   contactPhone?: string;
   contactEmail?: string;
   instructors: string[];
+  notes?: string;
   type: RealizationType;
   logoUrl?: string;
   hideMap: boolean;
@@ -159,6 +161,7 @@ type UpdateRealizationPayload = {
   contactPhone?: string;
   contactEmail?: string;
   instructors: string[];
+  notes?: string;
   type: RealizationType;
   logoUrl?: string;
   hideMap: boolean;
@@ -180,6 +183,11 @@ type UpdateRealizationPayload = {
   scheduledAt: string;
   changedBy?: string;
   scenarioStations?: RealizationStationDraft[];
+};
+
+type DeleteRealizationPayload = {
+  id: string;
+  confirmName: string;
 };
 
 type UploadRealizationAssetResponse = {
@@ -290,6 +298,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,
     instructors,
+    notes: dto.notes?.trim() || undefined,
     type: dto.type ?? "outdoor-games",
     logoUrl: dto.logoUrl,
     hideMap: dto.hideMap === true,
@@ -504,6 +513,14 @@ export const realizationApi = baseApi.injectEndpoints({
       transformResponse: (response: RealizationDto) => normalizeRealization(response),
       invalidatesTags: ["Realization", "Scenario"],
     }),
+    deleteRealization: build.mutation<{ id: string }, DeleteRealizationPayload>({
+      query: (body) => ({
+        url: buildApiPath("/realizations"),
+        method: "DELETE",
+        body,
+      }),
+      invalidatesTags: ["Realization", "Scenario"],
+    }),
     uploadRealizationLogo: build.mutation<UploadRealizationAssetResponse, File>({
       query: (file) => {
         const formData = new FormData();
@@ -576,6 +593,7 @@ export const {
   useGetRealizationsQuery,
   useCreateRealizationMutation,
   useUpdateRealizationMutation,
+  useDeleteRealizationMutation,
   useUploadRealizationLogoMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,

@@ -130,6 +130,7 @@ export function buildRealizationEntity(input: {
     contactPhone: string | null;
     contactEmail: string | null;
     instructors: unknown;
+    notes: string | null;
     type: PrismaRealizationType;
     logoUrl: string | null;
     hideMap: boolean;
@@ -179,6 +180,7 @@ export function buildRealizationEntity(input: {
           (item): item is string => typeof item === 'string',
         )
       : [],
+    notes: realization.notes || undefined,
     type: fromPrismaRealizationType(realization.type),
     logoUrl: realization.logoUrl || undefined,
     hideMap: realization.hideMap,

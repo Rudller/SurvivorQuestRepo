@@ -200,6 +200,7 @@ model Realization {
   contactPhone        String?
   contactEmail        String?
   instructors         Json?
+  notes               String?
   type                RealizationType
   logoUrl             String?
   hideMap             Boolean            @default(false)

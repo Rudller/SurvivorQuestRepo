@@ -194,6 +194,7 @@ export type Realization = {
   contactPhone?: string;
   contactEmail?: string;
   instructors: string[];
+  notes?: string;
   type: RealizationType;
   logoUrl?: string;
   hideMap: boolean;
@@ -262,6 +263,7 @@ export type RealizationExportRealizationData = {
   contactPhone?: string;
   contactEmail?: string;
   instructors: string[];
+  notes?: string;
   type: RealizationType;
   logoUrl?: string;
   hideMap: boolean;

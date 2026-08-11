@@ -43,6 +43,7 @@ export type CreateRealizationDto = {
   contactPhone?: string;
   contactEmail?: string;
   instructors?: unknown;
+  notes?: string;
   type?: RealizationType;
   logoUrl?: string;
   hideMap?: boolean;
@@ -186,6 +187,7 @@ export function validateRealizationPayload(
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
   const instructors = sanitizeInstructors(payload.instructors);
+  const notes = payload.notes?.trim() || '';
   const teamCount = Math.round(Number(payload.teamCount));
   const peopleCount = Math.round(Number(payload.peopleCount));
   const positionsCount = Math.round(Number(payload.positionsCount));
@@ -306,6 +308,7 @@ export function validateRealizationPayload(
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,
     instructors,
+    notes: notes || undefined,
     type: payload.type,
     logoUrl: payload.logoUrl?.trim() || undefined,
     hideMap: payload.hideMap === true,
@@ -340,6 +343,30 @@ export function requireRealizationId(payload: UpdateRealizationDto) {
   }
 
   return realizationId;
+}
+
+export type DeleteRealizationDto = {
+  id: string;
+  confirmName: string;
+};
+
+export function parseDeleteRealizationDto(
+  payload: unknown,
+): DeleteRealizationDto {
+  if (!payload || typeof payload !== 'object') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const body = payload as Record<string, unknown>;
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  const confirmName =
+    typeof body.confirmName === 'string' ? body.confirmName.trim() : '';
+
+  if (!id || !confirmName) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return { id, confirmName };
 }
 
 export function toUpdatedScenarioEntity(

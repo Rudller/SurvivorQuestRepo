@@ -29,6 +29,7 @@ import type { Station } from "@/features/games/types/station";
 import { useUploadStationAudioMutation } from "@/features/games/api/station.api";
 import {
   useUpdateRealizationMutation,
+  useDeleteRealizationMutation,
   useUploadRealizationLogoMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
@@ -98,6 +99,7 @@ export function EditRealizationPanel({
   onSaved,
 }: EditRealizationPanelProps) {
   const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
+  const [deleteRealization, { isLoading: isDeleting }] = useDeleteRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
   const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
@@ -115,6 +117,8 @@ export function EditRealizationPanel({
   const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
   const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const initialLanguageSelection = useMemo(
     () => parseRealizationLanguageSelection(realization.language, realization.customLanguage),
     [realization.customLanguage, realization.language],
@@ -131,6 +135,7 @@ export function EditRealizationPanel({
     contactPhone: realization.contactPhone ?? "",
     contactEmail: realization.contactEmail ?? "",
     instructors: realization.instructors ?? [],
+    notes: realization.notes ?? "",
     type: realization.type as RealizationType,
     logoUrl: realization.logoUrl,
     hideMap: realization.hideMap ?? false,
@@ -532,6 +537,7 @@ export function EditRealizationPanel({
                 contactPhone: normalizedContactPhone,
                 contactEmail: normalizedContactEmail,
                 instructors: editValues.instructors,
+                notes: editValues.notes.trim() || undefined,
                 type: editValues.type,
                 logoUrl: nextLogoUrl,
                 hideMap: editValues.hideMap,
@@ -842,6 +848,22 @@ export function EditRealizationPanel({
                   </div>
                 </FormSection>
 
+                <FormSection title="Notatki">
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Notatki wewnętrzne</span>
+                    <textarea
+                      value={editValues.notes}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({ ...prev, notes: event.target.value }))
+                      }
+                      placeholder="Notatki robocze widoczne tylko w panelu admina."
+                      rows={4}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    <p className="text-xs text-zinc-500">Widoczne tylko w panelu admina, nie w aplikacji mobilnej.</p>
+                  </label>
+                </FormSection>
+
                 <FormSection title="Harmonogram i status">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
@@ -923,6 +945,56 @@ export function EditRealizationPanel({
                     </label>
                   </div>
                 </FormSection>
+
+                <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+                  <h3 className="text-sm font-semibold text-red-200">Usuń realizację</h3>
+                  {realization.status === "in-progress" ? (
+                    <p className="text-xs text-red-200/90">
+                      Nie można usunąć realizacji, która jest w trakcie. Zmień jej status, aby móc ją usunąć.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-red-200/90">
+                        Aby usunąć realizację, wpisz dokładnie jej nazwę: <span className="font-semibold">{realization.companyName}</span>
+                      </p>
+                      <input
+                        value={deleteConfirmName}
+                        onChange={(event) => {
+                          setDeleteConfirmName(event.target.value);
+                          setDeleteError(null);
+                        }}
+                        placeholder="Wpisz nazwę realizacji do potwierdzenia"
+                        className="w-full rounded-lg border border-red-400/40 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-red-300"
+                      />
+                      <button
+                        type="button"
+                        disabled={isDeleting || deleteConfirmName.trim() !== realization.companyName}
+                        onClick={async () => {
+                          setDeleteError(null);
+
+                          if (deleteConfirmName.trim() !== realization.companyName) {
+                            setDeleteError("Nazwa realizacji nie zgadza się z potwierdzeniem.");
+                            return;
+                          }
+
+                          try {
+                            await deleteRealization({
+                              id: realization.id,
+                              confirmName: deleteConfirmName.trim(),
+                            }).unwrap();
+                            onClose();
+                          } catch (error) {
+                            setDeleteError(resolveApiErrorMessage(error) ?? "Nie udało się usunąć realizacji.");
+                          }
+                        }}
+                        className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isDeleting ? "Usuwanie..." : "Usuń realizację"}
+                      </button>
+                      {deleteError && <p className="text-sm text-red-200">{deleteError}</p>}
+                    </>
+                  )}
+                </section>
               </>
             )}
 
@@ -1266,6 +1338,9 @@ export function EditRealizationPanel({
                   </p>
                   <p>
                     <span className="text-zinc-500">Instruktorzy:</span> {editValues.instructors.length}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Notatki:</span> {editValues.notes.trim() ? "Tak" : "Nie"}
                   </p>
                 </div>
               </SummaryCard>
