@@ -744,6 +744,8 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   const nextValue = event.target.value;
                   if (isRealizationLanguage(nextValue)) {
                     setEditingLanguage(nextValue);
+                    setAudioFile(null);
+                    setAudioError(null);
                   }
                 }}
                 className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
@@ -752,6 +754,10 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   <option key={`editing-${language}`} value={language}>
                     {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
                     {language === baseLanguage ? " (podstawowy)" : ""}
+                    {type === "audio-quiz" &&
+                    (language === baseLanguage ? quizAudioUrl : translations?.[language]?.quiz?.audioUrl)?.trim()
+                      ? " 🔊"
+                      : ""}
                   </option>
                 ))}
               </select>

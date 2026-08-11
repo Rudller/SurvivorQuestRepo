@@ -744,6 +744,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     const nextValue = event.target.value;
                     if (isRealizationLanguage(nextValue)) {
                       setEditingLanguage(nextValue);
+                      setEditAudioFile(null);
+                      setEditAudioError(null);
                     }
                   }}
                   className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
@@ -752,6 +754,13 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     <option key={`editing-${language}`} value={language}>
                       {getRealizationLanguageFlag(language)} {getRealizationLanguageLabel(language)}
                       {language === baseLanguage ? " (podstawowy)" : ""}
+                      {editValues.type === "audio-quiz" &&
+                      (language === baseLanguage
+                        ? editValues.quizAudioUrl
+                        : editValues.translations?.[language]?.quiz?.audioUrl
+                      )?.trim()
+                        ? " 🔊"
+                        : ""}
                     </option>
                   ))}
                 </select>

@@ -1675,6 +1675,20 @@ export function RealizationStationsEditor({
                             </div>
                           </div>
 
+                          <p className="text-xs text-zinc-500">
+                            Audio ustawione dla:{" "}
+                            {editableLanguages
+                              .filter((language) => {
+                                const audioUrl =
+                                  language === baseLanguage
+                                    ? station.quiz?.audioUrl
+                                    : station.translations?.[language]?.quiz?.audioUrl;
+                                return Boolean(audioUrl?.trim());
+                              })
+                              .map((language) => getRealizationLanguageFlag(language))
+                              .join(" ") || "brak"}
+                          </p>
+
                           {audioMode === "upload" ? (
                             <div className="space-y-2">
                               <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
@@ -1696,7 +1710,7 @@ export function RealizationStationsEditor({
                               </label>
                               <p className="text-xs text-zinc-500">
                                 Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM.{" "}
-                                {audioFile
+                                {audioFile && station.pendingAudioLanguage === editingLanguage
                                   ? `Wybrano: ${audioFile.name} (zostanie przesłane przy zapisie realizacji).`
                                   : "Brak wybranego pliku."}
                               </p>
