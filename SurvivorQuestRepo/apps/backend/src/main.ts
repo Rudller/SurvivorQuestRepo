@@ -1,6 +1,7 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import type { Application } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/http/http-exception.filter';
 import {
@@ -83,6 +84,7 @@ function registerProcessHandlers() {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   appInstance = app;
+  (app.getHttpAdapter().getInstance() as Application).set('trust proxy', 1);
   app.useGlobalFilters(new HttpExceptionFilter());
   const allowlist = getCorsOriginAllowlist();
 

@@ -22,6 +22,7 @@ import {
   MOBILE_JOIN_THROTTLE,
   MOBILE_PHOTO_UPLOAD_THROTTLE,
   MOBILE_QR_RESOLVE_THROTTLE,
+  MOBILE_SESSION_STATE_THROTTLE,
 } from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
 
@@ -137,6 +138,7 @@ export class MobileController {
   }
 
   @Post('session/state')
+  @Throttle(MOBILE_SESSION_STATE_THROTTLE)
   async getMobileSessionState(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.mobileService.getMobileSessionState(
