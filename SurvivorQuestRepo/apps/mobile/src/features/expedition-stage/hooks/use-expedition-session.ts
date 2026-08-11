@@ -601,33 +601,28 @@ export function useExpeditionSession(
   const text = EXPEDITION_SESSION_TEXT[uiLanguage];
   const previousTaskStatusByStationIdRef = useRef<Record<string, ExpeditionTaskStatus>>({});
   const [globalTaskOutcomeQueue, setGlobalTaskOutcomeQueue] = useState<GlobalTaskOutcomeEvent[]>([]);
+  // Deliberately excludes selectedLanguage: switching the display language is not
+  // a new session and must not reset sessionState / previousTaskStatusByStationIdRef,
+  // or every already-completed task falsely looks like it just transitioned from
+  // "todo" and re-fires its outcome popup. The fetch already reacts to language
+  // changes on its own via refreshSessionState's dependency on selectedLanguage.
   const sessionIdentityKey = useMemo(
     () =>
       [
         session.apiBaseUrl?.trim() || "",
         session.sessionToken?.trim() || "",
         session.realization?.id || session.realizationId || "",
-        session.selectedLanguage ?? session.realization?.selectedLanguage ?? session.realization?.language ?? "",
         String(session.team.slotNumber ?? ""),
       ].join("|"),
-    [
-      session.apiBaseUrl,
-      session.realization?.id,
-      session.realization?.language,
-      session.realization?.selectedLanguage,
-      session.realizationId,
-      session.selectedLanguage,
-      session.sessionToken,
-      session.team.slotNumber,
-    ],
+    [session.apiBaseUrl, session.realization?.id, session.realizationId, session.sessionToken, session.team.slotNumber],
   );
   // Session consumers should react only to stable identity fields, not to parent object re-creation.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableSession = useMemo(() => session, [sessionIdentityKey]);
+  // Reads from the live session prop (not stableSession) so it stays reactive to
+  // language switches without those switches triggering the identity-reset effect below.
   const selectedLanguage =
-    stableSession.selectedLanguage ??
-    stableSession.realization?.selectedLanguage ??
-    stableSession.realization?.language;
+    session.selectedLanguage ?? session.realization?.selectedLanguage ?? session.realization?.language;
   const offlineMode = useMemo(() => isOfflineSession(stableSession), [stableSession]);
   const [sessionState, setSessionState] = useState<ExpeditionSessionState>(() => buildInitialSessionState(session));
   const [isLoading, setIsLoading] = useState(!offlineMode);
