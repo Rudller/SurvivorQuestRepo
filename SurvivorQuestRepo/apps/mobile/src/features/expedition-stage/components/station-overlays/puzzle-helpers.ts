@@ -456,7 +456,7 @@ export function resolveBoggleTarget(station: StationPuzzleViewModel) {
   const source = resolveCorrectAnswerText(station) || station.name;
   const normalized = normalizePuzzleWord(source);
   if (normalized.length >= 3) {
-    return normalized.slice(0, 8);
+    return normalized.slice(0, BOGGLE_BOARD_SIZE);
   }
 
   return "TEAM";

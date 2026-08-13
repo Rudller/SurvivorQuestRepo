@@ -383,6 +383,10 @@ export class MobileService {
       team.slotNumber,
       realization.teamStationNumberingEnabled,
     );
+    const timeLimitSecondsByStationId =
+      await this.getTimeLimitSecondsByStationId(
+        orderedStationIds.map(({ stationId }) => stationId),
+      );
 
     const tasks = orderedStationIds.map(({ stationId, stationNumber }) => {
       const progress = taskProgress.find(
@@ -392,9 +396,11 @@ export class MobileService {
         stationId,
         stationNumber,
         status:
-          this.fromTaskStatus(
+          this.resolveEffectiveTaskStatus(
             progress?.status,
             failedStationIds.has(stationId),
+            progress?.startedAt,
+            timeLimitSecondsByStationId.get(stationId),
           ) || 'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
@@ -2150,9 +2156,11 @@ export class MobileService {
       task: {
         stationId: station.id,
         status:
-          this.fromTaskStatus(
+          this.resolveEffectiveTaskStatus(
             progress?.status,
             failedStationIds.has(station.id),
+            progress?.startedAt,
+            station.timeLimitSeconds,
           ) || 'todo',
         pointsAwarded: progress?.pointsAwarded || 0,
         startedAt: progress?.startedAt?.toISOString() || null,
@@ -2343,6 +2351,9 @@ export class MobileService {
       }
     }
 
+    const timeLimitSecondsByStationId =
+      await this.getTimeLimitSecondsByStationId(realization.stationIds);
+
     const teamViews = teams.map((team) => {
       const teamAssignments = assignments.filter(
         (assignment) =>
@@ -2364,7 +2375,13 @@ export class MobileService {
         return {
           stationId,
           stationNumber,
-          status: this.fromTaskStatus(progress?.status, isFailed) || 'todo',
+          status:
+            this.resolveEffectiveTaskStatus(
+              progress?.status,
+              isFailed,
+              progress?.startedAt,
+              timeLimitSecondsByStationId.get(stationId),
+            ) || 'todo',
           pointsAwarded: progress?.pointsAwarded || 0,
           startedAt: progress?.startedAt?.toISOString() || null,
           finishedAt: progress?.finishedAt?.toISOString() || null,
@@ -3959,6 +3976,50 @@ export class MobileService {
     if (!status || status === TaskStatus.TODO) return 'todo' as const;
     if (status === TaskStatus.IN_PROGRESS) return 'in-progress' as const;
     return 'done' as const;
+  }
+
+  /**
+   * Same as fromTaskStatus, but also treats an IN_PROGRESS task as 'failed'
+   * once its time limit has elapsed, even if the device that ran the
+   * countdown never called task/fail (app closed, backgrounded, station
+   * never revisited). Purely a read-time projection, same pattern as
+   * resolveRealizationStatus — nothing is written to the DB here.
+   */
+  private resolveEffectiveTaskStatus(
+    status: TaskStatus | null | undefined,
+    failed: boolean,
+    startedAt: Date | null | undefined,
+    timeLimitSeconds: number | null | undefined,
+  ) {
+    if (failed) return 'failed' as const;
+    if (!status || status === TaskStatus.TODO) return 'todo' as const;
+    const effectiveTimeLimitSeconds = timeLimitSeconds ?? 0;
+    if (
+      status === TaskStatus.IN_PROGRESS &&
+      startedAt &&
+      effectiveTimeLimitSeconds > 0 &&
+      startedAt.getTime() + effectiveTimeLimitSeconds * 1000 < Date.now()
+    ) {
+      return 'failed' as const;
+    }
+    if (status === TaskStatus.IN_PROGRESS) return 'in-progress' as const;
+    return 'done' as const;
+  }
+
+  private async getTimeLimitSecondsByStationId(stationIds: string[]) {
+    const uniqueStationIds = Array.from(new Set(stationIds));
+    if (uniqueStationIds.length === 0) {
+      return new Map<string, number>();
+    }
+
+    const stations = await this.prisma.station.findMany({
+      where: { id: { in: uniqueStationIds } },
+      select: { id: true, timeLimitSeconds: true },
+    });
+
+    return new Map(
+      stations.map((station) => [station.id, station.timeLimitSeconds]),
+    );
   }
 
   private fromTeamStatus(status: TeamStatus) {

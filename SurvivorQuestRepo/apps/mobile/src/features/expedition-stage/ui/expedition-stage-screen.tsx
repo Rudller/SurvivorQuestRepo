@@ -1447,7 +1447,20 @@ export function ExpeditionStageScreen({
             points={sessionState.team.points}
             languageFlag={currentLanguageFlag}
             showLanguageButton={hasMultipleLanguageOptions}
-            onOpenLanguagePicker={() => setIsLanguagePickerOpen(true)}
+            onOpenLanguagePicker={() => {
+              if (availableLanguageOptions.length === 2) {
+                const nextOption =
+                  availableLanguageOptions.find((option) => option.value !== selectedLanguage) ??
+                  availableLanguageOptions[0];
+                if (nextOption && nextOption.value !== selectedLanguage) {
+                  onSelectedLanguageChange?.(nextOption.value);
+                  setActionError(null);
+                  setActionMessage(interpolate(text.contentLanguageSet, { label: nextOption.label }));
+                }
+                return;
+              }
+              setIsLanguagePickerOpen(true);
+            }}
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
           />
@@ -1645,24 +1658,24 @@ export function ExpeditionStageScreen({
           onPress={() => setIsLanguagePickerOpen(false)}
         >
           <Pressable
-            className="w-full self-center rounded-2xl border px-4 py-4"
+            className="w-full self-center rounded-3xl border px-6 py-6"
             style={{
-              maxWidth: 360,
+              maxWidth: 440,
               borderColor: EXPEDITION_THEME.border,
               backgroundColor: EXPEDITION_THEME.panel,
             }}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            <Text className="text-lg font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
               {text.chooseContentLanguage}
             </Text>
-            <View className="mt-3 gap-2">
+            <View className="mt-4 gap-3">
               {availableLanguageOptions.map((option) => {
                 const isActive = option.value === selectedLanguage;
                 return (
                   <Pressable
                     key={`expedition-language-popup-${option.value}`}
-                    className="flex-row items-center justify-between rounded-xl border px-3 py-2 active:opacity-90"
+                    className="flex-row items-center justify-between rounded-2xl border px-4 py-4 active:opacity-90"
                     style={{
                       borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
                       backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
@@ -1676,14 +1689,14 @@ export function ExpeditionStageScreen({
                       setIsLanguagePickerOpen(false);
                     }}
                   >
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-lg">{getRealizationLanguageFlag(option.value)}</Text>
-                      <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                    <View className="flex-row items-center gap-3">
+                      <Text className="text-2xl">{getRealizationLanguageFlag(option.value)}</Text>
+                      <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                         {option.label}
                       </Text>
                     </View>
                     {isActive ? (
-                      <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                      <Text className="text-base font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
                         ✓
                       </Text>
                     ) : null}
@@ -1692,11 +1705,11 @@ export function ExpeditionStageScreen({
               })}
             </View>
             <Pressable
-              className="mt-3 rounded-xl border px-3 py-2 active:opacity-90"
+              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsLanguagePickerOpen(false)}
             >
-              <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                 {text.close}
               </Text>
             </Pressable>

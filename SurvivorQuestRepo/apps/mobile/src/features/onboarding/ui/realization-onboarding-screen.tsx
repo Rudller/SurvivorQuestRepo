@@ -2787,7 +2787,18 @@ export function RealizationOnboardingScreen({
                       borderColor: EXPEDITION_THEME.border,
                       backgroundColor: EXPEDITION_THEME.panelMuted,
                     }}
-                    onPress={() => setIsLanguagePickerOpen(true)}
+                    onPress={() => {
+                      if (activeLanguageOptions.length === 2) {
+                        const nextOption =
+                          activeLanguageOptions.find((option) => option.value !== selectedLanguage) ??
+                          activeLanguageOptions[0];
+                        if (nextOption && nextOption.value !== selectedLanguage) {
+                          setSelectedLanguage(nextOption.value);
+                        }
+                        return;
+                      }
+                      setIsLanguagePickerOpen(true);
+                    }}
                   >
                     <Text className="text-xl">{currentLanguageFlag}</Text>
                   </Pressable>
@@ -2891,21 +2902,21 @@ export function RealizationOnboardingScreen({
             }}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+            <Text className="text-lg font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
               {text.languagePickerTitle}
             </Text>
-            <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+            <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
               {text.selectedLanguageLabel(selectedLanguageLabel)}
             </Text>
 
-            <View className="mt-3 gap-2">
+            <View className="mt-4 gap-3">
               {activeLanguageOptions.map((option) => {
                 const isActive = option.value === selectedLanguage;
 
                 return (
                   <Pressable
                     key={`language-option-${option.value}`}
-                    className="rounded-2xl border px-3 py-3 active:opacity-85"
+                    className="rounded-2xl border px-4 py-4 active:opacity-85"
                     style={{
                       borderColor: isActive ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
                       backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
@@ -2916,14 +2927,14 @@ export function RealizationOnboardingScreen({
                     }}
                   >
                     <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-2">
-                        <Text className="text-lg">{getRealizationLanguageFlag(option.value)}</Text>
-                        <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                      <View className="flex-row items-center gap-3">
+                        <Text className="text-2xl">{getRealizationLanguageFlag(option.value)}</Text>
+                        <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                           {option.label}
                         </Text>
                       </View>
                       {isActive ? (
-                        <Text className="text-sm font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
+                        <Text className="text-base font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
                           ✓
                         </Text>
                       ) : null}
@@ -2934,11 +2945,11 @@ export function RealizationOnboardingScreen({
             </View>
 
             <Pressable
-              className="mt-4 rounded-2xl border px-3 py-3 active:opacity-85"
+              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-85"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsLanguagePickerOpen(false)}
             >
-              <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                 {text.closeAction}
               </Text>
             </Pressable>

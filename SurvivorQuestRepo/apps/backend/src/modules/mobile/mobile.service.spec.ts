@@ -1699,3 +1699,87 @@ describe('MobileService resolveMobileStationQr', () => {
     ).rejects.toThrow('Station not found');
   });
 });
+
+describe('MobileService resolveEffectiveTaskStatus', () => {
+  function createService() {
+    return new MobileService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('treats an in-progress task whose time limit has elapsed as failed, even without a task/fail report', () => {
+    const service = createService() as never as {
+      resolveEffectiveTaskStatus: (
+        status: TaskStatus | null | undefined,
+        failed: boolean,
+        startedAt: Date | null | undefined,
+        timeLimitSeconds: number | null | undefined,
+      ) => string;
+    };
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-05-10T10:05:01.000Z'));
+
+    const result = service.resolveEffectiveTaskStatus(
+      TaskStatus.IN_PROGRESS,
+      false,
+      new Date('2026-05-10T10:00:00.000Z'),
+      300,
+    );
+
+    expect(result).toBe('failed');
+  });
+
+  it('keeps an in-progress task in-progress while its time limit has not elapsed yet', () => {
+    const service = createService() as never as {
+      resolveEffectiveTaskStatus: (
+        status: TaskStatus | null | undefined,
+        failed: boolean,
+        startedAt: Date | null | undefined,
+        timeLimitSeconds: number | null | undefined,
+      ) => string;
+    };
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-05-10T10:04:59.000Z'));
+
+    const result = service.resolveEffectiveTaskStatus(
+      TaskStatus.IN_PROGRESS,
+      false,
+      new Date('2026-05-10T10:00:00.000Z'),
+      300,
+    );
+
+    expect(result).toBe('in-progress');
+  });
+
+  it('leaves untimed (timeLimitSeconds <= 0) in-progress tasks alone regardless of elapsed time', () => {
+    const service = createService() as never as {
+      resolveEffectiveTaskStatus: (
+        status: TaskStatus | null | undefined,
+        failed: boolean,
+        startedAt: Date | null | undefined,
+        timeLimitSeconds: number | null | undefined,
+      ) => string;
+    };
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-05-10T12:00:00.000Z'));
+
+    const result = service.resolveEffectiveTaskStatus(
+      TaskStatus.IN_PROGRESS,
+      false,
+      new Date('2026-05-10T10:00:00.000Z'),
+      0,
+    );
+
+    expect(result).toBe('in-progress');
+  });
+});
