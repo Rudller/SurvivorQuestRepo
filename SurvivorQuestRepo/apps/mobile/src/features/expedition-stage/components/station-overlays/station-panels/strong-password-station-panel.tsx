@@ -2,7 +2,14 @@ import { useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
-import { buildStrongPasswordRules, getDifficultyPointsMultiplier, type ChallengeDifficulty } from "./strong-password-rules";
+import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
+import { AutoScrollingBox } from "../../../../../shared/ui/auto-scrolling-box";
+import {
+  buildStrongPasswordRules,
+  getDifficultyPointsMultiplier,
+  sumRomanNumerals,
+  type ChallengeDifficulty,
+} from "./strong-password-rules";
 import { resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type Props = {
@@ -23,6 +30,7 @@ type StrongPasswordStationText = {
   level: string;
   points: string;
   submit: string;
+  romanSumCurrent: (current: number) => string;
 };
 
 const STRONG_PASSWORD_STATION_TEXT_ENGLISH: StrongPasswordStationText = {
@@ -33,6 +41,7 @@ const STRONG_PASSWORD_STATION_TEXT_ENGLISH: StrongPasswordStationText = {
   level: "Level",
   points: "Points",
   submit: "Confirm strong password",
+  romanSumCurrent: (current) => `(currently: ${current})`,
 };
 
 const STRONG_PASSWORD_STATION_TEXT: Record<UiLanguage, StrongPasswordStationText> = {
@@ -44,6 +53,7 @@ const STRONG_PASSWORD_STATION_TEXT: Record<UiLanguage, StrongPasswordStationText
     level: "Poziom",
     points: "Punkty",
     submit: "Zatwierdź mocne hasło",
+    romanSumCurrent: (current) => `(obecnie: ${current})`,
   },
   english: STRONG_PASSWORD_STATION_TEXT_ENGLISH,
   ukrainian: {
@@ -54,6 +64,7 @@ const STRONG_PASSWORD_STATION_TEXT: Record<UiLanguage, StrongPasswordStationText
     level: "Рівень",
     points: "Бали",
     submit: "Підтвердити надійний пароль",
+    romanSumCurrent: (current) => `(зараз: ${current})`,
   },
   russian: {
     difficultyLabel: { easy: "Лёгкий", medium: "Средний", hard: "Сложный" },
@@ -63,6 +74,7 @@ const STRONG_PASSWORD_STATION_TEXT: Record<UiLanguage, StrongPasswordStationText
     level: "Уровень",
     points: "Очки",
     submit: "Подтвердить надёжный пароль",
+    romanSumCurrent: (current) => `(сейчас: ${current})`,
   },
 };
 
@@ -76,6 +88,7 @@ export function StrongPasswordStationPanel({
   onComplete,
 }: Props) {
   const layout = useStationPanelLayout();
+  const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = STRONG_PASSWORD_STATION_TEXT[uiLanguage];
   const [selectedDifficulty, setSelectedDifficulty] = useState<ChallengeDifficulty | null>(
@@ -145,24 +158,14 @@ export function StrongPasswordStationPanel({
         editable={!isActionDisabled}
         autoCapitalize="none"
         autoCorrect={false}
+        // The station card dismisses the keyboard on onTouchEnd for taps on empty
+        // space (preview.tsx). Raw touch events bubble regardless of who becomes
+        // the responder, so without this the card's handler also fires for taps
+        // on this input and closes the keyboard right as it's opening.
+        onTouchEnd={(event) => event.stopPropagation()}
       />
-      <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.level}: {text.difficultyLabel[difficulty]} • {text.points}: {awardedPoints}
-      </Text>
-      <View className="mt-3 gap-2">
-        {[...visibleRules].reverse().map((rule) => {
-          const passed = rule.validate(password);
-          return (
-            <View key={rule.id} className="rounded-xl border px-3 py-2" style={{ borderColor: passed ? "#34d399" : EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}>
-              <Text style={{ color: passed ? "#86efac" : EXPEDITION_THEME.textPrimary, fontSize: layout.infoFontSize }}>
-                {passed ? "✓" : "•"} {rule.label}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
       <Pressable
-        className="mt-3 items-center justify-center rounded-xl px-5 active:opacity-90"
+        className="mt-3 items-center justify-center self-center rounded-xl px-5 active:opacity-90"
         style={{ backgroundColor: isSolved && !isActionDisabled ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong, minHeight: layout.actionMinHeight }}
         disabled={!isSolved || isActionDisabled || !startedAt}
         onPress={() => onComplete(difficulty)}
@@ -171,6 +174,48 @@ export function StrongPasswordStationPanel({
           {text.submit}
         </Text>
       </Pressable>
+      <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+        {text.level}: {text.difficultyLabel[difficulty]} • {text.points}: {awardedPoints}
+      </Text>
+      <View
+        className="mt-3"
+        style={{ maxHeight: adaptiveLayout.s(layout.isTablet ? 260 : 180, 140, 340) }}
+      >
+        <AutoScrollingBox
+          autoScrollEnabled={false}
+          showsBottomFadeWhenScrollable
+          bottomFadeColor={EXPEDITION_THEME.panelMuted}
+        >
+          <View className="gap-2">
+            {[...visibleRules]
+              .reverse()
+              // Unmet rules bubble to the top — so a rule that breaks again while
+              // editing an earlier part of the password (e.g. deleting the digit
+              // that made "digit-sum" pass) immediately reappears at the top
+              // instead of staying buried wherever it sits in the fixed rule
+              // order. Stable sort keeps the existing relative order within each
+              // group (unmet vs. met).
+              .sort((a, b) => Number(a.validate(password)) - Number(b.validate(password)))
+              .map((rule) => {
+                const passed = rule.validate(password);
+                const romanSumSuffix =
+                  rule.id === "roman-sum" ? ` ${text.romanSumCurrent(sumRomanNumerals(password))}` : "";
+                return (
+                  <View
+                    key={rule.id}
+                    className="rounded-xl border px-3 py-2"
+                    style={{ borderColor: passed ? "#34d399" : EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                  >
+                    <Text style={{ color: passed ? "#86efac" : EXPEDITION_THEME.textPrimary, fontSize: layout.infoFontSize }}>
+                      {passed ? "✓" : "•"} {rule.label}
+                      {romanSumSuffix}
+                    </Text>
+                  </View>
+                );
+              })}
+          </View>
+        </AutoScrollingBox>
+      </View>
     </View>
   );
 }

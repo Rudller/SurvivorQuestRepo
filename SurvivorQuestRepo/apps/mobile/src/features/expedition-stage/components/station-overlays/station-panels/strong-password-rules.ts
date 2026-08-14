@@ -17,11 +17,86 @@ const ROMAN_VALUES: Record<string, number> = {
   M: 1000,
 };
 
-const MONTH_POOLS: Record<StrongPasswordLanguage, string[]> = {
-  polish: ["styczeń", "marzec", "maj", "lipiec", "październik", "grudzień"],
-  english: ["january", "march", "may", "july", "october", "december"],
-  ukrainian: ["січень", "березень", "травень", "липень", "жовтень", "грудень"],
-  russian: ["январь", "март", "май", "июль", "октябрь", "декабрь"],
+// Players on a Cyrillic system keyboard (this game also runs in Ukrainian and
+// Russian) can type a Cyrillic letter that's visually identical to a Latin
+// roman-numeral letter but a different Unicode code point, so it wouldn't
+// match ROMAN_VALUES at all. Normalize the ones that actually look alike
+// before summing, so the rule reads "whatever the player typed as a roman
+// numeral" rather than "whatever happens to be a Latin letter".
+const ROMAN_LOOKALIKE_TO_LATIN: Record<string, string> = {
+  С: "C", // Cyrillic Es (U+0421)
+  Х: "X", // Cyrillic Ha (U+0425)
+  І: "I", // Ukrainian/Belarusian Dotted I (U+0406)
+  М: "M", // Cyrillic Em (U+041C)
+};
+
+function normalizeRomanLookalikes(password: string) {
+  return Array.from(password)
+    .map((character) => ROMAN_LOOKALIKE_TO_LATIN[character] ?? character)
+    .join("");
+}
+
+// Indexed like Date#getMonth() (0 = January) — the "month" rule requires
+// whichever one is actually current, not a random pick, so the label can just
+// say "the current month" (same trick as the "contains-year" rule) instead of
+// handing the player the answer.
+const MONTH_NAMES: Record<StrongPasswordLanguage, string[]> = {
+  polish: [
+    "styczeń",
+    "luty",
+    "marzec",
+    "kwiecień",
+    "maj",
+    "czerwiec",
+    "lipiec",
+    "sierpień",
+    "wrzesień",
+    "październik",
+    "listopad",
+    "grudzień",
+  ],
+  english: [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ],
+  ukrainian: [
+    "січень",
+    "лютий",
+    "березень",
+    "квітень",
+    "травень",
+    "червень",
+    "липень",
+    "серпень",
+    "вересень",
+    "жовтень",
+    "листопад",
+    "грудень",
+  ],
+  russian: [
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+  ],
 };
 
 function hashSeed(seed: string) {
@@ -53,8 +128,11 @@ function sumDigits(password: string) {
   return Array.from(password).reduce((sum, character) => sum + (/\d/.test(character) ? Number(character) : 0), 0);
 }
 
-function sumRomanNumerals(password: string) {
-  return Array.from(password.toUpperCase()).reduce((sum, character) => sum + (ROMAN_VALUES[character] ?? 0), 0);
+export function sumRomanNumerals(password: string) {
+  return Array.from(normalizeRomanLookalikes(password.toUpperCase())).reduce(
+    (sum, character) => sum + (ROMAN_VALUES[character] ?? 0),
+    0,
+  );
 }
 
 function hasPrimeNumber(password: string) {
@@ -89,7 +167,6 @@ type RuleContext = {
   digitSum: number;
   romanSum: number;
   requiredEmoji: string;
-  requiredMonth: string;
   requiredCode: string;
 };
 
@@ -104,7 +181,7 @@ function buildRuleLabels(language: StrongPasswordLanguage, ctx: RuleContext): Re
       "digit-sum": `The digits in the password must add up to ${ctx.digitSum}`,
       prime: "Password must contain a prime number",
       emoji: `Password must contain the emoji ${ctx.requiredEmoji}`,
-      month: `Password must contain the word "${ctx.requiredMonth}"`,
+      month: "Password must contain the name of the current month",
       code: `Password must contain today's code ${ctx.requiredCode}`,
       "roman-sum": `All Roman numerals in the password must add up to ${ctx.romanSum}`,
       mirror: "Password must contain a fragment and its reverse, e.g. cat and tac",
@@ -129,7 +206,7 @@ function buildRuleLabels(language: StrongPasswordLanguage, ctx: RuleContext): Re
       "digit-sum": `Сума цифр у паролі має дорівнювати ${ctx.digitSum}`,
       prime: "Пароль має містити просте число",
       emoji: `Пароль має містити емодзі ${ctx.requiredEmoji}`,
-      month: `Пароль має містити слово «${ctx.requiredMonth}»`,
+      month: "Пароль має містити назву поточного місяця",
       code: `Пароль має містити код дня ${ctx.requiredCode}`,
       "roman-sum": `Сума всіх римських цифр у паролі має дорівнювати ${ctx.romanSum}`,
       mirror: "Пароль має містити фрагмент та його дзеркальне відображення, напр. кіт і тік",
@@ -154,7 +231,7 @@ function buildRuleLabels(language: StrongPasswordLanguage, ctx: RuleContext): Re
       "digit-sum": `Сумма цифр в пароле должна равняться ${ctx.digitSum}`,
       prime: "Пароль должен содержать простое число",
       emoji: `Пароль должен содержать эмодзи ${ctx.requiredEmoji}`,
-      month: `Пароль должен содержать слово «${ctx.requiredMonth}»`,
+      month: "Пароль должен содержать название текущего месяца",
       code: `Пароль должен содержать код дня ${ctx.requiredCode}`,
       "roman-sum": `Сумма всех римских цифр в пароле должна равняться ${ctx.romanSum}`,
       mirror: "Пароль должен содержать фрагмент и его зеркальное отражение, напр. кот и ток",
@@ -178,7 +255,7 @@ function buildRuleLabels(language: StrongPasswordLanguage, ctx: RuleContext): Re
     "digit-sum": `Suma cyfr w haśle ma wynosić ${ctx.digitSum}`,
     prime: "Hasło ma zawierać liczbę pierwszą",
     emoji: `Hasło ma zawierać emoji ${ctx.requiredEmoji}`,
-    month: `Hasło ma zawierać słowo „${ctx.requiredMonth}”`,
+    month: "Hasło ma zawierać nazwę obecnego miesiąca",
     code: `Hasło ma zawierać kod dnia ${ctx.requiredCode}`,
     "roman-sum": `Wszystkie rzymskie cyfry w haśle mają mieć sumę ${ctx.romanSum}`,
     mirror: "Hasło ma zawierać fragment oraz jego odwrócenie, np. kot i tok",
@@ -200,11 +277,20 @@ export function buildStrongPasswordRules(
 ): StrongPasswordRule[] {
   const random = createRandom(`${todayKey()}:${stationId}:${difficulty}`);
   const digitSum = 12 + Math.floor(random() * 16);
-  const romanSum = 20 + Math.floor(random() * 31);
   const requiredEmoji = pick(["🔥", "🧠", "🚀", "🌲", "⚡", "🏕️"], random);
-  const requiredMonth = pick(MONTH_POOLS[language], random).toLowerCase();
+  // Deliberately not part of the seeded random draw: it's today's real
+  // calendar month, same for every station/player, like "contains-year" below.
+  const requiredMonth = MONTH_NAMES[language][new Date().getMonth()];
   const requiredCode = `${pick(["SQ", "QUEST", "SURV"], random)}${10 + Math.floor(random() * 90)}`;
-  const labels = buildRuleLabels(language, { digitSum, romanSum, requiredEmoji, requiredMonth, requiredCode });
+  // The "month" and "code" rules force specific literal text into the password,
+  // and that text can itself contain roman-numeral letters (e.g. every Polish
+  // month name has at least one) — count what those two already contribute
+  // before picking a target, otherwise the target could land below what's
+  // already forced in, making the roman-sum rule impossible to satisfy no
+  // matter what the player types.
+  const forcedRomanSum = sumRomanNumerals(requiredMonth) + sumRomanNumerals(requiredCode);
+  const romanSum = forcedRomanSum + 10 + Math.floor(random() * 31);
+  const labels = buildRuleLabels(language, { digitSum, romanSum, requiredEmoji, requiredCode });
 
   const baseRules: StrongPasswordRule[] = [
     { id: "not-empty", label: labels["not-empty"], validate: (password) => password.length > 0 },
