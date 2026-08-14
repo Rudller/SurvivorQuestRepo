@@ -20,7 +20,6 @@ import {
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
-import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { FormSection } from "@/shared/components/form-section";
 import { SummaryCard } from "@/shared/components/summary-card";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
@@ -400,7 +399,7 @@ export function EditRealizationPanel({
     }
   }
 
-  const isDirty = useIsDirty({
+  const formSnapshotFields = {
     editValues,
     scenarioStations,
     selectedLanguages,
@@ -410,7 +409,16 @@ export function EditRealizationPanel({
     pendingMapImageFileName: pendingMapImageFile?.name ?? null,
     mapImageInputMode,
     pendingOfferPdfFileName: pendingOfferPdfFile?.name ?? null,
-  });
+  };
+
+  // Drives both the Save button's "Zapisano" vs "Zapisz" state and the
+  // "click outside closes the panel" guard below — compares against the most
+  // recently *saved* snapshot, so it goes back to "saved" (and closable)
+  // immediately after a successful save, instead of staying dirty for the
+  // rest of the panel's lifetime.
+  const serializedFormSnapshot = JSON.stringify(formSnapshotFields);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(serializedFormSnapshot);
+  const hasUnsavedChanges = serializedFormSnapshot !== lastSavedSnapshot;
 
   return (
     <>
@@ -418,7 +426,7 @@ export function EditRealizationPanel({
         type="button"
         aria-label="Zamknij edycję realizacji"
         onClick={() => {
-          if (!isDirty) {
+          if (!hasUnsavedChanges) {
             onClose();
           }
         }}
@@ -564,7 +572,7 @@ export function EditRealizationPanel({
               }).unwrap();
               onSaved?.(updatedRealization);
               setSubmitAttempted(false);
-              onClose();
+              setLastSavedSnapshot(serializedFormSnapshot);
             } catch (error) {
               setEditError(resolveApiErrorMessage(error) ?? "Nie udało się zapisać zmian realizacji.");
             }
@@ -587,13 +595,19 @@ export function EditRealizationPanel({
               <button
                 type="submit"
                 disabled={isBusy}
-                className="sq-button rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-amber-300"
+                className={`sq-button rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  hasUnsavedChanges
+                    ? "bg-amber-400 text-zinc-950 hover:bg-amber-300"
+                    : "bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                }`}
               >
                 {isUpdating
                   ? "Zapisywanie..."
                   : isUploadingLogo || isUploadingOffer || isUploadingStationAudio
                     ? "Przesyłanie plików..."
-                    : "Zapisz"}
+                    : !hasUnsavedChanges
+                      ? "Zapisano"
+                      : "Zapisz"}
               </button>
             </div>
           </div>

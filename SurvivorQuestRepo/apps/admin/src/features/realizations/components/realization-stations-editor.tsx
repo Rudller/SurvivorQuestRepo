@@ -578,7 +578,49 @@ export function RealizationStationsEditor({
     patch: Partial<Pick<RealizationStationDraft, "name" | "description" | "quiz">>,
   ) {
     if (editingLanguage === baseLanguage) {
-      updateStation(index, patch);
+      // "Język podstawowy" here is only this editor's local convenience toggle —
+      // it does not necessarily match the realization's actual configured
+      // language (e.g. a realization set to "other"/multi-language never has a
+      // real base language, since players always pick a concrete language like
+      // polish/english). Mobile always prefers translations[language] over these
+      // base fields whenever the player's picked language isn't the realization's
+      // true base. So mirror this edit into translations[baseLanguage] too, in
+      // the same update, otherwise a stale translations[] snapshot from an
+      // earlier auto-translate run keeps shadowing this edit for any player who
+      // explicitly selects this language.
+      onChange(
+        stations.map((station, currentIndex) => {
+          if (currentIndex !== index) {
+            return station;
+          }
+
+          const currentTranslation = station.translations?.[baseLanguage] ?? {};
+          const nextTranslation = {
+            ...currentTranslation,
+            ...(Object.prototype.hasOwnProperty.call(patch, "name") ? { name: patch.name } : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "description")
+              ? { description: patch.description }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "quiz") ? { quiz: patch.quiz } : {}),
+          };
+          const hasTranslationValue =
+            Boolean(nextTranslation.name?.trim()) ||
+            Boolean(nextTranslation.description?.trim()) ||
+            Boolean(nextTranslation.quiz);
+          const nextTranslations = { ...(station.translations ?? {}) };
+          if (hasTranslationValue) {
+            nextTranslations[baseLanguage] = nextTranslation;
+          } else {
+            delete nextTranslations[baseLanguage];
+          }
+
+          return {
+            ...station,
+            ...patch,
+            translations: Object.keys(nextTranslations).length > 0 ? nextTranslations : undefined,
+          };
+        }),
+      );
       return;
     }
 
@@ -1636,6 +1678,140 @@ export function RealizationStationsEditor({
                     </p>
                   </label>
 
+                  {isImageSupportedStationType(station.type) ? (
+                  <div className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
+                    <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
+                      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
+                        <div className="flex h-36 items-center justify-center bg-zinc-900">
+                          {station.imageUrl.trim() ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={station.imageUrl} alt="Podgląd obrazu stanowiska" className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="h-full w-full" />
+                          )}
+                        </div>
+                        <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2">
+                          <p className="truncate text-xs text-zinc-300">
+                            {station.imageUrl.trim() ? "Podgląd aktualnego obrazu stanowiska" : "Czeka na wybór obrazu"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <div className="flex flex-wrap rounded-lg border border-zinc-700 bg-zinc-900 p-1 sm:inline-flex">
+                          {imageModeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setStationImageMode(stationKey, option.value)}
+                              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                                imageMode === option.value
+                                  ? "bg-amber-400 text-zinc-950"
+                                  : "text-zinc-300 hover:text-zinc-100"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {imageMode === "upload" && (
+                        <div className="mx-auto w-full max-w-md space-y-2 text-center">
+                          <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                            Wybierz plik obrazu
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(event) => {
+                                void handleImageFile(
+                                  event.target.files?.[0] ?? null,
+                                  (url) => {
+                                    updateStation(stationIndex, { imageUrl: url });
+                                    setStationImageError(stationKey, null);
+                                  },
+                                  (error) => setStationImageError(stationKey, error),
+                                  async (file) => {
+                                    const uploaded = await uploadStationImage(file).unwrap();
+                                    return uploaded.url;
+                                  },
+                                );
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
+                        </div>
+                      )}
+
+                      {imageMode === "paste" && (
+                        <div
+                          onPaste={(event) => {
+                            void handleImagePaste(
+                              event,
+                              (url) => {
+                                updateStation(stationIndex, { imageUrl: url });
+                                setStationImageError(stationKey, null);
+                              },
+                              (error) => setStationImageError(stationKey, error),
+                              async (file) => {
+                                const uploaded = await uploadStationImage(file).unwrap();
+                                return uploaded.url;
+                              },
+                            );
+                          }}
+                          className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
+                        >
+                          Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
+                        </div>
+                      )}
+
+                      {imageMode === "url" && (
+                        <input
+                          type="url"
+                          value={station.imageUrl}
+                          onChange={(event) => {
+                            updateStation(stationIndex, { imageUrl: event.target.value });
+                            setStationImageError(stationKey, null);
+                          }}
+                          placeholder="https://..."
+                          className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                      )}
+
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs text-zinc-500">{station.imageUrl.trim() ? "Obraz ustawiony" : ""}</p>
+                        {station.imageUrl.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => updateStation(stationIndex, { imageUrl: "" })}
+                            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                          >
+                            Wyczyść
+                          </button>
+                        )}
+                      </div>
+
+                      {imageError && <p className="text-xs text-red-300">{imageError}</p>}
+                      {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
+                    </div>
+                  </div>
+                  ) : null}
+
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
+                    <textarea
+                      rows={3}
+                      value={selectedStationDescription}
+                      onChange={(event) => updateStationForSelectedLanguage(stationIndex, { description: event.target.value })}
+                      className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
+                        "border-zinc-700 focus:border-amber-400/80"
+                      }`}
+                    />
+                  </label>
+
                   {isQuizStationType(station.type) ? (
                     <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-900/70 p-3">
                       <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
@@ -1971,140 +2147,6 @@ export function RealizationStationsEditor({
                         <p className="text-xs text-red-300">{quizLikeCopy.validationMessage}</p>
                       ) : null}
                     </div>
-                  ) : null}
-
-                  <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
-                    <textarea
-                      rows={3}
-                      value={selectedStationDescription}
-                      onChange={(event) => updateStationForSelectedLanguage(stationIndex, { description: event.target.value })}
-                      className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                        "border-zinc-700 focus:border-amber-400/80"
-                      }`}
-                    />
-                  </label>
-
-                  {isImageSupportedStationType(station.type) ? (
-                  <div className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
-                    <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
-                      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
-                        <div className="flex h-36 items-center justify-center bg-zinc-900">
-                          {station.imageUrl.trim() ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={station.imageUrl} alt="Podgląd obrazu stanowiska" className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="h-full w-full" />
-                          )}
-                        </div>
-                        <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2">
-                          <p className="truncate text-xs text-zinc-300">
-                            {station.imageUrl.trim() ? "Podgląd aktualnego obrazu stanowiska" : "Czeka na wybór obrazu"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-center">
-                        <div className="flex flex-wrap rounded-lg border border-zinc-700 bg-zinc-900 p-1 sm:inline-flex">
-                          {imageModeOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setStationImageMode(stationKey, option.value)}
-                              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                                imageMode === option.value
-                                  ? "bg-amber-400 text-zinc-950"
-                                  : "text-zinc-300 hover:text-zinc-100"
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {imageMode === "upload" && (
-                        <div className="mx-auto w-full max-w-md space-y-2 text-center">
-                          <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
-                            Wybierz plik obrazu
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              className="hidden"
-                              onChange={(event) => {
-                                void handleImageFile(
-                                  event.target.files?.[0] ?? null,
-                                  (url) => {
-                                    updateStation(stationIndex, { imageUrl: url });
-                                    setStationImageError(stationKey, null);
-                                  },
-                                  (error) => setStationImageError(stationKey, error),
-                                  async (file) => {
-                                    const uploaded = await uploadStationImage(file).unwrap();
-                                    return uploaded.url;
-                                  },
-                                );
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
-                          <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
-                        </div>
-                      )}
-
-                      {imageMode === "paste" && (
-                        <div
-                          onPaste={(event) => {
-                            void handleImagePaste(
-                              event,
-                              (url) => {
-                                updateStation(stationIndex, { imageUrl: url });
-                                setStationImageError(stationKey, null);
-                              },
-                              (error) => setStationImageError(stationKey, error),
-                              async (file) => {
-                                const uploaded = await uploadStationImage(file).unwrap();
-                                return uploaded.url;
-                              },
-                            );
-                          }}
-                          className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
-                        >
-                          Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
-                        </div>
-                      )}
-
-                      {imageMode === "url" && (
-                        <input
-                          type="url"
-                          value={station.imageUrl}
-                          onChange={(event) => {
-                            updateStation(stationIndex, { imageUrl: event.target.value });
-                            setStationImageError(stationKey, null);
-                          }}
-                          placeholder="https://..."
-                          className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                        />
-                      )}
-
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-xs text-zinc-500">{station.imageUrl.trim() ? "Obraz ustawiony" : ""}</p>
-                        {station.imageUrl.trim() && (
-                          <button
-                            type="button"
-                            onClick={() => updateStation(stationIndex, { imageUrl: "" })}
-                            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-                          >
-                            Wyczyść
-                          </button>
-                        )}
-                      </div>
-
-                      {imageError && <p className="text-xs text-red-300">{imageError}</p>}
-                      {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
-                    </div>
-                  </div>
                   ) : null}
 
                   <div className="space-y-2">
