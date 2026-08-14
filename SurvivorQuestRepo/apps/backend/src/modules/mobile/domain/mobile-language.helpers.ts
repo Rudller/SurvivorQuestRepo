@@ -191,9 +191,21 @@ export function resolveLocalizedStationPresentation(
   station: StationEntity,
   context: MobileRealizationLanguageContext,
 ) {
-  const translations = context.fallbackChain.map(
-    (language) => station.translations?.[language],
-  );
+  // A player viewing the realization's own base/home language must always see
+  // the live station.name/description/quiz fields the admin edits directly —
+  // never a translations[] snapshot, which can go stale the moment those base
+  // fields are edited again without re-running the auto-translate step.
+  if (context.selectedLanguage === context.baseLanguage) {
+    return {
+      name: station.name,
+      description: station.description,
+      quiz: station.quiz,
+    };
+  }
+
+  const translations = context.fallbackChain
+    .filter((language) => language !== context.baseLanguage)
+    .map((language) => station.translations?.[language]);
 
   return {
     name: pickFirstString(

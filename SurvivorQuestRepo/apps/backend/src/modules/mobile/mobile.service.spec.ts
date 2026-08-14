@@ -1429,6 +1429,64 @@ describe('MobileService station payload mapper', () => {
       audioUrl: 'https://example.com/base-audio.mp3',
     });
   });
+
+  it('shows the live base station content, not a stale translations[] snapshot, when the player views the realization in its own base language', () => {
+    const service = new MobileService({} as never, {} as never, {} as never);
+    const languageContext = resolveRealizationLanguageContext({
+      language: 'polish',
+      selectedLanguage: 'polish',
+    });
+
+    const station: StationEntity = {
+      id: 'station-boggle-1',
+      name: 'Słownik procesów',
+      type: 'boggle',
+      categories: ['AURA'],
+      description: 'Znajdź cztery słowa związane z systemem.',
+      imageUrl: undefined,
+      points: 50,
+      timeLimitSeconds: 0,
+      challengeDifficultyMode: 'admin',
+      challengeDifficulty: 'medium',
+      completionStopwatchEnabled: false,
+      color: '#f59e0b',
+      quiz: {
+        question: '',
+        answers: ['DANE', '', '', ''],
+        correctAnswerIndex: 0,
+      },
+      // Stale snapshot from an auto-translate run that predates the admin's
+      // most recent direct edit of the base (Polish) fields above.
+      translations: {
+        polish: {
+          name: 'Słownik korzeniowy',
+          description: 'Podejście cztery założenia z systemu.',
+          quiz: {
+            question: '',
+            answers: ['KORZENIE', '', '', ''],
+            correctAnswerIndex: 0,
+          },
+        },
+      },
+      kind: 'template',
+      isTemplate: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    const payload = (service as never).toMobileStationPayload(
+      station,
+      languageContext,
+    );
+
+    expect(payload.name).toBe('Słownik procesów');
+    expect(payload.description).toBe(
+      'Znajdź cztery słowa związane z systemem.',
+    );
+    expect(payload.quiz).toEqual(
+      expect.objectContaining({ answers: ['DANE', '', '', ''] }),
+    );
+  });
 });
 
 describe('MobileService admin station QR export', () => {
