@@ -17,32 +17,39 @@ type SimonStationPanelProps = {
   isSimonPlaybackActive: boolean;
   isInteractiveLocked: boolean;
   isSubmittingSimon: boolean;
+  isSequenceStarted: boolean;
+  onStartSequence: () => void;
   onPressButton: (buttonId: string) => void;
 };
 
 type SimonStationText = {
   mistakes: string;
   button: string;
+  start: string;
 };
 
 const SIMON_STATION_TEXT_ENGLISH: SimonStationText = {
   mistakes: "Mistakes",
   button: "Button",
+  start: "Start",
 };
 
 const SIMON_STATION_TEXT: Record<UiLanguage, SimonStationText> = {
   polish: {
     mistakes: "Błędy",
     button: "Przycisk",
+    start: "Rozpocznij",
   },
   english: SIMON_STATION_TEXT_ENGLISH,
   ukrainian: {
     mistakes: "Помилки",
     button: "Кнопка",
+    start: "Почати",
   },
   russian: {
     mistakes: "Ошибки",
     button: "Кнопка",
+    start: "Начать",
   },
 };
 
@@ -56,6 +63,8 @@ export function SimonStationPanel({
   isSimonPlaybackActive,
   isInteractiveLocked,
   isSubmittingSimon,
+  isSequenceStarted,
+  onStartSequence,
   onPressButton,
 }: SimonStationPanelProps) {
   const uiLanguage = useUiLanguage();
@@ -89,6 +98,28 @@ export function SimonStationPanel({
           }
         }}
       >
+        {!isSequenceStarted ? (
+          <Pressable
+            className={`items-center justify-center rounded-full border ${MOBILE_UX_TOKENS.activePressClass}`}
+            style={{
+              width: simonButtonSize * 3 + simonButtonGap * 2,
+              height: simonButtonSize * 3 + simonButtonGap * 2,
+              borderRadius: (simonButtonSize * 3 + simonButtonGap * 2) / 2,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.accent,
+            }}
+            onPress={onStartSequence}
+            accessibilityRole="button"
+            accessibilityLabel={text.start}
+          >
+            <Text
+              className="font-semibold text-center"
+              style={{ color: EXPEDITION_THEME.background, fontSize: layout.actionFontSize }}
+            >
+              {text.start}
+            </Text>
+          </Pressable>
+        ) : (
         <View
           className="flex-row flex-wrap items-center justify-center"
           style={{
@@ -146,6 +177,7 @@ export function SimonStationPanel({
             })()
           ))}
         </View>
+        )}
       </View>
     </View>
   );

@@ -30,6 +30,9 @@ type ExpeditionStageOverlayLayerProps = {
   isLightTheme: boolean;
   text: ExpeditionStageOverlayText;
   onExitRealization: () => void;
+  languageFlag?: string;
+  showLanguageButton?: boolean;
+  onOpenLanguagePicker?: () => void;
 };
 
 export function ExpeditionStageOverlayLayer({
@@ -37,6 +40,9 @@ export function ExpeditionStageOverlayLayer({
   isLightTheme,
   text,
   onExitRealization,
+  languageFlag,
+  showLanguageButton,
+  onOpenLanguagePicker,
 }: ExpeditionStageOverlayLayerProps) {
   const { session, sessionState, isSessionEnded, sessionEndReason, sessionEndedAt } = useExpeditionStageSessionContext();
   const { stationTestEntries, overlayFlow, qrFlow } = useExpeditionStageOverlayContext();
@@ -91,6 +97,9 @@ export function ExpeditionStageOverlayLayer({
         timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
         debugOutcomePreview={overlayFlow.debugOutcomePreview}
         onDebugOutcomePreviewConsumed={() => overlayFlow.setDebugOutcomePreview(null)}
+        languageFlag={languageFlag}
+        showLanguageButton={showLanguageButton}
+        onOpenLanguagePicker={onOpenLanguagePicker}
       />
 
       <QuizPrestartOverlay

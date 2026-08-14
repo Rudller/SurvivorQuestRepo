@@ -1217,6 +1217,20 @@ export function ExpeditionStageScreen({
     availableLanguageOptions[0] ??
     null;
   const currentLanguageFlag = getRealizationLanguageFlag(currentLanguageOption?.value ?? "polish");
+  const handleLanguageButtonPress = () => {
+    if (availableLanguageOptions.length === 2) {
+      const nextOption =
+        availableLanguageOptions.find((option) => option.value !== selectedLanguage) ??
+        availableLanguageOptions[0];
+      if (nextOption && nextOption.value !== selectedLanguage) {
+        onSelectedLanguageChange?.(nextOption.value);
+        setActionError(null);
+        setActionMessage(interpolate(text.contentLanguageSet, { label: nextOption.label }));
+      }
+      return;
+    }
+    setIsLanguagePickerOpen(true);
+  };
   const countdown = useRealizationCountdown(
     sessionState.realization.scheduledAt,
     sessionState.realization.durationMinutes,
@@ -1447,20 +1461,7 @@ export function ExpeditionStageScreen({
             points={sessionState.team.points}
             languageFlag={currentLanguageFlag}
             showLanguageButton={hasMultipleLanguageOptions}
-            onOpenLanguagePicker={() => {
-              if (availableLanguageOptions.length === 2) {
-                const nextOption =
-                  availableLanguageOptions.find((option) => option.value !== selectedLanguage) ??
-                  availableLanguageOptions[0];
-                if (nextOption && nextOption.value !== selectedLanguage) {
-                  onSelectedLanguageChange?.(nextOption.value);
-                  setActionError(null);
-                  setActionMessage(interpolate(text.contentLanguageSet, { label: nextOption.label }));
-                }
-                return;
-              }
-              setIsLanguagePickerOpen(true);
-            }}
+            onOpenLanguagePicker={handleLanguageButtonPress}
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
           />
@@ -1636,6 +1637,9 @@ export function ExpeditionStageScreen({
           timedTaskAlertCloseAndFail: text.timedTaskAlertCloseAndFail,
         }}
         onExitRealization={onExitRealization}
+        languageFlag={currentLanguageFlag}
+        showLanguageButton={hasMultipleLanguageOptions}
+        onOpenLanguagePicker={handleLanguageButtonPress}
       />
 
       <QuizOutcomePopupPanel

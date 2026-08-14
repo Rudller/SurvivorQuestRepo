@@ -81,6 +81,9 @@ export type StationPreviewOverlayProps = {
     message: string;
   } | null;
   onDebugOutcomePreviewConsumed?: () => void;
+  languageFlag?: string;
+  showLanguageButton?: boolean;
+  onOpenLanguagePicker?: () => void;
 };
 
 export type QuizPrestartOverlayProps = {

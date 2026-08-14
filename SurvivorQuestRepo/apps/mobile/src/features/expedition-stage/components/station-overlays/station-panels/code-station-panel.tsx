@@ -105,8 +105,9 @@ export function CodeStationPanel({
   const [keyboardWidth, setKeyboardWidth] = useState(0);
   const canAppendAlphanumericCharacter = !isCodeActionDisabled && verificationCode.length < 32;
   const canBackspaceAlphanumericCode = !isCodeActionDisabled && verificationCode.length > 0;
-  const isPointsStation = station.stationType === "points";
-  const useInlineSubmitForNumericPad = station.completionCodeInputMode === "numeric" && isPointsStation;
+  const useInlineSubmitForNumericPad =
+    station.completionCodeInputMode === "numeric" &&
+    (station.stationType === "points" || station.stationType === "time");
   const keyboardGap = layout.isTablet ? 6 : 2;
   const desiredKeySize = layout.isTablet ? 62 : 46;
   const minKeySize = layout.isTablet ? 40 : 24;
@@ -146,7 +147,7 @@ export function CodeStationPanel({
                 {
                   marginTop: isNumericCodeStation ? 6 : 8,
                   width: "100%",
-                  maxWidth: 320,
+                  maxWidth: 320 * 0.8,
                   alignSelf: "center",
                   borderRadius: 16,
                   borderWidth: 1,
@@ -161,13 +162,13 @@ export function CodeStationPanel({
                       ? dangerSurfaceColor
                       : EXPEDITION_THEME.panelStrong,
                   color: EXPEDITION_THEME.textPrimary,
-                  minHeight: inlineCodeRowHeight,
-                  paddingHorizontal: 16,
-                  paddingVertical: layout.isTablet ? 12 : 10,
+                  minHeight: inlineCodeRowHeight * 0.8,
+                  paddingHorizontal: 16 * 0.8,
+                  paddingVertical: (layout.isTablet ? 12 : 10) * 0.8,
                   textAlign: "center",
-                  fontSize: layout.isTablet ? 34 : 24,
+                  fontSize: (layout.isTablet ? 34 : 24) * 0.8,
                   fontWeight: "600",
-                  letterSpacing: layout.isTablet ? 6 : 4,
+                  letterSpacing: (layout.isTablet ? 6 : 4) * 0.8,
                   fontVariant: ["tabular-nums"],
                 },
                 codeInputShakeStyle,
@@ -210,7 +211,7 @@ export function CodeStationPanel({
           )}
 
           {useInlineSubmitForNumericPad ? (
-            <View className={`mx-auto ${isNumericCodeStation ? "mt-2" : "mt-3"} w-full max-w-[320px] gap-y-2`}>
+            <View className={`mx-auto ${isNumericCodeStation ? "mt-2" : "mt-3"} w-full max-w-[256px] gap-y-2`}>
               {[
                 ["1", "2", "3"],
                 ["4", "5", "6"],
@@ -274,14 +275,14 @@ export function CodeStationPanel({
                                 color: EXPEDITION_THEME.textPrimary,
                                 textAlign: "center",
                                 fontVariant: ["tabular-nums"],
-                                fontSize: layout.pinpadDigitFontSize,
+                                fontSize: layout.pinpadDigitFontSize * 0.8,
                               }}
                             >
                               {label}
                             </Text>
                             <Text
                               className="mt-[-2px] text-[9px] font-semibold tracking-[1.6px] text-center"
-                              style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.isTablet ? 11 : 9 }}
+                              style={{ color: EXPEDITION_THEME.textSubtle, fontSize: (layout.isTablet ? 11 : 9) * 0.8 }}
                             >
                               {sublabel}
                             </Text>
@@ -296,7 +297,7 @@ export function CodeStationPanel({
                             width: "100%",
                             textAlign: "center",
                             textAlignVertical: "center",
-                            fontSize: isSubmitKey ? layout.actionFontSize : layout.keyLabelFontSize,
+                            fontSize: (isSubmitKey ? layout.actionFontSize : layout.keyLabelFontSize) * 0.8,
                             }}
                           >
                             {label}

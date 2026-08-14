@@ -1,8 +1,22 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { ScrollView, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+
+const BOTTOM_FADE_HEIGHT = 28;
+const BOTTOM_FADE_BAND_OPACITIES = [0.08, 0.22, 0.4, 0.62, 0.86] as const;
+// How close to the bottom (px) counts as "there" — avoids the fade flickering
+// on/off from sub-pixel scroll position noise right at the end.
+const BOTTOM_FADE_EPSILON_PX = 2;
 
 const AUTO_SCROLL_SPEED_PX_PER_SEC = 25;
 const AUTO_SCROLL_IDLE_DELAY_MS = 5000;
+// Caps how far a single frame is allowed to advance the scroll position. The
+// JS thread is often busy right when a station opens (image loads, the card's
+// slide-in animation, several hooks initializing), which can delay a
+// requestAnimationFrame callback well past one frame. Without this cap, that
+// delay shows up as a big jump in scroll position on the next tick instead of
+// a slow crawl — this clamps the effective time delta so a stalled frame just
+// takes a normal-sized step instead of a lurch.
+const AUTO_SCROLL_MAX_FRAME_DELTA_SECONDS = 1 / 20;
 
 type AutoScrollingBoxProps = {
   children: ReactNode;
@@ -10,6 +24,19 @@ type AutoScrollingBoxProps = {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   showsVerticalScrollIndicator?: boolean;
+  // Set false to keep this a plain, manually-scrollable box with no idle-timer-driven
+  // auto-scroll cycle — e.g. when it sits next to an input the user is actively using,
+  // where content silently scrolling itself is disorienting rather than helpful, or
+  // when the JS-thread-timing-dependent crawl animation itself proved too unreliable
+  // (see showsBottomFadeWhenScrollable for the static alternative).
+  autoScrollEnabled?: boolean;
+  // Static "there's more below" cue: a bottom-edge fade shown whenever the box is
+  // scrollable and not already scrolled to the end, in lieu of (or alongside)
+  // auto-scroll. Requires bottomFadeColor (an opaque color matching whatever this
+  // box sits on) since there's no gradient-image dependency here — it's faked with
+  // a few stacked, increasingly-opaque bands of that color.
+  showsBottomFadeWhenScrollable?: boolean;
+  bottomFadeColor?: string;
 };
 
 // Idle 5s -> auto-scroll down to the end -> idle 5s -> smooth scroll back to
@@ -24,6 +51,9 @@ export function AutoScrollingBox({
   style,
   contentContainerStyle,
   showsVerticalScrollIndicator = false,
+  autoScrollEnabled = true,
+  showsBottomFadeWhenScrollable = false,
+  bottomFadeColor,
 }: AutoScrollingBoxProps) {
   const scrollRef = useRef<ScrollView>(null);
   const currentYRef = useRef(0);
@@ -32,6 +62,17 @@ export function AutoScrollingBox({
   const maxScrollYRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
+  const [isScrollableBelow, setIsScrollableBelow] = useState(false);
+
+  const updateIsScrollableBelow = () => {
+    if (!showsBottomFadeWhenScrollable) {
+      return;
+    }
+    const next =
+      maxScrollYRef.current > 0 &&
+      currentYRef.current < maxScrollYRef.current - BOTTOM_FADE_EPSILON_PX;
+    setIsScrollableBelow((current) => (current === next ? current : next));
+  };
 
   const clearAutoScrollTimers = () => {
     if (idleTimerRef.current) {
@@ -59,13 +100,17 @@ export function AutoScrollingBox({
       if (lastTimestamp === null) {
         lastTimestamp = timestamp;
       }
-      const deltaSeconds = (timestamp - lastTimestamp) / 1000;
+      const deltaSeconds = Math.min(
+        AUTO_SCROLL_MAX_FRAME_DELTA_SECONDS,
+        (timestamp - lastTimestamp) / 1000,
+      );
       lastTimestamp = timestamp;
       currentYRef.current = Math.min(
         maxScrollYRef.current,
         currentYRef.current + AUTO_SCROLL_SPEED_PX_PER_SEC * deltaSeconds,
       );
       scrollRef.current?.scrollTo({ y: currentYRef.current, animated: false });
+      updateIsScrollableBelow();
 
       if (currentYRef.current < maxScrollYRef.current) {
         rafRef.current = requestAnimationFrame(tick);
@@ -81,19 +126,36 @@ export function AutoScrollingBox({
   function scrollToTopSmooth() {
     scrollRef.current?.scrollTo({ y: 0, animated: true });
     currentYRef.current = 0;
+    updateIsScrollableBelow();
     scheduleIdle(startDownScroll);
   }
 
   const resetIdleCycle = () => {
     clearAutoScrollTimers();
-    if (maxScrollYRef.current > 0) {
+    if (autoScrollEnabled && maxScrollYRef.current > 0) {
       scheduleIdle(startDownScroll);
     }
   };
 
   const recomputeMaxScroll = () => {
-    maxScrollYRef.current = Math.max(0, contentHeightRef.current - visibleHeightRef.current);
-    resetIdleCycle();
+    const nextMaxScrollY = Math.max(0, contentHeightRef.current - visibleHeightRef.current);
+    const scrollRangeChanged = nextMaxScrollY !== maxScrollYRef.current;
+    maxScrollYRef.current = nextMaxScrollY;
+    // Keep the tracked position valid if the scrollable range just shrank —
+    // otherwise the next tick's target (clamped to the new max) would land
+    // somewhere unrelated to the visually current position, i.e. a jump.
+    currentYRef.current = Math.min(currentYRef.current, nextMaxScrollY);
+    updateIsScrollableBelow();
+
+    // Only touch the running cycle when the scrollable range actually changed.
+    // onLayout/onContentSizeChange can fire repeatedly for reasons unrelated to
+    // this box's own size (e.g. a sibling countdown timer re-rendering once a
+    // second) — resetting on every one of those cancelled and restarted an
+    // in-flight auto-scroll animation, which is what made it look like it kept
+    // jumping and briefly refused to respond to touch.
+    if (scrollRangeChanged) {
+      resetIdleCycle();
+    }
   };
 
   useEffect(() => {
@@ -103,32 +165,53 @@ export function AutoScrollingBox({
   }, []);
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      showsVerticalScrollIndicator={showsVerticalScrollIndicator}
-      className={className}
-      contentContainerStyle={contentContainerStyle}
-      // RN's ScrollView defaults to flexGrow: 1 (styles.baseVertical) — without
-      // this override, the box silently expands to fill any flex-1 ancestor's
-      // remaining space instead of hugging its own content, pushing whatever
-      // renders after it far down (e.g. the quiz task card in preview.tsx).
-      style={[{ flexShrink: 1, flexGrow: 0 }, style]}
-      scrollEventThrottle={16}
-      onScroll={(event) => {
-        currentYRef.current = event.nativeEvent.contentOffset.y;
-      }}
-      onScrollBeginDrag={resetIdleCycle}
-      onTouchStart={resetIdleCycle}
-      onContentSizeChange={(_width, height) => {
-        contentHeightRef.current = height;
-        recomputeMaxScroll();
-      }}
-      onLayout={(event) => {
-        visibleHeightRef.current = event.nativeEvent.layout.height;
-        recomputeMaxScroll();
-      }}
-    >
-      {children}
-    </ScrollView>
+    <View className={className} style={[{ flexShrink: 1, flexGrow: 0, overflow: "hidden" }, style]}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+        contentContainerStyle={contentContainerStyle}
+        style={{ flexShrink: 1, flexGrow: 0 }}
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          currentYRef.current = event.nativeEvent.contentOffset.y;
+          updateIsScrollableBelow();
+        }}
+        onScrollBeginDrag={resetIdleCycle}
+        onTouchStart={resetIdleCycle}
+        onContentSizeChange={(_width, height) => {
+          contentHeightRef.current = height;
+          recomputeMaxScroll();
+        }}
+        onLayout={(event) => {
+          visibleHeightRef.current = event.nativeEvent.layout.height;
+          recomputeMaxScroll();
+        }}
+      >
+        {children}
+      </ScrollView>
+      {showsBottomFadeWhenScrollable && isScrollableBelow && bottomFadeColor ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: BOTTOM_FADE_HEIGHT,
+          }}
+        >
+          {BOTTOM_FADE_BAND_OPACITIES.map((opacity, index) => (
+            <View
+              key={index}
+              style={{
+                flex: 1,
+                backgroundColor: bottomFadeColor,
+                opacity,
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }

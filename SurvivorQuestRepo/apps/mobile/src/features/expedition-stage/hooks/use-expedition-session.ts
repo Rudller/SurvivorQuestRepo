@@ -101,7 +101,7 @@ const EXPEDITION_SESSION_TEXT = {
     globalOutcomeTimedOut: "Czas minął",
     globalOutcomePending: "Wysłano",
     globalBackToMapNow: "Wróć do mapy teraz",
-    globalBackToMap: "Wróć do mapy",
+    globalBackToMap: "Wróć do ekranu głównego",
   },
   english: {
     missingSessionStateApiConfig: "Missing API configuration to fetch session state.",
@@ -133,7 +133,7 @@ const EXPEDITION_SESSION_TEXT = {
     globalOutcomeTimedOut: "Time expired",
     globalOutcomePending: "Submitted",
     globalBackToMapNow: "Back to the map now",
-    globalBackToMap: "Back to the map",
+    globalBackToMap: "Back to home screen",
   },
   ukrainian: {
     missingSessionStateApiConfig: "Відсутня конфігурація API для отримання стану сесії.",
@@ -166,7 +166,7 @@ const EXPEDITION_SESSION_TEXT = {
     globalOutcomeTimedOut: "Час вичерпано",
     globalOutcomePending: "Надіслано",
     globalBackToMapNow: "Повернутися на мапу зараз",
-    globalBackToMap: "Повернутися на мапу",
+    globalBackToMap: "Повернутися на головний екран",
   },
   russian: {
     missingSessionStateApiConfig: "Отсутствует конфигурация API для получения состояния сессии.",
@@ -199,7 +199,7 @@ const EXPEDITION_SESSION_TEXT = {
     globalOutcomeTimedOut: "Время истекло",
     globalOutcomePending: "Отправлено",
     globalBackToMapNow: "Вернуться на карту сейчас",
-    globalBackToMap: "Вернуться на карту",
+    globalBackToMap: "Вернуться на главный экран",
   },
 } as const;
 
