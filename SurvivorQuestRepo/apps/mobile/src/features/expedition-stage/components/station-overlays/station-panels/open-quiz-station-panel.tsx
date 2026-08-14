@@ -2,7 +2,6 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
-import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
 import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
@@ -59,14 +58,10 @@ export function OpenQuizStationPanel({
   const uiLanguage = useUiLanguage();
   const text = OPEN_QUIZ_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
-  const adaptiveLayout = useAdaptiveLayout();
   const actionLabelColor = resolveActionLabelColor(isActionDisabled);
-  // Reserve empty space below the panel so its content never renders under the
-  // absolutely-positioned timer/points footer (preview.tsx).
-  const footerClearance = adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
 
   return (
-    <View className="mt-3" style={{ marginBottom: footerClearance }}>
+    <View className="mt-3">
       <View className="mt-1">
         <AttemptsIndicator
           label={text.attemptsLeft}
@@ -92,6 +87,11 @@ export function OpenQuizStationPanel({
           onChangeText={onChangeInput}
           editable={!isActionDisabled}
           onSubmitEditing={onSubmit}
+          // The station card dismisses the keyboard on onTouchEnd for taps on empty
+          // space (preview.tsx). Raw touch events bubble regardless of who becomes
+          // the responder, so without this the card's handler also fires for taps
+          // on this input and closes the keyboard right as it's opening.
+          onTouchEnd={(event) => event.stopPropagation()}
         />
         <Pressable
           className="items-center justify-center rounded-xl px-5 active:opacity-90"

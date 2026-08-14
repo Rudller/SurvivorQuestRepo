@@ -33,6 +33,7 @@ import {
   shuffleDeterministic,
 } from "../puzzle-helpers";
 import type { MastermindAttempt } from "./mastermind-station-panel";
+import { QR_HUNT_DESCRIPTION_RESERVE, QR_HUNT_PROGRESS_DOTS_RESERVE } from "./qr-hunt-station-panel";
 import type { WordleAttempt } from "./wordle-station-panel";
 
 type MiniSudokuPuzzle = ReturnType<typeof resolveMiniSudokuPuzzle>;
@@ -289,9 +290,22 @@ export function buildStationPreviewModel({
         : Math.max(72, Math.round(viewportHeight * 0.1));
     }
     if (requiresQrScan) {
+      // Was a flat 0.75 of availableMediaHeight, sized without accounting for
+      // its siblings — on real screens that left the card's outer flex-1
+      // (overflow: hidden, see preview.tsx) with no room for the progress dots
+      // row above it and the task description below it, so both got clipped
+      // off (or squeezed to a sliver) instead of just looking cramped.
+      // Explicitly subtracting their reserved heights (same constants preview.tsx
+      // caps those boxes at) guarantees the budget actually adds up.
+      const qrHuntSiblingReserve = isTabletOverlay
+        ? QR_HUNT_PROGRESS_DOTS_RESERVE.tablet + QR_HUNT_DESCRIPTION_RESERVE.tablet
+        : QR_HUNT_PROGRESS_DOTS_RESERVE.phone + QR_HUNT_DESCRIPTION_RESERVE.phone;
+      const qrHuntScannerBudget = Math.max(0, availableMediaHeight - qrHuntSiblingReserve);
+      // The scanner tile only needs to be tall enough for a comfortably
+      // tappable viewfinder, not to fill the whole leftover budget.
       return isTabletOverlay
-        ? Math.max(420, Math.round(availableMediaHeight * 0.75))
-        : Math.max(320, Math.round(availableMediaHeight * 0.75));
+        ? Math.max(220, Math.round(qrHuntScannerBudget * 0.65))
+        : Math.max(170, Math.round(qrHuntScannerBudget * 0.65));
     }
     if (requiresCode || requiresPhotoUpload) {
       return isTabletOverlay

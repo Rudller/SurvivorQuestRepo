@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, Text, View, type DimensionValue } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Pressable, Text, View, type DimensionValue } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -11,7 +11,6 @@ type MemoryStationPanelProps = {
   memoryDeck: MemoryCard[];
   memoryMatchedCount: number;
   memoryBusy: boolean;
-  memoryResult: string | null;
   isInteractiveLocked: boolean;
   onPressCard: (cardId: string) => void;
 };
@@ -80,6 +79,10 @@ function DotMetric({ label, value, max, fillColor }: DotMetricProps) {
   );
 }
 
+// Matches the flip timing used by wordle-station-panel.tsx's WordleRevealCell,
+// for a consistent feel between the two reveal animations.
+const MEMORY_FLIP_HALF_DURATION_MS = 120;
+
 type MemoryCardButtonProps = {
   card: MemoryCard;
   disabled: boolean;
@@ -103,6 +106,50 @@ const MemoryCardButton = memo(function MemoryCardButton({
     onPressCard(card.id);
   }, [card.id, onPressCard]);
 
+  const isFaceUp = card.revealed || card.matched;
+  const flipScaleAnimation = useRef(new Animated.Value(1)).current;
+  const wasFaceUpRef = useRef(isFaceUp);
+  const [showsSymbol, setShowsSymbol] = useState(isFaceUp);
+
+  useEffect(() => {
+    let symbolSwapTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    if (!isFaceUp) {
+      wasFaceUpRef.current = false;
+      setShowsSymbol(false);
+      flipScaleAnimation.stopAnimation();
+      flipScaleAnimation.setValue(1);
+      return () => {};
+    }
+
+    if (!wasFaceUpRef.current) {
+      wasFaceUpRef.current = true;
+      symbolSwapTimeout = setTimeout(() => {
+        setShowsSymbol(true);
+      }, MEMORY_FLIP_HALF_DURATION_MS);
+      Animated.sequence([
+        Animated.timing(flipScaleAnimation, {
+          toValue: 0,
+          duration: MEMORY_FLIP_HALF_DURATION_MS,
+          useNativeDriver: true,
+        }),
+        Animated.timing(flipScaleAnimation, {
+          toValue: 1,
+          duration: MEMORY_FLIP_HALF_DURATION_MS,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      setShowsSymbol(true);
+    }
+
+    return () => {
+      if (symbolSwapTimeout) {
+        clearTimeout(symbolSwapTimeout);
+      }
+    };
+  }, [flipScaleAnimation, isFaceUp]);
+
   return (
     <Pressable
       className="items-center justify-center rounded-lg border active:opacity-90"
@@ -122,9 +169,11 @@ const MemoryCardButton = memo(function MemoryCardButton({
       disabled={disabled || card.matched || card.revealed}
       hitSlop={6}
     >
-      <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize }}>
-        {card.revealed || card.matched ? card.symbol : "?"}
-      </Text>
+      <Animated.View style={{ transform: [{ scaleY: flipScaleAnimation }] }}>
+        <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize }}>
+          {showsSymbol ? card.symbol : "?"}
+        </Text>
+      </Animated.View>
     </Pressable>
   );
 });
@@ -133,7 +182,6 @@ export function MemoryStationPanel({
   memoryDeck,
   memoryMatchedCount,
   memoryBusy,
-  memoryResult,
   isInteractiveLocked,
   onPressCard,
 }: MemoryStationPanelProps) {
@@ -202,11 +250,6 @@ export function MemoryStationPanel({
           ))}
         </View>
       </View>
-      {memoryResult ? (
-        <Text className="mt-2" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.resultFontSize }}>
-          {memoryResult}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -216,7 +259,6 @@ type MemoryMediaSectionProps = {
   memoryDeck: MemoryCard[];
   memoryMatchedCount: number;
   memoryBusy: boolean;
-  memoryResult: string | null;
   isInteractiveLocked: boolean;
   isTabletOverlay: boolean;
   quizSubmitError: string | null;
@@ -228,7 +270,6 @@ export function MemoryMediaSection({
   memoryDeck,
   memoryMatchedCount,
   memoryBusy,
-  memoryResult,
   isInteractiveLocked,
   isTabletOverlay,
   quizSubmitError,
@@ -250,7 +291,6 @@ export function MemoryMediaSection({
           memoryDeck={memoryDeck}
           memoryMatchedCount={memoryMatchedCount}
           memoryBusy={memoryBusy}
-          memoryResult={memoryResult}
           isInteractiveLocked={isInteractiveLocked}
           onPressCard={onPressCard}
         />

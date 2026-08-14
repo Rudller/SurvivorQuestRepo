@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
@@ -12,20 +12,30 @@ type QrHuntText = {
   scanCode: string;
   scanNextCode: string;
   progress: (scanned: number, required: number) => string;
-  progressLabel: string;
   allScanned: string;
+  scanConfirmed: string;
   cameraAccessTitle: string;
   cameraAccessDescription: string;
   enableCamera: string;
 };
+
+const QR_HUNT_SCAN_CONFIRMATION_VISIBLE_MS = 1600;
+
+// Shared between use-station-preview-model.ts (which sizes the scanner tile off
+// of these) and preview.tsx (which caps the dots row / description boxes at
+// these same heights) — kept as one source of truth so the scanner tile's
+// height budget and its siblings' actual reserved space can't drift apart and
+// silently clip content again (see the description-hidden-behind-the-tile bug).
+export const QR_HUNT_PROGRESS_DOTS_RESERVE = { tablet: 60, phone: 46 };
+export const QR_HUNT_DESCRIPTION_RESERVE = { tablet: 150, phone: 110 };
 
 const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
   polish: {
     scanCode: "Skanuj kod",
     scanNextCode: "Skanuj kolejny kod",
     progress: (scanned, required) => `${scanned}/${required} zeskanowanych kodów`,
-    progressLabel: "Postęp skanowania",
     allScanned: "Wszystkie kody zeskanowane, zadanie zaliczone.",
+    scanConfirmed: "Zeskanowano",
     cameraAccessTitle: "Dostęp do kamery",
     cameraAccessDescription: "Aby zeskanować kod, włącz dostęp do kamery.",
     enableCamera: "Włącz kamerę",
@@ -34,8 +44,8 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Scan code",
     scanNextCode: "Scan next code",
     progress: (scanned, required) => `${scanned}/${required} codes scanned`,
-    progressLabel: "Scanning progress",
     allScanned: "All codes scanned, task completed.",
+    scanConfirmed: "Scanned",
     cameraAccessTitle: "Camera access",
     cameraAccessDescription: "Enable camera access to scan a code.",
     enableCamera: "Enable camera",
@@ -44,8 +54,8 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Сканувати код",
     scanNextCode: "Сканувати наступний код",
     progress: (scanned, required) => `${scanned}/${required} відсканованих кодів`,
-    progressLabel: "Прогрес сканування",
     allScanned: "Усі коди відскановано, завдання зараховано.",
+    scanConfirmed: "Відскановано",
     cameraAccessTitle: "Доступ до камери",
     cameraAccessDescription: "Щоб відсканувати код, увімкніть доступ до камери.",
     enableCamera: "Увімкнути камеру",
@@ -54,8 +64,8 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     scanCode: "Сканировать код",
     scanNextCode: "Сканировать следующий код",
     progress: (scanned, required) => `${scanned}/${required} отсканированных кодов`,
-    progressLabel: "Прогресс сканирования",
     allScanned: "Все коды отсканированы, задание зачтено.",
+    scanConfirmed: "Отсканировано",
     cameraAccessTitle: "Доступ к камере",
     cameraAccessDescription: "Чтобы отсканировать код, включите доступ к камере.",
     enableCamera: "Включить камеру",
@@ -72,7 +82,17 @@ export function useQrHuntScan(
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showScanConfirmation, setShowScanConfirmation] = useState(false);
+  const scanConfirmationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackSound = useQrScanFeedbackSound();
+
+  useEffect(() => {
+    return () => {
+      if (scanConfirmationTimeoutRef.current) {
+        clearTimeout(scanConfirmationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const isDone = station?.status === "done";
   const isFailed = station?.status === "failed";
@@ -100,6 +120,18 @@ export function useQrHuntScan(
 
     feedbackSound.playCorrect();
     setIsScannerOpen(false);
+
+    const isLastCode = requiredCount > 0 && scannedCount + 1 >= requiredCount;
+    if (!isLastCode) {
+      if (scanConfirmationTimeoutRef.current) {
+        clearTimeout(scanConfirmationTimeoutRef.current);
+      }
+      setShowScanConfirmation(true);
+      scanConfirmationTimeoutRef.current = setTimeout(() => {
+        setShowScanConfirmation(false);
+      }, QR_HUNT_SCAN_CONFIRMATION_VISIBLE_MS);
+    }
+
     onSubmitSuccess?.();
   }
 
@@ -108,6 +140,10 @@ export function useQrHuntScan(
     isScannerOpen,
     openScanner: () => {
       setSubmitError(null);
+      setShowScanConfirmation(false);
+      if (scanConfirmationTimeoutRef.current) {
+        clearTimeout(scanConfirmationTimeoutRef.current);
+      }
       setIsScannerOpen(true);
     },
     closeScanner: () => setIsScannerOpen(false),
@@ -116,6 +152,7 @@ export function useQrHuntScan(
     canScan,
     requiredCount,
     scannedCount,
+    showScanConfirmation,
     handleDetected: (value: string) => void handleDetected(value),
   };
 }
@@ -144,12 +181,6 @@ export function QrHuntProgressDots({ text, requiredCount, scannedCount, isDone }
 
   return (
     <View className="items-center" style={{ rowGap: layout.attemptRowGap }}>
-      <Text
-        className="text-center uppercase tracking-widest"
-        style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}
-      >
-        {text.progressLabel}
-      </Text>
       <View className="flex-row items-center justify-center flex-wrap" style={{ columnGap: layout.attemptDotGap, rowGap: layout.attemptDotGap }}>
         {Array.from({ length: requiredCount }).map((_, index) => {
           const isScanned = index < scannedCount;

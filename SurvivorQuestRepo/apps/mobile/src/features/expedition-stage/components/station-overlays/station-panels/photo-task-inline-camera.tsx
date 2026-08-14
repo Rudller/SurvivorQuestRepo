@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { SvgUri } from "react-native-svg";
+import { SvgUri, SvgXml } from "react-native-svg";
 
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
@@ -12,8 +12,20 @@ const CAMERA_SHUTTER_ICON_SVG_URI =
 const CHECK_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/check.svg";
 const RETRY_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/refresh.svg";
 const CLOSE_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/x.svg";
-const CAMERA_SWITCH_ICON_SVG_URI =
-  "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/camera-rotate.svg";
+// Inlined instead of fetched by URL (unlike the other icons on this screen): this one
+// is the first thing the user needs to tap (switch to the front camera for a selfie),
+// so a network round-trip delay before it appears — or unpkg's flaky serving of this
+// specific asset (confirmed 500s there; fine on jsdelivr) — showed up as a blank/wrong
+// button for a moment. Inlining makes it render synchronously, no network involved.
+const CAMERA_SWITCH_ICON_SVG_XML = `
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" />
+  <path d="M11.245 15.904a3 3 0 0 0 3.755 -2.904m-2.25 -2.905a3 3 0 0 0 -3.75 2.905" />
+  <path d="M14 13h2v2" />
+  <path d="M10 13h-2v-2" />
+</svg>
+`;
 
 type PhotoTaskInlineCameraProps = {
   isUploading: boolean;
@@ -154,7 +166,7 @@ export function PhotoTaskInlineCamera({
           accessibilityRole="button"
           accessibilityLabel={switchCameraLabel}
         >
-          <SvgUri uri={CAMERA_SWITCH_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
+          <SvgXml xml={CAMERA_SWITCH_ICON_SVG_XML} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
         </Pressable>
       ) : null}
 

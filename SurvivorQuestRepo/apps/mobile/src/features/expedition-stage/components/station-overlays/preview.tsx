@@ -9,7 +9,11 @@ import { AutoScrollingBox } from "../../../../shared/ui/auto-scrolling-box";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
 import { MiniSudokuKeypadSection } from "./station-panels/mini-sudoku-station-panel";
 import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
-import { useQrHuntScan, QrHuntProgressDots } from "./station-panels/qr-hunt-station-panel";
+import {
+  useQrHuntScan,
+  QrHuntProgressDots,
+  QR_HUNT_DESCRIPTION_RESERVE,
+} from "./station-panels/qr-hunt-station-panel";
 import { InlineQrScanner } from "../qr-scanner-overlay";
 import type { MastermindAttempt } from "./station-panels/mastermind-station-panel";
 import { StationMediaPanel } from "./station-panels/station-media-panel";
@@ -42,6 +46,8 @@ import {
 } from "./puzzle-helpers";
 
 const QR_HUNT_WATERMARK_ICON_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/qrcode.svg";
+// Matches the success color used by code-station-panel.tsx for its "correct code" feedback.
+const QR_HUNT_SCAN_SUCCESS_COLOR = "#34d399";
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
 const TIMEOUT_POPUP_AUTO_CLOSE_SECONDS = 10;
@@ -416,7 +422,7 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   fastestBonusAvailableLabel: (points) => `+${points} pts bonus for being fastest`,
   points: "Points",
   backToMapNow: "Back to map now",
-  backToMap: "Back to map",
+  backToMap: "Back to home screen",
 };
 
 const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
@@ -556,7 +562,7 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   fastestBonusAvailableLabel: (points) => `+${points} балів бонусу за найшвидше виконання`,
   points: "Бали",
   backToMapNow: "Повернутися до мапи зараз",
-  backToMap: "Повернутися до мапи",
+  backToMap: "Повернутися на головний екран",
 };
 
 const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
@@ -696,7 +702,7 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   fastestBonusAvailableLabel: (points) => `+${points} баллов бонуса за самое быстрое выполнение`,
   points: "Баллы",
   backToMapNow: "Вернуться к карте сейчас",
-  backToMap: "Вернуться к карте",
+  backToMap: "Вернуться на главный экран",
 };
 
 const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
@@ -837,7 +843,7 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     fastestBonusAvailableLabel: (points) => `+${points} pkt bonusu za najszybsze wykonanie`,
     points: "Punkty",
     backToMapNow: "Wróć do mapy teraz",
-    backToMap: "Wróć do mapy",
+    backToMap: "Wróć do ekranu głównego",
   },
   english: STATION_PREVIEW_TEXT_ENGLISH,
   ukrainian: STATION_PREVIEW_TEXT_UKRAINIAN,
@@ -858,6 +864,9 @@ export function StationPreviewOverlay({
   timedStationPointsDecayEnabled = false,
   debugOutcomePreview,
   onDebugOutcomePreviewConsumed,
+  languageFlag,
+  showLanguageButton = false,
+  onOpenLanguagePicker,
 }: StationPreviewOverlayProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const stationPanelLayout = useStationPanelLayout();
@@ -910,7 +919,7 @@ export function StationPreviewOverlay({
   const [caesarResult, setCaesarResult] = useState<string | null>(null);
   const [memoryDeck, setMemoryDeck] = useState<MemoryCard[]>([]);
   const [memorySelection, setMemorySelection] = useState<string[]>([]);
-  const [memoryResult, setMemoryResult] = useState<string | null>(null);
+  const [, setMemoryResult] = useState<string | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [simonInput, setSimonInput] = useState<string[]>([]);
   const [simonTargetLength, setSimonTargetLength] = useState(SIMON_INITIAL_SEQUENCE_LENGTH);
@@ -918,6 +927,7 @@ export function StationPreviewOverlay({
   const [simonActivePlaybackButtonId, setSimonActivePlaybackButtonId] = useState<string | null>(null);
   const [simonActiveInputButtonId, setSimonActiveInputButtonId] = useState<string | null>(null);
   const [isSimonPlaybackActive, setIsSimonPlaybackActive] = useState(false);
+  const [isSimonSequenceStarted, setIsSimonSequenceStarted] = useState(false);
   const [, setSimonResult] = useState<string | null>(null);
   const [rebusInput, setRebusInput] = useState("");
   const [rebusAttempts, setRebusAttempts] = useState(0);
@@ -1189,7 +1199,20 @@ export function StationPreviewOverlay({
           current.timeLimitSeconds === stationProp.timeLimitSeconds &&
           current.points === stationProp.points &&
           current.qrScanCompletedCount === stationProp.qrScanCompletedCount &&
-          current.qrScanRequiredCount === stationProp.qrScanRequiredCount
+          current.qrScanRequiredCount === stationProp.qrScanRequiredCount &&
+          // Also compare the localized content fields, otherwise switching the
+          // content language while a station is open keeps showing whatever was
+          // displayed when the overlay first opened — the app chrome (buttons,
+          // labels) updates immediately since that's driven by uiLanguage, but
+          // the station's own name/description/quiz stayed pinned to this stale
+          // snapshot.
+          current.name === stationProp.name &&
+          current.description === stationProp.description &&
+          current.quizQuestion === stationProp.quizQuestion &&
+          current.quizCorrectAnswerIndex === stationProp.quizCorrectAnswerIndex &&
+          current.quizAudioUrl === stationProp.quizAudioUrl &&
+          JSON.stringify(current.quizAnswers) === JSON.stringify(stationProp.quizAnswers) &&
+          JSON.stringify(current.quizAcceptedAnswers) === JSON.stringify(stationProp.quizAcceptedAnswers)
         ) {
           return current;
         }
@@ -1390,6 +1413,7 @@ export function StationPreviewOverlay({
   useEffect(() => {
     if (!displayedStation || displayedStation.stationType !== "simon") {
       stopSimonPlayback();
+      setIsSimonSequenceStarted(false);
       return;
     }
 
@@ -1402,14 +1426,27 @@ export function StationPreviewOverlay({
     setSimonMistakes(0);
     setSimonTargetLength(initialLength);
     setSimonResult(null);
-    void prepareSimonAudio().then(() => {
-      void playSimonSequence(sequence.slice(0, initialLength));
-    });
+    // Wait for the player to tap Start (see handleStartSimonSequence) instead
+    // of auto-playing the first sequence the moment the station opens.
+    setIsSimonSequenceStarted(false);
 
     return () => {
       stopSimonPlayback();
     };
-  }, [displayedStation, playSimonSequence, prepareSimonAudio, stopSimonPlayback]);
+  }, [displayedStation, stopSimonPlayback]);
+
+  const handleStartSimonSequence = useCallback(() => {
+    if (!displayedStation || displayedStation.stationType !== "simon" || isSimonSequenceStarted) {
+      return;
+    }
+
+    setIsSimonSequenceStarted(true);
+    const sequence = resolveSimonSequence(displayedStation);
+    const initialLength = Math.max(1, Math.min(SIMON_INITIAL_SEQUENCE_LENGTH, sequence.length));
+    void prepareSimonAudio().then(() => {
+      void playSimonSequence(sequence.slice(0, initialLength));
+    });
+  }, [displayedStation, isSimonSequenceStarted, playSimonSequence, prepareSimonAudio]);
 
   useEffect(() => {
     return () => {
@@ -2076,6 +2113,8 @@ export function StationPreviewOverlay({
       isSimonPlaybackActive,
       isInteractiveLocked,
       isSubmittingSimon,
+      isSequenceStarted: isSimonSequenceStarted,
+      onStartSequence: handleStartSimonSequence,
       onPressButton: (buttonId) => {
         void handleSimonPress(buttonId);
       },
@@ -2122,7 +2161,6 @@ export function StationPreviewOverlay({
       memoryDeck,
       memoryMatchedCount,
       memoryBusy,
-      memoryResult,
       isInteractiveLocked,
       isTabletOverlay,
       quizSubmitError,
@@ -2419,12 +2457,18 @@ export function StationPreviewOverlay({
           overlayPanelStyle,
         ]}
       >
-        <Pressable
+        <View
           className="flex-1 border"
-          onPress={() => {
+          onTouchEnd={() => {
             // Tapping empty space anywhere in the card dismisses the
             // keyboard; nested Pressables/TextInputs still claim their own
             // touches first, so buttons and the input itself are unaffected.
+            // Plain View + onTouchEnd instead of Pressable: Pressable's own
+            // responder-negotiation ("is this a press, or should a nested
+            // gesture — like the description ScrollView's drag — take it
+            // instead?") was intermittently winning that negotiation and
+            // swallowing the first bit of a scroll drag, making the
+            // description scroll only work after several attempts.
             Keyboard.dismiss();
           }}
           style={{
@@ -2453,6 +2497,33 @@ export function StationPreviewOverlay({
                   {stationHeaderLabel}
                 </Text>
             </View>
+            {showLanguageButton && languageFlag && onOpenLanguagePicker ? (
+              <Pressable
+                className="items-center justify-center rounded-full border active:opacity-90"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panelMuted,
+                  width: closeButtonDiameter,
+                  height: closeButtonDiameter,
+                }}
+                onPress={onOpenLanguagePicker}
+                hitSlop={8}
+              >
+                <Text
+                  className="text-center"
+                  style={{
+                    fontSize: adaptiveLayout.fs(isTabletOverlay ? 20 : 13, 12, 24),
+                    includeFontPadding: false,
+                    width: closeButtonDiameter,
+                    height: closeButtonDiameter,
+                    lineHeight: closeButtonDiameter,
+                    verticalAlign: "middle",
+                  }}
+                >
+                  {languageFlag}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               className="items-center justify-center rounded-full border active:opacity-90"
                 style={{
@@ -2644,6 +2715,42 @@ export function StationPreviewOverlay({
                       />
                     </View>
                   ) : null}
+                  {qrHuntScan.showScanConfirmation ? (
+                    <View
+                      className="absolute inset-x-0 items-center"
+                      style={{ top: adaptiveLayout.s(10, 6, 14), zIndex: 20 }}
+                      pointerEvents="none"
+                    >
+                      <View
+                        className="flex-row items-center rounded-full"
+                        style={{
+                          columnGap: adaptiveLayout.s(6, 4, 8),
+                          paddingHorizontal: adaptiveLayout.s(14, 10, 18),
+                          paddingVertical: adaptiveLayout.s(7, 5, 9),
+                          backgroundColor: QR_HUNT_SCAN_SUCCESS_COLOR,
+                        }}
+                      >
+                        <Text
+                          className="font-semibold"
+                          style={{
+                            color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                            fontSize: adaptiveLayout.fs(16, 13, 18),
+                          }}
+                        >
+                          ✓
+                        </Text>
+                        <Text
+                          className="font-semibold"
+                          style={{
+                            color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                            fontSize: adaptiveLayout.fs(13, 11, 15),
+                          }}
+                        >
+                          {qrHuntScan.text.scanConfirmed}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                   {qrHuntScan.isScannerOpen ? (
                     <InlineQrScanner
                       isResolving={qrHuntScan.isSubmitting}
@@ -2696,12 +2803,67 @@ export function StationPreviewOverlay({
                 </View>
               ) : null}
 
+              {requiresQrScan ? (
+                <View className="mt-2 w-full items-center">
+                  <QrHuntProgressDots
+                    text={qrHuntScan.text}
+                    requiredCount={qrHuntScan.requiredCount}
+                    scannedCount={qrHuntScan.scannedCount}
+                    isDone={station.status === "done"}
+                  />
+                </View>
+              ) : null}
+
+              {requiresQrScan && stationDescription.length > 0 ? (
+                <View
+                  className="px-1"
+                  style={{
+                    marginTop: adaptiveLayout.s(isTabletOverlay ? 10 : 6, 5, 14),
+                    maxHeight: isTabletOverlay
+                      ? QR_HUNT_DESCRIPTION_RESERVE.tablet
+                      : QR_HUNT_DESCRIPTION_RESERVE.phone,
+                  }}
+                >
+                  <AutoScrollingBox
+                    autoScrollEnabled={false}
+                    showsBottomFadeWhenScrollable
+                    bottomFadeColor={EXPEDITION_THEME.panel}
+                  >
+                    <Text
+                      className="leading-6"
+                      style={{
+                        color: EXPEDITION_THEME.textMuted,
+                        textAlign: "justify",
+                        fontSize: stationPanelLayout.descriptionFontSize,
+                        lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
+                      }}
+                    >
+                      {stationDescription}
+                    </Text>
+                  </AutoScrollingBox>
+                </View>
+              ) : null}
+
               {requiresCode ? (
                 <View
                   className="px-1"
-                  style={{ marginVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 16) }}
+                  style={{
+                    marginVertical: adaptiveLayout.s(isTabletOverlay ? 12 : 6, 5, 16),
+                    // A fixed, precomputed cap instead of flex-shrinking against
+                    // siblings (the image above is itself flex:1 and can still be
+                    // settling its own async-loaded size right after the station
+                    // opens) — that made this box's available height a moving
+                    // target during the first moments, which is what made the
+                    // auto-scroll cycle look jumpy right from station start.
+                    // A fixed maxHeight is stable from the very first layout pass.
+                    maxHeight: adaptiveLayout.s(isTabletOverlay ? 160 : 110, 80, 260),
+                  }}
                 >
-                  <AutoScrollingBox>
+                  <AutoScrollingBox
+                    autoScrollEnabled={false}
+                    showsBottomFadeWhenScrollable
+                    bottomFadeColor={EXPEDITION_THEME.panel}
+                  >
                     <Text
                       className="leading-6"
                       style={{
@@ -2717,7 +2879,7 @@ export function StationPreviewOverlay({
                     </Text>
                   </AutoScrollingBox>
                 </View>
-              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && !requiresQrScan && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <AutoScrollingBox className="mt-1">
                   <Text
                     style={{
@@ -2729,16 +2891,6 @@ export function StationPreviewOverlay({
                     {stationDescription}
                   </Text>
                 </AutoScrollingBox>
-              ) : null}
-              {requiresQrScan ? (
-                <View className="mt-2 w-full items-center">
-                  <QrHuntProgressDots
-                    text={qrHuntScan.text}
-                    requiredCount={qrHuntScan.requiredCount}
-                    scannedCount={qrHuntScan.scannedCount}
-                    isDone={station.status === "done"}
-                  />
-                </View>
               ) : null}
               {isAnagramStation ? (
                 <Text
@@ -2920,7 +3072,7 @@ export function StationPreviewOverlay({
             </View>
           </View>
 
-        </Pressable>
+        </View>
       </Animated.View>
       <QuizOutcomePopupPanel
         popup={quizOutcomePopup}
