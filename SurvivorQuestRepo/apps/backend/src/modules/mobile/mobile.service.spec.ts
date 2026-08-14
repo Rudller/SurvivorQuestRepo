@@ -394,6 +394,7 @@ describe('MobileService task scoring', () => {
       teamStationScan: {
         create: jest.fn(),
         count: jest.fn(),
+        deleteMany: jest.fn(),
       },
       team: {
         update: jest.fn(),
@@ -992,6 +993,47 @@ describe('MobileService task scoring', () => {
         code: 'CODE-A',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('clears qr-hunt scan history when an admin resets a task', async () => {
+    const { service, prisma } = createService();
+
+    jest
+      .spyOn(service as never, 'resolveMobileAdminTeamTaskContext')
+      .mockResolvedValue({
+        realization: { id: 'realization-1', stationIds: ['station-1'] },
+        team: { id: 'team-1' },
+        station: { id: 'station-1', type: 'qr-hunt' },
+        existingProgress: {
+          id: 'progress-1',
+          status: TaskStatus.IN_PROGRESS,
+          pointsAwarded: 0,
+        },
+        stationId: 'station-1',
+      });
+    jest
+      .spyOn(service as never, 'getFailedTaskStationIds')
+      .mockResolvedValue(new Set());
+    jest.spyOn(service as never, 'emitEvent').mockResolvedValue(undefined);
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    const result = await service.resetMobileAdminTeamTask({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+
+    // qrScanCompletedCount is derived by counting TeamStationScan rows (see
+    // session/state building), not stored on TeamTaskProgress — without this
+    // deleteMany, a reset task kept showing its pre-reset scan count.
+    expect(prisma.teamStationScan.deleteMany).toHaveBeenCalledWith({
+      where: {
+        realizationId: 'realization-1',
+        teamId: 'team-1',
+        stationId: 'station-1',
+      },
+    });
+    expect(result.taskStatus).toBe('todo');
   });
 
   it('requires a location update before starting tasks when realization requires location', async () => {

@@ -2497,6 +2497,7 @@ export class MobileService {
       select: {
         id: true,
         teamId: true,
+        stationId: true,
       },
     });
 
@@ -2524,6 +2525,19 @@ export class MobileService {
         pointsAwarded: 0,
         startedAt: null,
         finishedAt: null,
+      },
+    });
+
+    // Same reasoning as resetMobileAdminTeamTask: qr-hunt progress is derived
+    // from this scan log, not from TeamTaskProgress, so it has to be cleared
+    // separately or a bulk reset leaves stale scan counts behind.
+    await this.prisma.teamStationScan.deleteMany({
+      where: {
+        realizationId: realization.id,
+        OR: resettableTasks.map((task) => ({
+          teamId: task.teamId,
+          stationId: task.stationId,
+        })),
       },
     });
 
@@ -2591,6 +2605,13 @@ export class MobileService {
         },
       });
     }
+
+    // qr-hunt progress (qrScanCompletedCount) is derived by counting rows here,
+    // not stored on TeamTaskProgress — without this, a reset task kept showing
+    // its old scan count (e.g. 2/4) because the scan log itself was untouched.
+    await this.prisma.teamStationScan.deleteMany({
+      where: { realizationId: realization.id, teamId: team.id, stationId },
+    });
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -2863,23 +2884,33 @@ export class MobileService {
 
     await this.ensureTeamsForRealization(realization);
 
-    const [deletedAssignments, deletedProgress, deletedRuntimeEvents] =
-      await this.prisma.$transaction([
-        this.prisma.teamAssignment.deleteMany({
-          where: { realizationId: realization.id },
-        }),
-        this.prisma.teamTaskProgress.deleteMany({
-          where: { realizationId: realization.id },
-        }),
-        this.prisma.eventLog.deleteMany({
-          where: {
-            realizationId: realization.id,
-            actorType: {
-              in: [EventActorType.MOBILE_DEVICE, EventActorType.SYSTEM],
-            },
+    const [
+      deletedAssignments,
+      deletedProgress,
+      deletedRuntimeEvents,
+      deletedStationScans,
+    ] = await this.prisma.$transaction([
+      this.prisma.teamAssignment.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.teamTaskProgress.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.eventLog.deleteMany({
+        where: {
+          realizationId: realization.id,
+          actorType: {
+            in: [EventActorType.MOBILE_DEVICE, EventActorType.SYSTEM],
           },
-        }),
-      ]);
+        },
+      }),
+      // qr-hunt progress is derived by counting these rows (see session/state
+      // building), not stored on TeamTaskProgress — left out of this reset, a
+      // "fresh" realization would still show old scan counts for qr-hunt tasks.
+      this.prisma.teamStationScan.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+    ]);
 
     await this.prisma.team.updateMany({
       where: { realizationId: realization.id },
@@ -2917,6 +2948,7 @@ export class MobileService {
         deletedAssignments: deletedAssignments.count,
         deletedTaskProgress: deletedProgress.count,
         deletedRuntimeEvents: deletedRuntimeEvents.count,
+        deletedStationScans: deletedStationScans.count,
       },
     });
 
@@ -2927,6 +2959,7 @@ export class MobileService {
       deletedAssignments: deletedAssignments.count,
       deletedTaskProgress: deletedProgress.count,
       deletedRuntimeEvents: deletedRuntimeEvents.count,
+      deletedStationScans: deletedStationScans.count,
     };
   }
 
