@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
-import { QR_SCAN_SILENT_FAILURE } from "../../../api/mobile-session.api";
+import { QR_SCAN_ALREADY_SCANNED, QR_SCAN_SILENT_FAILURE } from "../../../api/mobile-session.api";
 import type { StationTestViewModel } from "../types";
 import { useStationPanelLayout } from "./shared-ui";
 import { useQrScanFeedbackSound } from "./use-qr-scan-feedback-sound";
@@ -14,6 +14,7 @@ type QrHuntText = {
   progress: (scanned: number, required: number) => string;
   allScanned: string;
   scanConfirmed: string;
+  alreadyScanned: string;
   cameraAccessTitle: string;
   cameraAccessDescription: string;
   enableCamera: string;
@@ -36,6 +37,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     progress: (scanned, required) => `${scanned}/${required} zeskanowanych kodów`,
     allScanned: "Wszystkie kody zeskanowane, zadanie zaliczone.",
     scanConfirmed: "Zeskanowano",
+    alreadyScanned: "Ten kod został już zeskanowany",
     cameraAccessTitle: "Dostęp do kamery",
     cameraAccessDescription: "Aby zeskanować kod, włącz dostęp do kamery.",
     enableCamera: "Włącz kamerę",
@@ -46,6 +48,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     progress: (scanned, required) => `${scanned}/${required} codes scanned`,
     allScanned: "All codes scanned, task completed.",
     scanConfirmed: "Scanned",
+    alreadyScanned: "This code has already been scanned",
     cameraAccessTitle: "Camera access",
     cameraAccessDescription: "Enable camera access to scan a code.",
     enableCamera: "Enable camera",
@@ -56,6 +59,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     progress: (scanned, required) => `${scanned}/${required} відсканованих кодів`,
     allScanned: "Усі коди відскановано, завдання зараховано.",
     scanConfirmed: "Відскановано",
+    alreadyScanned: "Цей код уже відскановано",
     cameraAccessTitle: "Доступ до камери",
     cameraAccessDescription: "Щоб відсканувати код, увімкніть доступ до камери.",
     enableCamera: "Увімкнути камеру",
@@ -66,6 +70,7 @@ const QR_HUNT_TEXT: Record<UiLanguage, QrHuntText> = {
     progress: (scanned, required) => `${scanned}/${required} отсканированных кодов`,
     allScanned: "Все коды отсканированы, задание зачтено.",
     scanConfirmed: "Отсканировано",
+    alreadyScanned: "Этот код уже отсканирован",
     cameraAccessTitle: "Доступ к камере",
     cameraAccessDescription: "Чтобы отсканировать код, включите доступ к камере.",
     enableCamera: "Включить камеру",
@@ -83,13 +88,18 @@ export function useQrHuntScan(
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showScanConfirmation, setShowScanConfirmation] = useState(false);
+  const [showAlreadyScannedNotice, setShowAlreadyScannedNotice] = useState(false);
   const scanConfirmationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alreadyScannedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const feedbackSound = useQrScanFeedbackSound();
 
   useEffect(() => {
     return () => {
       if (scanConfirmationTimeoutRef.current) {
         clearTimeout(scanConfirmationTimeoutRef.current);
+      }
+      if (alreadyScannedTimeoutRef.current) {
+        clearTimeout(alreadyScannedTimeoutRef.current);
       }
     };
   }, []);
@@ -109,6 +119,18 @@ export function useQrHuntScan(
     setSubmitError(null);
     const error = await onSubmitQrScan(station.stationId, rawValue);
     setIsSubmitting(false);
+
+    if (error === QR_SCAN_ALREADY_SCANNED) {
+      setIsScannerOpen(false);
+      if (alreadyScannedTimeoutRef.current) {
+        clearTimeout(alreadyScannedTimeoutRef.current);
+      }
+      setShowAlreadyScannedNotice(true);
+      alreadyScannedTimeoutRef.current = setTimeout(() => {
+        setShowAlreadyScannedNotice(false);
+      }, QR_HUNT_SCAN_CONFIRMATION_VISIBLE_MS);
+      return;
+    }
 
     if (error) {
       feedbackSound.playIncorrect();
@@ -141,8 +163,12 @@ export function useQrHuntScan(
     openScanner: () => {
       setSubmitError(null);
       setShowScanConfirmation(false);
+      setShowAlreadyScannedNotice(false);
       if (scanConfirmationTimeoutRef.current) {
         clearTimeout(scanConfirmationTimeoutRef.current);
+      }
+      if (alreadyScannedTimeoutRef.current) {
+        clearTimeout(alreadyScannedTimeoutRef.current);
       }
       setIsScannerOpen(true);
     },
@@ -153,6 +179,7 @@ export function useQrHuntScan(
     requiredCount,
     scannedCount,
     showScanConfirmation,
+    showAlreadyScannedNotice,
     handleDetected: (value: string) => void handleDetected(value),
   };
 }

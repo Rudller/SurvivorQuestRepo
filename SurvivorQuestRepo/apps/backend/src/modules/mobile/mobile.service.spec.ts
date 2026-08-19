@@ -848,6 +848,7 @@ describe('MobileService task scoring', () => {
     expect(result.taskStatus).toBe('in-progress');
     expect(result.scannedCount).toBe(1);
     expect(result.requiredCount).toBe(2);
+    expect(result.duplicate).toBe(false);
     expect(prisma.teamTaskProgress.update).not.toHaveBeenCalled();
   });
 
@@ -872,6 +873,7 @@ describe('MobileService task scoring', () => {
 
     expect(result.taskStatus).toBe('in-progress');
     expect(result.scannedCount).toBe(1);
+    expect(result.duplicate).toBe(true);
   });
 
   it('rejects a QR code that is not configured for the station', async () => {

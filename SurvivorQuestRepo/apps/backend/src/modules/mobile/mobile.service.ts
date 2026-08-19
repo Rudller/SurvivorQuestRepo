@@ -801,6 +801,7 @@ export class MobileService {
       });
     }
 
+    let isDuplicateScan = false;
     try {
       await this.prisma.teamStationScan.create({
         data: {
@@ -816,6 +817,7 @@ export class MobileService {
       }
       // Already scanned this exact code before — idempotent no-op, not an
       // error for the player (they may have scanned the same sticker twice).
+      isDuplicateScan = true;
     }
 
     const progress = await this.prisma.teamTaskProgress.upsert({
@@ -868,6 +870,7 @@ export class MobileService {
         scannedCount,
         requiredCount,
         taskStatus: 'in-progress' as const,
+        duplicate: isDuplicateScan,
       };
     }
 
@@ -927,6 +930,7 @@ export class MobileService {
         pointsAwarded: 0,
         fastestBonusPoints: 0,
         taskStatus: 'failed' as const,
+        duplicate: isDuplicateScan,
       };
     }
 
@@ -954,6 +958,7 @@ export class MobileService {
       pointsAwarded: awardedPoints,
       fastestBonusPoints,
       taskStatus: 'done' as const,
+      duplicate: isDuplicateScan,
     };
   }
 

@@ -120,7 +120,7 @@ function collectMiniSudokuConflictIndexes(values: string[], side: number, blockS
     .filter((index) => index >= 0);
 }
 
-type UseStationPreviewModelArgs = {
+export type UseStationPreviewModelArgs = {
   station: StationTestViewModel;
   uiLanguage: UiLanguage;
   viewportHeight: number;
@@ -593,6 +593,37 @@ export function buildStationPreviewModel({
     station.status === "failed" ||
     (hasTimedLimit && !hasTimerStarted) ||
     isTimeExpired;
+  // Per-panel interaction gates — computed here (not inline in preview.tsx's
+  // JSX) so the exact same logic that decides what's tappable is directly
+  // unit-testable, and so a test can't accidentally assert against a
+  // hand-typed "should be correct" boolean instead of the real one. Each
+  // panel's submit/action gate and its tile/key/cell gate are kept as
+  // separate expressions (even where identical today) — sharing one flag for
+  // both was exactly the anagram bug fixed earlier: the submit gate that
+  // requires a complete answer also silently locked every letter tile.
+  const anagramIsActionDisabled =
+    isInteractiveLocked ||
+    isSubmittingAnagram ||
+    anagramAttemptsLeft <= 0 ||
+    anagramInput.length < anagramScrambledWords.reduce((sum, word) => sum + word.length, 0);
+  const anagramIsInputLocked = isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0;
+  const mastermindIsActionDisabled =
+    isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0;
+  const mastermindIsSymbolDisabled =
+    isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0;
+  const caesarIsActionDisabled = isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0;
+  const rebusIsActionDisabled = isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0;
+  const boggleIsActionDisabled = isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0;
+  const miniSudokuIsActionDisabled = isInteractiveLocked || isSubmittingMiniSudoku;
+  const hangmanIsGuessDisabled =
+    station.status === "done" ||
+    station.status === "failed" ||
+    isSubmittingHangmanGuess ||
+    (hasTimedLimit && !hasTimerStarted) ||
+    isTimeExpired ||
+    hangmanAttemptsLeft <= 0 ||
+    hangmanHasWon;
+  const matchingIsInteractiveLocked = isInteractiveLocked || isSubmittingMatching || matchingAllMatched;
 
   return {
     isClassicQuizStation,
@@ -697,6 +728,16 @@ export function buildStationPreviewModel({
     isAudioStopDisabled,
     isCodeActionDisabled,
     isInteractiveLocked,
+    anagramIsActionDisabled,
+    anagramIsInputLocked,
+    mastermindIsActionDisabled,
+    mastermindIsSymbolDisabled,
+    caesarIsActionDisabled,
+    rebusIsActionDisabled,
+    boggleIsActionDisabled,
+    miniSudokuIsActionDisabled,
+    hangmanIsGuessDisabled,
+    matchingIsInteractiveLocked,
     timerTextColor,
     timerPulseStyle,
   };

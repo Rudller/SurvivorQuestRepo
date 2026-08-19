@@ -48,6 +48,8 @@ import {
 const QR_HUNT_WATERMARK_ICON_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/qrcode.svg";
 // Matches the success color used by code-station-panel.tsx for its "correct code" feedback.
 const QR_HUNT_SCAN_SUCCESS_COLOR = "#34d399";
+// Neutral (not error, not success) — for "you already scanned this code" feedback.
+const QR_HUNT_SCAN_NEUTRAL_COLOR = "#f0c977";
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
 const TIMEOUT_POPUP_AUTO_CLOSE_SECONDS = 10;
@@ -1619,7 +1621,6 @@ export function StationPreviewOverlay({
     wordleKeyboardKeyWidth,
     guessedHangmanSet,
     hangmanSecret,
-    hangmanHasWon,
     hangmanAttemptsLeft,
     mastermindSecret,
     mastermindConfig,
@@ -1679,6 +1680,16 @@ export function StationPreviewOverlay({
     isAudioStopDisabled,
     isCodeActionDisabled,
     isInteractiveLocked,
+    anagramIsActionDisabled,
+    anagramIsInputLocked,
+    mastermindIsActionDisabled,
+    mastermindIsSymbolDisabled,
+    caesarIsActionDisabled,
+    rebusIsActionDisabled,
+    boggleIsActionDisabled,
+    miniSudokuIsActionDisabled,
+    hangmanIsGuessDisabled,
+    matchingIsInteractiveLocked,
     timerTextColor,
     timerPulseStyle,
   } = buildStationPreviewModel({
@@ -2055,7 +2066,7 @@ export function StationPreviewOverlay({
     },
   });
   const appendRebusCharacter = (character: string) => {
-    if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
+    if (rebusIsActionDisabled) {
       return;
     }
 
@@ -2069,7 +2080,7 @@ export function StationPreviewOverlay({
     setQuizSubmitError(null);
   };
   const backspaceRebusInput = () => {
-    if (isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0) {
+    if (rebusIsActionDisabled) {
       return;
     }
 
@@ -2178,7 +2189,7 @@ export function StationPreviewOverlay({
       miniSudokuPuzzle,
       normalizedMiniSudokuValues,
       conflictCellIndexes: miniSudokuConflictIndexes,
-      isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku,
+      isActionDisabled: miniSudokuIsActionDisabled,
       activeCellIndex: miniSudokuActiveCellIndex,
       onSelectCell: setMiniSudokuActiveCellIndex,
     },
@@ -2188,9 +2199,9 @@ export function StationPreviewOverlay({
       matchingRightOptions,
       matchingConnections,
       matchingResult,
-      isInteractiveLocked: isInteractiveLocked || isSubmittingMatching || matchingAllMatched,
+      isInteractiveLocked: matchingIsInteractiveLocked,
       onConnect: (left, right) => {
-        if (isInteractiveLocked || isSubmittingMatching || matchingAllMatched || matchingAttemptsLeft <= 0) {
+        if (matchingIsInteractiveLocked || matchingAttemptsLeft <= 0) {
           return;
         }
         setMatchingResult(null);
@@ -2210,7 +2221,7 @@ export function StationPreviewOverlay({
       boggleInput,
       boggleResult,
       selectedCellPath: boggleSelectedCellPath,
-      isActionDisabled: isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0,
+      isActionDisabled: boggleIsActionDisabled,
       isSubmittingBoggle,
       onChangeInput: (value) => {
         handleBoggleInput(value);
@@ -2228,7 +2239,7 @@ export function StationPreviewOverlay({
     miniSudokuPuzzle,
     activeCellIndex: miniSudokuActiveCellIndex,
     onSelectCell: setMiniSudokuActiveCellIndex,
-    isActionDisabled: isInteractiveLocked || isSubmittingMiniSudoku,
+    isActionDisabled: miniSudokuIsActionDisabled,
     isSubmittingMiniSudoku,
     onChangeCell: handleMiniSudokuChangeCell,
     onSubmit: handleMiniSudokuSubmit,
@@ -2304,14 +2315,7 @@ export function StationPreviewOverlay({
       hangmanMisses,
       hangmanAttemptsLeft,
       guessedHangmanSet,
-      isGuessDisabled:
-        station.status === "done" ||
-        station.status === "failed" ||
-        isSubmittingHangmanGuess ||
-        (hasTimedLimit && !hasTimerStarted) ||
-        isTimeExpired ||
-        hangmanAttemptsLeft <= 0 ||
-        hangmanHasWon,
+      isGuessDisabled: hangmanIsGuessDisabled,
       isSubmittingHangmanGuess,
       onSubmitLetter: (letter) => {
         void submitHangmanGuess(letter);
@@ -2329,8 +2333,8 @@ export function StationPreviewOverlay({
       mastermindMaxAttempts: mastermindConfig.maxAttempts,
       mastermindSymbols: mastermindConfig.symbols,
       isInputEditable: !isInteractiveLocked && !isSubmittingMastermindGuess && !mastermindSolved,
-      isActionDisabled: isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0,
-      isSymbolDisabled: isInteractiveLocked || isSubmittingMastermindGuess || mastermindSolved || mastermindAttemptsLeft <= 0,
+      isActionDisabled: mastermindIsActionDisabled,
+      isSymbolDisabled: mastermindIsSymbolDisabled,
       isSubmittingMastermindGuess,
       onChangeInput: (value) => {
         handleMastermindInput(value);
@@ -2359,11 +2363,12 @@ export function StationPreviewOverlay({
         anagramAttemptsLeft,
         anagramInput,
         anagramResult,
-        isActionDisabled:
-          isInteractiveLocked ||
-          isSubmittingAnagram ||
-          anagramAttemptsLeft <= 0 ||
-          anagramInput.length < anagramScrambledWords.reduce((sum, word) => sum + word.length, 0),
+        isActionDisabled: anagramIsActionDisabled,
+        // Letter tiles and backspace must stay tappable while the word is still
+        // being built — unlike isActionDisabled (which gates the Check button
+        // and is true whenever the input isn't yet full-length), this excludes
+        // the length check so tiles aren't disabled from the very first render.
+        isInputLocked: anagramIsInputLocked,
         isSubmittingAnagram,
         onChangeInput: (value) => {
           handleAnagramInputChange(value);
@@ -2376,7 +2381,7 @@ export function StationPreviewOverlay({
       caesarInput,
       caesarMaxLength,
         caesarResult,
-        isActionDisabled: isInteractiveLocked || isSubmittingCaesar || caesarAttemptsLeft <= 0,
+        isActionDisabled: caesarIsActionDisabled,
         isSubmittingCaesar,
         onChangeInput: (value) => {
           handleCaesarInputChange(value);
@@ -2396,7 +2401,7 @@ export function StationPreviewOverlay({
       rebusAttemptsLeft,
       rebusInput,
         rebusResult,
-        isActionDisabled: isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0,
+        isActionDisabled: rebusIsActionDisabled,
         isSubmittingRebus,
         onChangeInput: (value) => {
           handleRebusInputChange(value);
@@ -2754,6 +2759,42 @@ export function StationPreviewOverlay({
                           }}
                         >
                           {qrHuntScan.text.scanConfirmed}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                  {qrHuntScan.showAlreadyScannedNotice ? (
+                    <View
+                      className="absolute inset-x-0 items-center"
+                      style={{ top: adaptiveLayout.s(10, 6, 14), zIndex: 20 }}
+                      pointerEvents="none"
+                    >
+                      <View
+                        className="flex-row items-center rounded-full"
+                        style={{
+                          columnGap: adaptiveLayout.s(6, 4, 8),
+                          paddingHorizontal: adaptiveLayout.s(14, 10, 18),
+                          paddingVertical: adaptiveLayout.s(7, 5, 9),
+                          backgroundColor: QR_HUNT_SCAN_NEUTRAL_COLOR,
+                        }}
+                      >
+                        <Text
+                          className="font-semibold"
+                          style={{
+                            color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                            fontSize: adaptiveLayout.fs(16, 13, 18),
+                          }}
+                        >
+                          ℹ
+                        </Text>
+                        <Text
+                          className="font-semibold"
+                          style={{
+                            color: isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background,
+                            fontSize: adaptiveLayout.fs(13, 11, 15),
+                          }}
+                        >
+                          {qrHuntScan.text.alreadyScanned}
                         </Text>
                       </View>
                     </View>

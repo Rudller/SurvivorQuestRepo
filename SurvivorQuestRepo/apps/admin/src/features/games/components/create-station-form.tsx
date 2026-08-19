@@ -451,7 +451,12 @@ export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps
       const translatedQuiz = normalizeStationQuizForType(type, {
         question: translatedQuestion,
         answers: finalAnswers,
-        correctAnswerIndex: 0,
+        // Word-puzzle/memory/mini-sudoku/simon/open-quiz/matching types force
+        // their own correctAnswerIndex below regardless of what's passed here
+        // — but for a plain multi-choice quiz, this value passes straight
+        // through, so hardcoding 0 was silently moving the "correct" answer
+        // to whichever option happened to be first once translated.
+        correctAnswerIndex: quizCorrectAnswerIndex,
         audioUrl: activeTranslation?.quiz?.audioUrl,
         acceptedAnswers: activeTranslation?.quiz?.acceptedAnswers,
       });

@@ -51,6 +51,13 @@ export type MobileApiErrorCode =
 // surfaced to the player.
 export const QR_SCAN_SILENT_FAILURE = "__qr_scan_silent_failure__";
 
+// Returned by qr-hunt-station-panel's handleDetected when the scanned code is
+// valid for the station but was already scanned before (backend treats the
+// repeat as an idempotent no-op, so progress doesn't move) — lets the panel
+// show a distinct "already scanned" message instead of the normal success
+// confirmation.
+export const QR_SCAN_ALREADY_SCANNED = "__qr_scan_already_scanned__";
+
 export class MobileApiHttpError extends Error {
   readonly statusCode: number;
   readonly code: MobileApiErrorCode;
@@ -931,6 +938,7 @@ export async function postMobileSubmitQrScan(
     pointsAwarded?: number;
     fastestBonusPoints?: number;
     pointsTotal?: number;
+    duplicate?: boolean;
   }>(
     apiBaseUrl,
     "/api/mobile/task/scan-code",

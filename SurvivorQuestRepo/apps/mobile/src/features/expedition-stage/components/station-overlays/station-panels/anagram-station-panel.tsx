@@ -15,6 +15,7 @@ type AnagramStationPanelProps = {
   anagramInput: string;
   anagramResult: string | null;
   isActionDisabled: boolean;
+  isInputLocked: boolean;
   isSubmittingAnagram: boolean;
   onChangeInput: (value: string) => void;
   onSubmit: () => void;
@@ -69,6 +70,7 @@ export function AnagramStationPanel({
   anagramInput,
   anagramResult,
   isActionDisabled,
+  isInputLocked,
   isSubmittingAnagram,
   onChangeInput,
   onSubmit,
@@ -79,7 +81,7 @@ export function AnagramStationPanel({
   const adaptiveLayout = useAdaptiveLayout();
   const tileSize = layout.isTablet ? 40 : 32;
   const tileFontSize = layout.isTablet ? 17 : 13;
-  const isBackspaceDisabled = !anagramInput.length || isActionDisabled;
+  const isBackspaceDisabled = !anagramInput.length || isInputLocked;
 
   // Tracks which specific tile (by word/character position, not by letter
   // value) was tapped to build the current input — a letter-count-only check
@@ -127,7 +129,7 @@ export function AnagramStationPanel({
             style={{ columnGap: pickerTileGap, rowGap: pickerTileGap }}
           >
             {tiles.map(({ character, isAvailable, tileKey }) => {
-              const tileDisabled = !isAvailable || isActionDisabled;
+              const tileDisabled = !isAvailable || isInputLocked;
               return (
                 <Pressable
                   key={`anagram-picker-${tileKey}`}

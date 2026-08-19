@@ -15,6 +15,7 @@ import {
   postMobileUploadTaskPhoto,
   postMobileSubmitQrScan,
   QR_SCAN_SILENT_FAILURE,
+  QR_SCAN_ALREADY_SCANNED,
 } from "../api/mobile-session.api";
 import {
   buildInitialSessionState,
@@ -1102,8 +1103,9 @@ export function useExpeditionSession(
         return text.missingApiConfig;
       }
 
+      let result: Awaited<ReturnType<typeof postMobileSubmitQrScan>>;
       try {
-        await withRequestTimeout(
+        result = await withRequestTimeout(
           (signal) =>
             postMobileSubmitQrScan(apiBaseUrl, {
               sessionToken: session.sessionToken,
@@ -1121,7 +1123,7 @@ export function useExpeditionSession(
       }
 
       void refreshSessionState();
-      return null;
+      return result.duplicate ? QR_SCAN_ALREADY_SCANNED : null;
     },
     [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );

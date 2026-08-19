@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { ExpeditionStationType, ExpeditionTask, PlayerLocation } from "../../model/types";
 import type { AlreadyCompletedNotice, ChallengeDifficulty, StationTestViewModel } from "../../components/station-overlays";
+import { QR_SCAN_ALREADY_SCANNED, QR_SCAN_SILENT_FAILURE } from "../../api/mobile-session.api";
 
 const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
+
+// qr-hunt-station-panel.tsx already shows its own in-panel feedback (silent
+// buzzer / neutral "already scanned" toast) for these — surfacing them again
+// via the global error popup would show the raw internal string to the player.
+export function isSilentQrScanSentinel(result: string): boolean {
+  return result === QR_SCAN_SILENT_FAILURE || result === QR_SCAN_ALREADY_SCANNED;
+}
 const ALREADY_COMPLETED_NOTICE_AUTO_CLOSE_MS = 3000;
 
 type OverlayFlowText = {
@@ -519,7 +527,9 @@ export function useExpeditionStageOverlayFlow({
 
       const result = await submitStationQrScan(stationId, code);
       if (result) {
-        setActionError(result);
+        if (!isSilentQrScanSentinel(result)) {
+          setActionError(result);
+        }
         return result;
       }
 
