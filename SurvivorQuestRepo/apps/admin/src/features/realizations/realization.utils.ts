@@ -3,6 +3,13 @@ import type { Realization, RealizationStatus } from "./types/realization";
 export type RealizationSortField = "company" | "scheduledAt" | "status" | "createdAt";
 export type SortDirection = "asc" | "desc";
 
+// Shown as the "Tekst wstępu" field's placeholder in the admin forms, and as
+// the actual fallback text shown to players in the mobile app when the admin
+// leaves the field empty — keep this string in sync with
+// INTRO_FALLBACK_TEXT in apps/mobile/src/features/risk-quiz/ui/risk-quiz-screen.tsx.
+export const RISK_QUIZ_INTRO_TEXT_PLACEHOLDER =
+  "Witajcie w grze! Za chwilę zaczynamy — skanujcie karty, podejmujcie wyzwania i zdobywajcie punkty dla swojej drużyny. Powodzenia!";
+
 export function getStatusLabel(status: RealizationStatus) {
   switch (status) {
     case "planned":

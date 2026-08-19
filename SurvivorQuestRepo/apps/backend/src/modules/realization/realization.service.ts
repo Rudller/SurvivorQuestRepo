@@ -89,8 +89,12 @@ export class RealizationService {
   async createRealization(payload: CreateRealizationDto) {
     const validated = validateRealizationPayload(payload);
     const realizationId = crypto.randomUUID();
+    const scenarioIdToClone =
+      validated.type === 'risk-quiz' && !validated.scenarioId
+        ? await this.resolveRiskQuizPlaceholderScenarioId()
+        : validated.scenarioId;
     const clonedScenario = await this.scenarioService.cloneScenario(
-      validated.scenarioId,
+      scenarioIdToClone,
       {
         realizationId,
       },
@@ -127,6 +131,7 @@ export class RealizationService {
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: clonedScenario.id,
+        riskSchemeId: validated.riskSchemeId || null,
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
@@ -275,6 +280,7 @@ export class RealizationService {
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: scenario.id,
+        riskSchemeId: validated.riskSchemeId || null,
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
@@ -455,11 +461,22 @@ export class RealizationService {
     const currentStations = await this.stationService.findStationsByIds(
       scenario.stationIds,
     );
+    const currentStationsById = new Map(
+      currentStations.map((item) => [item.id, item]),
+    );
     const nextStations: StationEntity[] = [];
+    const reusedExistingIds = new Set<string>();
 
     for (let index = 0; index < normalizedDrafts.length; index += 1) {
-      const existing = currentStations[index];
+      // Match by the draft's own id (not array position) — reordering
+      // stations sends the same ids back in a new order, and position-based
+      // matching would update the wrong DB row for each moved station,
+      // corrupting anything unique-per-row (e.g. qrEntryCode collisions
+      // silently falling back to a random code).
+      const draftId = drafts?.[index]?.id;
+      const existing = draftId ? currentStationsById.get(draftId) : undefined;
       if (existing) {
+        reusedExistingIds.add(existing.id);
         const maybeUpdated: unknown =
           await this.stationService.updateScenarioStationInstance(
             existing.id,
@@ -488,7 +505,7 @@ export class RealizationService {
     }
 
     const toRemove = currentStations
-      .slice(normalizedDrafts.length)
+      .filter((item) => !reusedExistingIds.has(item.id))
       .map((item) => item.id);
     if (toRemove.length > 0) {
       await this.stationService.removeStationsByIds(toRemove);
@@ -552,6 +569,69 @@ export class RealizationService {
       scenarioStations: stations,
       logs: mapRealizationLogs(logsRaw),
     });
+  }
+
+  private static readonly RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME =
+    'Ryzykanci — automatyczny szkielet (nie edytuj)';
+
+  /**
+   * Risk-quiz realizations don't use the Station/Scenario system, but
+   * Realization.scenarioId is a mandatory FK. Rather than making every
+   * consumer of that column handle null, we lazily create one shared,
+   * hidden template scenario (with one harmless station) the first time
+   * it's needed and reuse it for every future risk-quiz realization.
+   */
+  private async resolveRiskQuizPlaceholderScenarioId(): Promise<string> {
+    const existing = await this.prisma.scenario.findFirst({
+      where: {
+        name: RealizationService.RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME,
+        realizationId: null,
+        sourceTemplateId: null,
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return existing.id;
+    }
+
+    const now = new Date().toISOString();
+    const placeholderStation = await this.stationService.addTemplateStation({
+      id: crypto.randomUUID(),
+      name: 'Ryzykanci — pole techniczne',
+      type: 'points',
+      categories: [],
+      description:
+        'Wygenerowane automatycznie dla realizacji typu Ryzykanci. Nieużywane w aplikacji mobilnej.',
+      imageUrl: '',
+      points: 0,
+      timeLimitSeconds: 0,
+      qrScanCodes: [],
+      challengeDifficultyMode: 'admin',
+      challengeDifficulty: 'medium',
+      completionStopwatchEnabled: false,
+      allowConcurrentTeams: false,
+      fastestCompletionBonusPoints: 0,
+      color: '#f59e0b',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const placeholderScenario = await this.scenarioService.addScenario({
+      id: crypto.randomUUID(),
+      name: RealizationService.RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME,
+      description:
+        'Automatyczny szkielet wymagany przez system dla realizacji typu Ryzykanci.',
+      introText: '',
+      gameRules: '',
+      stationIds: [placeholderStation.id],
+      kind: 'template',
+      isTemplate: true,
+      isInstance: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return placeholderScenario.id;
   }
 
   private async createLog(

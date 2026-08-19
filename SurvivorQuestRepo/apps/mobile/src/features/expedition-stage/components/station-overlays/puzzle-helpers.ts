@@ -34,6 +34,7 @@ type StationPuzzleViewModel = {
   quizQuestion?: string;
   quizAnswers?: readonly string[];
   quizCorrectAnswerIndex?: number;
+  quizCaesarShift?: number;
 };
 
 export const WORDLE_MAX_ATTEMPTS = 6;
@@ -70,7 +71,7 @@ export const MINI_SUDOKU_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, { givenC
   hard: { givenCount: 25 },
 };
 export const TEXT_PUZZLE_MAX_ATTEMPTS = 3;
-export const MEMORY_MAX_MISTAKES = 7;
+export const MEMORY_MAX_MISTAKES = 3;
 export const NUMERIC_PINPAD_LAYOUT = [
   "1",
   "2",
@@ -395,7 +396,17 @@ export function caesarShift(value: string, shift: number) {
 }
 
 export function resolveCaesarShift(station: StationPuzzleViewModel) {
-  // Deterministic random shift per station so the challenge is reproducible within a session.
+  if (
+    typeof station.quizCaesarShift === "number" &&
+    Number.isInteger(station.quizCaesarShift) &&
+    station.quizCaesarShift >= 1 &&
+    station.quizCaesarShift <= 25
+  ) {
+    return station.quizCaesarShift;
+  }
+
+  // No admin-configured shift — fall back to one derived deterministically
+  // from the station id, so the challenge is still reproducible within a session.
   return (resolveSeed(`${station.stationId}-caesar-shift`) % 25) + 1;
 }
 

@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Scenario } from "../types/scenario";
 import type { Station } from "@/features/games/types/station";
 import { isCompletionCodeRequired } from "@/features/games/station.utils";
+import { getStationGroupCategories, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
+
+const UNCATEGORIZED_FILTER_LABEL = "Bez kategorii";
 
 interface ScenariosTableProps {
   scenarios: Scenario[];
@@ -14,10 +17,65 @@ interface ScenariosTableProps {
 }
 
 export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefetch }: ScenariosTableProps) {
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const sortedScenarios = useMemo(
+    () => [...scenarios].sort((left, right) => left.name.localeCompare(right.name, "pl", { sensitivity: "base" })),
+    [scenarios],
+  );
   const stationById = useMemo(
     () => new Map(stations.map((station) => [station.id, station])),
     [stations],
   );
+  const scenarioCategoriesById = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    sortedScenarios.forEach((scenario) => {
+      const categories = new Set<string>();
+      scenario.stationIds.forEach((stationId) => {
+        const station = stationById.get(stationId);
+        if (!station) {
+          return;
+        }
+        getStationGroupCategories(station).forEach((category) => categories.add(category));
+      });
+      map.set(scenario.id, categories);
+    });
+    return map;
+  }, [sortedScenarios, stationById]);
+  const categoryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    scenarioCategoriesById.forEach((categories) => {
+      categories.forEach((category) => {
+        counts.set(category, (counts.get(category) ?? 0) + 1);
+      });
+    });
+    return Array.from(counts.entries())
+      .sort(([left], [right]) => {
+        if (left === uncategorizedStationGroupKey) return 1;
+        if (right === uncategorizedStationGroupKey) return -1;
+        return left.localeCompare(right, "pl", { sensitivity: "base" });
+      })
+      .map(([value, count]) => ({
+        value,
+        count,
+        label: value === uncategorizedStationGroupKey ? UNCATEGORIZED_FILTER_LABEL : value,
+      }));
+  }, [scenarioCategoriesById]);
+  const filteredScenarios = useMemo(() => {
+    if (selectedCategories.length === 0) {
+      return sortedScenarios;
+    }
+    return sortedScenarios.filter((scenario) => {
+      const categories = scenarioCategoriesById.get(scenario.id);
+      return categories ? selectedCategories.some((category) => categories.has(category)) : false;
+    });
+  }, [sortedScenarios, scenarioCategoriesById, selectedCategories]);
+
+  function toggleCategoryFilter(category: string) {
+    setSelectedCategories((current) =>
+      current.includes(category) ? current.filter((item) => item !== category) : [...current, category],
+    );
+  }
+
   const getCodeCoverage = (stationIds: string[]) => {
     let required = 0;
     let configured = 0;
@@ -52,6 +110,43 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
         </button>
       </div>
 
+      {categoryOptions.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs uppercase tracking-wider text-zinc-500">
+              Filtruj po kategorii stanowisk • Wyniki: {filteredScenarios.length}/{scenarios.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedCategories([])}
+              disabled={selectedCategories.length === 0}
+              className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Wyczyść
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {categoryOptions.map((option) => {
+              const isActive = selectedCategories.includes(option.value);
+              return (
+                <button
+                  key={`scenario-filter-category-${option.value}`}
+                  type="button"
+                  onClick={() => toggleCategoryFilter(option.value)}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    isActive
+                      ? "border-amber-300 bg-amber-300/15 text-amber-200"
+                      : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-zinc-500"
+                  }`}
+                >
+                  {option.label} ({option.count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {isLoading && <p className="text-zinc-400">Ładowanie scenariuszy...</p>}
 
       {!isLoading && scenarios.length === 0 && (
@@ -61,7 +156,14 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
         </div>
       )}
 
-      {!isLoading && scenarios.length > 0 && (
+      {!isLoading && scenarios.length > 0 && filteredScenarios.length === 0 && (
+        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+          <p className="text-sm font-medium text-zinc-200">Brak wyników dla wybranych kategorii</p>
+          <p className="mt-1 text-sm text-zinc-400">Odznacz część kategorii, aby zobaczyć więcej scenariuszy.</p>
+        </div>
+      )}
+
+      {!isLoading && filteredScenarios.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/60">
           <div className="min-w-[820px]">
             <div className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-3 text-xs uppercase tracking-wider text-zinc-400">
@@ -73,7 +175,7 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
             </div>
 
             <div className="divide-y divide-zinc-800">
-              {scenarios.map((scenario) => (
+              {filteredScenarios.map((scenario) => (
                 <div key={scenario.id} className="grid grid-cols-[1.2fr_2fr_140px_1fr_120px] gap-3 px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold text-zinc-100">{scenario.name}</p>

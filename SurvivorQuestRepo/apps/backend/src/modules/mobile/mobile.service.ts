@@ -142,6 +142,7 @@ export class MobileService {
         return {
           id: realization.id,
           companyName: realization.companyName,
+          type: realization.type,
           language: languageContext.baseLanguage,
           customLanguage: languageContext.customLanguage,
           selectedLanguage: languageContext.selectedLanguage,
@@ -3370,6 +3371,11 @@ export class MobileService {
               ...(quizAudioUrl ? { audioUrl: quizAudioUrl } : {}),
               ...(localized.quiz.acceptedAnswers?.length
                 ? { acceptedAnswers: localized.quiz.acceptedAnswers }
+                : {}),
+              // Not translation-dependent — always read from the base
+              // station, never the per-language override.
+              ...(typeof station.quiz?.caesarShift === 'number'
+                ? { caesarShift: station.quiz.caesarShift }
                 : {}),
             }
           : undefined,

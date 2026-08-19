@@ -35,6 +35,7 @@ import {
 } from "../api/realization.api";
 import {
   getDistinctUsedAssets,
+  RISK_QUIZ_INTRO_TEXT_PLACEHOLDER,
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
 } from "../realization.utils";
@@ -47,6 +48,8 @@ import {
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesManager } from "./points-qr-codes-manager";
+import { RiskQuizManager } from "@/features/risk-quiz/components/risk-quiz-manager";
+import { useGetRiskSchemesQuery } from "@/features/risk-quiz/api/risk-quiz.api";
 import { geocodeLocation } from "../realization-geocoding";
 import {
   REALIZATION_FORM_TAB_LABELS,
@@ -142,6 +145,7 @@ export function EditRealizationPanel({
     offerPdfUrl: realization.offerPdfUrl,
     offerPdfName: realization.offerPdfName,
     scenarioId: realization.scenarioTemplateId ?? realization.scenarioId,
+    riskSchemeId: realization.riskSchemeId ?? "",
     teamCount: realization.teamCount,
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
@@ -274,7 +278,15 @@ export function EditRealizationPanel({
     isDurationInvalid;
   const scenarioTabHasError = isScenarioInvalid;
   const stationsTabHasError = isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
-  const tabs: TabItem[] = REALIZATION_FORM_TAB_ORDER.map((id) => ({
+  const isRiskQuizType = editValues.type === "risk-quiz";
+  const { data: riskSchemes, isLoading: isRiskSchemesLoading } = useGetRiskSchemesQuery(undefined, {
+    skip: !isRiskQuizType,
+  });
+  const tabs: TabItem[] = REALIZATION_FORM_TAB_ORDER.filter((id) => {
+    if (id === "riskQuiz") return isRiskQuizType;
+    if (id === "scenario" || id === "stations" || id === "pointsQr") return !isRiskQuizType;
+    return true;
+  }).map((id) => ({
     id,
     label: REALIZATION_FORM_TAB_LABELS[id],
     hasError:
@@ -553,6 +565,7 @@ export function EditRealizationPanel({
                 offerPdfUrl: nextOfferPdfUrl,
                 offerPdfName: nextOfferPdfName,
                 scenarioId: fallbackScenarioId,
+                riskSchemeId: isRiskQuizType ? editValues.riskSchemeId || undefined : undefined,
                 teamCount: normalizedTeamCount,
                 peopleCount: normalizedPeopleCount,
                 positionsCount: positionsCountForSubmit,
@@ -882,21 +895,30 @@ export function EditRealizationPanel({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
-                      <div className="relative">
-                        <input
-                          ref={scheduledAtInputRef}
-                          type="datetime-local"
-                          value={editValues.scheduledAt}
-                          onChange={(event) => setEditValues((prev) => ({ ...prev, scheduledAt: event.target.value }))}
-                          className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
-                        />
+                      <div className="flex gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <input
+                            ref={scheduledAtInputRef}
+                            type="datetime-local"
+                            value={editValues.scheduledAt}
+                            onChange={(event) => setEditValues((prev) => ({ ...prev, scheduledAt: event.target.value }))}
+                            className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={openScheduledAtPicker}
+                            aria-label="Otwórz kalendarz terminu realizacji"
+                            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                          >
+                            <CalendarInputIcon />
+                          </button>
+                        </div>
                         <button
                           type="button"
-                          onClick={openScheduledAtPicker}
-                          aria-label="Otwórz kalendarz terminu realizacji"
-                          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                          onClick={() => setEditValues((prev) => ({ ...prev, scheduledAt: toDateTimeLocalValue(new Date().toISOString()) }))}
+                          className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 transition hover:border-amber-400/80 hover:text-amber-300"
                         >
-                          <CalendarInputIcon />
+                          Teraz
                         </button>
                       </div>
                       {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
@@ -1288,6 +1310,49 @@ export function EditRealizationPanel({
 
             {activeTab === "pointsQr" && (
               <PointsQrCodesManager realizationId={realization.id} realizationName={realization.companyName} />
+            )}
+
+            {activeTab === "riskQuiz" && (
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Talia</span>
+                  <select
+                    value={editValues.riskSchemeId}
+                    onChange={(event) =>
+                      setEditValues((prev) => ({ ...prev, riskSchemeId: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  >
+                    <option value="">
+                      {isRiskSchemesLoading ? "Ładowanie talii..." : "— wybierz talię —"}
+                    </option>
+                    {(riskSchemes ?? []).map((scheme) => (
+                      <option key={scheme.id} value={scheme.id}>
+                        {scheme.name} ({scheme.schemeCategories.length} kat.)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-zinc-500">
+                    Talie tworzysz i edytujesz w osobnej zakładce „Ryzykanci” w panelu bocznym. Zmiana talii tutaj
+                    wymaga zapisania realizacji.
+                  </p>
+                </div>
+                <StyledMarkdownEditor
+                  label="Tekst wstępu"
+                  value={editValues.introText}
+                  onChange={(nextValue) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      introText: nextValue,
+                    }))
+                  }
+                  placeholder={RISK_QUIZ_INTRO_TEXT_PLACEHOLDER}
+                  rows={5}
+                  helperText="Opcjonalne. Jeśli zostawisz puste, w aplikacji mobilnej wyświetli się tekst z placeholdera."
+                />
+
+                <RiskQuizManager realizationId={realization.id} realizationName={realization.companyName} />
+              </div>
             )}
 
             {activeTab === "summary" && (

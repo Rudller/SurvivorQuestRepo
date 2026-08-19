@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
@@ -20,6 +21,7 @@ type AnagramStationPanelProps = {
 };
 
 type AnagramStationText = {
+  instructions: string;
   attemptsLeft: string;
   check: string;
   words: string;
@@ -27,6 +29,7 @@ type AnagramStationText = {
 };
 
 const ANAGRAM_STATION_TEXT_ENGLISH: AnagramStationText = {
+  instructions: "Tap the letters below in the right order to build the password.",
   attemptsLeft: "Attempts left",
   check: "Check",
   words: "Words",
@@ -35,6 +38,7 @@ const ANAGRAM_STATION_TEXT_ENGLISH: AnagramStationText = {
 
 const ANAGRAM_STATION_TEXT: Record<UiLanguage, AnagramStationText> = {
   polish: {
+    instructions: "Dotykaj poniższych liter we właściwej kolejności, aby ułożyć hasło.",
     attemptsLeft: "Pozostało prób",
     check: "Sprawdź",
     words: "Wyrazy",
@@ -42,36 +46,20 @@ const ANAGRAM_STATION_TEXT: Record<UiLanguage, AnagramStationText> = {
   },
   english: ANAGRAM_STATION_TEXT_ENGLISH,
   ukrainian: {
+    instructions: "Торкайтеся літер нижче у правильному порядку, щоб скласти пароль.",
     attemptsLeft: "Залишилось спроб",
     check: "Перевірити",
     words: "Слова",
     letters: "Літери",
   },
   russian: {
+    instructions: "Нажимайте на буквы ниже в правильном порядке, чтобы составить пароль.",
     attemptsLeft: "Осталось попыток",
     check: "Проверить",
     words: "Слова",
     letters: "Буквы",
   },
 };
-
-function computeLetterRemaining(scrambledWords: string[], anagramInput: string): Record<string, number> {
-  const pool: Record<string, number> = {};
-  for (const word of scrambledWords) {
-    for (const ch of Array.from(word)) {
-      pool[ch] = (pool[ch] ?? 0) + 1;
-    }
-  }
-  const used: Record<string, number> = {};
-  for (const ch of Array.from(anagramInput.toUpperCase())) {
-    used[ch] = (used[ch] ?? 0) + 1;
-  }
-  const remaining: Record<string, number> = {};
-  for (const [ch, count] of Object.entries(pool)) {
-    remaining[ch] = Math.max(0, count - (used[ch] ?? 0));
-  }
-  return remaining;
-}
 
 export function AnagramStationPanel({
   scrambledWords,
@@ -93,6 +81,20 @@ export function AnagramStationPanel({
   const tileFontSize = layout.isTablet ? 17 : 13;
   const isBackspaceDisabled = !anagramInput.length || isActionDisabled;
 
+  // Tracks which specific tile (by word/character position, not by letter
+  // value) was tapped to build the current input — a letter-count-only check
+  // can't tell two identical letters apart, so tapping one "A" of two would
+  // grey out whichever "A" tile happened to come first on screen instead of
+  // the one actually tapped. The parent can also reset anagramInput on its
+  // own (new puzzle, cleared attempt) without going through our tap/backspace
+  // handlers below, which is the only way this stack and the input length
+  // could ever drift apart — resync during render (not in an effect) so
+  // there's no stale-tile flash.
+  const [usedTileKeys, setUsedTileKeys] = useState<string[]>([]);
+  if (usedTileKeys.length !== anagramInput.length) {
+    setUsedTileKeys([]);
+  }
+
   const wordsToDisplay = scrambledWords.length > 0 ? scrambledWords : ["—"];
   const pickerTileGap = layout.isTablet ? 12 : 6;
   const longestWordLength = Math.max(...wordsToDisplay.map((w) => w.length), 1);
@@ -104,36 +106,38 @@ export function AnagramStationPanel({
   const pickerTileFontSize = layout.isTablet ? 28 : Math.max(12, Math.round(pickerTileSize * 0.46));
   const wordRowGap = layout.isTablet ? 18 : 12;
 
-  const letterRemaining = computeLetterRemaining(scrambledWords, anagramInput);
-  const remainingForTiles = { ...letterRemaining };
-  const wordTiles = wordsToDisplay.map((word) =>
-    Array.from(word).map((character) => {
-      const isAvailable = (remainingForTiles[character] ?? 0) > 0;
-      if (isAvailable) {
-        remainingForTiles[character]--;
-      }
-      return { character, isAvailable };
+  const wordTiles = wordsToDisplay.map((word, wordIndex) =>
+    Array.from(word).map((character, characterIndex) => {
+      const tileKey = `${wordIndex}-${characterIndex}`;
+      const isAvailable = scrambledWords.length > 0 && !usedTileKeys.includes(tileKey);
+      return { character, isAvailable, tileKey };
     }),
   );
 
   return (
     <View className="mt-3">
-      <View className="items-center" style={{ rowGap: wordRowGap }}>
+      <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+        {text.instructions}
+      </Text>
+      <View className="mt-2 items-center" style={{ rowGap: wordRowGap }}>
         {wordTiles.map((tiles, wordIndex) => (
           <View
             key={`anagram-picker-word-${wordIndex}`}
             className="flex-row flex-wrap justify-center"
             style={{ columnGap: pickerTileGap, rowGap: pickerTileGap }}
           >
-            {tiles.map(({ character, isAvailable }, characterIndex) => {
+            {tiles.map(({ character, isAvailable, tileKey }) => {
               const tileDisabled = !isAvailable || isActionDisabled;
               return (
                 <Pressable
-                  key={`anagram-picker-${wordIndex}-${characterIndex}`}
+                  key={`anagram-picker-${tileKey}`}
                   className="active:opacity-60"
                   style={{ opacity: tileDisabled ? 0.3 : 1 }}
                   disabled={tileDisabled}
-                  onPress={() => onChangeInput(`${anagramInput}${character}`)}
+                  onPress={() => {
+                    setUsedTileKeys((current) => [...current, tileKey]);
+                    onChangeInput(`${anagramInput}${character}`);
+                  }}
                 >
                   <View
                     className="items-center justify-center rounded-lg border"
@@ -222,7 +226,10 @@ export function AnagramStationPanel({
             opacity: isBackspaceDisabled ? 0.35 : 1,
           }}
           disabled={isBackspaceDisabled}
-          onPress={() => onChangeInput(anagramInput.slice(0, -1))}
+          onPress={() => {
+            setUsedTileKeys((current) => current.slice(0, -1));
+            onChangeInput(anagramInput.slice(0, -1));
+          }}
         >
           <View className="h-full w-full items-center justify-center">
             <Text

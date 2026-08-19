@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Station } from "@/features/games/types/station";
 import { stationTypeOptions } from "@/features/games/types/station";
+import { groupStationsByCategory } from "@/features/games/station-catalog.utils";
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useCreateScenarioMutation } from "../api/scenario.api";
 
@@ -21,6 +22,8 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [introText, setIntroText] = useState("");
+  const [gameRules, setGameRules] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -30,7 +33,23 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
     );
   }
 
-  const isDirty = useIsDirty({ name, description, selectedStationIds });
+  const stationGroups = useMemo(() => groupStationsByCategory(stations), [stations]);
+
+  function isGroupFullySelected(groupStations: Station[]) {
+    return groupStations.length > 0 && groupStations.every((station) => selectedStationIds.includes(station.id));
+  }
+
+  function toggleGroupSelection(groupStations: Station[]) {
+    const groupIds = groupStations.map((station) => station.id);
+    const allSelected = isGroupFullySelected(groupStations);
+    setSelectedStationIds((current) =>
+      allSelected
+        ? current.filter((id) => !groupIds.includes(id))
+        : Array.from(new Set([...current, ...groupIds])),
+    );
+  }
+
+  const isDirty = useIsDirty({ name, description, introText, gameRules, selectedStationIds });
 
   return (
     <>
@@ -67,10 +86,14 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
               await createScenario({
                 name: trimmedName,
                 description: trimmedDescription,
+                introText: introText.trim(),
+                gameRules: gameRules.trim(),
                 stationIds: selectedStationIds,
               }).unwrap();
               setName("");
               setDescription("");
+              setIntroText("");
+              setGameRules("");
               setSelectedStationIds([]);
               setFormError(null);
               onClose();
@@ -112,39 +135,83 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
               />
             </label>
 
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
+              <textarea
+                value={introText}
+                onChange={(event) => setIntroText(event.target.value)}
+                rows={4}
+                placeholder="Tekst wstępu podpowie się automatycznie przy tworzeniu realizacji z tego scenariusza"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Zasady gry</span>
+              <textarea
+                value={gameRules}
+                onChange={(event) => setGameRules(event.target.value)}
+                rows={4}
+                placeholder="Zasady gry podpowiedzą się automatycznie przy tworzeniu realizacji z tego scenariusza"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
-              <div className="max-h-72 space-y-2 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3">
+              <div className="max-h-96 space-y-4 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3">
                 {isStationsLoading ? (
                   <p className="text-xs text-zinc-500">Ładowanie stanowisk...</p>
                 ) : stations.length === 0 ? (
                   <p className="text-xs text-zinc-500">Brak stanowisk do przypisania.</p>
                 ) : (
-                  stations.map((station) => {
-                    const checked = selectedStationIds.includes(station.id);
+                  stationGroups.map((group) => {
+                    const groupSelected = isGroupFullySelected(group.stations);
 
                     return (
-                      <label
-                        key={station.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition ${
-                          checked
-                            ? "border-amber-300 bg-amber-400/10"
-                            : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1"
-                          checked={checked}
-                          onChange={() => toggleSelection(station.id)}
-                        />
-                        <div>
-                          <p className="text-sm font-semibold text-zinc-100">{station.name}</p>
-                          <p className="text-xs text-zinc-400">
-                            {getTypeLabel(station.type)} • {station.points} pkt • Czas: {station.timeLimitSeconds}s
-                          </p>
+                      <div key={group.category} className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-300">
+                            {group.label} ({group.stations.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleGroupSelection(group.stations)}
+                            className="rounded-md border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 transition hover:border-amber-400/60 hover:text-amber-200"
+                          >
+                            {groupSelected ? "Odznacz wszystkie" : "Zaznacz wszystkie"}
+                          </button>
                         </div>
-                      </label>
+                        <div className="space-y-2">
+                          {group.stations.map((station) => {
+                            const checked = selectedStationIds.includes(station.id);
+
+                            return (
+                              <label
+                                key={station.id}
+                                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition ${
+                                  checked
+                                    ? "border-amber-300 bg-amber-400/10"
+                                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-500"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="mt-1"
+                                  checked={checked}
+                                  onChange={() => toggleSelection(station.id)}
+                                />
+                                <div>
+                                  <p className="text-sm font-semibold text-zinc-100">{station.name}</p>
+                                  <p className="text-xs text-zinc-400">
+                                    {getTypeLabel(station.type)} • {station.points} pkt • Czas: {station.timeLimitSeconds}s
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   })
                 )}

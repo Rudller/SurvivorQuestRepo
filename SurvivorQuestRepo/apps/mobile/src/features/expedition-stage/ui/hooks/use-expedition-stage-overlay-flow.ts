@@ -5,17 +5,8 @@ import type { AlreadyCompletedNotice, ChallengeDifficulty, StationTestViewModel 
 const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
 const ALREADY_COMPLETED_NOTICE_AUTO_CLOSE_MS = 3000;
 
-type DebugOutcomePreview = {
-  id: number;
-  variant: "success" | "failed";
-  message: string;
-};
-
 type OverlayFlowText = {
   realizationEndedCannotOpenStations: string;
-  noStationsForPopupPreview: string;
-  successPopupPreview: string;
-  failedPopupPreview: string;
   realizationEndedCannotStartTasks: string;
   taskTimerStarted: string;
   taskAlreadyFailedAfterClose: string;
@@ -25,6 +16,7 @@ type OverlayFlowText = {
   locationRequired: string;
   stationAlreadyCompleted: string;
   stationAlreadyFailed: string;
+  stationPhotoPendingReview: string;
 };
 
 type UseExpeditionStageOverlayFlowArgs = {
@@ -79,6 +71,7 @@ export function useExpeditionStageOverlayFlow({
   const [activeStationSnapshot, setActiveStationSnapshot] = useState<StationTestViewModel | null>(null);
   const [pendingQuizStartStationId, setPendingQuizStartStationId] = useState<string | null>(null);
   const [pendingTimeStartStationId, setPendingTimeStartStationId] = useState<string | null>(null);
+  const [pendingPhotoStartStationId, setPendingPhotoStartStationId] = useState<string | null>(null);
   const [isStartingPendingQuiz, setIsStartingPendingQuiz] = useState(false);
   const [isStartingPendingTime, setIsStartingPendingTime] = useState(false);
   const [timedCloseConfirmStation, setTimedCloseConfirmStation] = useState<{
@@ -87,8 +80,8 @@ export function useExpeditionStageOverlayFlow({
   } | null>(null);
   const [localStartedAtByStationId, setLocalStartedAtByStationId] = useState<Record<string, string>>({});
   const [localChallengeDifficultyByStationId, setLocalChallengeDifficultyByStationId] = useState<Record<string, ChallengeDifficulty>>({});
-  const [debugOutcomePreview, setDebugOutcomePreview] = useState<DebugOutcomePreview | null>(null);
   const [alreadyCompletedNotice, setAlreadyCompletedNotice] = useState<AlreadyCompletedNotice | null>(null);
+  const [isFeedbackPopupEnabled, setIsFeedbackPopupEnabled] = useState(false);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alreadyCompletedNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -160,6 +153,10 @@ export function useExpeditionStageOverlayFlow({
     () => stationTestEntries.find((item) => item.stationId === pendingTimeStartStationId) ?? null,
     [pendingTimeStartStationId, stationTestEntries],
   );
+  const pendingPhotoStartStation = useMemo(
+    () => stationTestEntries.find((item) => item.stationId === pendingPhotoStartStationId) ?? null,
+    [pendingPhotoStartStationId, stationTestEntries],
+  );
 
   const activeStationPreview = useMemo(() => {
     const fallbackStation =
@@ -217,6 +214,18 @@ export function useExpeditionStageOverlayFlow({
 
     setPendingTimeStartStationId(null);
   }, [pendingTimeStartStationId, stationTestEntries]);
+
+  useEffect(() => {
+    if (!pendingPhotoStartStationId) {
+      return;
+    }
+
+    if (stationTestEntries.some((item) => item.stationId === pendingPhotoStartStationId)) {
+      return;
+    }
+
+    setPendingPhotoStartStationId(null);
+  }, [pendingPhotoStartStationId, stationTestEntries]);
 
   useEffect(() => {
     if (!pendingQuizStartStationId) {
@@ -293,15 +302,30 @@ export function useExpeditionStageOverlayFlow({
         return;
       }
 
+      if (resolvedStationType === "photo-task" && selectedStation?.status === "in-progress") {
+        // A submitted photo moves the task to "in-progress" (not "done") until
+        // the organizer reviews it in the admin panel — reopening the station
+        // here would let the team resubmit while a review is still pending, so
+        // treat this the same as done/failed: an informational notice only.
+        showAlreadyCompletedNotice({
+          variant: "pending",
+          message: text.stationPhotoPendingReview,
+        });
+        return;
+      }
+
       if (resolvedStationType === "photo-task") {
         // Backend never allows task/start for photo-task stations (they submit via task/photo
-        // instead), so this must always open directly regardless of any configured time limit.
+        // instead), so there's no timer/state to kick off here — the prestart screen is purely
+        // a "get ready" heads-up, and its Start button just opens the station directly below.
         setPendingQuizStartStationId(null);
         setPendingTimeStartStationId(null);
-        setActiveStationTestId(stationId);
+        setPendingPhotoStartStationId(stationId);
+        setActiveStationTestId(null);
       } else if (isInteractiveQuizStationType(resolvedStationType)) {
         setPendingQuizStartStationId(stationId);
         setPendingTimeStartStationId(null);
+        setPendingPhotoStartStationId(null);
         setActiveStationTestId(null);
       } else if (
         hasTimedLimit ||
@@ -316,10 +340,12 @@ export function useExpeditionStageOverlayFlow({
         // begins at station launch, not only when a time limit is configured.
         setPendingQuizStartStationId(null);
         setPendingTimeStartStationId(stationId);
+        setPendingPhotoStartStationId(null);
         setActiveStationTestId(null);
       } else {
         setPendingQuizStartStationId(null);
         setPendingTimeStartStationId(null);
+        setPendingPhotoStartStationId(null);
         setActiveStationTestId(stationId);
       }
     },
@@ -329,6 +355,7 @@ export function useExpeditionStageOverlayFlow({
       stationTestEntries,
       text.stationAlreadyCompleted,
       text.stationAlreadyFailed,
+      text.stationPhotoPendingReview,
     ],
   );
 
@@ -355,35 +382,6 @@ export function useExpeditionStageOverlayFlow({
       stationIds,
       stationTestEntries,
       text.realizationEndedCannotOpenStations,
-    ],
-  );
-
-  const handlePreviewOutcomePopup = useCallback(
-    (variant: "success" | "failed") => {
-      const previewStationId = stationTestEntries[0]?.stationId ?? null;
-      if (!previewStationId) {
-        setActionError(text.noStationsForPopupPreview);
-        return;
-      }
-
-      setPendingQuizStartStationId(null);
-      setPendingTimeStartStationId(null);
-      setSelectedStationId(previewStationId);
-      setActiveStationTestId(previewStationId);
-      setIsStationTestMenuOpen(false);
-      setDebugOutcomePreview({
-        id: Date.now(),
-        variant,
-        message: variant === "success" ? text.successPopupPreview : text.failedPopupPreview,
-      });
-    },
-    [
-      setActionError,
-      setSelectedStationId,
-      stationTestEntries,
-      text.failedPopupPreview,
-      text.noStationsForPopupPreview,
-      text.successPopupPreview,
     ],
   );
 
@@ -665,6 +663,18 @@ export function useExpeditionStageOverlayFlow({
     setIsStartingPendingTime(false);
   }, [handleStartStationTestTask, pendingTimeStartStationId]);
 
+  const handleStartPendingPhoto = useCallback(() => {
+    if (!pendingPhotoStartStationId) {
+      return;
+    }
+
+    // No backend task/start call for photo-task (see the comment in
+    // openStationByType) — this prestart screen is a pure "get ready" beat,
+    // so Start just reveals the station overlay underneath.
+    setActiveStationTestId(pendingPhotoStartStationId);
+    setPendingPhotoStartStationId(null);
+  }, [pendingPhotoStartStationId]);
+
   const handleConfirmTimedCloseFail = useCallback(() => {
     const station = timedCloseConfirmStation;
     if (!station) {
@@ -688,6 +698,10 @@ export function useExpeditionStageOverlayFlow({
     });
   }, [ensureLocationRequirement, failStationTask, setActionError, setActionMessage, text.taskMarkedFailed, timedCloseConfirmStation]);
 
+  const handleToggleFeedbackPopupEnabled = useCallback(() => {
+    setIsFeedbackPopupEnabled((current) => !current);
+  }, []);
+
   return {
     isStationTestMenuOpen,
     setIsStationTestMenuOpen,
@@ -701,6 +715,8 @@ export function useExpeditionStageOverlayFlow({
     setPendingQuizStartStationId,
     pendingTimeStartStationId,
     setPendingTimeStartStationId,
+    pendingPhotoStartStationId,
+    setPendingPhotoStartStationId,
     isStartingPendingQuiz,
     setIsStartingPendingQuiz,
     isStartingPendingTime,
@@ -709,20 +725,20 @@ export function useExpeditionStageOverlayFlow({
     setTimedCloseConfirmStation,
     localStartedAtByStationId,
     setLocalStartedAtByStationId,
-    debugOutcomePreview,
-    setDebugOutcomePreview,
     alreadyCompletedNotice,
     dismissAlreadyCompletedNotice,
+    isFeedbackPopupEnabled,
+    handleToggleFeedbackPopupEnabled,
     activeStationTest,
     activeStationPreview,
     pendingQuizStartStation,
     pendingTimeStartStation,
+    pendingPhotoStartStation,
     clearTestMenuHoldTimeout,
     handleTestMenuHoldStart,
     handleTestMenuHoldEnd,
     openStationByType,
     handleEnterStationTest,
-    handlePreviewOutcomePopup,
     handleStartStationTestTask,
     handleCompleteStationTestTask,
     handleSubmitPhotoTask,
@@ -732,6 +748,7 @@ export function useExpeditionStageOverlayFlow({
     handleQuizFailed,
     handleStartPendingQuiz,
     handleStartPendingTime,
+    handleStartPendingPhoto,
     handleConfirmTimedCloseFail,
   };
 }

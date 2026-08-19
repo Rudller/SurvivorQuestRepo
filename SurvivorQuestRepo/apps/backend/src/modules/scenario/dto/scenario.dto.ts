@@ -4,6 +4,8 @@ import type { ScenarioEntity } from '../scenario.service';
 export type CreateScenarioDto = {
   name: string;
   description: string;
+  introText: string;
+  gameRules: string;
   stationIds: string[];
 };
 
@@ -63,6 +65,8 @@ export function parseCreateScenarioDto(payload: unknown): CreateScenarioDto {
   return {
     name: ensureName(body.name),
     description: ensureOptionalDescription(body.description),
+    introText: ensureOptionalDescription(body.introText),
+    gameRules: ensureOptionalDescription(body.gameRules),
     stationIds: sanitizeStationIds(body.stationIds),
   };
 }
@@ -111,6 +115,8 @@ export function toCreateScenarioEntity(dto: CreateScenarioDto): ScenarioEntity {
     id: crypto.randomUUID(),
     name: dto.name,
     description: dto.description,
+    introText: dto.introText,
+    gameRules: dto.gameRules,
     stationIds: dto.stationIds,
     kind: 'template',
     isTemplate: true,
@@ -128,6 +134,8 @@ export function toUpdatedScenarioEntity(
     ...current,
     name: dto.name,
     description: dto.description,
+    introText: dto.introText,
+    gameRules: dto.gameRules,
     stationIds: dto.stationIds,
     updatedAt: new Date().toISOString(),
   };

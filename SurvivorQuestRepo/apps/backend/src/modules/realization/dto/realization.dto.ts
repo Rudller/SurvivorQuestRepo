@@ -16,6 +16,7 @@ const REALIZATION_TYPES: RealizationType[] = [
   'evening-attractions',
   'dj',
   'recreation',
+  'risk-quiz',
 ];
 
 const REALIZATION_STATUSES: RealizationStatus[] = [
@@ -51,6 +52,7 @@ export type CreateRealizationDto = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId?: string;
+  riskSchemeId?: string;
   teamCount?: number;
   peopleCount?: number;
   positionsCount?: number;
@@ -193,6 +195,13 @@ export function validateRealizationPayload(
   const positionsCount = Math.round(Number(payload.positionsCount));
   const durationMinutes = Math.round(Number(payload.durationMinutes));
   const scenarioId = payload.scenarioId?.trim() || '';
+  const riskSchemeId = payload.riskSchemeId?.trim() || '';
+  const isRiskQuizType = payload.type === 'risk-quiz';
+  // Risk-quiz realizations don't use the scenario/station machinery at all —
+  // the backend auto-provisions a shared placeholder scenario for them (see
+  // RealizationService.resolveRiskQuizPlaceholderScenarioId), so the admin
+  // is never required to pick one. They instead pick a "talia" (RiskScheme).
+  const requiresScenario = !isRiskQuizType;
   const showLeaderboard = payload.showLeaderboard;
   const showLeaderboardDuringGame = payload.showLeaderboardDuringGame;
   const showLeaderboardOnFinish = payload.showLeaderboardOnFinish;
@@ -213,7 +222,8 @@ export function validateRealizationPayload(
     !isValidRealizationType(payload.type) ||
     !isValidRealizationLanguage(payload.language) ||
     !isValidRealizationStatus(payload.status) ||
-    !scenarioId ||
+    (requiresScenario && !scenarioId) ||
+    (isRiskQuizType && !riskSchemeId) ||
     !Number.isFinite(teamCount) ||
     teamCount < 1 ||
     !Number.isFinite(peopleCount) ||
@@ -317,6 +327,7 @@ export function validateRealizationPayload(
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,
     scenarioId,
+    riskSchemeId: isRiskQuizType ? riskSchemeId : undefined,
     teamCount,
     peopleCount,
     positionsCount,

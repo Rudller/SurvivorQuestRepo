@@ -9,7 +9,7 @@ import type {
   RealizationStatus,
   RealizationType,
 } from "../types/realization";
-import { parseRealizationExportFile } from "../realization-export";
+import { buildRealizationExport, parseRealizationExportFile } from "../realization-export";
 import { geocodeLocation } from "../realization-geocoding";
 import {
   formatRealizationLanguageSummary,
@@ -45,9 +45,11 @@ import {
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesDraftEditor, type PointsQrCodeDraft } from "./points-qr-codes-draft-editor";
+import { useCreateRiskSchemeMutation, useGetRiskSchemesQuery } from "@/features/risk-quiz/api/risk-quiz.api";
 import {
   getDistinctUsedAssets,
   getStatusLabel,
+  RISK_QUIZ_INTRO_TEXT_PLACEHOLDER,
   toDateTimeLocalValue,
   toIsoFromDateTimeLocal,
 } from "../realization.utils";
@@ -225,11 +227,31 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const selectedScenario = selectedScenarioId ? scenarioById.get(selectedScenarioId) : undefined;
   const [scenarioStations, setScenarioStations] = useState(() => [] as ReturnType<typeof mapScenarioStations>);
   const [pointsQrCodeDrafts, setPointsQrCodeDrafts] = useState<PointsQrCodeDraft[]>([]);
+  const [selectedRiskSchemeId, setSelectedRiskSchemeId] = useState("");
+  const { data: riskSchemes, isLoading: isRiskSchemesLoading } = useGetRiskSchemesQuery();
+  const [createRiskScheme, { isLoading: isCreatingRiskScheme }] = useCreateRiskSchemeMutation();
+  const [isCreatingNewRiskScheme, setIsCreatingNewRiskScheme] = useState(false);
+  const [newRiskSchemeName, setNewRiskSchemeName] = useState("");
+  const [createRiskSchemeError, setCreateRiskSchemeError] = useState<string | null>(null);
+
+  async function handleCreateRiskScheme() {
+    setCreateRiskSchemeError(null);
+    if (!newRiskSchemeName.trim()) return;
+    try {
+      const created = await createRiskScheme({ name: newRiskSchemeName.trim() }).unwrap();
+      setSelectedRiskSchemeId(created.id);
+      setNewRiskSchemeName("");
+      setIsCreatingNewRiskScheme(false);
+    } catch {
+      setCreateRiskSchemeError("Nie udało się utworzyć talii (nazwa może być już zajęta).");
+    }
+  }
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
   const isBusy = isCreating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !companyName.trim();
-  const isScenarioInvalid = submitAttempted && !selectedScenarioId;
+  const isRiskQuizType = selectedType === "risk-quiz";
+  const isScenarioInvalid = submitAttempted && !isRiskQuizType && !selectedScenarioId;
   const isContactPersonInvalid = submitAttempted && !contactPerson.trim();
   const isContactChannelInvalid = submitAttempted && !contactPhone.trim() && !contactEmail.trim();
   const languageSelection = useMemo(
@@ -248,7 +270,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
   const isScheduledAtInvalid = submitAttempted && !scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(durationMinutes) || durationMinutes < 1);
-  const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
+  const isScenarioStationsEmpty = submitAttempted && !isRiskQuizType && scenarioStations.length === 0;
   const basicTabHasError =
     isCompanyNameInvalid ||
     isContactPersonInvalid ||
@@ -259,7 +281,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     isDurationInvalid;
   const scenarioTabHasError = isScenarioInvalid;
   const stationsTabHasError = isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
-  const tabs: TabItem[] = CREATE_FORM_TAB_ORDER.map((id) => ({
+  const riskQuizTabHasError = submitAttempted && isRiskQuizType && !selectedRiskSchemeId;
+  const tabs: TabItem[] = CREATE_FORM_TAB_ORDER.filter((id) => {
+    if (id === "riskQuiz") return isRiskQuizType;
+    if (id === "scenario" || id === "stations" || id === "pointsQr") return !isRiskQuizType;
+    return true;
+  }).map((id) => ({
     id,
     label: REALIZATION_FORM_TAB_LABELS[id],
     hasError:
@@ -269,7 +296,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
           ? scenarioTabHasError
           : id === "stations"
             ? stationsTabHasError
-            : false,
+            : id === "riskQuiz"
+              ? riskQuizTabHasError
+              : false,
   }));
   const logoPreviewUrl = useMemo(
     () => (logoFile ? URL.createObjectURL(logoFile) : undefined),
@@ -278,6 +307,13 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const mapImagePreviewUrl = useMemo(
     () => (mapImageFile ? URL.createObjectURL(mapImageFile) : undefined),
     [mapImageFile],
+  );
+  const copyableRealizationOptions = useMemo(
+    () =>
+      [...realizations].sort(
+        (left, right) => new Date(right.scheduledAt).getTime() - new Date(left.scheduledAt).getTime(),
+      ),
+    [realizations],
   );
   const usedLogoOptions = useMemo(
     () => getDistinctUsedAssets(realizations, "logoUrl"),
@@ -405,6 +441,28 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     }
   }
 
+  function handleCopyFromRealization(realizationId: string) {
+    if (!realizationId) {
+      return;
+    }
+
+    const sourceRealization = realizations.find((item) => item.id === realizationId);
+    if (!sourceRealization) {
+      setImportError("Nie znaleziono wybranej realizacji.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Skopiowanie tej realizacji nadpisze wszystkie obecnie wypełnione pola formularza. Kontynuować?",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setImportError(null);
+    applyImportedData(buildRealizationExport(sourceRealization));
+  }
+
   function openScheduledAtPicker() {
     const input = scheduledAtInputRef.current;
     if (!input) {
@@ -486,9 +544,11 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               !scheduledAt ||
               !Number.isFinite(durationMinutes) ||
               durationMinutes < 1;
-            const scenarioTabInvalid = !selectedScenarioId;
-            const stationsTabInvalid = scenarioStations.length === 0;
-            const hasIncompleteFields = basicTabInvalid || scenarioTabInvalid || stationsTabInvalid;
+            const scenarioTabInvalid = !isRiskQuizType && !selectedScenarioId;
+            const stationsTabInvalid = !isRiskQuizType && scenarioStations.length === 0;
+            const riskQuizTabInvalid = isRiskQuizType && !selectedRiskSchemeId;
+            const hasIncompleteFields =
+              basicTabInvalid || scenarioTabInvalid || stationsTabInvalid || riskQuizTabInvalid;
 
             if (hasInvalidScenarioStations) {
               setActiveTab("stations");
@@ -501,7 +561,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 ? "basic"
                 : scenarioTabInvalid
                   ? "scenario"
-                  : "stations";
+                  : stationsTabInvalid
+                    ? "stations"
+                    : "riskQuiz";
               setActiveTab(firstInvalidTab);
 
               if (!window.confirm("Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?")) {
@@ -509,21 +571,26 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               }
             }
 
-            const fallbackScenarioId =
-              selectedScenarioId || scenarios.find((scenario) => !scenario.sourceTemplateId)?.id || scenarios[0]?.id || "";
-            if (!fallbackScenarioId) {
-              setFormError("Brak dostępnego scenariusza do utworzenia realizacji.");
-              return;
+            let fallbackScenarioId = "";
+            if (!isRiskQuizType) {
+              fallbackScenarioId =
+                selectedScenarioId || scenarios.find((scenario) => !scenario.sourceTemplateId)?.id || scenarios[0]?.id || "";
+              if (!fallbackScenarioId) {
+                setFormError("Brak dostępnego scenariusza do utworzenia realizacji.");
+                return;
+              }
             }
 
             const scenarioStationsWithUploadedAudio = await uploadPendingStationAudioFiles(scenarioStations);
             const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStationsWithUploadedAudio);
-            const useCustomScenarioStations = scenarioStations.length > 0;
-            const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
-            const positionsCountForSubmit = Math.max(
-              1,
-              useCustomScenarioStations ? normalizedScenarioStations.length : fallbackScenarioStations.length,
-            );
+            const useCustomScenarioStations = !isRiskQuizType && scenarioStations.length > 0;
+            const fallbackScenarioStations = isRiskQuizType ? [] : mapScenarioStations(fallbackScenarioId);
+            const positionsCountForSubmit = isRiskQuizType
+              ? 1
+              : Math.max(
+                  1,
+                  useCustomScenarioStations ? normalizedScenarioStations.length : fallbackScenarioStations.length,
+                );
             const normalizedCompanyName = companyName.trim() || "Nowa realizacja";
             const normalizedContactPerson = contactPerson.trim() || "Brak osoby kontaktowej";
             const normalizedContactEmail = contactEmail.trim() || undefined;
@@ -573,7 +640,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 mapImageUrl: finalMapImageUrl,
                 offerPdfUrl: finalOfferPdfUrl,
                 offerPdfName: nextOfferPdfName,
-                scenarioId: fallbackScenarioId,
+                scenarioId: isRiskQuizType ? undefined : fallbackScenarioId,
+                riskSchemeId: isRiskQuizType ? selectedRiskSchemeId : undefined,
                 teamCount: normalizedTeamCount,
                 peopleCount: normalizedPeopleCount,
                 positionsCount: positionsCountForSubmit,
@@ -595,6 +663,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 })),
                 changedBy: userEmail,
               }).unwrap();
+
               onSaved?.(createdRealization);
               setCompanyName("");
               setLocation("");
@@ -630,6 +699,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setScheduledAt(toDateTimeLocalValue(new Date().toISOString()));
               setScenarioStations([]);
               setPointsQrCodeDrafts([]);
+              setSelectedRiskSchemeId("");
               setSubmitAttempted(false);
               setActiveTab("basic");
               onClose();
@@ -641,6 +711,20 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
           <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 sm:px-6">
             <h2 className="text-xl font-semibold text-zinc-100">Nowa realizacja</h2>
             <div className="flex shrink-0 items-center gap-2">
+              {copyableRealizationOptions.length > 0 && (
+                <select
+                  value=""
+                  onChange={(event) => handleCopyFromRealization(event.target.value)}
+                  className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 outline-none transition hover:border-zinc-500 focus:border-amber-400/80"
+                >
+                  <option value="">Kopiuj z istniejącej realizacji...</option>
+                  {copyableRealizationOptions.map((realization) => (
+                    <option key={realization.id} value={realization.id}>
+                      {realization.companyName} • {new Date(realization.scheduledAt).toLocaleDateString("pl-PL")}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 onClick={() => importFileInputRef.current?.click()}
@@ -923,21 +1007,30 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
-                      <div className="relative">
-                        <input
-                          ref={scheduledAtInputRef}
-                          type="datetime-local"
-                          value={scheduledAt}
-                          onChange={(event) => setScheduledAt(event.target.value)}
-                          className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
-                        />
+                      <div className="flex gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <input
+                            ref={scheduledAtInputRef}
+                            type="datetime-local"
+                            value={scheduledAt}
+                            onChange={(event) => setScheduledAt(event.target.value)}
+                            className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={openScheduledAtPicker}
+                            aria-label="Otwórz kalendarz terminu realizacji"
+                            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                          >
+                            <CalendarInputIcon />
+                          </button>
+                        </div>
                         <button
                           type="button"
-                          onClick={openScheduledAtPicker}
-                          aria-label="Otwórz kalendarz terminu realizacji"
-                          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+                          onClick={() => setScheduledAt(toDateTimeLocalValue(new Date().toISOString()))}
+                          className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 transition hover:border-amber-400/80 hover:text-amber-300"
                         >
-                          <CalendarInputIcon />
+                          Teraz
                         </button>
                       </div>
                       {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
@@ -1136,6 +1229,11 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       const nextScenarioId = event.target.value;
                       setSelectedScenarioId(nextScenarioId);
                       setScenarioStations(mapScenarioStations(nextScenarioId));
+                      const nextScenario = scenarioById.get(nextScenarioId);
+                      if (nextScenario) {
+                        setIntroText(nextScenario.introText ?? "");
+                        setGameRules(nextScenario.gameRules ?? "");
+                      }
                     }}
                     className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}
                   >
@@ -1234,6 +1332,90 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
             {activeTab === "pointsQr" && (
               <PointsQrCodesDraftEditor drafts={pointsQrCodeDrafts} onChange={setPointsQrCodeDrafts} />
+            )}
+
+            {activeTab === "riskQuiz" && (
+              <div className="space-y-3">
+                <p className="text-xs text-zinc-500">
+                  Wybierz talię (zestaw kategorii z przypisanymi zadaniami) do tej realizacji. Talie tworzysz i
+                  edytujesz w osobnej zakładce „Ryzykanci” w panelu bocznym.
+                </p>
+                <label className="block space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Talia</span>
+                  <select
+                    value={selectedRiskSchemeId}
+                    onChange={(event) => setSelectedRiskSchemeId(event.target.value)}
+                    className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 ${resolveFieldBorderClassName(
+                      submitAttempted && isRiskQuizType && !selectedRiskSchemeId,
+                    )}`}
+                  >
+                    <option value="">
+                      {isRiskSchemesLoading ? "Ładowanie talii..." : "— wybierz talię —"}
+                    </option>
+                    {(riskSchemes ?? []).map((scheme) => (
+                      <option key={scheme.id} value={scheme.id}>
+                        {scheme.name} ({scheme.schemeCategories.length} kat.)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {isCreatingNewRiskScheme ? (
+                  <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                    <input
+                      value={newRiskSchemeName}
+                      onChange={(event) => setNewRiskSchemeName(event.target.value)}
+                      placeholder="Nazwa talii, np. Standardowy zestaw"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    {createRiskSchemeError ? <p className="text-xs text-red-300">{createRiskSchemeError}</p> : null}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateRiskScheme()}
+                        disabled={isCreatingRiskScheme || !newRiskSchemeName.trim()}
+                        className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+                      >
+                        {isCreatingRiskScheme ? "Tworzenie..." : "Utwórz i wybierz"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingNewRiskScheme(false);
+                          setNewRiskSchemeName("");
+                          setCreateRiskSchemeError(null);
+                        }}
+                        className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                      >
+                        Anuluj
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewRiskScheme(true)}
+                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    + Utwórz nową talię
+                  </button>
+                )}
+
+                {!isRiskSchemesLoading && riskSchemes && riskSchemes.length === 0 ? (
+                  <p className="text-xs text-zinc-500">
+                    Brak talii jeszcze. Utwórz pierwszą powyżej albo w zakładce „Ryzykanci” w panelu bocznym.
+                  </p>
+                ) : null}
+
+                <StyledMarkdownEditor
+                  label="Tekst wstępu"
+                  value={introText}
+                  onChange={setIntroText}
+                  placeholder={RISK_QUIZ_INTRO_TEXT_PLACEHOLDER}
+                  rows={5}
+                  helperText="Opcjonalne. Jeśli zostawisz puste, w aplikacji mobilnej wyświetli się tekst z placeholdera."
+                />
+              </div>
             )}
 
             {activeTab === "summary" && (

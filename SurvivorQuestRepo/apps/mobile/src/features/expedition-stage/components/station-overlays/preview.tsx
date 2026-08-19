@@ -862,8 +862,6 @@ export function StationPreviewOverlay({
   onQuizPassed,
   onTimeExpired,
   timedStationPointsDecayEnabled = false,
-  debugOutcomePreview,
-  onDebugOutcomePreviewConsumed,
   languageFlag,
   showLanguageButton = false,
   onOpenLanguagePicker,
@@ -985,6 +983,7 @@ export function StationPreviewOverlay({
   const simonInputHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerPulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const memoryHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousBoggleTargetWordRef = useRef<string | null>(null);
   const wordleRevealTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const timeoutPopupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const quizOutcomeActionRef = useRef<(() => void) | null>(null);
@@ -1361,20 +1360,6 @@ export function StationPreviewOverlay({
     setIsCodeInputSuccess,
     setNowMs,
   });
-
-  useEffect(() => {
-    if (!debugOutcomePreview || !displayedStation) {
-      return;
-    }
-
-    showQuizOutcomePopup(debugOutcomePreview.variant, debugOutcomePreview.message);
-    onDebugOutcomePreviewConsumed?.();
-  }, [
-    debugOutcomePreview,
-    displayedStation,
-    onDebugOutcomePreviewConsumed,
-    showQuizOutcomePopup,
-  ]);
 
   useEffect(() => {
     if (quizOutcomePopup?.variant !== "timeout") {
@@ -1759,6 +1744,26 @@ export function StationPreviewOverlay({
       miniSudokuIncorrect: text.miniSudokuIncorrect,
     },
   });
+
+  // The Boggle target word (and therefore the board's letter layout) is
+  // re-derived from the translated answer text whenever the content language
+  // changes, while the station itself stays the same — so the normal
+  // per-station reset (keyed only by station id) never fires here. A
+  // selection built against the previous language's board no longer points
+  // at the same letters on the new one, so clear it in lockstep with the
+  // target word change. Adjusted during render (not in an effect) so the
+  // stale board never gets a chance to paint. The ref itself is declared
+  // unconditionally near the component's other refs (above the early
+  // `return null`); only this comparison — plain JS, not a hook call — is
+  // skipped when that early return fires, which rules-of-hooks allows.
+  if (previousBoggleTargetWordRef.current !== boggleTargetWord) {
+    previousBoggleTargetWordRef.current = boggleTargetWord;
+    setBoggleInput("");
+    setBoggleSelectedCellPath([]);
+    setBoggleAttempts(0);
+    setBoggleResult(null);
+  }
+
   const {
     submitVerificationCode,
     submitWordleGuess,
@@ -2354,7 +2359,11 @@ export function StationPreviewOverlay({
         anagramAttemptsLeft,
         anagramInput,
         anagramResult,
-        isActionDisabled: isInteractiveLocked || isSubmittingAnagram || anagramAttemptsLeft <= 0,
+        isActionDisabled:
+          isInteractiveLocked ||
+          isSubmittingAnagram ||
+          anagramAttemptsLeft <= 0 ||
+          anagramInput.length < anagramScrambledWords.reduce((sum, word) => sum + word.length, 0),
         isSubmittingAnagram,
         onChangeInput: (value) => {
           handleAnagramInputChange(value);
@@ -2433,9 +2442,7 @@ export function StationPreviewOverlay({
     },
   });
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
-  const stationHeaderLabel = isCaesarStation
-    ? station.typeLabel
-    : `${station.name} • ${station.typeLabel}`;
+  const stationHeaderLabel = `${station.name} • ${station.typeLabel}`;
   const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
 
   return (

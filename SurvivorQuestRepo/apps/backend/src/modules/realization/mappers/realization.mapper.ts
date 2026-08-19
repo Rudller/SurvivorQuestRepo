@@ -23,6 +23,7 @@ export function fromPrismaRealizationType(
   if (type === PrismaRealizationType.EVENING_ATTRACTIONS)
     return 'evening-attractions';
   if (type === PrismaRealizationType.DJ) return 'dj';
+  if (type === PrismaRealizationType.RISK_QUIZ) return 'risk-quiz';
   return 'recreation';
 }
 
@@ -33,6 +34,7 @@ export function toPrismaRealizationType(type: RealizationType) {
   if (type === 'evening-attractions')
     return PrismaRealizationType.EVENING_ATTRACTIONS;
   if (type === 'dj') return PrismaRealizationType.DJ;
+  if (type === 'risk-quiz') return PrismaRealizationType.RISK_QUIZ;
   return PrismaRealizationType.RECREATION;
 }
 
@@ -140,6 +142,7 @@ export function buildRealizationEntity(input: {
     scenarioId: string;
     scenarioTemplateId?: string;
     scenarioTemplateName?: string;
+    riskSchemeId?: string | null;
     joinCode: string;
     teamCount: number;
     requiredDevicesCount: number;
@@ -190,6 +193,7 @@ export function buildRealizationEntity(input: {
     scenarioId: realization.scenarioId,
     scenarioTemplateId: realization.scenarioTemplateId,
     scenarioTemplateName: realization.scenarioTemplateName,
+    riskSchemeId: realization.riskSchemeId ?? undefined,
     stationIds: input.stationIds,
     scenarioStations: input.scenarioStations,
     joinCode: realization.joinCode,

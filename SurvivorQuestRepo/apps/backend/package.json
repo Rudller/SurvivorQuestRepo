@@ -19,6 +19,8 @@
     "prisma:seed": "prisma db seed",
     "prisma:seed:check": "SEED_DRY_RUN=1 ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "prisma:backfill-qr-entry-codes": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/backfill-station-qr-entry-codes.ts",
+    "prisma:seed-risk-history": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-risk-history.ts",
+    "prisma:seed-risk-categories": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-risk-categories.ts",
     "prisma:studio": "prisma studio",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

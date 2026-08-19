@@ -157,6 +157,21 @@ function ensureStringAllowingEmpty(value: unknown) {
   return value.trim() || DEFAULT_STATION_DESCRIPTION;
 }
 
+// undefined/blank leaves the shift unset, so the station falls back to its
+// deterministic per-station default (see resolveCaesarShift on mobile).
+function ensureCaesarShift(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 25) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return parsed;
+}
+
 function ensurePositiveNumber(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     throw new BadRequestException('Invalid payload');
@@ -314,10 +329,16 @@ function ensureStationQuiz(
   const question = ensureTrimmedString(quiz.question);
 
   if (isWordPuzzleStationType(type)) {
+    const caesarShift =
+      type === 'caesar-cipher'
+        ? ensureCaesarShift(quiz.caesarShift)
+        : undefined;
+
     return {
       question,
       answers: [question, 'A', 'B', 'C'],
       correctAnswerIndex: 0,
+      ...(caesarShift !== undefined ? { caesarShift } : {}),
     };
   }
 

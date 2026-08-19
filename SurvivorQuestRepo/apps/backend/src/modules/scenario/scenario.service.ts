@@ -8,6 +8,8 @@ export type ScenarioEntity = {
   id: string;
   name: string;
   description: string;
+  introText: string;
+  gameRules: string;
   stationIds: string[];
   sourceTemplateId?: string;
   realizationId?: string;
@@ -33,6 +35,8 @@ function mapScenario(input: {
   id: string;
   name: string;
   description: string;
+  introText: string | null;
+  gameRules: string | null;
   sourceTemplateId: string | null;
   realizationId: string | null;
   createdAt: Date;
@@ -45,6 +49,8 @@ function mapScenario(input: {
     id: input.id,
     name: input.name,
     description: input.description,
+    introText: input.introText ?? '',
+    gameRules: input.gameRules ?? '',
     stationIds: input.scenarioStations.map((item) => item.stationId),
     sourceTemplateId: input.sourceTemplateId || undefined,
     realizationId: input.realizationId || undefined,
@@ -99,6 +105,8 @@ export class ScenarioService {
         id: scenario.id,
         name: scenario.name,
         description: scenario.description,
+        introText: scenario.introText,
+        gameRules: scenario.gameRules,
         sourceTemplateId: scenario.sourceTemplateId,
         realizationId: scenario.realizationId,
         scenarioStations: {
@@ -125,6 +133,8 @@ export class ScenarioService {
         data: {
           name: updatedScenario.name,
           description: updatedScenario.description,
+          introText: updatedScenario.introText,
+          gameRules: updatedScenario.gameRules,
           sourceTemplateId: updatedScenario.sourceTemplateId,
         },
       }),
@@ -175,6 +185,8 @@ export class ScenarioService {
       id: clonedScenarioId,
       name: source.name,
       description: source.description,
+      introText: source.introText,
+      gameRules: source.gameRules,
       stationIds: clonedStations.map((station) => station.id),
       sourceTemplateId: source.sourceTemplateId ?? source.id,
       realizationId: options?.realizationId,

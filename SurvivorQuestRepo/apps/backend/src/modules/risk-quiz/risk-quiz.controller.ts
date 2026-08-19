@@ -1,0 +1,251 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { RiskDifficulty } from '@prisma/client';
+import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
+import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { MOBILE_QR_RESOLVE_THROTTLE } from '../../common/security/throttle.constants';
+import { RiskQuizService } from './risk-quiz.service';
+
+type Payload = Record<string, unknown>;
+
+function requirePayload(value: unknown): Payload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value as Payload;
+}
+
+function requireString(payload: Payload, key: string) {
+  const value = payload[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value.trim();
+}
+
+function optionalFiniteNumber(payload: Payload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value;
+}
+
+function optionalBoolean(payload: Payload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value;
+}
+
+function requireDifficulty(payload: Payload, key: string) {
+  const value = payload[key];
+  if (
+    typeof value !== 'string' ||
+    !Object.values(RiskDifficulty).includes(value as RiskDifficulty)
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value as RiskDifficulty;
+}
+
+@Controller(['mobile/risk-quiz', 'api/mobile/risk-quiz'])
+export class RiskQuizController {
+  constructor(private readonly riskQuizService: RiskQuizService) {}
+
+  // --- Device-facing ---
+
+  @Post('scan')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async scanCard(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.scanCard({
+      sessionToken: requireString(payload, 'sessionToken'),
+      code: requireString(payload, 'code'),
+    });
+  }
+
+  @Post('answer')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async submitAnswer(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.submitAnswer({
+      sessionToken: requireString(payload, 'sessionToken'),
+      cardId: requireString(payload, 'cardId'),
+      stationId: requireString(payload, 'stationId'),
+      selectedIndex: optionalFiniteNumber(payload, 'selectedIndex'),
+      completed: optionalBoolean(payload, 'completed'),
+    });
+  }
+
+  @Post('deck-status')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async getDeckStatus(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.getDeckStatus(
+      requireString(payload, 'sessionToken'),
+    );
+  }
+
+  // --- Admin: categories ---
+
+  @Get('admin/schemes')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listSchemes() {
+    return this.riskQuizService.listSchemes();
+  }
+
+  @Post('admin/schemes')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async createScheme(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.createScheme(requireString(payload, 'name'));
+  }
+
+  @Patch('admin/schemes/:schemeId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async renameScheme(
+    @Param('schemeId') schemeId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.renameScheme(
+      schemeId,
+      requireString(payload, 'name'),
+    );
+  }
+
+  @Delete('admin/schemes/:schemeId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async deleteScheme(@Param('schemeId') schemeId: string) {
+    return this.riskQuizService.deleteScheme(schemeId);
+  }
+
+  @Post('admin/schemes/:schemeId/categories')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async assignCategoryToScheme(
+    @Param('schemeId') schemeId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.assignCategoryToScheme(
+      schemeId,
+      requireString(payload, 'categoryId'),
+    );
+  }
+
+  @Delete('admin/scheme-categories/:schemeCategoryId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async removeCategoryFromScheme(
+    @Param('schemeCategoryId') schemeCategoryId: string,
+  ) {
+    return this.riskQuizService.removeCategoryFromScheme(schemeCategoryId);
+  }
+
+  @Get('admin/categories')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listCategories() {
+    return this.riskQuizService.listCategories();
+  }
+
+  @Post('admin/categories')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async createCategory(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.createCategory(requireString(payload, 'name'));
+  }
+
+  @Patch('admin/categories/:categoryId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async updateCategory(
+    @Param('categoryId') categoryId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.updateCategory(
+      categoryId,
+      requireString(payload, 'name'),
+    );
+  }
+
+  @Delete('admin/categories/:categoryId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async deleteCategory(@Param('categoryId') categoryId: string) {
+    return this.riskQuizService.deleteCategory(categoryId);
+  }
+
+  // --- Admin: pool stations (stations assigned to a category+difficulty pool) ---
+
+  @Post('admin/categories/:categoryId/pool-stations')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async assignStationToPool(
+    @Param('categoryId') categoryId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.assignStationToPool({
+      categoryId,
+      difficulty: requireDifficulty(payload, 'difficulty'),
+      stationId: requireString(payload, 'stationId'),
+    });
+  }
+
+  @Delete('admin/pool-stations/:poolStationId')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async removeStationFromPool(@Param('poolStationId') poolStationId: string) {
+    return this.riskQuizService.removeStationFromPool(poolStationId);
+  }
+
+  // --- Admin: cards + board ---
+
+  @Get('admin/realizations/:realizationId/cards')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listCards(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.listCards(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/cards/generate')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async generateCards(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.generateMissingCards(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/board')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getBoard(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.getBoard(realizationId);
+  }
+}

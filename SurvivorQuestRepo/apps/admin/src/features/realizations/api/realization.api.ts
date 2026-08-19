@@ -86,6 +86,7 @@ type RealizationDto = {
   scenarioId: string;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
+  riskSchemeId?: string;
   joinCode?: string;
   stationIds?: string[];
   scenarioStations?: StationDto[];
@@ -126,7 +127,8 @@ type CreateRealizationPayload = {
   mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
-  scenarioId: string;
+  scenarioId?: string;
+  riskSchemeId?: string;
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
@@ -169,6 +171,7 @@ type UpdateRealizationPayload = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  riskSchemeId?: string;
   teamCount: number;
   peopleCount: number;
   positionsCount: number;
@@ -308,6 +311,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     scenarioId: dto.scenarioId,
     scenarioTemplateId: dto.scenarioTemplateId?.trim() || undefined,
     scenarioTemplateName: dto.scenarioTemplateName?.trim() || undefined,
+    riskSchemeId: dto.riskSchemeId?.trim() || undefined,
     joinCode: dto.joinCode?.trim() || "------",
     stationIds: dto.stationIds ?? scenarioStations.map((station) => station.id),
     scenarioStations,

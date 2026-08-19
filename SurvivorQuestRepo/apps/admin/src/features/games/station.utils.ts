@@ -443,12 +443,25 @@ export function createEmptyQuizAnswers() {
   return Array.from({ length: QUIZ_ANSWER_COUNT }, () => "");
 }
 
+// Blank/invalid input leaves the shift unset, so the station falls back to
+// its deterministic per-station default on mobile (see resolveCaesarShift).
+export function parseCaesarShiftInput(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 25 ? parsed : undefined;
+}
+
 export type StationQuizInput = {
   question: string;
   answers: string[];
   correctAnswerIndex: number;
   audioUrl?: string;
   acceptedAnswers?: string[];
+  caesarShift?: number;
 };
 
 export type MatchingPairInput = {
@@ -536,6 +549,10 @@ export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | nul
   }
 
   const acceptedAnswers = normalizeAcceptedAnswers(input.acceptedAnswers, answers[correctAnswerIndex]);
+  const caesarShift =
+    Number.isInteger(input.caesarShift) && input.caesarShift! >= 1 && input.caesarShift! <= 25
+      ? input.caesarShift
+      : undefined;
 
   return {
     question,
@@ -543,6 +560,7 @@ export function normalizeStationQuiz(input: StationQuizInput): StationQuiz | nul
     correctAnswerIndex,
     audioUrl: audioUrl || undefined,
     ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
+    ...(caesarShift !== undefined ? { caesarShift } : {}),
   };
 }
 

@@ -5,6 +5,8 @@ import type { Scenario } from "../types/scenario";
 type CreateScenarioPayload = {
   name: string;
   description: string;
+  introText: string;
+  gameRules: string;
   stationIds: string[];
 };
 
@@ -12,6 +14,8 @@ type UpdateScenarioPayload = {
   id: string;
   name: string;
   description: string;
+  introText: string;
+  gameRules: string;
   stationIds: string[];
 };
 

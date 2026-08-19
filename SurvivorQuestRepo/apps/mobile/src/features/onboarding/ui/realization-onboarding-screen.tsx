@@ -59,6 +59,7 @@ type ApiServerPreset = "local" | "production" | "custom";
 type MobileBootstrapRealization = {
   id: string;
   companyName: string;
+  type?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
   selectedLanguage?: RealizationLanguage;
@@ -1712,6 +1713,7 @@ export function RealizationOnboardingScreen({
         ? {
             id: effectiveRealization.id,
             companyName: effectiveRealization.companyName,
+            type: effectiveRealization.type,
             language: effectiveRealization.language,
             customLanguage: effectiveRealization.customLanguage?.trim() || undefined,
             selectedLanguage: effectiveSelectedLanguage,

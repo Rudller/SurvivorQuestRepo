@@ -14,7 +14,7 @@ const realizationExportDataSchema = z.object({
   contactEmail: z.string().optional(),
   instructors: z.array(z.string()),
   notes: z.string().optional(),
-  type: z.enum(["outdoor-games", "hotel-games", "workshops", "evening-attractions", "dj", "recreation"]),
+  type: z.enum(["outdoor-games", "hotel-games", "workshops", "evening-attractions", "dj", "recreation", "risk-quiz"]),
   logoUrl: z.string().optional(),
   hideMap: z.boolean(),
   mapImageUrl: z.string().optional(),

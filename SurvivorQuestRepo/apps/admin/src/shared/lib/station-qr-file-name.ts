@@ -31,3 +31,10 @@ export function buildPointsQrCodeFileName(realizationName: string, label: string
   const safeLabel = sanitizeFileNamePart(label ?? code, "kod-punktowy");
   return `${safeRealizationName} - Punkty - ${safeLabel}.png`;
 }
+
+export function buildRiskCardQrFileName(realizationName: string, categoryName: string, code: string) {
+  const safeRealizationName = sanitizeFileNamePart(realizationName, "realizacja");
+  const safeCategoryName = sanitizeFileNamePart(categoryName, "kategoria");
+  const safeCode = sanitizeFileNamePart(code, "karta");
+  return `${safeRealizationName} - Ryzykanci - ${safeCategoryName} - ${safeCode}.png`;
+}

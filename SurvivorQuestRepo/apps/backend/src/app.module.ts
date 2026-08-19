@@ -9,6 +9,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { GalleryModule } from './modules/gallery/gallery.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { RealizationModule } from './modules/realization/realization.module';
+import { RiskQuizModule } from './modules/risk-quiz/risk-quiz.module';
 import { ScenarioModule } from './modules/scenario/scenario.module';
 import { StationModule } from './modules/station/station.module';
 import { UsersModule } from './modules/users/users.module';
@@ -30,6 +31,7 @@ import { UsersModule } from './modules/users/users.module';
     RealizationModule,
     MobileModule,
     GalleryModule,
+    RiskQuizModule,
   ],
   controllers: [AppController],
   providers: [

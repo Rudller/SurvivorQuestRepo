@@ -12,7 +12,8 @@ export type RealizationType =
   | 'workshops'
   | 'evening-attractions'
   | 'dj'
-  | 'recreation';
+  | 'recreation'
+  | 'risk-quiz';
 export type RealizationLanguage =
   | 'polish'
   | 'english'
@@ -50,6 +51,7 @@ export type RealizationEntity = {
   scenarioId: string;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
+  riskSchemeId?: string;
   stationIds: string[];
   scenarioStations: StationEntity[];
   joinCode: string;
@@ -123,6 +125,7 @@ export type ValidatedRealizationPayload = {
   offerPdfUrl?: string;
   offerPdfName?: string;
   scenarioId: string;
+  riskSchemeId?: string;
   teamCount: number;
   peopleCount: number;
   positionsCount: number;

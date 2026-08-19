@@ -1,0 +1,84 @@
+import { requestMobileApi } from "../../expedition-stage/api/mobile-session.api";
+
+export type RiskDifficulty = "EASY" | "MEDIUM" | "HARD";
+
+export type RiskDrawnStation = {
+  id: string;
+  type: string;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  points: number;
+  timeLimitSeconds: number;
+  completionCodeLength?: number;
+  completionCodeInputMode?: "numeric" | "alphanumeric";
+  quiz?: {
+    question?: string;
+    answers?: string[];
+    audioUrl?: string;
+  };
+};
+
+export type RiskScanResult =
+  | {
+      exhausted: true;
+      categoryName: string;
+      difficulty: RiskDifficulty;
+    }
+  | {
+      exhausted: false;
+      cardId: string;
+      categoryName: string;
+      difficulty: RiskDifficulty;
+      station: RiskDrawnStation;
+    };
+
+export type RiskAnswerResult = {
+  isCorrect: boolean;
+  correctIndex?: number;
+  pointsDelta: number;
+  teamPoints: number;
+  streak: number;
+  multiplier: number;
+};
+
+export async function postRiskQuizScan(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; code: string },
+) {
+  return requestMobileApi<RiskScanResult>(apiBaseUrl, "/mobile/risk-quiz/scan", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type RiskDeckStatus = {
+  categoryCount: number;
+  remainingCards: number;
+};
+
+export async function fetchRiskQuizDeckStatus(
+  apiBaseUrl: string,
+  payload: { sessionToken: string },
+) {
+  return requestMobileApi<RiskDeckStatus>(apiBaseUrl, "/mobile/risk-quiz/deck-status", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function postRiskQuizAnswer(
+  apiBaseUrl: string,
+  payload: {
+    sessionToken: string;
+    cardId: string;
+    stationId: string;
+    selectedIndex?: number;
+    completed?: boolean;
+  },
+) {
+  return requestMobileApi<RiskAnswerResult>(apiBaseUrl, "/mobile/risk-quiz/answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

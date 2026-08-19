@@ -4,7 +4,7 @@ import { EXPEDITION_THEME } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 
 export type AlreadyCompletedNotice = {
-  variant: "success" | "failed";
+  variant: "success" | "failed" | "pending";
   message: string;
 };
 
@@ -31,7 +31,9 @@ export function AlreadyCompletedNoticeOverlay({ notice, isLightTheme, onDismiss 
   const accent =
     notice.variant === "success"
       ? { border: "rgba(16, 185, 129, 0.55)", bg: "rgba(16, 185, 129, 0.18)", text: "#6ee7b7", icon: "✓" }
-      : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
+      : notice.variant === "pending"
+        ? { border: "rgba(251, 191, 36, 0.55)", bg: "rgba(251, 191, 36, 0.16)", text: "#fde68a", icon: "⏳" }
+        : { border: "rgba(239, 68, 68, 0.55)", bg: "rgba(239, 68, 68, 0.16)", text: "#fca5a5", icon: "✕" };
   const horizontalInset = adaptiveLayout.s(isTabletLayout ? 44 : 24, 18, 56);
   const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 420 : 300, 240, 460);
   const panelRadius = adaptiveLayout.s(isTabletLayout ? 32 : 24, 18, 40);

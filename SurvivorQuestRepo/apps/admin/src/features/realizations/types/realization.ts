@@ -8,7 +8,8 @@ export type RealizationType =
   | "workshops"
   | "evening-attractions"
   | "dj"
-  | "recreation";
+  | "recreation"
+  | "risk-quiz";
 
 export type RealizationLanguage =
   | "polish"
@@ -24,6 +25,7 @@ export const realizationTypeOptions: { value: RealizationType; label: string }[]
   { value: "evening-attractions", label: "Atrakcje wieczorne" },
   { value: "dj", label: "DJ" },
   { value: "recreation", label: "Rekreacja" },
+  { value: "risk-quiz", label: "Ryzykanci" },
 ];
 
 export const realizationLanguageOptions: { value: RealizationLanguage; label: string }[] = [
@@ -204,6 +206,7 @@ export type Realization = {
   scenarioId: string;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
+  riskSchemeId?: string;
   stationIds: string[];
   scenarioStations: Station[];
   joinCode: string;

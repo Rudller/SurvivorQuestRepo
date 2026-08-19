@@ -81,6 +81,21 @@ function normalizeStationCategories(categories: string[] | undefined) {
   return normalized;
 }
 
+// undefined/blank leaves the shift unset, so the station falls back to its
+// deterministic per-station default (see resolveCaesarShift on mobile).
+function normalizeCaesarShift(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 25) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return parsed;
+}
+
 function normalizeStationQuiz(
   quiz: StationQuiz | undefined,
   stationType: StationDraftInput['type'],
@@ -99,10 +114,16 @@ function normalizeStationQuiz(
       throw new BadRequestException('Invalid payload');
     }
 
+    const caesarShift =
+      stationType === 'caesar-cipher'
+        ? normalizeCaesarShift(quiz.caesarShift)
+        : undefined;
+
     return {
       question,
       answers: [question, 'A', 'B', 'C'],
       correctAnswerIndex: 0,
+      ...(caesarShift !== undefined ? { caesarShift } : {}),
     };
   }
 

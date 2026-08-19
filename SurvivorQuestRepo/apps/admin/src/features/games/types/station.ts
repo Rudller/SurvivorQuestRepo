@@ -28,6 +28,10 @@ export type StationQuiz = {
   correctAnswerIndex: number;
   audioUrl?: string;
   acceptedAnswers?: string[];
+  // Admin-configured Caesar cipher shift (1-25), caesar-cipher stations only.
+  // Left unset, the station falls back to a shift derived deterministically
+  // from the station id (see resolveCaesarShift on the mobile side).
+  caesarShift?: number;
 };
 
 export type StationTranslation = {

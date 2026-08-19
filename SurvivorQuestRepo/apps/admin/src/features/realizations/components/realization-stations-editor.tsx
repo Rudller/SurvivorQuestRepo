@@ -8,6 +8,7 @@ import { filterStationCatalogItems, uncategorizedStationGroupKey } from "@/featu
 import {
   clampTimeLimitSeconds,
   createEmptyQuizAnswers,
+  parseCaesarShiftInput,
   normalizeStationQuizForType,
   normalizeStationTranslations,
   isCompletionCodeRequired,
@@ -275,6 +276,7 @@ export function normalizeRealizationStationDrafts(stations: RealizationStationDr
             correctAnswerIndex: station.quiz.correctAnswerIndex,
             audioUrl: station.quiz.audioUrl,
             acceptedAnswers: station.quiz.acceptedAnswers,
+            caesarShift: station.quiz.caesarShift,
           }) ?? undefined
         : undefined,
     translations: normalizeStationTranslations(station.translations, station.type),
@@ -400,12 +402,14 @@ export function RealizationStationsEditor({
   const [stationLocationLoading, setStationLocationLoading] = useState<Record<string, boolean>>({});
   const [stationMapRecenterTokens, setStationMapRecenterTokens] = useState<Record<string, number>>({});
   const [stationCategoryInputs, setStationCategoryInputs] = useState<Record<string, string>>({});
+  const [stationCaesarShiftInputs, setStationCaesarShiftInputs] = useState<Record<string, string>>({});
   const colorInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const colorSwatchButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const colorCommitCallbackRef = useRef<Map<string, (v: string) => void>>(new Map());
   const colorSwatchPointerDownRef = useRef<string | null>(null);
   const [stationSearchQuery, setStationSearchQuery] = useState("");
   const [selectedStationCategories, setSelectedStationCategories] = useState<string[]>([]);
+  const [stationSortMode, setStationSortMode] = useState<"alphabetical" | "id">("alphabetical");
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
   const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
@@ -466,6 +470,20 @@ export function RealizationStationsEditor({
       }),
     [stationEntries, stationSearchQuery, selectedStationCategories],
   );
+  // Sorting here is a display-only convenience for browsing/finding stations —
+  // it never touches `stations` itself, which stays in the order that
+  // actually gets saved (and, when enabled, numbered for players). That's
+  // also why the move up/down buttons below only make sense — and stay
+  // enabled — in "id" mode: they swap true array neighbors, which wouldn't
+  // track a station's visible position while it's alphabetically sorted.
+  const sortedStationEntries = useMemo(() => {
+    if (stationSortMode !== "alphabetical") {
+      return filteredStationEntries;
+    }
+    return [...filteredStationEntries].sort((left, right) =>
+      left.name.localeCompare(right.name, "pl", { sensitivity: "base" }),
+    );
+  }, [filteredStationEntries, stationSortMode]);
   const hasStationFilters = stationSearchQuery.trim().length > 0 || selectedStationCategories.length > 0;
   const stationCategoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -936,6 +954,10 @@ export function RealizationStationsEditor({
     setStationCategoryInputs((current) => ({ ...current, [stationKey]: value }));
   }
 
+  function setStationCaesarShiftInput(stationKey: string, value: string) {
+    setStationCaesarShiftInputs((current) => ({ ...current, [stationKey]: value }));
+  }
+
   function addStationCategory(index: number, category: string) {
     const nextCategory = category.trim();
     if (!nextCategory) {
@@ -1071,6 +1093,11 @@ export function RealizationStationsEditor({
       delete next[stationKey];
       return next;
     });
+    setStationCaesarShiftInputs((current) => {
+      const next = { ...current };
+      delete next[stationKey];
+      return next;
+    });
 
     setExpandedStationIndex((currentIndex) => {
       if (currentIndex === null) {
@@ -1104,17 +1131,15 @@ export function RealizationStationsEditor({
     [reorderedStations[index], reorderedStations[targetIndex]] = [reorderedStations[targetIndex], reorderedStations[index]];
     onChange(reorderedStations);
 
+    // Collapse (rather than follow the moved station to its new index): a
+    // reordered card whose panel stays open would drag a live Leaflet map
+    // instance to a new position in the DOM. Leaflet's map pane loses its
+    // internal position cache (_leaflet_pos) when React relocates it that
+    // way, crashing on the next setView call. Unmounting it here instead
+    // tears the old map down cleanly.
     setExpandedStationIndex((currentIndex) => {
-      if (currentIndex === null) {
+      if (currentIndex === index || currentIndex === targetIndex) {
         return null;
-      }
-
-      if (currentIndex === index) {
-        return targetIndex;
-      }
-
-      if (currentIndex === targetIndex) {
-        return index;
       }
 
       return currentIndex;
@@ -1219,7 +1244,24 @@ export function RealizationStationsEditor({
           >
             Wyczyść
           </button>
+          <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-200">
+            <span>Sortuj</span>
+            <select
+              value={stationSortMode}
+              onChange={(event) => setStationSortMode(event.target.value === "id" ? "id" : "alphabetical")}
+              className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+            >
+              <option value="alphabetical">Alfabetycznie</option>
+              <option value="id">Kolejność dodania</option>
+            </select>
+          </label>
         </div>
+        {stationSortMode === "alphabetical" ? (
+          <p className="text-xs text-zinc-500">
+            Widok posortowany alfabetycznie tylko do przeglądania — strzałki ↑/↓ są wyłączone. Przełącz na
+            „Kolejność dodania”, aby ręcznie zmieniać kolejność stanowisk.
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {stationCategoryFilterOptions.map((option) => {
@@ -1256,7 +1298,7 @@ export function RealizationStationsEditor({
       )}
 
       <div className="space-y-3">
-        {filteredStationEntries.map(({ station, index: stationIndex }) => {
+        {sortedStationEntries.map(({ station, index: stationIndex }) => {
           const stationKey = getStationKey(stationIndex, station);
           const imageMode = stationImageModes[stationKey] ?? "upload";
           const audioMode = stationAudioModes[stationKey] ?? "upload";
@@ -1281,6 +1323,9 @@ export function RealizationStationsEditor({
           const selectedStationCorrectAnswerIndex = selectedStationQuiz?.correctAnswerIndex ?? 0;
           const stationCategories = normalizeStationCategories(station.categories);
           const stationCategoryInput = stationCategoryInputs[stationKey] ?? "";
+          const stationCaesarShiftInput =
+            stationCaesarShiftInputs[stationKey] ??
+            (station.quiz?.caesarShift !== undefined ? String(station.quiz.caesarShift) : "");
           const quizLikeCopy = getQuizLikeStationCopy(station.type);
           const shouldValidateLanguageFields = showValidation && isEditingBaseLanguage;
           const hasCoordinates =
@@ -1322,8 +1367,12 @@ export function RealizationStationsEditor({
                     <button
                       type="button"
                       onClick={() => moveStation(stationIndex, "up")}
-                      disabled={stationIndex === 0}
-                      title="Przesuń w górę"
+                      disabled={stationIndex === 0 || stationSortMode === "alphabetical"}
+                      title={
+                        stationSortMode === "alphabetical"
+                          ? "Przełącz sortowanie na „Kolejność dodania”, aby zmieniać kolejność"
+                          : "Przesuń w górę"
+                      }
                       className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ↑
@@ -1331,8 +1380,12 @@ export function RealizationStationsEditor({
                     <button
                       type="button"
                       onClick={() => moveStation(stationIndex, "down")}
-                      disabled={stationIndex === stations.length - 1}
-                      title="Przesuń w dół"
+                      disabled={stationIndex === stations.length - 1 || stationSortMode === "alphabetical"}
+                      title={
+                        stationSortMode === "alphabetical"
+                          ? "Przełącz sortowanie na „Kolejność dodania”, aby zmieniać kolejność"
+                          : "Przesuń w dół"
+                      }
                       className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ↓
@@ -1981,6 +2034,33 @@ export function RealizationStationsEditor({
                             Generuj sekwencję
                           </button>
                         </div>
+                      ) : null}
+                      {station.type === "caesar-cipher" ? (
+                        <label className="space-y-1.5">
+                          <span className="text-xs uppercase tracking-wider text-zinc-400">
+                            Przesunięcie szyfru (1-25, opcjonalnie)
+                          </span>
+                          <input
+                            value={stationCaesarShiftInput}
+                            onChange={(event) => {
+                              const rawValue = event.target.value;
+                              setStationCaesarShiftInput(stationKey, rawValue);
+                              updateStation(stationIndex, {
+                                quiz: {
+                                  ...(station.quiz ?? {
+                                    question: "",
+                                    answers: createEmptyQuizAnswers(),
+                                    correctAnswerIndex: 0,
+                                  }),
+                                  caesarShift: parseCaesarShiftInput(rawValue),
+                                },
+                              });
+                            }}
+                            inputMode="numeric"
+                            placeholder="Zostaw puste, aby wylosować stałe przesunięcie"
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          />
+                        </label>
                       ) : null}
 
                       {!isWordPuzzleStationType(station.type) && !isMatchingStationType(station.type) && !isOpenQuizStationType(station.type) ? (

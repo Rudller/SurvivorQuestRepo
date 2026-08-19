@@ -44,6 +44,7 @@ import {
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
+  parseCaesarShiftInput,
   normalizeStationQuizForType,
   normalizeStationTranslations,
   QUIZ_ANSWER_COUNT,
@@ -194,6 +195,9 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     (station.qrScanCodes ?? []).join("\n"),
   );
   const [qrEntryCode, setQrEntryCode] = useState("");
+  const [caesarShiftInput, setCaesarShiftInput] = useState(
+    station.quiz?.caesarShift !== undefined ? String(station.quiz.caesarShift) : "",
+  );
   const [openQuizAcceptedAnswersInput, setOpenQuizAcceptedAnswersInput] = useState(
     (station.quiz?.acceptedAnswers ?? []).join("\n"),
   );
@@ -507,6 +511,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     editValues,
     qrScanCodesInput,
     qrEntryCode,
+    caesarShiftInput,
     openQuizAcceptedAnswersInput,
     translationAcceptedAnswersInputs,
     baseLanguage,
@@ -606,6 +611,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                       acceptedAnswers: isOpenQuizStationType(editValues.type)
                         ? parseAcceptedAnswersInput(openQuizAcceptedAnswersInput)
                         : undefined,
+                      caesarShift:
+                        editValues.type === "caesar-cipher" ? parseCaesarShiftInput(caesarShiftInput) : undefined,
                     })
                   : null;
 
@@ -1029,6 +1036,151 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </label>
             ) : null}
 
+            {isImageSupportedStationType(editValues.type) ? (
+            <div className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
+              <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
+                  <div className="flex h-40 items-center justify-center bg-zinc-900">
+                    {editValues.imageUrl.trim() ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={editValues.imageUrl}
+                        alt="Podgląd obrazu stanowiska"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="h-full w-full" />
+                    )}
+                  </div>
+                  <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2">
+                    <p className="truncate text-xs text-zinc-300">
+                      {editValues.imageUrl.trim() ? "Podgląd aktualnego obrazu stanowiska" : "Czeka na wybór obrazu"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                  {imageModeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setEditImageMode(option.value)}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                        editImageMode === option.value
+                          ? "bg-amber-400 text-zinc-950"
+                          : "text-zinc-300 hover:text-zinc-100"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  </div>
+                </div>
+
+                {editImageMode === "upload" && (
+                  <div className="mx-auto w-full max-w-md space-y-2 text-center">
+                    <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                      Wybierz plik obrazu
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(event) => {
+                          void handleImageFile(
+                            event.target.files?.[0] ?? null,
+                            (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
+                            setEditImageError,
+                            async (file) => {
+                              const uploaded = await uploadStationImage(file).unwrap();
+                              return uploaded.url;
+                            },
+                          );
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
+                  </div>
+                )}
+
+                {editImageMode === "paste" && (
+                  <div
+                    onPaste={(event) => {
+                      void handleImagePaste(
+                        event,
+                        (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
+                        setEditImageError,
+                        async (file) => {
+                          const uploaded = await uploadStationImage(file).unwrap();
+                          return uploaded.url;
+                        },
+                      );
+                    }}
+                    className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
+                  >
+                    Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
+                  </div>
+                )}
+
+                {editImageMode === "url" && (
+                  <input
+                    type="url"
+                    value={editValues.imageUrl}
+                    onChange={(event) => {
+                      setEditValues((prev) => ({ ...prev, imageUrl: event.target.value }));
+                      setEditImageError(null);
+                    }}
+                    placeholder="https://..."
+                    className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs text-zinc-500">
+                    {editValues.imageUrl.trim() ? "Obraz ustawiony" : ""}
+                  </p>
+                  {editValues.imageUrl.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setEditValues((prev) => ({ ...prev, imageUrl: "" }))}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                    >
+                      Wyczyść
+                    </button>
+                  )}
+                </div>
+
+                {editImageError && <p className="text-sm text-red-300">{editImageError}</p>}
+                {isUploadingImage && <p className="text-sm text-amber-300">Przesyłanie obrazu...</p>}
+              </div>
+            </div>
+            ) : null}
+
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">
+                {editValues.type === "photo-task"
+                  ? "Polecenie (co należy sfotografować)"
+                  : editValues.type === "qr-hunt"
+                    ? "Wskazówka (gdzie szukać kodów QR)"
+                    : "Opis"}
+              </span>
+              <textarea
+                value={activeDescription}
+                onChange={(event) => setActiveDescription(event.target.value)}
+                rows={4}
+                placeholder={
+                  editValues.type === "photo-task"
+                    ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                    : editValues.type === "qr-hunt"
+                      ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                      : "Opis stanowiska"
+                }
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
             {isQuizStationType(editValues.type) ? (
               <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
@@ -1152,6 +1304,20 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                     </button>
                   </div>
                 ) : null}
+                {editValues.type === "caesar-cipher" ? (
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Przesunięcie szyfru (1-25, opcjonalnie)
+                    </span>
+                    <input
+                      value={caesarShiftInput}
+                      onChange={(event) => setCaesarShiftInput(event.target.value)}
+                      inputMode="numeric"
+                      placeholder="Zostaw puste, aby wylosować stałe przesunięcie"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                ) : null}
 
                 {!isWordPuzzleStationType(editValues.type) && !isMatchingStationType(editValues.type) && !isOpenQuizStationType(editValues.type) ? (
                   <div className="space-y-2">
@@ -1255,151 +1421,6 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   {quizLikeCopy.answersHint}
                 </p>
               </div>
-            ) : null}
-
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">
-                {editValues.type === "photo-task"
-                  ? "Polecenie (co należy sfotografować)"
-                  : editValues.type === "qr-hunt"
-                    ? "Wskazówka (gdzie szukać kodów QR)"
-                    : "Opis"}
-              </span>
-              <textarea
-                value={activeDescription}
-                onChange={(event) => setActiveDescription(event.target.value)}
-                rows={4}
-                placeholder={
-                  editValues.type === "photo-task"
-                    ? "Np. Znajdź młotek i zrób jego zdjęcie"
-                    : editValues.type === "qr-hunt"
-                      ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
-                      : "Opis stanowiska"
-                }
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
-
-            {isImageSupportedStationType(editValues.type) ? (
-            <div className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska</span>
-              <div className="space-y-3 rounded-xl border border-amber-400/30 bg-gradient-to-b from-zinc-900 to-zinc-950 p-3">
-                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
-                  <div className="flex h-40 items-center justify-center bg-zinc-900">
-                    {editValues.imageUrl.trim() ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={editValues.imageUrl}
-                        alt="Podgląd obrazu stanowiska"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="h-full w-full" />
-                    )}
-                  </div>
-                  <div className="border-t border-zinc-800 bg-zinc-950 px-3 py-2">
-                    <p className="truncate text-xs text-zinc-300">
-                      {editValues.imageUrl.trim() ? "Podgląd aktualnego obrazu stanowiska" : "Czeka na wybór obrazu"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-center">
-                  <div className="inline-flex rounded-lg border border-zinc-700 bg-zinc-900 p-1">
-                  {imageModeOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setEditImageMode(option.value)}
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                        editImageMode === option.value
-                          ? "bg-amber-400 text-zinc-950"
-                          : "text-zinc-300 hover:text-zinc-100"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                  </div>
-                </div>
-
-                {editImageMode === "upload" && (
-                  <div className="mx-auto w-full max-w-md space-y-2 text-center">
-                    <label className="mx-auto inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
-                      Wybierz plik obrazu
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={(event) => {
-                          void handleImageFile(
-                            event.target.files?.[0] ?? null,
-                            (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
-                            setEditImageError,
-                            async (file) => {
-                              const uploaded = await uploadStationImage(file).unwrap();
-                              return uploaded.url;
-                            },
-                          );
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    <p className="text-xs text-zinc-500">Obsługiwane: PNG, JPG, WEBP.</p>
-                  </div>
-                )}
-
-                {editImageMode === "paste" && (
-                  <div
-                    onPaste={(event) => {
-                      void handleImagePaste(
-                        event,
-                        (url) => { setEditValues((prev) => ({ ...prev, imageUrl: url })); setEditImageError(null); },
-                        setEditImageError,
-                        async (file) => {
-                          const uploaded = await uploadStationImage(file).unwrap();
-                          return uploaded.url;
-                        },
-                      );
-                    }}
-                    className="mx-auto w-full max-w-md rounded-lg border border-dashed border-zinc-700 bg-zinc-900/70 px-3 py-3 text-center text-xs text-zinc-400"
-                  >
-                    Skopiuj obraz lub link i wklej tutaj (Ctrl+V).
-                  </div>
-                )}
-
-                {editImageMode === "url" && (
-                  <input
-                    type="url"
-                    value={editValues.imageUrl}
-                    onChange={(event) => {
-                      setEditValues((prev) => ({ ...prev, imageUrl: event.target.value }));
-                      setEditImageError(null);
-                    }}
-                    placeholder="https://..."
-                    className="mx-auto block w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                )}
-
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-xs text-zinc-500">
-                    {editValues.imageUrl.trim() ? "Obraz ustawiony" : ""}
-                  </p>
-                  {editValues.imageUrl.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => setEditValues((prev) => ({ ...prev, imageUrl: "" }))}
-                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-                    >
-                      Wyczyść
-                    </button>
-                  )}
-                </div>
-
-                {editImageError && <p className="text-sm text-red-300">{editImageError}</p>}
-                {isUploadingImage && <p className="text-sm text-amber-300">Przesyłanie obrazu...</p>}
-              </div>
-            </div>
             ) : null}
 
             <label className="space-y-1.5">

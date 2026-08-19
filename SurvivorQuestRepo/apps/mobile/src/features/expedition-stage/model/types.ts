@@ -139,6 +139,8 @@ export type ExpeditionStationQuiz = {
   correctAnswerIndex: number;
   audioUrl?: string;
   acceptedAnswers?: string[];
+  // Admin-configured Caesar cipher shift (1-25), caesar-cipher stations only.
+  caesarShift?: number;
 };
 
 export type ExpeditionRealizationStation = {

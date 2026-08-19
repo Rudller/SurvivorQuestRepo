@@ -128,6 +128,7 @@ export function getRealizationLanguageFlag(value: RealizationLanguage) {
 export type OnboardingRealizationSummary = {
   id: string;
   companyName: string;
+  type?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
   selectedLanguage?: RealizationLanguage;

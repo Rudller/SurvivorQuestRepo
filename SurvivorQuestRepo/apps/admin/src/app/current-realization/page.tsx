@@ -23,6 +23,7 @@ import type { CurrentRealizationOverview } from "@/features/current-realization/
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
 import { AdminShell } from "@/shared/components/admin-shell";
+import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
 
 const CurrentRealizationTeamsMap = dynamic(
@@ -247,6 +248,7 @@ export default function CurrentRealizationPage() {
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const canManageCurrentRealization = meData?.user.role === "admin";
+  const [actionError, setActionError] = useState<string | null>(null);
   const [resetCompletedTasks, { isLoading: isResettingTasks }] = useResetCurrentRealizationCompletedTasksMutation();
   const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
@@ -507,20 +509,29 @@ export default function CurrentRealizationPage() {
                         return;
                       }
 
+                      setActionError(null);
                       try {
                         await startCurrentRealization(selectedRealizationArg).unwrap();
-                      } catch {
-                        // handled by query error rendering/refetch path
+                      } catch (error) {
+                        setActionError(
+                          resolveApiErrorMessage(error) ?? "Nie udało się uruchomić aplikacji.",
+                        );
                       }
                     }}
-                    disabled={isStartingRealization || overview.realization.status === "in-progress"}
+                    disabled={
+                      isStartingRealization ||
+                      overview.realization.status === "in-progress" ||
+                      overview.realization.status === "done"
+                    }
                     className={`${actionButtonBaseClassName} ${actionButtonEmeraldClassName}`}
                   >
                     {isStartingRealization
                       ? "Uruchamianie..."
                       : overview.realization.status === "in-progress"
                         ? "Aplikacja uruchomiona"
-                        : "Start aplikacji"}
+                        : overview.realization.status === "done"
+                          ? "Realizacja zakończona — zresetuj, by uruchomić ponownie"
+                          : "Start aplikacji"}
                   </button>
                   <button
                     type="button"
@@ -529,10 +540,13 @@ export default function CurrentRealizationPage() {
                         return;
                       }
 
+                      setActionError(null);
                       try {
                         await finishCurrentRealization(selectedRealizationArg).unwrap();
-                      } catch {
-                        // handled by query error rendering/refetch path
+                      } catch (error) {
+                        setActionError(
+                          resolveApiErrorMessage(error) ?? "Nie udało się zakończyć realizacji.",
+                        );
                       }
                     }}
                     disabled={isFinishingRealization || overview.realization.status === "done"}
@@ -545,6 +559,7 @@ export default function CurrentRealizationPage() {
                         : "Zakończ realizację"}
                   </button>
                 </div>
+                {actionError && <p className="mt-3 text-xs text-red-300">{actionError}</p>}
               </div>
             ) : null}
 
@@ -593,10 +608,13 @@ export default function CurrentRealizationPage() {
                         return;
                       }
 
+                      setActionError(null);
                       try {
                         await resetCompletedTasks(selectedRealizationArg).unwrap();
-                      } catch {
-                        // handled by query error rendering/refetch path
+                      } catch (error) {
+                        setActionError(
+                          resolveApiErrorMessage(error) ?? "Nie udało się zresetować ukończonych zadań.",
+                        );
                       }
                     }}
                     disabled={isResettingTasks}
@@ -615,10 +633,13 @@ export default function CurrentRealizationPage() {
                         return;
                       }
 
+                      setActionError(null);
                       try {
                         await resetCurrentRealization(selectedRealizationArg).unwrap();
-                      } catch {
-                        // handled by query error rendering/refetch path
+                      } catch (error) {
+                        setActionError(
+                          resolveApiErrorMessage(error) ?? "Nie udało się zresetować realizacji.",
+                        );
                       }
                     }}
                     disabled={isResettingRealization}
@@ -627,6 +648,7 @@ export default function CurrentRealizationPage() {
                     {isResettingRealization ? "Resetowanie realizacji..." : "Reset realizacji"}
                   </button>
                 </div>
+                {actionError && <p className="mt-3 text-xs text-red-300">{actionError}</p>}
               </div>
             ) : null}
           </div>

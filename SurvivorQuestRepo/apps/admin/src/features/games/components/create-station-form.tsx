@@ -6,6 +6,7 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type {
   ChallengeDifficulty,
   ChallengeDifficultyMode,
+  Station,
   StationQuiz,
   StationTranslation,
   StationTranslations,
@@ -43,6 +44,7 @@ import {
   normalizeCompletionCode,
   generateSampleCompletionCode,
   createEmptyQuizAnswers,
+  parseCaesarShiftInput,
   normalizeStationQuizForType,
   normalizeStationTranslations,
   QUIZ_ANSWER_COUNT,
@@ -69,6 +71,7 @@ import {
 
 type CreateStationFormProps = {
   onClose: () => void;
+  onCreated?: (station: Station) => void;
 };
 
 const supportedStationTranslationLanguages: RealizationLanguage[] = [
@@ -158,7 +161,7 @@ function normalizeCategories(categories: string[]) {
   return normalized;
 }
 
-export function CreateStationForm({ onClose }: CreateStationFormProps) {
+export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps) {
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
@@ -192,6 +195,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
   const [quizAnswers, setQuizAnswers] = useState<string[]>(() => createEmptyQuizAnswers());
   const [quizCorrectAnswerIndex, setQuizCorrectAnswerIndex] = useState(0);
   const [quizAudioUrl, setQuizAudioUrl] = useState("");
+  const [caesarShiftInput, setCaesarShiftInput] = useState("");
   const [openQuizAcceptedAnswersInput, setOpenQuizAcceptedAnswersInput] = useState("");
   const [translations, setTranslations] = useState<StationTranslations | undefined>(undefined);
   const [translationAcceptedAnswersInputs, setTranslationAcceptedAnswersInputs] = useState<
@@ -562,6 +566,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                      acceptedAnswers: isOpenQuizStationType(type)
                        ? parseAcceptedAnswersInput(openQuizAcceptedAnswersInput)
                        : undefined,
+                     caesarShift: type === "caesar-cipher" ? parseCaesarShiftInput(caesarShiftInput) : undefined,
                    })
                  : null;
 
@@ -625,7 +630,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                   ) as StationTranslations)
                 : undefined;
 
-              await createStation({
+              const createdStation = await createStation({
                 name: name.trim(),
                 type,
                 categories,
@@ -652,6 +657,7 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
                 latitude: nextLatitude,
                 longitude: nextLongitude,
               }).unwrap();
+              onCreated?.(createdStation);
               setName("");
               setType("quiz");
               setCategories([]);
@@ -1019,250 +1025,6 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
             </label>
           ) : null}
 
-          {isQuizStationType(type) ? (
-            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
-              {type === "audio-quiz" ? (
-                <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Audio (upload lub URL)</span>
-                    <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-900 p-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreateAudioMode("upload");
-                          setAudioError(null);
-                        }}
-                        className={`rounded px-2.5 py-1 text-xs transition ${
-                          createAudioMode === "upload" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
-                        }`}
-                      >
-                        Upload
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreateAudioMode("url");
-                          setAudioFile(null);
-                          setAudioError(null);
-                        }}
-                        className={`rounded px-2.5 py-1 text-xs transition ${
-                          createAudioMode === "url" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
-                        }`}
-                      >
-                        URL
-                      </button>
-                    </div>
-                  </div>
-
-                  {createAudioMode === "upload" ? (
-                    <div className="space-y-2">
-                      <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
-                        Wybierz plik audio
-                        <input
-                          type="file"
-                          accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
-                          className="hidden"
-                          onChange={async (event) => {
-                            const selected = event.target.files?.[0] ?? null;
-                            event.currentTarget.value = "";
-                            if (!selected) {
-                              return;
-                            }
-
-                            setAudioFile(selected);
-                            setAudioError(null);
-
-                            try {
-                              const uploaded = await uploadStationAudio(selected).unwrap();
-                              setActiveQuizField({ audioUrl: uploaded.url });
-                            } catch {
-                              setAudioError("Nie udało się przesłać pliku audio.");
-                            }
-                          }}
-                        />
-                      </label>
-                      <p className="text-xs text-zinc-500">
-                        Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
-                      </p>
-                    </div>
-                  ) : (
-                    <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
-                      <input
-                        type="url"
-                        value={activeQuizAudioUrl}
-                        onChange={(event) => {
-                          setActiveQuizField({ audioUrl: event.target.value });
-                          setAudioError(null);
-                        }}
-                        placeholder="https://..."
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
-                    </label>
-                  )}
-
-                  {audioError ? <p className="text-xs text-red-300">{audioError}</p> : null}
-                  {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
-                </div>
-              ) : null}
-              {hasVisibleQuizQuestionField(type) ? (
-                <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
-                  <textarea
-                    value={activeQuizQuestion}
-                    onChange={(event) => {
-                      const rawValue = event.target.value;
-                      const nextValue =
-                        type === "memory" && !rawValue.trim()
-                          ? MEMORY_SYSTEM_STATION_PROMPT
-                          : type === "matching" && !rawValue.trim()
-                            ? MATCHING_SYSTEM_STATION_PROMPT
-                          : type === "simon"
-                            ? normalizeSimonSequenceInput(rawValue)
-                            : rawValue;
-                      setActiveQuizField({ question: nextValue });
-                    }}
-                    rows={2}
-                    placeholder={quizLikeCopy.questionPlaceholder}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                </label>
-              ) : null}
-              {type === "simon" ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
-                  <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveQuizField({ question: generateSimonSequence(10) })}
-                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                  >
-                    Generuj sekwencję
-                  </button>
-                </div>
-              ) : null}
-
-              {!isWordPuzzleStationType(type) && !isMatchingStationType(type) && !isOpenQuizStationType(type) ? (
-                <div className="space-y-2">
-                  {activeQuizAnswers.map((answer, index) => (
-                    <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
-                      <input
-                        type="radio"
-                        name="quiz-correct-answer-create"
-                        checked={activeQuizCorrectAnswerIndex === index}
-                        onChange={() => setActiveQuizField({ correctAnswerIndex: index })}
-                        className="h-4 w-4 accent-amber-400"
-                      />
-                      <input
-                        value={answer}
-                        onChange={(event) =>
-                          setActiveQuizField({
-                            answers: activeQuizAnswers.map((item, answerIndex) =>
-                              answerIndex === index ? event.target.value : item,
-                            ),
-                          })
-                        }
-                        placeholder={`Odpowiedź ${index + 1}`}
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
-                    </label>
-                  ))}
-                </div>
-              ) : null}
-              {isOpenQuizStationType(type) ? (
-                <div className="space-y-3">
-                  <label className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
-                    <input
-                      value={activeQuizAnswers[0] ?? ""}
-                      onChange={(event) =>
-                        setActiveQuizField({ answers: [event.target.value, ...activeQuizAnswers.slice(1)] })
-                      }
-                      placeholder="Wpisz poprawną odpowiedź"
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                    />
-                  </label>
-                  <label className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">
-                      Dodatkowe akceptowane odpowiedzi (opcjonalnie)
-                    </span>
-                    <textarea
-                      rows={3}
-                      value={activeQuizAcceptedAnswersText}
-                      onChange={(event) => setActiveQuizAcceptedAnswersText(event.target.value)}
-                      placeholder={"Jedna odpowiedź na linię, np.\nWarszawa\nstolica Polski"}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                    />
-                  </label>
-                </div>
-              ) : null}
-              {isMatchingStationType(type) ? (
-                <div className="space-y-2">
-                  {activeQuizAnswers.map((answer, index) => {
-                    const pair = splitMatchingPairAnswer(answer);
-                    return (
-                      <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
-                        <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Para {index + 1}</p>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input
-                            value={pair.left}
-                            onChange={(event) =>
-                              setActiveQuizField({
-                                answers: activeQuizAnswers.map((item, answerIndex) =>
-                                  answerIndex === index ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right) : item,
-                                ),
-                              })
-                            }
-                            placeholder="Lewa strona"
-                            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                          />
-                          <input
-                            value={pair.right}
-                            onChange={(event) =>
-                              setActiveQuizField({
-                                answers: activeQuizAnswers.map((item, answerIndex) =>
-                                  answerIndex === index ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value) : item,
-                                ),
-                              })
-                            }
-                            placeholder="Prawa strona"
-                            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-              <p className="text-xs text-zinc-500">
-                {quizLikeCopy.answersHint}
-              </p>
-            </div>
-          ) : null}
-
-          <label className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">
-              {type === "photo-task"
-                ? "Polecenie (co należy sfotografować)"
-                : type === "qr-hunt"
-                  ? "Wskazówka (gdzie szukać kodów QR)"
-                  : "Opis (opcjonalny)"}
-            </span>
-            <textarea
-              value={activeDescription}
-              onChange={(event) => setActiveDescription(event.target.value)}
-              placeholder={
-                type === "photo-task"
-                  ? "Np. Znajdź młotek i zrób jego zdjęcie"
-                  : type === "qr-hunt"
-                    ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
-                    : "Krótki opis stanowiska"
-              }
-              rows={4}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-            />
-          </label>
-
           {isImageSupportedStationType(type) ? (
           <div className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Obraz stanowiska (URL opcjonalny)</span>
@@ -1419,6 +1181,264 @@ export function CreateStationForm({ onClose }: CreateStationFormProps) {
               {isUploadingImage && <p className="text-xs text-amber-300">Przesyłanie obrazu...</p>}
             </div>
           </div>
+          ) : null}
+
+          <label className="space-y-1.5">
+            <span className="text-xs uppercase tracking-wider text-zinc-400">
+              {type === "photo-task"
+                ? "Polecenie (co należy sfotografować)"
+                : type === "qr-hunt"
+                  ? "Wskazówka (gdzie szukać kodów QR)"
+                  : "Opis (opcjonalny)"}
+            </span>
+            <textarea
+              value={activeDescription}
+              onChange={(event) => setActiveDescription(event.target.value)}
+              placeholder={
+                type === "photo-task"
+                  ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                  : type === "qr-hunt"
+                    ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                    : "Krótki opis stanowiska"
+              }
+              rows={4}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+            />
+          </label>
+
+          {isQuizStationType(type) ? (
+            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
+              {type === "audio-quiz" ? (
+                <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Audio (upload lub URL)</span>
+                    <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-900 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateAudioMode("upload");
+                          setAudioError(null);
+                        }}
+                        className={`rounded px-2.5 py-1 text-xs transition ${
+                          createAudioMode === "upload" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                        }`}
+                      >
+                        Upload
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateAudioMode("url");
+                          setAudioFile(null);
+                          setAudioError(null);
+                        }}
+                        className={`rounded px-2.5 py-1 text-xs transition ${
+                          createAudioMode === "url" ? "bg-amber-400 text-zinc-950" : "text-zinc-300"
+                        }`}
+                      >
+                        URL
+                      </button>
+                    </div>
+                  </div>
+
+                  {createAudioMode === "upload" ? (
+                    <div className="space-y-2">
+                      <label className="inline-flex cursor-pointer items-center rounded-md border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500">
+                        Wybierz plik audio
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/wav,audio/wave,audio/x-wav,audio/ogg,application/ogg,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/webm,.mp3,.wav,.ogg,.m4a,.aac,.webm"
+                          className="hidden"
+                          onChange={async (event) => {
+                            const selected = event.target.files?.[0] ?? null;
+                            event.currentTarget.value = "";
+                            if (!selected) {
+                              return;
+                            }
+
+                            setAudioFile(selected);
+                            setAudioError(null);
+
+                            try {
+                              const uploaded = await uploadStationAudio(selected).unwrap();
+                              setActiveQuizField({ audioUrl: uploaded.url });
+                            } catch {
+                              setAudioError("Nie udało się przesłać pliku audio.");
+                            }
+                          }}
+                        />
+                      </label>
+                      <p className="text-xs text-zinc-500">
+                        Obsługiwane: MP3, WAV, OGG, M4A, AAC, WEBM. {audioFile ? `Wybrano: ${audioFile.name}` : "Brak wybranego pliku."}
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">URL audio (opcjonalny)</span>
+                      <input
+                        type="url"
+                        value={activeQuizAudioUrl}
+                        onChange={(event) => {
+                          setActiveQuizField({ audioUrl: event.target.value });
+                          setAudioError(null);
+                        }}
+                        placeholder="https://..."
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+                  )}
+
+                  {audioError ? <p className="text-xs text-red-300">{audioError}</p> : null}
+                  {isUploadingAudio ? <p className="text-xs text-amber-300">Przesyłanie audio...</p> : null}
+                </div>
+              ) : null}
+              {hasVisibleQuizQuestionField(type) ? (
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">{quizLikeCopy.questionLabel}</span>
+                  <textarea
+                    value={activeQuizQuestion}
+                    onChange={(event) => {
+                      const rawValue = event.target.value;
+                      const nextValue =
+                        type === "memory" && !rawValue.trim()
+                          ? MEMORY_SYSTEM_STATION_PROMPT
+                          : type === "matching" && !rawValue.trim()
+                            ? MATCHING_SYSTEM_STATION_PROMPT
+                          : type === "simon"
+                            ? normalizeSimonSequenceInput(rawValue)
+                            : rawValue;
+                      setActiveQuizField({ question: nextValue });
+                    }}
+                    rows={2}
+                    placeholder={quizLikeCopy.questionPlaceholder}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+              ) : null}
+              {type === "simon" ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                  <p className="text-xs text-zinc-500">Sekwencja Simon ma zawsze 10 cyfr (1-9).</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveQuizField({ question: generateSimonSequence(10) })}
+                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Generuj sekwencję
+                  </button>
+                </div>
+              ) : null}
+              {type === "caesar-cipher" ? (
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Przesunięcie szyfru (1-25, opcjonalnie)
+                  </span>
+                  <input
+                    value={caesarShiftInput}
+                    onChange={(event) => setCaesarShiftInput(event.target.value)}
+                    inputMode="numeric"
+                    placeholder="Zostaw puste, aby wylosować stałe przesunięcie"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+              ) : null}
+
+              {!isWordPuzzleStationType(type) && !isMatchingStationType(type) && !isOpenQuizStationType(type) ? (
+                <div className="space-y-2">
+                  {activeQuizAnswers.map((answer, index) => (
+                    <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                      <input
+                        type="radio"
+                        name="quiz-correct-answer-create"
+                        checked={activeQuizCorrectAnswerIndex === index}
+                        onChange={() => setActiveQuizField({ correctAnswerIndex: index })}
+                        className="h-4 w-4 accent-amber-400"
+                      />
+                      <input
+                        value={answer}
+                        onChange={(event) =>
+                          setActiveQuizField({
+                            answers: activeQuizAnswers.map((item, answerIndex) =>
+                              answerIndex === index ? event.target.value : item,
+                            ),
+                          })
+                        }
+                        placeholder={`Odpowiedź ${index + 1}`}
+                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              {isOpenQuizStationType(type) ? (
+                <div className="space-y-3">
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
+                    <input
+                      value={activeQuizAnswers[0] ?? ""}
+                      onChange={(event) =>
+                        setActiveQuizField({ answers: [event.target.value, ...activeQuizAnswers.slice(1)] })
+                      }
+                      placeholder="Wpisz poprawną odpowiedź"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Dodatkowe akceptowane odpowiedzi (opcjonalnie)
+                    </span>
+                    <textarea
+                      rows={3}
+                      value={activeQuizAcceptedAnswersText}
+                      onChange={(event) => setActiveQuizAcceptedAnswersText(event.target.value)}
+                      placeholder={"Jedna odpowiedź na linię, np.\nWarszawa\nstolica Polski"}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {isMatchingStationType(type) ? (
+                <div className="space-y-2">
+                  {activeQuizAnswers.map((answer, index) => {
+                    const pair = splitMatchingPairAnswer(answer);
+                    return (
+                      <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                        <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Para {index + 1}</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            value={pair.left}
+                            onChange={(event) =>
+                              setActiveQuizField({
+                                answers: activeQuizAnswers.map((item, answerIndex) =>
+                                  answerIndex === index ? joinMatchingPairAnswer(event.target.value, splitMatchingPairAnswer(item).right) : item,
+                                ),
+                              })
+                            }
+                            placeholder="Lewa strona"
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          />
+                          <input
+                            value={pair.right}
+                            onChange={(event) =>
+                              setActiveQuizField({
+                                answers: activeQuizAnswers.map((item, answerIndex) =>
+                                  answerIndex === index ? joinMatchingPairAnswer(splitMatchingPairAnswer(item).left, event.target.value) : item,
+                                ),
+                              })
+                            }
+                            placeholder="Prawa strona"
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <p className="text-xs text-zinc-500">
+                {quizLikeCopy.answersHint}
+              </p>
+            </div>
           ) : null}
 
           <div className="space-y-2">

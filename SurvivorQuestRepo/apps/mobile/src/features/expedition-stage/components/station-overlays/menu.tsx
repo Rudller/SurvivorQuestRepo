@@ -12,8 +12,6 @@ const STATION_TEST_MENU_TEXT: Record<
     description: string;
     openWelcome: string;
     openFinish: string;
-    openPassedPopup: string;
-    openFailedPopup: string;
     exitRealization: string;
     emptyStations: string;
     enter: string;
@@ -22,6 +20,7 @@ const STATION_TEST_MENU_TEXT: Record<
     done: string;
     inProgress: string;
     todo: string;
+    showFeedbackPopups: string;
   }
 > = {
   polish: {
@@ -29,8 +28,6 @@ const STATION_TEST_MENU_TEXT: Record<
     description: "Lista pobrana z panelu admina dla aktywnej realizacji.",
     openWelcome: "Pokaż Welcome Screen",
     openFinish: "Pokaż ekran końcowy",
-    openPassedPopup: "Pokaż popup zaliczone",
-    openFailedPopup: "Pokaż popup niezaliczone",
     exitRealization: "Wyjdź z realizacji",
     emptyStations: "Brak stanowisk. Dodaj je w panelu admina.",
     enter: "Wejdź",
@@ -39,14 +36,13 @@ const STATION_TEST_MENU_TEXT: Record<
     done: "Ukończone",
     inProgress: "W trakcie",
     todo: "Do zrobienia",
+    showFeedbackPopups: "Pokazuj popupy informacyjne (np. „zadanie niezaliczone”)",
   },
   english: {
     title: "Test menu",
     description: "List fetched from the admin panel for the active realization.",
     openWelcome: "Show welcome screen",
     openFinish: "Show finish screen",
-    openPassedPopup: "Show passed popup",
-    openFailedPopup: "Show failed popup",
     exitRealization: "Exit realization",
     emptyStations: "No stations. Add them in the admin panel.",
     enter: "Enter",
@@ -55,14 +51,13 @@ const STATION_TEST_MENU_TEXT: Record<
     done: "Completed",
     inProgress: "In progress",
     todo: "To do",
+    showFeedbackPopups: "Show info popups (e.g. \"task failed\")",
   },
   ukrainian: {
     title: "Тестове меню",
     description: "Список отримано з адмін-панелі для активної реалізації.",
     openWelcome: "Показати екран вітання",
     openFinish: "Показати фінальний екран",
-    openPassedPopup: "Показати popup «зараховано»",
-    openFailedPopup: "Показати popup «не зараховано»",
     exitRealization: "Вийти з реалізації",
     emptyStations: "Немає станцій. Додайте їх в адмін-панелі.",
     enter: "Увійти",
@@ -71,14 +66,13 @@ const STATION_TEST_MENU_TEXT: Record<
     done: "Завершено",
     inProgress: "У процесі",
     todo: "До виконання",
+    showFeedbackPopups: "Показувати інформаційні popup (напр. «завдання не зараховано»)",
   },
   russian: {
     title: "Тестовое меню",
     description: "Список получен из админ-панели для активной реализации.",
     openWelcome: "Показать экран приветствия",
     openFinish: "Показать финальный экран",
-    openPassedPopup: "Показать popup «зачтено»",
-    openFailedPopup: "Показать popup «не зачтено»",
     exitRealization: "Выйти из реализации",
     emptyStations: "Нет станций. Добавьте их в админ-панели.",
     enter: "Войти",
@@ -87,6 +81,7 @@ const STATION_TEST_MENU_TEXT: Record<
     done: "Завершено",
     inProgress: "В процессе",
     todo: "К выполнению",
+    showFeedbackPopups: "Показывать информационные popup (напр. «задание не зачтено»)",
   },
 };
 
@@ -141,9 +136,9 @@ export function StationTestMenuOverlay({
   onEnterStation,
   onOpenWelcomeScreen,
   onOpenFinishScreen,
-  onPreviewSuccessPopup,
-  onPreviewFailedPopup,
   onExitRealization,
+  isFeedbackPopupEnabled,
+  onToggleFeedbackPopupEnabled,
 }: StationTestMenuOverlayProps) {
   const uiLanguage = useUiLanguage();
   const adaptiveLayout = useAdaptiveLayout();
@@ -151,16 +146,18 @@ export function StationTestMenuOverlay({
   const text = STATION_TEST_MENU_TEXT[uiLanguage];
   const isLightTheme = getExpeditionThemeMode() === "light";
   const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
-  const overlayPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 22 : 16, 14, 26);
-  const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 600 : 560, 520, 620);
-  const panelPadding = adaptiveLayout.s(isTabletLayout ? 18 : 16, 14, 20);
-  const titleFontSize = adaptiveLayout.fs(isTabletLayout ? 16 : 14, 13, 18);
-  const descriptionFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 12, 11, 14);
-  const closeButtonSize = adaptiveLayout.hit(isTabletLayout ? 38 : 32);
-  const quickButtonPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 12, 12, 16);
-  const quickButtonPaddingVertical = adaptiveLayout.s(isTabletLayout ? 10 : 8, 8, 11);
-  const quickButtonFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 12, 11, 14);
-  const scrollMaxHeight = adaptiveLayout.s(isTabletLayout ? 360 : 320, 300, 380);
+  const overlayPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 16 : 10, 8, 20);
+  const panelMaxWidth = adaptiveLayout.s(isTabletLayout ? 720 : 680, 620, 780);
+  const panelPadding = adaptiveLayout.s(isTabletLayout ? 22 : 20, 16, 26);
+  const titleFontSize = adaptiveLayout.fs(isTabletLayout ? 18 : 16, 14, 20);
+  const descriptionFontSize = adaptiveLayout.fs(isTabletLayout ? 14 : 13, 12, 15);
+  const closeButtonSize = adaptiveLayout.hit(isTabletLayout ? 40 : 34);
+  const quickButtonPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 16 : 14, 12, 18);
+  const quickButtonPaddingVertical = adaptiveLayout.s(isTabletLayout ? 12 : 10, 9, 14);
+  const quickButtonFontSize = adaptiveLayout.fs(isTabletLayout ? 14 : 13, 12, 15);
+  const scrollMaxHeight = adaptiveLayout.s(isTabletLayout ? 460 : 420, 380, 520);
+  const checkboxSize = adaptiveLayout.hit(isTabletLayout ? 24 : 22);
+  const checkboxLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 12, 11, 14);
   const stationCardPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 12, 12, 16);
   const stationCardPaddingVertical = adaptiveLayout.s(isTabletLayout ? 11 : 8, 8, 12);
   const stationNameFontSize = adaptiveLayout.fs(isTabletLayout ? 15 : 14, 13, 17);
@@ -219,26 +216,6 @@ export function StationTestMenuOverlay({
             {text.openFinish}
           </Text>
         </Pressable>
-        <View className="mt-2 flex-row gap-2">
-          <Pressable
-            className="flex-1 rounded-xl border active:opacity-90"
-            style={{ paddingHorizontal: quickButtonPaddingHorizontal, paddingVertical: quickButtonPaddingVertical, borderColor: "rgba(16, 185, 129, 0.45)", backgroundColor: "rgba(16, 185, 129, 0.16)" }}
-            onPress={onPreviewSuccessPopup}
-          >
-            <Text className="font-semibold text-center" style={{ color: "#6ee7b7", fontSize: quickButtonFontSize }}>
-              {text.openPassedPopup}
-            </Text>
-          </Pressable>
-          <Pressable
-            className="flex-1 rounded-xl border active:opacity-90"
-            style={{ paddingHorizontal: quickButtonPaddingHorizontal, paddingVertical: quickButtonPaddingVertical, borderColor: "rgba(239, 68, 68, 0.45)", backgroundColor: "rgba(239, 68, 68, 0.16)" }}
-            onPress={onPreviewFailedPopup}
-          >
-            <Text className="font-semibold text-center" style={{ color: "#fca5a5", fontSize: quickButtonFontSize }}>
-              {text.openFailedPopup}
-            </Text>
-          </Pressable>
-        </View>
         <Pressable
           className="mt-2 rounded-xl border active:opacity-90"
           style={{ paddingHorizontal: quickButtonPaddingHorizontal, paddingVertical: quickButtonPaddingVertical, borderColor: "rgba(248, 113, 113, 0.55)", backgroundColor: "rgba(127, 29, 29, 0.3)" }}
@@ -246,6 +223,30 @@ export function StationTestMenuOverlay({
         >
           <Text className="font-semibold text-center" style={{ color: "#fca5a5", fontSize: quickButtonFontSize }}>
             {text.exitRealization}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          className="mt-3 flex-row items-center gap-2 active:opacity-80"
+          onPress={onToggleFeedbackPopupEnabled}
+        >
+          <View
+            className="items-center justify-center rounded-md border"
+            style={{
+              width: checkboxSize,
+              height: checkboxSize,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: isFeedbackPopupEnabled ? EXPEDITION_THEME.accent : "transparent",
+            }}
+          >
+            {isFeedbackPopupEnabled ? (
+              <Text className="font-semibold" style={{ color: accentButtonTextColor, fontSize: checkboxLabelFontSize }}>
+                ✓
+              </Text>
+            ) : null}
+          </View>
+          <Text className="flex-1" style={{ color: EXPEDITION_THEME.textMuted, fontSize: checkboxLabelFontSize }}>
+            {text.showFeedbackPopups}
           </Text>
         </Pressable>
 

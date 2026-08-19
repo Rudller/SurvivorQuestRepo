@@ -46,6 +46,10 @@ export type StationTestViewModel = {
   quizCorrectAnswerIndex?: number;
   quizAudioUrl?: string;
   quizAcceptedAnswers?: string[];
+  // Admin-configured Caesar cipher shift (1-25), caesar-cipher stations only.
+  // Left unset, resolveCaesarShift falls back to a shift derived
+  // deterministically from the station id.
+  quizCaesarShift?: number;
   status: ExpeditionTaskStatus;
   quizFailed?: boolean;
   startedAt: string | null;
@@ -59,9 +63,9 @@ export type StationTestMenuOverlayProps = {
   onEnterStation: (stationId: string) => void;
   onOpenWelcomeScreen: () => void;
   onOpenFinishScreen: () => void;
-  onPreviewSuccessPopup: () => void;
-  onPreviewFailedPopup: () => void;
   onExitRealization: () => void;
+  isFeedbackPopupEnabled: boolean;
+  onToggleFeedbackPopupEnabled: () => void;
 };
 
 export type StationPreviewOverlayProps = {
@@ -75,12 +79,6 @@ export type StationPreviewOverlayProps = {
   onQuizPassed?: (stationId: string) => void;
   onTimeExpired?: (stationId: string) => void;
   timedStationPointsDecayEnabled?: boolean;
-  debugOutcomePreview?: {
-    id: number;
-    variant: "success" | "failed";
-    message: string;
-  } | null;
-  onDebugOutcomePreviewConsumed?: () => void;
   languageFlag?: string;
   showLanguageButton?: boolean;
   onOpenLanguagePicker?: () => void;

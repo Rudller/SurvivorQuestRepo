@@ -120,6 +120,32 @@ describe("strong password month rule", () => {
   });
 });
 
+describe("strong password digit-sum rule", () => {
+  it("stays satisfiable even though the required code and current year already force digits into the password", () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const stationId = `station-digit-sum-solvable-${attempt}`;
+      // "medium" (not "easy") so the "contains-year" rule — which forces the
+      // current year's digits into the password too — is also active, same
+      // as the "code" rule that's always on.
+      const rules = buildStrongPasswordRules(stationId, "medium", "polish");
+      const digitSumRule = findRule(rules, "digit-sum");
+      const requiredCode = findRequiredCode(rules);
+      const forcedText = `${requiredCode}${new Date().getFullYear()}`;
+
+      // The forced code/year text alone must always be extendable up to the
+      // target by padding with single digits — that proves the target was
+      // shifted to sit at or above what's already forced in, not picked
+      // independently of it.
+      let solved = false;
+      for (let padding = 0; padding <= 30 && !solved; padding += 1) {
+        solved = digitSumRule.validate(`${forcedText}${"1".repeat(padding)}`);
+      }
+
+      expect(solved).toBe(true);
+    }
+  });
+});
+
 describe("strong password roman-sum rule", () => {
   it("sums roman numeral letter values regardless of case", () => {
     const rule = findRomanSumRule("station-roman-case");

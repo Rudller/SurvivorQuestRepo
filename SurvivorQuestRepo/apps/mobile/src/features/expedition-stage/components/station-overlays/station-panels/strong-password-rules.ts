@@ -276,12 +276,18 @@ export function buildStrongPasswordRules(
   language: StrongPasswordLanguage = "polish",
 ): StrongPasswordRule[] {
   const random = createRandom(`${todayKey()}:${stationId}:${difficulty}`);
-  const digitSum = 12 + Math.floor(random() * 16);
   const requiredEmoji = pick(["🔥", "🧠", "🚀", "🌲", "⚡", "🏕️"], random);
   // Deliberately not part of the seeded random draw: it's today's real
   // calendar month, same for every station/player, like "contains-year" below.
   const requiredMonth = MONTH_NAMES[language][new Date().getMonth()];
   const requiredCode = `${pick(["SQ", "QUEST", "SURV"], random)}${10 + Math.floor(random() * 90)}`;
+  // The "code" rule (always active) and "contains-year" rule (active on medium/
+  // hard) force specific digits into the password unconditionally — count what
+  // they already contribute before picking a target, otherwise the target
+  // could land below what's already forced in, making the digit-sum rule
+  // impossible to satisfy no matter what the player types.
+  const forcedDigitSum = sumDigits(requiredCode) + sumDigits(String(new Date().getFullYear()));
+  const digitSum = forcedDigitSum + Math.floor(random() * 16);
   // The "month" and "code" rules force specific literal text into the password,
   // and that text can itself contain roman-numeral letters (e.g. every Polish
   // month name has at least one) — count what those two already contribute

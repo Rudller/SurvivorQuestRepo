@@ -40,6 +40,8 @@ import { QuizOutcomePopupPanel } from "../components/station-overlays/station-pa
 import { ExpeditionStageOverlayProvider, ExpeditionStageSessionProvider } from "./expedition-stage-context";
 import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
 import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
+import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
+import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { getMobileApiErrorCode, getMobileApiErrorStatusCode } from "../api/mobile-session.api";
 
 function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
@@ -105,15 +107,13 @@ const EXPEDITION_STAGE_TEXT: Record<
     pointsQrAlreadyClaimed: string;
     pointsQrClaimedByOtherTeam: string;
     realizationEndedCannotOpenStations: string;
-    noStationsForPopupPreview: string;
-    successPopupPreview: string;
-    failedPopupPreview: string;
     realizationEndedCannotStartTasks: string;
     taskTimerStarted: string;
     taskAlreadyFailedAfterClose: string;
     taskCompleted: string;
     stationAlreadyCompleted: string;
     stationAlreadyFailed: string;
+    stationPhotoPendingReview: string;
     timedTaskAlertTitle: string;
     timedTaskAlertBody: string;
     timedTaskAlertBack: string;
@@ -157,15 +157,13 @@ const EXPEDITION_STAGE_TEXT: Record<
     pointsQrAlreadyClaimed: "Ten kod został już zaliczony.",
     pointsQrClaimedByOtherTeam: "Ten kod został już wykorzystany przez inną drużynę.",
     realizationEndedCannotOpenStations: "Realizacja została zakończona. Nie można otwierać stanowisk.",
-    noStationsForPopupPreview: "Brak stanowisk do podglądu popupu.",
-    successPopupPreview: "Podgląd popupu zaliczonego zadania.",
-    failedPopupPreview: "Podgląd popupu niezaliczonego zadania.",
     realizationEndedCannotStartTasks: "Realizacja została zakończona. Nie można uruchamiać nowych zadań.",
     taskTimerStarted: "Licznik zadania uruchomiony.",
     taskAlreadyFailedAfterClose: "To zadanie zostało oznaczone jako niezaliczone po zamknięciu stanowiska.",
     taskCompleted: "Zadanie zaliczone.",
     stationAlreadyCompleted: "To zadanie zostało już wykonane.",
     stationAlreadyFailed: "To zadanie zostało już oznaczone jako niezaliczone.",
+    stationPhotoPendingReview: "Zdjęcie wysłane, czeka na akceptację przez organizatora.",
     timedTaskAlertTitle: "Uwaga: opuszczenie stanowiska",
     timedTaskAlertBody: "Jeśli zamkniesz stanowisko bez ukończenia, zadanie zostanie oznaczone jako niezaliczone.",
     timedTaskAlertBack: "Wróć",
@@ -208,15 +206,13 @@ const EXPEDITION_STAGE_TEXT: Record<
     pointsQrAlreadyClaimed: "This code has already been claimed.",
     pointsQrClaimedByOtherTeam: "This code has already been claimed by another team.",
     realizationEndedCannotOpenStations: "The realization has ended. Stations cannot be opened.",
-    noStationsForPopupPreview: "No stations available for popup preview.",
-    successPopupPreview: "Preview of passed task popup.",
-    failedPopupPreview: "Preview of failed task popup.",
     realizationEndedCannotStartTasks: "The realization has ended. New tasks cannot be started.",
     taskTimerStarted: "Task timer started.",
     taskAlreadyFailedAfterClose: "This task was marked as failed after closing the station.",
     taskCompleted: "Task completed.",
     stationAlreadyCompleted: "This task has already been completed.",
     stationAlreadyFailed: "This task has already been marked as failed.",
+    stationPhotoPendingReview: "Photo submitted, waiting for organizer approval.",
     timedTaskAlertTitle: "Warning: leaving station",
     timedTaskAlertBody: "If you close the station before completion, the task will be marked as failed.",
     timedTaskAlertBack: "Back",
@@ -259,15 +255,13 @@ const EXPEDITION_STAGE_TEXT: Record<
     pointsQrAlreadyClaimed: "Цей код вже було зараховано.",
     pointsQrClaimedByOtherTeam: "Цей код вже використала інша команда.",
     realizationEndedCannotOpenStations: "Реалізацію завершено. Не можна відкривати станції.",
-    noStationsForPopupPreview: "Немає станцій для попереднього перегляду popup.",
-    successPopupPreview: "Попередній перегляд popup зарахованого завдання.",
-    failedPopupPreview: "Попередній перегляд popup незарахованого завдання.",
     realizationEndedCannotStartTasks: "Реалізацію завершено. Не можна запускати нові завдання.",
     taskTimerStarted: "Таймер завдання запущено.",
     taskAlreadyFailedAfterClose: "Це завдання позначено як незараховане після закриття станції.",
     taskCompleted: "Завдання зараховано.",
     stationAlreadyCompleted: "Це завдання вже виконано.",
     stationAlreadyFailed: "Це завдання вже позначено як невиконане.",
+    stationPhotoPendingReview: "Фото надіслано, очікує на підтвердження організатора.",
     timedTaskAlertTitle: "Увага: вихід зі станції",
     timedTaskAlertBody: "Якщо закрити станцію без завершення, завдання буде позначено як незараховане.",
     timedTaskAlertBack: "Назад",
@@ -310,15 +304,13 @@ const EXPEDITION_STAGE_TEXT: Record<
     pointsQrAlreadyClaimed: "Этот код уже был зачтён.",
     pointsQrClaimedByOtherTeam: "Этот код уже использовала другая команда.",
     realizationEndedCannotOpenStations: "Реализация завершена. Нельзя открывать станции.",
-    noStationsForPopupPreview: "Нет станций для предпросмотра popup.",
-    successPopupPreview: "Предпросмотр popup зачтённого задания.",
-    failedPopupPreview: "Предпросмотр popup незачтённого задания.",
     realizationEndedCannotStartTasks: "Реализация завершена. Нельзя запускать новые задания.",
     taskTimerStarted: "Таймер задания запущен.",
     taskAlreadyFailedAfterClose: "Это задание было отмечено как незачтённое после закрытия станции.",
     taskCompleted: "Задание зачтено.",
     stationAlreadyCompleted: "Это задание уже выполнено.",
     stationAlreadyFailed: "Это задание уже отмечено как невыполненное.",
+    stationPhotoPendingReview: "Фото отправлено, ожидает подтверждения организатора.",
     timedTaskAlertTitle: "Внимание: выход со станции",
     timedTaskAlertBody: "Если закрыть станцию без выполнения, задание будет отмечено как незачтённое.",
     timedTaskAlertBack: "Назад",
@@ -831,8 +823,14 @@ export function ExpeditionStageScreen({
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-  const [, setActionMessage] = useState<string | null>(null);
-  const [, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { transientPopup } = useExpeditionStageTransientPopup({
+    errorMessage: null,
+    locationError: null,
+    actionError,
+    actionMessage,
+  });
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(false);
   const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
@@ -1101,6 +1099,7 @@ export function ExpeditionStageScreen({
                 quizCorrectAnswerIndex: stationCatalog.quiz?.correctAnswerIndex,
                 quizAudioUrl: stationCatalog.quiz?.audioUrl,
                 quizAcceptedAnswers: stationCatalog.quiz?.acceptedAnswers,
+                quizCaesarShift: stationCatalog.quiz?.caesarShift,
                 status: task?.status ?? "todo",
                 quizFailed: (task?.status ?? "todo") === "failed",
                 startedAt: task?.startedAt ?? null,
@@ -1263,9 +1262,6 @@ export function ExpeditionStageScreen({
     taskByStationId,
     text: {
       realizationEndedCannotOpenStations: text.realizationEndedCannotOpenStations,
-      noStationsForPopupPreview: text.noStationsForPopupPreview,
-      successPopupPreview: text.successPopupPreview,
-      failedPopupPreview: text.failedPopupPreview,
       realizationEndedCannotStartTasks: text.realizationEndedCannotStartTasks,
       taskTimerStarted: text.taskTimerStarted,
       taskAlreadyFailedAfterClose: text.taskAlreadyFailedAfterClose,
@@ -1275,6 +1271,7 @@ export function ExpeditionStageScreen({
       locationRequired: text.locationRequired,
       stationAlreadyCompleted: text.stationAlreadyCompleted,
       stationAlreadyFailed: text.stationAlreadyFailed,
+      stationPhotoPendingReview: text.stationPhotoPendingReview,
     },
     startStationTask,
     completeStationTask,
@@ -1606,6 +1603,16 @@ export function ExpeditionStageScreen({
       </View>
 
       <View className="absolute left-3 right-3 items-center" style={{ bottom: insets.bottom + 12 }}>
+        {overlayFlow.isFeedbackPopupEnabled && transientPopup ? (
+          <View pointerEvents="none" className="mb-2 w-full max-w-[560px]">
+            <MobileFeedbackBanner
+              message={transientPopup.message}
+              tone={transientPopup.tone}
+              style={{ width: "100%" }}
+            />
+          </View>
+        ) : null}
+
         {shouldShowTopLeaderboard ? (
           <View className="mb-2 w-full max-w-[560px]">
             <TopLeaderboardStrip

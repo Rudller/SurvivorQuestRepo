@@ -59,13 +59,13 @@ export function ExpeditionStageOverlayLayer({
           overlayFlow.setIsStationTestMenuOpen(false);
           overlayFlow.setIsFinishPreviewOpen(true);
         }}
-        onPreviewSuccessPopup={() => overlayFlow.handlePreviewOutcomePopup("success")}
-        onPreviewFailedPopup={() => overlayFlow.handlePreviewOutcomePopup("failed")}
         onExitRealization={onExitRealization}
         onOpenWelcomeScreen={() => {
           overlayFlow.setIsStationTestMenuOpen(false);
           overlayFlow.setIsWelcomePreviewOpen(true);
         }}
+        isFeedbackPopupEnabled={overlayFlow.isFeedbackPopupEnabled}
+        onToggleFeedbackPopupEnabled={overlayFlow.handleToggleFeedbackPopupEnabled}
       />
 
       <WelcomePreviewOverlay
@@ -95,8 +95,6 @@ export function ExpeditionStageOverlayLayer({
         onQuizFailed={overlayFlow.handleQuizFailed}
         onTimeExpired={overlayFlow.handleTimeStationExpired}
         timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
-        debugOutcomePreview={overlayFlow.debugOutcomePreview}
-        onDebugOutcomePreviewConsumed={() => overlayFlow.setDebugOutcomePreview(null)}
         languageFlag={languageFlag}
         showLanguageButton={showLanguageButton}
         onOpenLanguagePicker={onOpenLanguagePicker}
@@ -138,6 +136,19 @@ export function ExpeditionStageOverlayLayer({
         onStart={() => {
           void overlayFlow.handleStartPendingTime();
         }}
+      />
+
+      <QuizPrestartOverlay
+        visible={Boolean(overlayFlow.pendingPhotoStartStation)}
+        stationName={overlayFlow.pendingPhotoStartStation?.name ?? null}
+        stationType={overlayFlow.pendingPhotoStartStation?.stationType ?? "photo-task"}
+        timeLimitSeconds={overlayFlow.pendingPhotoStartStation?.timeLimitSeconds ?? 0}
+        points={overlayFlow.pendingPhotoStartStation?.points ?? 0}
+        timedStationPointsDecayEnabled={sessionState.realization.timedStationPointsDecayEnabled}
+        challengeDifficultyMode={overlayFlow.pendingPhotoStartStation?.challengeDifficultyMode ?? "admin"}
+        challengeDifficulty={overlayFlow.pendingPhotoStartStation?.challengeDifficulty ?? "medium"}
+        onClose={() => overlayFlow.setPendingPhotoStartStationId(null)}
+        onStart={() => overlayFlow.handleStartPendingPhoto()}
       />
 
       <AlreadyCompletedNoticeOverlay

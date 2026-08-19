@@ -310,6 +310,11 @@ function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["qui
   const acceptedAnswers = asArray(parsed.acceptedAnswers ?? parsed.accepted_answers)
     .map((item) => asString(item).trim())
     .filter((item) => item.length > 0);
+  const parsedCaesarShift = asNumber(parsed.caesarShift ?? parsed.caesar_shift, Number.NaN);
+  const caesarShift =
+    Number.isInteger(parsedCaesarShift) && parsedCaesarShift >= 1 && parsedCaesarShift <= 25
+      ? parsedCaesarShift
+      : undefined;
 
   return {
     question,
@@ -317,6 +322,7 @@ function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["qui
     correctAnswerIndex,
     audioUrl: asString(parsed.audioUrl ?? parsed.audio_url).trim() || undefined,
     ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
+    ...(caesarShift !== undefined ? { caesarShift } : {}),
   };
 }
 
@@ -677,7 +683,7 @@ export function buildMobileApiHttpError(data: MobileApiError, fallbackStatusCode
   return { message, statusCode };
 }
 
-async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
+export async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {

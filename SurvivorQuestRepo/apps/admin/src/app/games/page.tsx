@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
@@ -11,6 +11,10 @@ import { StationsTable } from "@/features/games/components/stations-table";
 import { CreateStationForm } from "@/features/games/components/create-station-form";
 import { EditStationModal } from "@/features/games/components/edit-station-modal";
 import type { StationSortField, SortDirection } from "@/features/games/station.utils";
+import { useGetRiskCategoriesQuery } from "@/features/risk-quiz/api/risk-quiz.api";
+import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
+
+type StationScope = "regular" | "riskQuiz";
 
 export default function StationPage() {
   const router = useRouter();
@@ -23,10 +27,41 @@ export default function StationPage() {
   const { data: games, isLoading: isGamesLoading, isError, error, refetch } = useGetStationsQuery(undefined, {
     skip: !canManageStations,
   });
+  const { data: riskCategories } = useGetRiskCategoriesQuery(undefined, { skip: !canManageStations });
 
   const [sortField, setSortField] = useState<StationSortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [editingGame, setEditingGame] = useState<Station | null>(null);
+  const [stationScope, setStationScope] = useState<StationScope>("regular");
+
+  const riskQuizStationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const category of riskCategories ?? []) {
+      for (const poolStation of category.poolStations) {
+        ids.add(poolStation.stationId);
+      }
+    }
+    return ids;
+  }, [riskCategories]);
+
+  const scopedGames = useMemo(
+    () =>
+      (games ?? []).filter((game) =>
+        stationScope === "riskQuiz" ? riskQuizStationIds.has(game.id) : !riskQuizStationIds.has(game.id),
+      ),
+    [games, riskQuizStationIds, stationScope],
+  );
+
+  const stationScopeTabs: TabItem[] = [
+    {
+      id: "regular",
+      label: `Zwykłe stanowiska (${(games ?? []).filter((game) => !riskQuizStationIds.has(game.id)).length})`,
+    },
+    {
+      id: "riskQuiz",
+      label: `Stanowiska Ryzykantów (${riskQuizStationIds.size})`,
+    },
+  ];
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -85,14 +120,27 @@ export default function StationPage() {
           )}
 
           {!isGamesLoading && !isError && (
-            <StationsTable
-              stations={games ?? []}
-              sortField={sortField}
-              sortDirection={sortDirection}
-              onSortFieldChange={setSortField}
-              onSortDirectionChange={setSortDirection}
-              onEdit={setEditingGame}
-            />
+            <>
+              <TabStrip
+                tabs={stationScopeTabs}
+                activeId={stationScope}
+                onChange={(id) => setStationScope(id as StationScope)}
+              />
+              {stationScope === "riskQuiz" ? (
+                <p className="text-xs text-zinc-500">
+                  Stanowiska przypisane do puli którejkolwiek kategorii Ryzykantów. Zarządzanie pulami: zakładka
+                  „Ryzykanci” w panelu bocznym.
+                </p>
+              ) : null}
+              <StationsTable
+                stations={scopedGames}
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onSortFieldChange={setSortField}
+                onSortDirectionChange={setSortDirection}
+                onEdit={setEditingGame}
+              />
+            </>
           )}
 
           {isCreatePanelOpen && (

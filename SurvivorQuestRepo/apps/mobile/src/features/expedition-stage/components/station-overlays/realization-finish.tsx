@@ -491,12 +491,12 @@ export function RealizationFinishOverlay({
       <Animated.View
         className="w-full rounded-3xl border"
         style={{
-          maxWidth: isTablet ? 1120 : 640,
+          maxWidth: isTablet ? 1200 : 680,
           borderColor: EXPEDITION_THEME.border,
           backgroundColor: EXPEDITION_THEME.panel,
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
-          padding: isTablet ? 28 : 18,
+          padding: isTablet ? 32 : 22,
         }}
       >
         {showLeaderboard ? (
@@ -521,10 +521,10 @@ export function RealizationFinishOverlay({
           </Text>
         </View>
 
-        <Text className={isTablet ? "mt-2 text-xl font-semibold" : "mt-2 text-base font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
+        <Text className={isTablet ? "mt-2 text-2xl font-semibold" : "mt-2 text-lg font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
           {resolveReasonLabel(reason, text)}
         </Text>
-        <Text className={isTablet ? "mt-1 text-sm" : "mt-1 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className={isTablet ? "mt-1 text-base" : "mt-1 text-sm"} style={{ color: EXPEDITION_THEME.textMuted }}>
           {resolveReasonSubtitle(reason, text)}
         </Text>
         {endedAt ? (
@@ -588,13 +588,18 @@ export function RealizationFinishOverlay({
           )}
         </View>
 
-        <Text
-          className={isTablet ? "mt-5 text-base font-semibold" : "mt-4 text-sm font-semibold"}
-          style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center", lineHeight: isTablet ? 24 : 20 }}
+        <View
+          className="mt-5 rounded-xl border px-3 py-3"
+          style={{ borderColor: EXPEDITION_THEME.accentStrong, backgroundColor: EXPEDITION_THEME.panelStrong }}
         >
-          {text.finalInstruction}{" "}
-          <Text style={{ fontWeight: "900" }}>{text.finalInstructionBold}</Text> {text.finalInstructionSuffix}
-        </Text>
+          <Text
+            className={isTablet ? "text-xl font-semibold" : "text-lg font-semibold"}
+            style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center", lineHeight: isTablet ? 32 : 27 }}
+          >
+            {text.finalInstruction}{" "}
+            <Text style={{ fontWeight: "900" }}>{text.finalInstructionBold}</Text> {text.finalInstructionSuffix}
+          </Text>
+        </View>
 
         {canClose ? (
           <Pressable

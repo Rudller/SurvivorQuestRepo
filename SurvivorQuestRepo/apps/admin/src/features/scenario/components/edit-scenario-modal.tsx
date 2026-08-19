@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Scenario } from "../types/scenario";
 import type { Station } from "@/features/games/types/station";
+import { groupStationsByCategory } from "@/features/games/station-catalog.utils";
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/scenario.api";
 
@@ -19,6 +20,8 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
   const [editValues, setEditValues] = useState({
     name: scenario.name,
     description: scenario.description,
+    introText: scenario.introText,
+    gameRules: scenario.gameRules,
     stationIds: scenario.stationIds,
   });
   const [editError, setEditError] = useState<string | null>(null);
@@ -31,6 +34,23 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
       stationIds: current.stationIds.includes(stationId)
         ? current.stationIds.filter((item) => item !== stationId)
         : [...current.stationIds, stationId],
+    }));
+  }
+
+  const stationGroups = useMemo(() => groupStationsByCategory(stations), [stations]);
+
+  function isGroupFullySelected(groupStations: Station[]) {
+    return groupStations.length > 0 && groupStations.every((station) => editValues.stationIds.includes(station.id));
+  }
+
+  function toggleGroupSelection(groupStations: Station[]) {
+    const groupIds = groupStations.map((station) => station.id);
+    const allSelected = isGroupFullySelected(groupStations);
+    setEditValues((current) => ({
+      ...current,
+      stationIds: allSelected
+        ? current.stationIds.filter((id) => !groupIds.includes(id))
+        : Array.from(new Set([...current.stationIds, ...groupIds])),
     }));
   }
 
@@ -87,6 +107,8 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                   id: scenario.id,
                   name: trimmedName,
                   description: trimmedDescription,
+                  introText: editValues.introText.trim(),
+                  gameRules: editValues.gameRules.trim(),
                   stationIds: editValues.stationIds,
                 }).unwrap();
                 onClose();
@@ -116,25 +138,67 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
             </label>
 
             <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
+              <textarea
+                value={editValues.introText}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, introText: event.target.value }))}
+                rows={4}
+                placeholder="Tekst wstępu podpowie się automatycznie przy tworzeniu realizacji z tego scenariusza"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Zasady gry</span>
+              <textarea
+                value={editValues.gameRules}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, gameRules: event.target.value }))}
+                rows={4}
+                placeholder="Zasady gry podpowiedzą się automatycznie przy tworzeniu realizacji z tego scenariusza"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+              />
+            </label>
+
+            <div className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
-              <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 pr-2">
-                {stations.map((station) => {
-                  const isChecked = editValues.stationIds.includes(station.id);
+              <div className="max-h-72 space-y-3 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3 pr-2">
+                {stationGroups.map((group) => {
+                  const groupSelected = isGroupFullySelected(group.stations);
 
                   return (
-                    <label key={station.id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
-                      <span className="truncate">{station.name}</span>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleStationSelection(station.id)}
-                        className="h-4 w-4 accent-amber-400"
-                      />
-                    </label>
+                    <div key={group.category} className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-zinc-400">
+                          {group.label} ({group.stations.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupSelection(group.stations)}
+                          className="rounded-md border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 transition hover:border-amber-400/60 hover:text-amber-200"
+                        >
+                          {groupSelected ? "Odznacz wszystkie" : "Zaznacz wszystkie"}
+                        </button>
+                      </div>
+                      {group.stations.map((station) => {
+                        const isChecked = editValues.stationIds.includes(station.id);
+
+                        return (
+                          <label key={station.id} className="flex items-center justify-between gap-3 text-sm text-zinc-200">
+                            <span className="truncate">{station.name}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleStationSelection(station.id)}
+                              className="h-4 w-4 accent-amber-400"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
-            </label>
+            </div>
 
             {editError && <p className="text-sm text-red-300">{editError}</p>}
 

@@ -18,6 +18,7 @@ import {
 import Svg, { Circle, Path } from "react-native-svg";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
+import { RiskQuizScreen } from "../features/risk-quiz/ui/risk-quiz-screen";
 import type {
   OnboardingSession,
   RealizationLanguage,
@@ -38,7 +39,7 @@ import {
   isSessionTokenInvalidError,
 } from "../features/expedition-stage/api/mobile-session.api";
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
-import { AutoScrollingBox } from "../shared/ui/auto-scrolling-box";
+import { AutoScrollingIntroBox, parseInlineRules, parseRulesBlocks } from "../shared/ui/intro-text-preview";
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
@@ -71,74 +72,6 @@ type OnboardingRecoveryIntent = {
   apiBaseUrl: string | null;
   notice: string;
 };
-
-type RulesBlock = {
-  kind: "paragraph" | "unordered" | "ordered";
-  text: string;
-  order?: number;
-};
-
-type InlineRulesPart = {
-  text: string;
-  bold?: boolean;
-  italic?: boolean;
-};
-
-function parseRulesBlocks(rawText: string): RulesBlock[] {
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0);
-
-  return lines.map((line) => {
-    const unorderedMatch = /^[-*]\s+(.*)$/.exec(line);
-    if (unorderedMatch) {
-      return { kind: "unordered", text: unorderedMatch[1].trim() };
-    }
-
-    const orderedMatch = /^(\d+)\.\s+(.*)$/.exec(line);
-    if (orderedMatch) {
-      return {
-        kind: "ordered",
-        order: Number(orderedMatch[1]),
-        text: orderedMatch[2].trim(),
-      };
-    }
-
-    return { kind: "paragraph", text: line.trim() };
-  });
-}
-
-function parseInlineRules(text: string): InlineRulesPart[] {
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  const parts: InlineRulesPart[] = [];
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(tokenPattern)) {
-    const token = match[0];
-    const index = match.index ?? 0;
-
-    if (index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, index) });
-    }
-
-    if (token.startsWith("**") && token.endsWith("**")) {
-      parts.push({ text: token.slice(2, -2), bold: true });
-    } else if (token.startsWith("*") && token.endsWith("*")) {
-      parts.push({ text: token.slice(1, -1), italic: true });
-    } else {
-      parts.push({ text: token });
-    }
-
-    lastIndex = index + token.length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex) });
-  }
-
-  return parts;
-}
 
 type GameRulesScreenProps = {
   rulesText: string;
@@ -448,69 +381,6 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
         </Pressable>
       </View>
     </View>
-  );
-}
-
-function IntroTextPreview({ text, language }: { text: string; language: UiLanguage }) {
-  const uiText = MOBILE_APP_TEXT[language];
-  const blocks = parseRulesBlocks(text);
-  const adaptiveLayout = useAdaptiveLayout();
-  const isTablet = adaptiveLayout.isTablet;
-  const introFontSize = adaptiveLayout.fs(isTablet ? 16 : 12, 11, 20);
-  const introLineHeight = adaptiveLayout.s(isTablet ? 28 : 20, 18, 34);
-
-  if (blocks.length === 0) {
-    return (
-      <Text className="mt-3" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: introFontSize, lineHeight: introLineHeight }}>
-        {uiText.introFallback}
-      </Text>
-    );
-  }
-
-  return (
-    <View className="mt-3">
-      {blocks.map((block, blockIndex) => {
-        const parts = parseInlineRules(block.text);
-        const prefix = block.kind === "unordered" ? "• " : block.kind === "ordered" ? `${block.order ?? 1}. ` : "";
-
-        return (
-          <Text
-            key={`intro-${block.kind}-${blockIndex}`}
-            className="mb-1"
-            style={{ color: EXPEDITION_THEME.textPrimary, fontSize: introFontSize, lineHeight: introLineHeight }}
-          >
-            {prefix ? (
-              <Text className="font-semibold" style={{ color: EXPEDITION_THEME.accentStrong }}>
-                {prefix}
-              </Text>
-            ) : null}
-            {parts.map((part, partIndex) => (
-              <Text
-                key={`intro-${blockIndex}-${partIndex}`}
-                style={{
-                  fontWeight: part.bold ? "700" : "400",
-                  fontStyle: part.italic ? "italic" : "normal",
-                }}
-              >
-                {part.text}
-              </Text>
-            ))}
-          </Text>
-        );
-      })}
-    </View>
-  );
-}
-
-function AutoScrollingIntroBox({ text, language }: { text: string; language: UiLanguage }) {
-  return (
-    <AutoScrollingBox
-      className="mt-2 rounded-2xl border"
-      contentContainerStyle={{ padding: 12 }}
-      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-    >
-      <IntroTextPreview text={text} language={language} />
-    </AutoScrollingBox>
   );
 }
 
@@ -983,7 +853,7 @@ export function MobileApp() {
               </Text>
               <AutoScrollingIntroBox
                 text={onboardingSession.realization?.introText?.trim() || ""}
-                language={uiLanguage}
+                fallbackText={text.introFallback}
               />
               <HiddenResetOnHold
                 language={uiLanguage}
@@ -1037,7 +907,21 @@ export function MobileApp() {
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
-          {onboardingSession ? (
+          {onboardingSession && onboardingSession.realization?.type === "risk-quiz" ? (
+            <RiskQuizScreen
+              session={onboardingSession}
+              onSessionInvalid={(reason) => {
+                void resetToOnboardingWithMessage(reason);
+              }}
+              onSelectedLanguageChange={(language) => {
+                void handleSelectedLanguageChange(language);
+              }}
+              themeMode={activeThemeMode}
+              onToggleTheme={() => {
+                void handleThemePreferenceToggle();
+              }}
+            />
+          ) : onboardingSession ? (
             <ExpeditionStageScreen
               session={onboardingSession}
               onSessionInvalid={(reason) => {

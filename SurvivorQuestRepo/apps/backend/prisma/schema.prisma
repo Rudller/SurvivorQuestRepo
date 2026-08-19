@@ -58,6 +58,13 @@ enum RealizationType {
   EVENING_ATTRACTIONS
   DJ
   RECREATION
+  RISK_QUIZ
+}
+
+enum RiskDifficulty {
+  EASY
+  MEDIUM
+  HARD
 }
 
 enum RealizationLanguage {
@@ -153,6 +160,8 @@ model Station {
   taskProgresses   TeamTaskProgress[]
   photos           TeamPhoto[]
   stationScans     TeamStationScan[]
+  riskPoolMemberships RiskPoolStation[]
+  riskAttempts     RiskAttempt[]
 
   @@unique([realizationId, qrEntryCode])
 }
@@ -223,9 +232,11 @@ model Realization {
   timedStationPointsDecayEnabled Boolean @default(false)
   hideTaskList        Boolean            @default(false)
   joinCode            String             @unique
+  riskSchemeId        String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   scenario            Scenario           @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  riskScheme          RiskScheme?        @relation(fields: [riskSchemeId], references: [id], onDelete: SetNull)
   teams               Team[]
   teamAssignments     TeamAssignment[]
   teamTaskProgresses  TeamTaskProgress[]
@@ -233,6 +244,8 @@ model Realization {
   photos              TeamPhoto[]
   stationScans        TeamStationScan[]
   pointsQrCodes       PointsQrCode[]
+  riskCards           RiskCard[]
+  riskAttempts        RiskAttempt[]
 }
 
 model Team {
@@ -260,6 +273,7 @@ model Team {
   photos             TeamPhoto[]
   stationScans       TeamStationScan[]
   pointsQrClaims     PointsQrCodeClaim[]
+  riskAttempts       RiskAttempt[]
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -362,6 +376,95 @@ model PointsQrCodeClaim {
 
   @@unique([pointsQrCodeId, teamId])
   @@index([teamId])
+}
+
+// A named deck ("talia") assembled from existing, reusable Categories —
+// same relationship shape as Scenario -> Station: the deck just assigns
+// already-existing content, it doesn't own or clone it.
+model RiskScheme {
+  id               String              @id @default(uuid())
+  name             String              @unique
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  schemeCategories RiskSchemeCategory[]
+  realizations     Realization[]
+}
+
+model RiskSchemeCategory {
+  id         String       @id @default(uuid())
+  schemeId   String
+  categoryId String
+  order      Int          @default(0)
+  createdAt  DateTime     @default(now())
+  scheme     RiskScheme   @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  category   RiskCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([schemeId, categoryId])
+  @@index([schemeId, order])
+}
+
+// A standalone, reusable pool of tasks (by difficulty) — a "task bank" for
+// one topic, independent of any deck/realization, assignable into many
+// decks — same standalone-library shape as Station templates.
+model RiskCategory {
+  id           String              @id @default(uuid())
+  name         String              @unique
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  poolStations RiskPoolStation[]
+  cards        RiskCard[]
+  schemes      RiskSchemeCategory[]
+}
+
+// Assigns an existing Station (any of the 19 library types — quiz, wordle,
+// hangman, memory, ...) to a (category, difficulty) pool. Drawing a card
+// picks a random un-attempted assignment from here instead of a bespoke
+// question — the pool's content IS the shared Station library.
+model RiskPoolStation {
+  id         String         @id @default(uuid())
+  categoryId String
+  difficulty RiskDifficulty
+  stationId  String
+  createdAt  DateTime       @default(now())
+  category   RiskCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  station    Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, difficulty, stationId])
+  @@index([categoryId, difficulty])
+}
+
+model RiskCard {
+  id            String         @id @default(uuid())
+  realizationId String
+  categoryId    String
+  difficulty    RiskDifficulty
+  code          String
+  createdAt     DateTime       @default(now())
+  realization   Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  category      RiskCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attempts      RiskAttempt[]
+
+  @@unique([realizationId, code])
+  @@index([categoryId, difficulty])
+}
+
+model RiskAttempt {
+  id            String         @id @default(uuid())
+  realizationId String
+  teamId        String
+  cardId        String
+  stationId     String
+  selectedIndex Int?
+  isCorrect     Boolean
+  pointsDelta   Int
+  createdAt     DateTime       @default(now())
+  realization   Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team          Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  card          RiskCard       @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  station       Station        @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, stationId])
+  @@index([realizationId, teamId])
 }
 
 model EventLog {
