@@ -67,6 +67,23 @@ export async function fetchRiskQuizDeckStatus(
   });
 }
 
+export type RiskTestMenuEntry = {
+  categoryId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+  code: string;
+};
+
+export async function fetchRiskQuizTestMenu(
+  apiBaseUrl: string,
+  payload: { sessionToken: string },
+) {
+  return requestMobileApi<RiskTestMenuEntry[]>(apiBaseUrl, "/mobile/risk-quiz/test-menu", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function postRiskQuizAnswer(
   apiBaseUrl: string,
   payload: {

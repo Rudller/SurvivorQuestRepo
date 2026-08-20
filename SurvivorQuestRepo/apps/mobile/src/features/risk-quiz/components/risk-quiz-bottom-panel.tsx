@@ -1,10 +1,17 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Image, Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
 // Animated flame icon shown next to the streak count while it's active.
 const STREAK_FIRE_GIF_URL = "https://cdn.pixabay.com/animation/2025/06/26/05/26/05-26-59-506_512.gif";
+
+// Scale-squish-and-release "flip", matching the memory station's card flip
+// (see memory-station-panel.tsx) — a true 3D rotateY/backfaceVisibility flip
+// does not render reliably on react-native-web, so we swap the icon/color at
+// the animation's midpoint instead, same as the proven memory-card pattern.
+const FLIP_HALF_DURATION_MS = 150;
 
 type RiskQuizBottomPanelProps = {
   remainingLabel: string;
@@ -13,6 +20,11 @@ type RiskQuizBottomPanelProps = {
   multiplier: number;
   onOpenQrScanner: () => void;
   isScannerOpening?: boolean;
+  // While a card is open, the scan button flips into a red "close" button
+  // instead — closing abandons the current card client-side (no answer is
+  // submitted) and returns to the idle deck view.
+  isCardOpen?: boolean;
+  onCloseCard?: () => void;
 };
 
 function QrScannerIcon({ size }: { size: number }) {
@@ -27,6 +39,15 @@ function QrScannerIcon({ size }: { size: number }) {
   );
 }
 
+function CloseCardIcon({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 6L18 18" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+      <Path d="M18 6L6 18" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 export function RiskQuizBottomPanel({
   remainingLabel,
   isCompleted,
@@ -34,8 +55,39 @@ export function RiskQuizBottomPanel({
   multiplier,
   onOpenQrScanner,
   isScannerOpening = false,
+  isCardOpen = false,
+  onCloseCard,
 }: RiskQuizBottomPanelProps) {
   const adaptiveLayout = useAdaptiveLayout();
+  const flipScaleAnimation = useRef(new Animated.Value(1)).current;
+  const wasCardOpenRef = useRef(isCardOpen);
+  const [showsCloseIcon, setShowsCloseIcon] = useState(isCardOpen);
+
+  useEffect(() => {
+    if (wasCardOpenRef.current === isCardOpen) {
+      return;
+    }
+    wasCardOpenRef.current = isCardOpen;
+    const swapTimeout = setTimeout(() => {
+      setShowsCloseIcon(isCardOpen);
+    }, FLIP_HALF_DURATION_MS);
+    Animated.sequence([
+      Animated.timing(flipScaleAnimation, {
+        toValue: 0,
+        duration: FLIP_HALF_DURATION_MS,
+        useNativeDriver: true,
+      }),
+      Animated.timing(flipScaleAnimation, {
+        toValue: 1,
+        duration: FLIP_HALF_DURATION_MS,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    return () => {
+      clearTimeout(swapTimeout);
+    };
+  }, [isCardOpen, flipScaleAnimation]);
+
   const isTabletLayout = adaptiveLayout.isTablet;
   const panelRadius = adaptiveLayout.s(isTabletLayout ? 32 : 30, 26, 36);
   const panelPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 18 : 16, 14, 22);
@@ -50,11 +102,13 @@ export function RiskQuizBottomPanel({
   const footerMarginTop = adaptiveLayout.s(isTabletLayout ? 9 : 8, 6, 10);
   const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
-  const footerLabel = isCompleted
-    ? "Realizacja zakończona"
-    : isScannerOpening
-      ? "Otwieranie skanera..."
-      : "Skanuj kartę";
+  const footerLabel = isCardOpen
+    ? "Zamknij kartę"
+    : isCompleted
+      ? "Realizacja zakończona"
+      : isScannerOpening
+        ? "Otwieranie skanera..."
+        : "Skanuj kartę";
   const hasStreak = streak > 0;
 
   return (
@@ -83,17 +137,26 @@ export function RiskQuizBottomPanel({
 
         <View style={{ width: qrButtonSize + qrButtonMarginHorizontal * 2, alignItems: "center" }}>
           <Pressable
-            className="items-center justify-center rounded-full active:opacity-90"
+            className="items-center justify-center active:opacity-90"
             style={{
               width: qrButtonSize,
               height: qrButtonSize,
-              backgroundColor: isCompleted ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
-              opacity: isScannerOpening || isCompleted ? 0.7 : 1,
+              opacity: !isCardOpen && (isScannerOpening || isCompleted) ? 0.7 : 1,
             }}
-            onPress={onOpenQrScanner}
-            disabled={isScannerOpening || isCompleted}
+            onPress={isCardOpen ? onCloseCard : onOpenQrScanner}
+            disabled={isCardOpen ? false : isScannerOpening || isCompleted}
           >
-            <QrScannerIcon size={qrIconSize} />
+            <Animated.View
+              className="items-center justify-center rounded-full"
+              style={{
+                width: qrButtonSize,
+                height: qrButtonSize,
+                backgroundColor: showsCloseIcon ? "#ef4444" : isCompleted ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
+                transform: [{ scaleY: flipScaleAnimation }],
+              }}
+            >
+              {showsCloseIcon ? <CloseCardIcon size={qrIconSize} /> : <QrScannerIcon size={qrIconSize} />}
+            </Animated.View>
           </Pressable>
           <Text className="text-center" style={{ marginTop: footerMarginTop, color: EXPEDITION_THEME.textSubtle, fontSize: footerFontSize }}>
             {footerLabel}

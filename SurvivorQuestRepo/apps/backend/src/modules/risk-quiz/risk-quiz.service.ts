@@ -4,13 +4,17 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { RiskDifficulty } from '@prisma/client';
+import {
+  RiskDifficulty,
+  StationType as PrismaStationType,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getOpaqueTokenCandidates } from '../../shared/lib/opaque-token';
 import {
   parseCompletionCode,
   resolveCompletionCodeInputMode,
 } from '../mobile/domain/mobile-station.helpers';
+import { fromPrismaStationType } from '../station/mappers/station.mapper';
 import {
   RISK_CARDS_PER_POOL,
   RISK_DIFFICULTY_ORDER,
@@ -20,7 +24,15 @@ import {
   RISK_STREAK_MULTIPLIER_STEP,
 } from './risk-quiz.constants';
 
-const ANSWER_INDEX_STATION_TYPES = new Set(['quiz', 'audio-quiz']);
+// station.type here is always the raw Prisma enum (straight from a Station
+// row) — NOT the lowercase-kebab string the mobile client uses elsewhere
+// (see fromPrismaStationType). Comparing against 'quiz'/'audio-quiz' here
+// silently never matched, so every QUIZ-type risk card fell through to the
+// generic "completed / gave up" flow instead of showing real answer options.
+const ANSWER_INDEX_STATION_TYPES = new Set<PrismaStationType>([
+  PrismaStationType.QUIZ,
+  PrismaStationType.AUDIO_QUIZ,
+]);
 
 const POLISH_DIACRITICS: Record<string, string> = {
   ą: 'a',
@@ -144,6 +156,62 @@ export class RiskQuizService {
     };
   }
 
+  // Test menu for the idle scan screen's hold-gesture shortcut (mirrors the
+  // normal station test menu) — one entry per (category, difficulty) pool
+  // that has at least one generated card, each carrying a real card `code`
+  // so tapping it can go through the exact same scanCard() path a physical
+  // QR scan would, instead of a separate no-op preview mode.
+  async listTestMenuEntries(sessionToken: string) {
+    const { realization } = await this.requireTeamSession(sessionToken);
+
+    if (!realization.riskSchemeId) {
+      return [];
+    }
+
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId: realization.riskSchemeId },
+      include: { category: true },
+      orderBy: { order: 'asc' },
+    });
+    const categoryIds = schemeCategories.map((item) => item.categoryId);
+
+    if (categoryIds.length === 0) {
+      return [];
+    }
+
+    const cards = await this.prisma.riskCard.findMany({
+      where: { realizationId: realization.id, categoryId: { in: categoryIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const entries: {
+      categoryId: string;
+      categoryName: string;
+      difficulty: RiskDifficulty;
+      code: string;
+    }[] = [];
+
+    for (const schemeCategory of schemeCategories) {
+      for (const difficulty of RISK_DIFFICULTY_ORDER) {
+        const card = cards.find(
+          (item) =>
+            item.categoryId === schemeCategory.categoryId &&
+            item.difficulty === difficulty,
+        );
+        if (card) {
+          entries.push({
+            categoryId: schemeCategory.categoryId,
+            categoryName: schemeCategory.category.name,
+            difficulty,
+            code: card.code,
+          });
+        }
+      }
+    }
+
+    return entries;
+  }
+
   // Deck status for the idle scan screen: how many category "decks" the
   // assigned scheme has, and how many stations (cards) this team still
   // hasn't attempted across every category/difficulty in that scheme.
@@ -194,7 +262,7 @@ export class RiskQuizService {
 
   private toRiskStationPayload(station: {
     id: string;
-    type: string;
+    type: PrismaStationType;
     name: string;
     description: string;
     imageUrl: string | null;
@@ -216,7 +284,7 @@ export class RiskQuizService {
 
     return {
       id: station.id,
-      type: station.type,
+      type: fromPrismaStationType(station.type),
       name: station.name,
       description: station.description,
       imageUrl: station.imageUrl,
@@ -361,7 +429,7 @@ export class RiskQuizService {
    * them, applied uniformly regardless of type.
    */
   private resolveOutcome(
-    station: { type: string; quizData: unknown },
+    station: { type: PrismaStationType; quizData: unknown },
     input: { selectedIndex?: number; completed?: boolean },
   ): { isCorrect: boolean; correctIndex?: number } {
     if (ANSWER_INDEX_STATION_TYPES.has(station.type)) {
@@ -583,7 +651,11 @@ export class RiskQuizService {
         const difficultySlug = RISK_DIFFICULTY_SLUG[difficulty];
 
         for (let index = 1; index <= RISK_CARDS_PER_POOL; index += 1) {
-          const code = `${categorySlug}-${difficultySlug}-${index}`;
+          // scanCard() uppercases whatever it scans before matching against
+          // this column (defensive against scan/typing case variance) — the
+          // stored code must be uppercase too, or it can never match.
+          const code =
+            `${categorySlug}-${difficultySlug}-${index}`.toUpperCase();
           if (existingCodes.has(code)) continue;
 
           await this.prisma.riskCard.create({

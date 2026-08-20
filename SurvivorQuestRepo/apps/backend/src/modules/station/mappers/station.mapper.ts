@@ -47,7 +47,7 @@ export function toPrismaStationType(type: StationType) {
   return PrismaStationType.MATCHING;
 }
 
-function fromPrismaStationType(type: PrismaStationType): StationType {
+export function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.QUIZ) return 'quiz';
   if (type === PrismaStationType.AUDIO_QUIZ) return 'audio-quiz';
   if (type === PrismaStationType.TIME) return 'time';

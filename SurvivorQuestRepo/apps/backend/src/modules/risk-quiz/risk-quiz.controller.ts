@@ -105,6 +105,15 @@ export class RiskQuizController {
     );
   }
 
+  @Post('test-menu')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async getTestMenu(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.listTestMenuEntries(
+      requireString(payload, 'sessionToken'),
+    );
+  }
+
   // --- Admin: categories ---
 
   @Get('admin/schemes')

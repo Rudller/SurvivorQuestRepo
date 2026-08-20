@@ -5,8 +5,8 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import {
   EXPEDITION_THEME,
-  TEAM_COLORS,
   getExpeditionThemeMode,
+  getTeamColors,
   type ExpeditionThemeMode,
 } from "../../onboarding/model/constants";
 import {
@@ -1147,7 +1147,7 @@ export function ExpeditionStageScreen({
     ],
   );
 
-  const teamColor = TEAM_COLORS.find((color) => color.key === sessionState.team.color) ?? null;
+  const teamColor = getTeamColors(uiLanguage).find((color) => color.key === sessionState.team.color) ?? null;
   const teamColorHex = teamColor?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColor?.label ?? session.team.colorLabel;
   const teamName = sessionState.team.name?.trim() || session.team.name || text.teamDefaultName;

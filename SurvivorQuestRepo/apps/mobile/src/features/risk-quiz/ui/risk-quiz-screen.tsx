@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { OnboardingSession, RealizationLanguage, RealizationLanguageOption } from "../../onboarding/model/types";
 import { getRealizationLanguageFlag, getRealizationLanguageLabel } from "../../onboarding/model/types";
-import { EXPEDITION_THEME, TEAM_COLORS, type ExpeditionThemeMode } from "../../onboarding/model/constants";
+import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../../onboarding/model/constants";
+import { resolveUiLanguage } from "../../i18n";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
 import {
@@ -12,11 +13,13 @@ import {
 } from "../../expedition-stage/api/mobile-session.api";
 import {
   fetchRiskQuizDeckStatus,
+  fetchRiskQuizTestMenu,
   postRiskQuizAnswer,
   postRiskQuizScan,
   type RiskAnswerResult,
   type RiskDeckStatus,
   type RiskScanResult,
+  type RiskTestMenuEntry,
 } from "../api/risk-quiz.api";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
@@ -59,6 +62,9 @@ const ANSWER_INDEX_TYPES = new Set(["quiz", "audio-quiz"]);
 const INTRO_FALLBACK_TEXT =
   "Witajcie w grze! Za chwilę zaczynamy — skanujcie karty, podejmujcie wyzwania i zdobywajcie punkty dla swojej drużyny. Powodzenia!";
 const START_POLL_INTERVAL_MS = 3000;
+// Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
+// same hold-the-team-banner gesture as normal gameplay's station test menu.
+const TEST_MENU_TRIGGER_HOLD_MS = 5000;
 
 export function RiskQuizScreen({
   session,
@@ -86,6 +92,13 @@ export function RiskQuizScreen({
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerResult, setAnswerResult] = useState<RiskAnswerResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTestMenuOpen, setIsTestMenuOpen] = useState(false);
+  const [isLoadingTestMenu, setIsLoadingTestMenu] = useState(false);
+  const [testMenuEntries, setTestMenuEntries] = useState<RiskTestMenuEntry[]>([]);
+  const [testMenuError, setTestMenuError] = useState<string | null>(null);
+  const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const questionRevealAnimation = useRef(new Animated.Value(0)).current;
+  const autoDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Mirrors the normal realization's "waiting for admin start" poll: while the
   // intro screen is showing, keep checking realization status and reveal the
@@ -175,6 +188,74 @@ export function RiskQuizScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showIntro]);
 
+  useEffect(() => {
+    return () => {
+      if (testMenuHoldTimeoutRef.current) {
+        clearTimeout(testMenuHoldTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Fade-and-slide-up reveal every time a new card is drawn (keyed off
+  // cardId, not just activeDraw !== null, so re-rendering the same question
+  // — e.g. after an answer submission — doesn't replay the animation).
+  useEffect(() => {
+    if (!activeDraw) {
+      return;
+    }
+    questionRevealAnimation.setValue(0);
+    Animated.timing(questionRevealAnimation, {
+      toValue: 1,
+      duration: 380,
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDraw?.cardId]);
+
+  // Shared by the auto-dismiss timer below and the bottom panel's flipped
+  // "close card" button — slides the card back out downward (mirroring the
+  // entrance) and clears it once the animation finishes. Closing never
+  // submits an answer; the card is just abandoned client-side.
+  function dismissActiveCard() {
+    if (autoDismissTimeoutRef.current) {
+      clearTimeout(autoDismissTimeoutRef.current);
+      autoDismissTimeoutRef.current = null;
+    }
+    Animated.timing(questionRevealAnimation, {
+      toValue: 0,
+      duration: 320,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setActiveDraw(null);
+        setAnswerResult(null);
+        setExhaustedNotice(null);
+      }
+    });
+  }
+
+  // Give the player a moment to read the "Dobrze!/Źle!" result, then
+  // auto-dismiss — cancelled if a fresh card gets drawn (answerResult resets
+  // to null) before the timer fires, so it never dismisses the wrong question.
+  useEffect(() => {
+    if (!answerResult) {
+      return;
+    }
+
+    autoDismissTimeoutRef.current = setTimeout(() => {
+      autoDismissTimeoutRef.current = null;
+      dismissActiveCard();
+    }, 2200);
+
+    return () => {
+      if (autoDismissTimeoutRef.current) {
+        clearTimeout(autoDismissTimeoutRef.current);
+        autoDismissTimeoutRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answerResult]);
+
   const selectedLanguage: RealizationLanguage =
     session.selectedLanguage ??
     liveRealization?.selectedLanguage ??
@@ -226,7 +307,8 @@ export function RiskQuizScreen({
     setIsLanguagePickerOpen(true);
   };
 
-  const teamColorFromPalette = TEAM_COLORS.find((color) => color.key === liveTeam?.color) ?? null;
+  const teamColorFromPalette =
+    getTeamColors(resolveUiLanguage(selectedLanguage)).find((color) => color.key === liveTeam?.color) ?? null;
   const teamColorHex = teamColorFromPalette?.hex ?? session.team.colorHex;
   const teamColorLabel = teamColorFromPalette?.label ?? session.team.colorLabel;
   const teamName = liveTeam?.name?.trim() || session.team.name || "Drużyna";
@@ -293,11 +375,41 @@ export function RiskQuizScreen({
     }
   }
 
-  function handleScanNext() {
-    setActiveDraw(null);
-    setAnswerResult(null);
-    setExhaustedNotice(null);
-    setIsScannerVisible(true);
+  async function openTestMenu() {
+    setIsTestMenuOpen(true);
+    setIsLoadingTestMenu(true);
+    setTestMenuError(null);
+    try {
+      const entries = await fetchRiskQuizTestMenu(apiBaseUrl, { sessionToken });
+      setTestMenuEntries(entries);
+    } catch (error) {
+      if (getMobileApiErrorStatusCode(error) === 401) {
+        onSessionInvalid();
+        return;
+      }
+      setTestMenuError(error instanceof Error ? error.message : "Nie udało się wczytać menu testowego.");
+    } finally {
+      setIsLoadingTestMenu(false);
+    }
+  }
+
+  function handleTestMenuHoldStart() {
+    testMenuHoldTimeoutRef.current = setTimeout(() => {
+      testMenuHoldTimeoutRef.current = null;
+      void openTestMenu();
+    }, TEST_MENU_TRIGGER_HOLD_MS);
+  }
+
+  function handleTestMenuHoldEnd() {
+    if (testMenuHoldTimeoutRef.current) {
+      clearTimeout(testMenuHoldTimeoutRef.current);
+      testMenuHoldTimeoutRef.current = null;
+    }
+  }
+
+  function handleEnterTestMenuEntry(entry: RiskTestMenuEntry) {
+    setIsTestMenuOpen(false);
+    void handleDetected(entry.code);
   }
 
   const isAnswerIndexType = activeDraw ? ANSWER_INDEX_TYPES.has(activeDraw.station.type) : false;
@@ -333,26 +445,42 @@ export function RiskQuizScreen({
     <SafeAreaView className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       <RiskQuizBackground isLightTheme={isLightTheme} />
       <View className="flex-1 px-3 py-3" style={{ rowGap: 10 }}>
-        <TopRealizationPanel
-          companyName={companyName}
-          logoUrl={liveRealization?.logoUrl}
-          teamName={teamName}
-          teamSlot={teamSlot}
-          teamColorHex={teamColorHex}
-          teamColorLabel={teamColorLabel}
-          teamIcon={teamIcon}
-          teamBadgeImageUrl={teamBadgeImageUrl}
-          points={teamPoints}
-          languageFlag={currentLanguageFlag}
-          showLanguageButton={hasMultipleLanguageOptions}
-          onOpenLanguagePicker={handleLanguageButtonPress}
-          themeMode={themeMode}
-          onToggleTheme={onToggleTheme}
-        />
+        <Pressable onPressIn={handleTestMenuHoldStart} onPressOut={handleTestMenuHoldEnd}>
+          <TopRealizationPanel
+            companyName={companyName}
+            logoUrl={liveRealization?.logoUrl}
+            teamName={teamName}
+            teamSlot={teamSlot}
+            teamColorHex={teamColorHex}
+            teamColorLabel={teamColorLabel}
+            teamIcon={teamIcon}
+            teamBadgeImageUrl={teamBadgeImageUrl}
+            points={teamPoints}
+            languageFlag={currentLanguageFlag}
+            showLanguageButton={hasMultipleLanguageOptions}
+            onOpenLanguagePicker={handleLanguageButtonPress}
+            themeMode={themeMode}
+            onToggleTheme={onToggleTheme}
+          />
+        </Pressable>
 
         <View className="flex-1 items-center justify-center">
           {activeDraw ? (
-            <View className="w-full" style={{ rowGap: 14 }}>
+            <Animated.View
+              className="w-full"
+              style={{
+                rowGap: 14,
+                opacity: questionRevealAnimation,
+                transform: [
+                  {
+                    translateY: questionRevealAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [28, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
               <Text style={{ color: EXPEDITION_THEME.textSubtle, fontSize: 13 }}>
                 {activeDraw.categoryName} • {difficultyLabel(activeDraw.difficulty)} • {activeDraw.station.name}
               </Text>
@@ -421,7 +549,7 @@ export function RiskQuizScreen({
               {isSubmittingAnswer ? <ActivityIndicator color={EXPEDITION_THEME.accent} /> : null}
 
               {answerResult ? (
-                <View style={{ rowGap: 10, alignItems: "center", marginTop: 8 }}>
+                <View style={{ alignItems: "center", marginTop: 8 }}>
                   <Text
                     style={{
                       color: answerResult.isCorrect ? "#22c55e" : "#ef4444",
@@ -433,18 +561,9 @@ export function RiskQuizScreen({
                     {answerResult.pointsDelta} pkt
                     {answerResult.isCorrect && answerResult.multiplier > 1 ? ` (x${answerResult.multiplier})` : ""}
                   </Text>
-                  <Pressable
-                    onPress={handleScanNext}
-                    className="rounded-2xl px-6 py-3"
-                    style={{ backgroundColor: EXPEDITION_THEME.accent }}
-                  >
-                    <Text style={{ color: EXPEDITION_THEME.background, fontSize: 16, fontWeight: "700" }}>
-                      Skanuj kolejną kartę
-                    </Text>
-                  </Pressable>
                 </View>
               ) : null}
-            </View>
+            </Animated.View>
           ) : (
             <View style={{ alignItems: "center", rowGap: 16 }}>
               <RiskQuizDeckStack
@@ -478,6 +597,8 @@ export function RiskQuizScreen({
               multiplier={multiplier}
               onOpenQrScanner={() => setIsScannerVisible(true)}
               isScannerOpening={isResolvingScan}
+              isCardOpen={Boolean(activeDraw)}
+              onCloseCard={dismissActiveCard}
             />
           </View>
         </View>
@@ -550,6 +671,86 @@ export function RiskQuizScreen({
               className="mt-4 rounded-2xl border px-4 py-3 active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsLanguagePickerOpen(false)}
+            >
+              <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                Zamknij
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isTestMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsTestMenuOpen(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center px-6"
+          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
+          onPress={() => setIsTestMenuOpen(false)}
+        >
+          <Pressable
+            className="w-full self-center rounded-3xl border px-6 py-6"
+            style={{
+              maxWidth: 440,
+              maxHeight: "80%",
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="text-lg font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              Menu testowe
+            </Text>
+            <Text className="mt-1" style={{ color: EXPEDITION_THEME.textMuted, fontSize: 13 }}>
+              Losuje kartę z wybranej puli tak samo jak prawdziwy skan — zużywa realną kartę z talii.
+            </Text>
+
+            {isLoadingTestMenu ? (
+              <View className="mt-5 items-center">
+                <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+              </View>
+            ) : testMenuError ? (
+              <Text className="mt-4" style={{ color: "#ef4444", fontSize: 14 }}>
+                {testMenuError}
+              </Text>
+            ) : testMenuEntries.length === 0 ? (
+              <Text className="mt-4" style={{ color: EXPEDITION_THEME.textMuted, fontSize: 14 }}>
+                Brak dostępnych puli kart dla tej realizacji.
+              </Text>
+            ) : (
+              <ScrollView className="mt-4" style={{ maxHeight: 420 }}>
+                <View style={{ rowGap: 10 }}>
+                  {testMenuEntries.map((entry) => (
+                    <Pressable
+                      key={`${entry.categoryId}-${entry.difficulty}`}
+                      className="flex-row items-center justify-between rounded-2xl border px-4 py-4 active:opacity-90"
+                      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                      onPress={() => handleEnterTestMenuEntry(entry)}
+                    >
+                      <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                        {entry.categoryName} • {difficultyLabel(entry.difficulty)}
+                      </Text>
+                      <View
+                        className="rounded-full px-3 py-1.5"
+                        style={{ backgroundColor: EXPEDITION_THEME.accent }}
+                      >
+                        <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.background }}>
+                          Wejdź
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+
+            <Pressable
+              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-90"
+              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+              onPress={() => setIsTestMenuOpen(false)}
             >
               <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
                 Zamknij

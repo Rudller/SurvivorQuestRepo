@@ -5,7 +5,7 @@ function createService() {
   const prisma = {
     teamAssignment: { findFirst: jest.fn() },
     realization: { findUnique: jest.fn() },
-    riskCard: { findUnique: jest.fn() },
+    riskCard: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
     riskPoolStation: { findMany: jest.fn(), findUnique: jest.fn() },
     riskSchemeCategory: { findMany: jest.fn() },
     station: { findUnique: jest.fn() },
@@ -39,7 +39,7 @@ const card = {
 
 const quizStation = {
   id: 'station-1',
-  type: 'quiz',
+  type: 'QUIZ', // raw Prisma StationType enum value, as a real Station row would have
   name: 'Pytanie',
   description: 'Opis',
   imageUrl: null,
@@ -150,6 +150,88 @@ describe('RiskQuizService.getDeckStatus', () => {
   });
 });
 
+describe('RiskQuizService.listTestMenuEntries', () => {
+  it('returns an empty list when the realization has no assigned scheme', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+
+    const result = await service.listTestMenuEntries('token');
+
+    expect(result).toEqual([]);
+    expect(prisma.riskSchemeCategory.findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns one entry per (category, difficulty) pool that has a generated card, in scheme order', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      { categoryId: 'category-1', category: { name: 'Historia' } },
+      { categoryId: 'category-2', category: { name: 'Geografia' } },
+    ]);
+    prisma.riskCard.findMany.mockResolvedValue([
+      { categoryId: 'category-1', difficulty: 'EASY', code: 'HIST-EASY-1' },
+      { categoryId: 'category-1', difficulty: 'HARD', code: 'HIST-HARD-1' },
+      { categoryId: 'category-2', difficulty: 'MEDIUM', code: 'GEO-MED-1' },
+    ]);
+
+    const result = await service.listTestMenuEntries('token');
+
+    expect(result).toEqual([
+      {
+        categoryId: 'category-1',
+        categoryName: 'Historia',
+        difficulty: 'EASY',
+        code: 'HIST-EASY-1',
+      },
+      {
+        categoryId: 'category-1',
+        categoryName: 'Historia',
+        difficulty: 'HARD',
+        code: 'HIST-HARD-1',
+      },
+      {
+        categoryId: 'category-2',
+        categoryName: 'Geografia',
+        difficulty: 'MEDIUM',
+        code: 'GEO-MED-1',
+      },
+    ]);
+  });
+});
+
+describe('RiskQuizService.generateMissingCards', () => {
+  it('generates uppercase codes, matching the uppercase normalization scanCard() looks up by', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      {
+        categoryId: 'category-1',
+        category: { id: 'category-1', name: 'Historia' },
+      },
+    ]);
+    prisma.riskCard.findMany.mockResolvedValue([]);
+    prisma.riskCard.create.mockResolvedValue({});
+
+    await service.generateMissingCards('realization-1');
+
+    expect(prisma.riskCard.create).toHaveBeenCalled();
+    const createdCodes = prisma.riskCard.create.mock.calls.map(
+      ([args]: [{ data: { code: string } }]) => args.data.code,
+    );
+    expect(createdCodes.length).toBeGreaterThan(0);
+    for (const code of createdCodes) {
+      expect(code).toBe(code.toUpperCase());
+    }
+    expect(createdCodes).toContain('HISTORIA-LATWE-1');
+  });
+});
+
 describe('RiskQuizService.submitAnswer', () => {
   it('awards the correct-answer points for the difficulty and updates the team total', async () => {
     const { service, prisma } = createService();
@@ -208,7 +290,7 @@ describe('RiskQuizService.submitAnswer', () => {
     const puzzleStation = {
       ...quizStation,
       id: 'station-2',
-      type: 'wordle',
+      type: 'WORDLE',
       quizData: null,
     };
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
