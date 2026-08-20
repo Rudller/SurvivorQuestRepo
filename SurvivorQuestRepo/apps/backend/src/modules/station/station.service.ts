@@ -29,17 +29,27 @@ export class StationService {
 
   /**
    * Creates a Station row, assigning a qrEntryCode. If `preferredQrEntryCode`
-   * is given (cloning), it's tried first so the clone keeps the same
-   * physical QR sticker as its source; only on a collision (e.g. the same
-   * template used twice within one realization) does it fall back to a
-   * freshly generated code.
+   * is given (cloning, or an admin-typed code), it's tried first so the
+   * clone keeps the same physical QR sticker as its source; only on a
+   * collision (e.g. the same template used twice within one realization)
+   * does it fall back to a freshly generated code. When no preferred code is
+   * given at all, the row is created with `qrEntryCode: null` instead of
+   * inventing a random one — a missing code should be a visible admin
+   * decision (via the "Wygeneruj"/"Zaciągnij ze stanowiska" buttons), not a
+   * silent default that can mask a lost/expected code.
    */
   private async createStationRow(
-    buildData: (qrEntryCode: string) => Prisma.StationCreateInput,
+    buildData: (qrEntryCode: string | null) => Prisma.StationCreateInput,
     preferredQrEntryCode?: string,
   ) {
+    if (!preferredQrEntryCode) {
+      return await this.prisma.station.create({
+        data: buildData(null),
+      });
+    }
+
     const candidateCodes = [
-      ...(preferredQrEntryCode ? [preferredQrEntryCode] : []),
+      preferredQrEntryCode,
       ...Array.from({ length: QR_ENTRY_CODE_MAX_ATTEMPTS }, () =>
         generateRandomCode(QR_ENTRY_CODE_LENGTH),
       ),

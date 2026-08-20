@@ -274,7 +274,7 @@ export type RealizationStationQrResponse = {
     stationName: string;
     stationType: StationType;
     qrEntryCode: string | null;
-    entryUrl: string;
+    entryUrl: string | null;
     qrScanCodes: string[];
   }>;
 };

@@ -101,6 +101,30 @@ describe('StationService.cloneStationsForScenario', () => {
       /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/,
     );
   });
+
+  it('clones a codeless template as codeless, without inventing a random code', async () => {
+    const { service, prisma } = createService();
+    prisma.station.findMany.mockResolvedValue([
+      { ...baseSourceRow, qrEntryCode: null },
+    ]);
+    prisma.station.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({ ...baseSourceRow, id: 'cloned-1', ...data }),
+    );
+
+    const [cloned] = await service.cloneStationsForScenario(['source-1'], {
+      scenarioInstanceId: 'scenario-instance-1',
+      realizationId: 'realization-1',
+    });
+
+    expect(prisma.station.create).toHaveBeenCalledTimes(1);
+    expect(prisma.station.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ qrEntryCode: null }),
+      }),
+    );
+    expect(cloned.qrEntryCode).toBeUndefined();
+  });
 });
 
 describe('StationService.createScenarioStationInstance', () => {
@@ -136,6 +160,36 @@ describe('StationService.createScenarioStationInstance', () => {
       }),
     );
     expect(created.qrEntryCode).toBe('CUSTOM-CODE');
+  });
+
+  it('leaves qrEntryCode null instead of inventing one when none is provided', async () => {
+    const { service, prisma } = createService();
+    prisma.station.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve({ ...baseSourceRow, id: 'new-1', ...data }),
+    );
+
+    const created = await service.createScenarioStationInstance(
+      {
+        name: 'Nowe stanowisko',
+        type: 'photo-task',
+        description: 'Opis',
+        points: 100,
+        timeLimitSeconds: 0,
+      },
+      {
+        scenarioInstanceId: 'scenario-instance-1',
+        realizationId: 'realization-1',
+      },
+    );
+
+    expect(prisma.station.create).toHaveBeenCalledTimes(1);
+    expect(prisma.station.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ qrEntryCode: null }),
+      }),
+    );
+    expect(created.qrEntryCode).toBeUndefined();
   });
 });
 

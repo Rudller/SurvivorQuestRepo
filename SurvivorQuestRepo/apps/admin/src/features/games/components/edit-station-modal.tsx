@@ -194,7 +194,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
   const [qrScanCodesInput, setQrScanCodesInput] = useState(
     (station.qrScanCodes ?? []).join("\n"),
   );
-  const [qrEntryCode, setQrEntryCode] = useState("");
+  const [qrEntryCode, setQrEntryCode] = useState(station.qrEntryCode ?? "");
   const [caesarShiftInput, setCaesarShiftInput] = useState(
     station.quiz?.caesarShift !== undefined ? String(station.quiz.caesarShift) : "",
   );
@@ -1004,7 +1004,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                   value={qrEntryCode}
                   onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
                   list={`qr-entry-code-suggestions-${station.id}`}
-                  placeholder={station.qrEntryCode ?? "Brak kodu"}
+                  placeholder="Brak kodu"
                   className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                 />
                 <datalist id={`qr-entry-code-suggestions-${station.id}`}>
@@ -1021,9 +1021,8 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 </button>
               </div>
               <p className="text-xs text-zinc-500">
-                Obecny kod: <span className="font-semibold text-zinc-300">{station.qrEntryCode ?? "brak"}</span>.
-                Zostaw puste, aby nie zmieniać. Wybierz z podpowiedzi istniejący kod, aby ta sama naklejka QR pasowała
-                też do tego stanowiska.
+                Ten kod trafia do QR na naklejce i jest kopiowany do każdej realizacji z tego szablonu. Wyczyszczenie
+                pola nie usuwa obecnego kodu — zmień je tylko, gdy naprawdę chcesz przypisać inny kod.
               </p>
             </label>
 

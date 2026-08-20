@@ -88,8 +88,10 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
     setHuntCodeImagesByStationId({});
 
     void Promise.all(
-      data.entries.map(async (entry) => {
-        const qrImage = await QRCode.toDataURL(entry.entryUrl, {
+      data.entries
+        .filter((entry) => Boolean(entry.entryUrl))
+        .map(async (entry) => {
+        const qrImage = await QRCode.toDataURL(entry.entryUrl!, {
           margin: 1,
           width: 280,
           errorCorrectionLevel: "M",
@@ -450,7 +452,12 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                     </div>
 
                     <div className="mt-3 flex min-h-[280px] items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
-                      {qrImage ? (
+                      {!entry.entryUrl ? (
+                        <p className="max-w-[200px] text-center text-xs text-amber-300">
+                          Brak kodu QR dla tego stanowiska. Uzupełnij go w edycji realizacji (&bdquo;Wygeneruj&rdquo;
+                          lub &bdquo;Zaciągnij ze stanowiska&rdquo;), zanim wydrukujesz naklejki.
+                        </p>
+                      ) : qrImage ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -472,18 +479,22 @@ export function RealizationStationQrPanel({ realization, onClose }: RealizationS
                       )}
                     </div>
 
-                    <p className="mt-2 break-all rounded-md border border-zinc-800 bg-zinc-950/70 p-2 text-[11px] text-zinc-400">
-                      {entry.entryUrl}
-                    </p>
+                    {entry.entryUrl ? (
+                      <p className="mt-2 break-all rounded-md border border-zinc-800 bg-zinc-950/70 p-2 text-[11px] text-zinc-400">
+                        {entry.entryUrl}
+                      </p>
+                    ) : null}
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleCopyEntryUrl(entry.stationId, entry.entryUrl)}
-                        className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
-                      >
-                        {copiedStationId === entry.stationId ? "Skopiowano" : "Kopiuj link"}
-                      </button>
+                      {entry.entryUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyEntryUrl(entry.stationId, entry.entryUrl!)}
+                          className="rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-200 transition hover:border-zinc-500"
+                        >
+                          {copiedStationId === entry.stationId ? "Skopiowano" : "Kopiuj link"}
+                        </button>
+                      ) : null}
                       {downloadableQrImage ? (
                         <a
                           href={downloadableQrImage}

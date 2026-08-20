@@ -1949,7 +1949,7 @@ export class MobileService {
           stationType: station?.type || 'quiz',
           completionCode: station?.completionCode?.trim() || null,
           qrEntryCode,
-          entryUrl: buildStationQrEntryUrl(qrEntryCode ?? ''),
+          entryUrl: qrEntryCode ? buildStationQrEntryUrl(qrEntryCode) : null,
           qrScanCodes:
             station?.type === 'qr-hunt' && Array.isArray(station.qrScanCodes)
               ? station.qrScanCodes.filter(

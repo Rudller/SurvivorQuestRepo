@@ -231,6 +231,7 @@ export type Realization = {
 
 export type RealizationStationDraft = {
   id?: string;
+  sourceTemplateId?: string;
   name: string;
   type: StationType;
   categories?: string[];

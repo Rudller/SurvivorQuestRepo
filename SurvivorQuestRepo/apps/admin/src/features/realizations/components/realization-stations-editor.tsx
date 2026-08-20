@@ -186,6 +186,7 @@ function cloneStationTranslations(translations: Station["translations"] | undefi
 export function toRealizationStationDraft(station: Station): RealizationStationDraft {
   return {
     id: station.id,
+    sourceTemplateId: station.sourceTemplateId,
     name: station.name,
     type: station.type,
     categories: normalizeStationCategories(station.categories),
@@ -422,6 +423,15 @@ export function RealizationStationsEditor({
       }
     }
     return Array.from(codes);
+  }, [allStations]);
+  const templateQrEntryCodeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of allStations ?? []) {
+      if (item.kind === "template" && item.qrEntryCode) {
+        map.set(item.id, item.qrEntryCode);
+      }
+    }
+    return map;
   }, [allStations]);
 
   const stationTypeLabelByValue = useMemo(
@@ -1702,34 +1712,56 @@ export function RealizationStationsEditor({
                     </label>
                   ) : null}
 
-                  <label className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
-                    <div className="flex gap-2">
-                      <input
-                        value={station.qrEntryCode ?? ""}
-                        onChange={(event) => updateStation(stationIndex, { qrEntryCode: event.target.value.toUpperCase() })}
-                        list={`qr-entry-code-suggestions-${stationKey}`}
-                        placeholder="Brak kodu"
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                      />
-                      <datalist id={`qr-entry-code-suggestions-${stationKey}`}>
-                        {qrEntryCodeSuggestions.map((code) => (
-                          <option key={code} value={code} />
-                        ))}
-                      </datalist>
-                      <button
-                        type="button"
-                        onClick={() => updateStation(stationIndex, { qrEntryCode: generateSampleCompletionCode(8, "letters") })}
-                        className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                      >
-                        Wygeneruj
-                      </button>
-                    </div>
-                    <p className="text-xs text-zinc-500">
-                      Dotyczy tylko tej realizacji. Zmiana tutaj nie wpływa na stanowisko-szablon ani inne realizacje.
-                      Wybierz z podpowiedzi istniejący kod, aby ta sama naklejka QR pasowała też do tego stanowiska.
-                    </p>
-                  </label>
+                  {(() => {
+                    const templateId = station.sourceTemplateId ?? station.id;
+                    const templateQrEntryCode = templateId ? templateQrEntryCodeById.get(templateId) : undefined;
+                    const canPullFromStation =
+                      Boolean(templateQrEntryCode) && templateQrEntryCode !== station.qrEntryCode;
+
+                    return (
+                      <label className="space-y-1.5">
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+                        <div className="flex gap-2">
+                          <input
+                            value={station.qrEntryCode ?? ""}
+                            onChange={(event) => updateStation(stationIndex, { qrEntryCode: event.target.value.toUpperCase() })}
+                            list={`qr-entry-code-suggestions-${stationKey}`}
+                            placeholder="Brak kodu"
+                            className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                          />
+                          <datalist id={`qr-entry-code-suggestions-${stationKey}`}>
+                            {qrEntryCodeSuggestions.map((code) => (
+                              <option key={code} value={code} />
+                            ))}
+                          </datalist>
+                          <button
+                            type="button"
+                            onClick={() => updateStation(stationIndex, { qrEntryCode: generateSampleCompletionCode(8, "letters") })}
+                            className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                          >
+                            Wygeneruj
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!canPullFromStation}
+                            onClick={() => updateStation(stationIndex, { qrEntryCode: templateQrEntryCode })}
+                            title={
+                              templateQrEntryCode
+                                ? "Ustaw kod przypisany do stanowiska-szablonu"
+                                : "Stanowisko-szablon nie ma jeszcze przypisanego kodu"
+                            }
+                            className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-700"
+                          >
+                            Zaciągnij ze stanowiska
+                          </button>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          Dotyczy tylko tej realizacji. Zmiana tutaj nie wpływa na stanowisko-szablon ani inne realizacje.
+                          Wybierz z podpowiedzi istniejący kod, aby ta sama naklejka QR pasowała też do tego stanowiska.
+                        </p>
+                      </label>
+                    );
+                  })()}
 
                   {isImageSupportedStationType(station.type) ? (
                   <div className="space-y-1.5">

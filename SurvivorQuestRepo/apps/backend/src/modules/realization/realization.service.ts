@@ -464,6 +464,27 @@ export class RealizationService {
     const currentStationsById = new Map(
       currentStations.map((item) => [item.id, item]),
     );
+    // On a brand-new realization, `drafts[].id` is the *template* station id
+    // (the form is built from the scenario template, before cloning), while
+    // `currentStations` here are the just-cloned scenario-instance rows with
+    // freshly generated ids — so a direct id match always misses. Fall back
+    // to matching by sourceTemplateId (queued per template so repeated use
+    // of the same template in one scenario still pairs up 1:1 in order).
+    // Without this, every station falls into the "create" branch below and
+    // collides with the clone it duplicates, silently losing its qrEntryCode
+    // to the random-code fallback (see createStationRow).
+    const stationsBySourceTemplateId = new Map<string, StationEntity[]>();
+    for (const station of currentStations) {
+      if (!station.sourceTemplateId) {
+        continue;
+      }
+      const queue = stationsBySourceTemplateId.get(station.sourceTemplateId);
+      if (queue) {
+        queue.push(station);
+      } else {
+        stationsBySourceTemplateId.set(station.sourceTemplateId, [station]);
+      }
+    }
     const nextStations: StationEntity[] = [];
     const reusedExistingIds = new Set<string>();
 
@@ -474,7 +495,17 @@ export class RealizationService {
       // corrupting anything unique-per-row (e.g. qrEntryCode collisions
       // silently falling back to a random code).
       const draftId = drafts?.[index]?.id;
-      const existing = draftId ? currentStationsById.get(draftId) : undefined;
+      let existing = draftId ? currentStationsById.get(draftId) : undefined;
+      if (!existing && draftId) {
+        const queue = stationsBySourceTemplateId.get(draftId);
+        while (queue && queue.length > 0) {
+          const candidate = queue.shift();
+          if (candidate && !reusedExistingIds.has(candidate.id)) {
+            existing = candidate;
+            break;
+          }
+        }
+      }
       if (existing) {
         reusedExistingIds.add(existing.id);
         const maybeUpdated: unknown =
