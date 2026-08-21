@@ -65,6 +65,7 @@ export type ExpeditionSessionState = {
     showLeaderboard: boolean;
     showLeaderboardDuringGame: boolean;
     showLeaderboardOnFinish: boolean;
+    hideLeaderboardMinutesBeforeEnd: number;
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
     hideTaskList: boolean;
@@ -285,6 +286,11 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
         session.realization?.showLeaderboardOnFinish ??
         session.realization?.showLeaderboard ??
         true,
+      hideLeaderboardMinutesBeforeEnd:
+        typeof session.realization?.hideLeaderboardMinutesBeforeEnd === "number" &&
+        session.realization.hideLeaderboardMinutesBeforeEnd > 0
+          ? Math.round(session.realization.hideLeaderboardMinutesBeforeEnd)
+          : 0,
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: session.realization?.timedStationPointsDecayEnabled ?? false,
       hideTaskList: session.realization?.hideTaskList ?? false,

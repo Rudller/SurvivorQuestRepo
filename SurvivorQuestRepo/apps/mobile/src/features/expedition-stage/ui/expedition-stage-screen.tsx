@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -16,6 +16,7 @@ import {
   type RealizationLanguage,
   type RealizationLanguageOption,
 } from "../../onboarding/model/types";
+import { LanguagePickerModal } from "../../../shared/ui/language-picker-modal";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
 import {
@@ -1338,8 +1339,12 @@ export function ExpeditionStageScreen({
     }),
     [overlayFlow, qrFlow, stationTestEntries],
   );
+  const isLeaderboardHiddenByCountdown =
+    sessionState.realization.hideLeaderboardMinutesBeforeEnd > 0 &&
+    countdown.remainingSeconds <= sessionState.realization.hideLeaderboardMinutesBeforeEnd * 60;
   const shouldShowTopLeaderboard =
     sessionState.realization.showLeaderboardDuringGame &&
+    !isLeaderboardHiddenByCountdown &&
     sessionState.leaderboard.entries.length > 0;
   const shouldShowTasksList = isTabletLayout || isTasksPanelExpanded;
   const tasksListMaxHeight = adaptiveLayout.s(220, 180, 300);
@@ -1657,76 +1662,23 @@ export function ExpeditionStageScreen({
         text={globalOutcomePanelText}
       />
 
-      <Modal
+      <LanguagePickerModal
         visible={isLanguagePickerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsLanguagePickerOpen(false)}
-      >
-        <Pressable
-          className="flex-1 justify-center px-6"
-          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
-          onPress={() => setIsLanguagePickerOpen(false)}
-        >
-          <Pressable
-            className="w-full self-center rounded-3xl border px-6 py-6"
-            style={{
-              maxWidth: 440,
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: EXPEDITION_THEME.panel,
-            }}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <Text className="text-lg font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {text.chooseContentLanguage}
-            </Text>
-            <View className="mt-4 gap-3">
-              {availableLanguageOptions.map((option) => {
-                const isActive = option.value === selectedLanguage;
-                return (
-                  <Pressable
-                    key={`expedition-language-popup-${option.value}`}
-                    className="flex-row items-center justify-between rounded-2xl border px-4 py-4 active:opacity-90"
-                    style={{
-                      borderColor: isActive ? EXPEDITION_THEME.accent : EXPEDITION_THEME.border,
-                      backgroundColor: isActive ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.panelMuted,
-                    }}
-                    onPress={() => {
-                      if (option.value !== selectedLanguage) {
-                        onSelectedLanguageChange?.(option.value);
-                        setActionError(null);
-                        setActionMessage(interpolate(text.contentLanguageSet, { label: option.label }));
-                      }
-                      setIsLanguagePickerOpen(false);
-                    }}
-                  >
-                    <View className="flex-row items-center gap-3">
-                      <Text className="text-2xl">{getRealizationLanguageFlag(option.value)}</Text>
-                      <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                        {option.label}
-                      </Text>
-                    </View>
-                    {isActive ? (
-                      <Text className="text-base font-bold" style={{ color: EXPEDITION_THEME.accentStrong }}>
-                        ✓
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable
-              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-90"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-              onPress={() => setIsLanguagePickerOpen(false)}
-            >
-              <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {text.close}
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        uiLanguage={uiLanguage}
+        isLightTheme={isLightTheme}
+        options={availableLanguageOptions}
+        selectedLanguage={selectedLanguage}
+        onSelect={(language) => {
+          onSelectedLanguageChange?.(language);
+          setActionError(null);
+          setActionMessage(
+            interpolate(text.contentLanguageSet, {
+              label: availableLanguageOptions.find((option) => option.value === language)?.label ?? "",
+            }),
+          );
+        }}
+        onClose={() => setIsLanguagePickerOpen(false)}
+      />
       </Animated.View>
 
     </View>

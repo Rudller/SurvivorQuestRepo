@@ -9,6 +9,9 @@ const realizationExportDataSchema = z.object({
   customLanguage: z.string().optional(),
   introText: z.string().optional(),
   gameRules: z.string().optional(),
+  translations: z
+    .record(z.string(), z.object({ introText: z.string().optional(), gameRules: z.string().optional() }))
+    .optional(),
   contactPerson: z.string(),
   contactPhone: z.string().optional(),
   contactEmail: z.string().optional(),
@@ -26,6 +29,7 @@ const realizationExportDataSchema = z.object({
   showLeaderboard: z.boolean(),
   showLeaderboardDuringGame: z.boolean(),
   showLeaderboardOnFinish: z.boolean(),
+  hideLeaderboardMinutesBeforeEnd: z.number().optional().default(0),
   teamStationNumberingEnabled: z.boolean(),
   timedStationPointsDecayEnabled: z.boolean(),
   hideTaskList: z.boolean(),
@@ -86,6 +90,7 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       customLanguage: realization.customLanguage,
       introText: realization.introText,
       gameRules: realization.gameRules,
+      translations: realization.translations,
       contactPerson: realization.contactPerson,
       contactPhone: realization.contactPhone,
       contactEmail: realization.contactEmail,
@@ -103,6 +108,7 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       showLeaderboard: realization.showLeaderboard,
       showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
       showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+      hideLeaderboardMinutesBeforeEnd: realization.hideLeaderboardMinutesBeforeEnd,
       teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
       timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
       hideTaskList: realization.hideTaskList,

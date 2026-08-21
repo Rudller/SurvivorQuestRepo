@@ -4,10 +4,59 @@ import type {
   RealizationLanguage,
   RealizationEntity,
   RealizationStatus,
+  RealizationTranslation,
+  RealizationTranslations,
   RealizationType,
   ScenarioStationDraftPayload,
   ValidatedRealizationPayload,
 } from '../entities/realization.entity';
+
+const REALIZATION_TRANSLATION_LANGUAGES: (keyof RealizationTranslations)[] = [
+  'polish',
+  'english',
+  'ukrainian',
+  'russian',
+  'other',
+];
+
+function ensureRealizationTranslations(
+  value: unknown,
+): RealizationTranslations | undefined {
+  if (typeof value === 'undefined') {
+    return undefined;
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const payload = value as Record<string, unknown>;
+  const translations: RealizationTranslations = {};
+
+  for (const language of REALIZATION_TRANSLATION_LANGUAGES) {
+    const entry = payload[language];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+
+    const item = entry as Record<string, unknown>;
+    const translation: RealizationTranslation = {};
+
+    if (typeof item.introText === 'string' && item.introText.trim()) {
+      translation.introText = item.introText.trim();
+    }
+
+    if (typeof item.gameRules === 'string' && item.gameRules.trim()) {
+      translation.gameRules = item.gameRules.trim();
+    }
+
+    if (Object.keys(translation).length > 0) {
+      translations[language] = translation;
+    }
+  }
+
+  return Object.keys(translations).length > 0 ? translations : undefined;
+}
 
 const REALIZATION_TYPES: RealizationType[] = [
   'outdoor-games',
@@ -40,6 +89,7 @@ export type CreateRealizationDto = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: unknown;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -62,6 +112,7 @@ export type CreateRealizationDto = {
   showLeaderboard?: boolean;
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
+  hideLeaderboardMinutesBeforeEnd?: number;
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
@@ -185,6 +236,7 @@ export function validateRealizationPayload(
   const customLanguage = payload.customLanguage?.trim() || '';
   const introText = payload.introText?.trim() || '';
   const gameRules = payload.gameRules?.trim() || '';
+  const translations = ensureRealizationTranslations(payload.translations);
   const contactPerson = payload.contactPerson?.trim() || '';
   const contactPhone = payload.contactPhone?.trim() || '';
   const contactEmail = payload.contactEmail?.trim() || '';
@@ -205,6 +257,8 @@ export function validateRealizationPayload(
   const showLeaderboard = payload.showLeaderboard;
   const showLeaderboardDuringGame = payload.showLeaderboardDuringGame;
   const showLeaderboardOnFinish = payload.showLeaderboardOnFinish;
+  const hideLeaderboardMinutesBeforeEnd =
+    payload.hideLeaderboardMinutesBeforeEnd;
   const teamStationNumberingEnabled = payload.teamStationNumberingEnabled;
   const timedStationPointsDecayEnabled = payload.timedStationPointsDecayEnabled;
   const scheduledAtDate = payload.scheduledAt
@@ -252,6 +306,13 @@ export function validateRealizationPayload(
   if (
     typeof showLeaderboardOnFinish !== 'undefined' &&
     typeof showLeaderboardOnFinish !== 'boolean'
+  ) {
+    throw new BadRequestException('Invalid payload');
+  }
+  if (
+    typeof hideLeaderboardMinutesBeforeEnd !== 'undefined' &&
+    (!Number.isFinite(Number(hideLeaderboardMinutesBeforeEnd)) ||
+      Number(hideLeaderboardMinutesBeforeEnd) < 0)
   ) {
     throw new BadRequestException('Invalid payload');
   }
@@ -314,6 +375,7 @@ export function validateRealizationPayload(
     customLanguage: payload.language === 'other' ? customLanguage : undefined,
     introText: introText || undefined,
     gameRules: gameRules || undefined,
+    translations,
     contactPerson,
     contactPhone: contactPhone || undefined,
     contactEmail: contactEmail || undefined,
@@ -336,6 +398,12 @@ export function validateRealizationPayload(
       resolvedShowLeaderboardDuringGame || resolvedShowLeaderboardOnFinish,
     showLeaderboardDuringGame: resolvedShowLeaderboardDuringGame,
     showLeaderboardOnFinish: resolvedShowLeaderboardOnFinish,
+    hideLeaderboardMinutesBeforeEnd:
+      typeof hideLeaderboardMinutesBeforeEnd === 'number' &&
+      Number.isFinite(hideLeaderboardMinutesBeforeEnd) &&
+      hideLeaderboardMinutesBeforeEnd >= 0
+        ? Math.round(hideLeaderboardMinutesBeforeEnd)
+        : 0,
     teamStationNumberingEnabled: payload.teamStationNumberingEnabled ?? true,
     timedStationPointsDecayEnabled:
       payload.timedStationPointsDecayEnabled ?? false,

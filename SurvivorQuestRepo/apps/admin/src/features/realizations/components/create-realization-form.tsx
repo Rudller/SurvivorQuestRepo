@@ -7,6 +7,7 @@ import type {
   RealizationLanguage,
   RealizationStationDraft,
   RealizationStatus,
+  RealizationTranslations,
   RealizationType,
 } from "../types/realization";
 import { buildRealizationExport, parseRealizationExportFile } from "../realization-export";
@@ -32,6 +33,7 @@ import type { Station } from "@/features/games/types/station";
 import { useUploadStationAudioMutation } from "@/features/games/api/station.api";
 import {
   useCreateRealizationMutation,
+  useTranslateRealizationTextsMutation,
   useUploadRealizationLogoMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
@@ -83,6 +85,10 @@ function isPdfFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+function isRealizationLanguage(value: string): value is RealizationLanguage {
+  return value === "polish" || value === "english" || value === "ukrainian" || value === "russian" || value === "other";
+}
+
 function CalendarInputIcon() {
   return (
     // Icon based on Heroicons (MIT) calendar style.
@@ -100,6 +106,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
   const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
 
   const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [companyName, setCompanyName] = useState("");
@@ -111,6 +118,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [customLanguage, setCustomLanguage] = useState("");
   const [introText, setIntroText] = useState("");
   const [gameRules, setGameRules] = useState("");
+  const [translations, setTranslations] = useState<RealizationTranslations>({});
+  const [textEditingLanguage, setTextEditingLanguage] = useState<RealizationLanguage>("polish");
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
   const [instructors, setInstructors] = useState<string[]>([]);
   const [instructorInput, setInstructorInput] = useState("");
   const [notes, setNotes] = useState("");
@@ -132,6 +142,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [durationMinutes, setDurationMinutes] = useState(120);
   const [showLeaderboardDuringGame, setShowLeaderboardDuringGame] = useState(true);
   const [showLeaderboardOnFinish, setShowLeaderboardOnFinish] = useState(true);
+  const [hideLeaderboardMinutesBeforeEnd, setHideLeaderboardMinutesBeforeEnd] = useState(0);
   const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [timedStationPointsDecayEnabled, setTimedStationPointsDecayEnabled] = useState(false);
   const [hideTaskList, setHideTaskList] = useState(false);
@@ -268,6 +279,86 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   );
   const isLanguageSelectionInvalid = submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
   const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
+  const baseTextLanguage = languagePayload.language;
+  const textEditableLanguages = useMemo(
+    () => (selectedLanguages.includes(baseTextLanguage) ? selectedLanguages : [baseTextLanguage, ...selectedLanguages]),
+    [selectedLanguages, baseTextLanguage],
+  );
+  const isEditingBaseTextLanguage = textEditingLanguage === baseTextLanguage;
+  const isTextAutoTranslateDisabled =
+    isAutoTranslating || isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other";
+  const effectiveIntroText = isEditingBaseTextLanguage ? introText : translations[textEditingLanguage]?.introText ?? "";
+  const effectiveGameRules = isEditingBaseTextLanguage ? gameRules : translations[textEditingLanguage]?.gameRules ?? "";
+
+  function updateEffectiveIntroText(nextValue: string) {
+    if (isEditingBaseTextLanguage) {
+      setIntroText(nextValue);
+      return;
+    }
+
+    setTranslations((current) => ({
+      ...current,
+      [textEditingLanguage]: { ...current[textEditingLanguage], introText: nextValue },
+    }));
+  }
+
+  function updateEffectiveGameRules(nextValue: string) {
+    if (isEditingBaseTextLanguage) {
+      setGameRules(nextValue);
+      return;
+    }
+
+    setTranslations((current) => ({
+      ...current,
+      [textEditingLanguage]: { ...current[textEditingLanguage], gameRules: nextValue },
+    }));
+  }
+
+  async function handleAutoTranslateText() {
+    if (isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other") {
+      return;
+    }
+
+    const texts: string[] = [];
+    const fields: Array<"introText" | "gameRules"> = [];
+    const currentTranslation = translations[textEditingLanguage];
+
+    if (!currentTranslation?.introText?.trim() && introText.trim()) {
+      fields.push("introText");
+      texts.push(introText);
+    }
+    if (!currentTranslation?.gameRules?.trim() && gameRules.trim()) {
+      fields.push("gameRules");
+      texts.push(gameRules);
+    }
+
+    if (texts.length === 0) {
+      setAutoTranslateMessage("Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.");
+      return;
+    }
+
+    setAutoTranslateMessage(null);
+    try {
+      const response = await translateRealizationTexts({
+        sourceLanguage: baseTextLanguage,
+        targetLanguage: textEditingLanguage,
+        texts,
+      }).unwrap();
+
+      setTranslations((current) => {
+        const next = { ...current[textEditingLanguage] };
+        fields.forEach((field, index) => {
+          const translated = response.texts[index]?.trim();
+          if (translated) {
+            next[field] = translated;
+          }
+        });
+        return { ...current, [textEditingLanguage]: next };
+      });
+    } catch {
+      setAutoTranslateMessage("Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+    }
+  }
   const isScheduledAtInvalid = submitAttempted && !scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(durationMinutes) || durationMinutes < 1);
   const isScenarioStationsEmpty = submitAttempted && !isRiskQuizType && scenarioStations.length === 0;
@@ -340,6 +431,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     };
   }, [mapImagePreviewUrl]);
 
+  if (!textEditableLanguages.includes(textEditingLanguage)) {
+    setTextEditingLanguage(baseTextLanguage);
+  }
+
   function addInstructor() {
     const name = instructorInput.trim();
     if (!name) {
@@ -375,6 +470,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setCustomLanguage(importedLanguageSelection.customLanguage);
     setIntroText(data.realization.introText ?? "");
     setGameRules(data.realization.gameRules ?? "");
+    setTranslations(data.realization.translations ?? {});
     setInstructors(data.realization.instructors);
     setInstructorInput("");
     setNotes(data.realization.notes ?? "");
@@ -396,6 +492,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setDurationMinutes(data.realization.durationMinutes);
     setShowLeaderboardDuringGame(data.realization.showLeaderboardDuringGame);
     setShowLeaderboardOnFinish(data.realization.showLeaderboardOnFinish);
+    setHideLeaderboardMinutesBeforeEnd(data.realization.hideLeaderboardMinutesBeforeEnd ?? 0);
     setTeamStationNumberingEnabled(data.realization.teamStationNumberingEnabled);
     setTimedStationPointsDecayEnabled(data.realization.timedStationPointsDecayEnabled);
     setHideTaskList(data.realization.hideTaskList);
@@ -488,6 +585,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     customLanguage,
     introText,
     gameRules,
+    translations,
     instructors,
     notes,
     selectedType,
@@ -507,6 +605,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     durationMinutes,
     showLeaderboardDuringGame,
     showLeaderboardOnFinish,
+    hideLeaderboardMinutesBeforeEnd,
     teamStationNumberingEnabled,
     timedStationPointsDecayEnabled,
     hideTaskList,
@@ -528,7 +627,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
         }}
         className="fixed inset-0 z-40 bg-zinc-950/70"
       />
-      <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950 lg:w-1/2">
+      <aside className="fixed right-0 top-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-zinc-800 bg-zinc-950 lg:w-3/4">
         <form
           className="sq-form flex h-full min-h-0 flex-col"
           onSubmit={async (event) => {
@@ -629,6 +728,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 customLanguage: languagePayload.customLanguage,
                 introText: introText || undefined,
                 gameRules: gameRules.trim() || undefined,
+                translations: Object.keys(translations).length > 0 ? translations : undefined,
                 contactPerson: normalizedContactPerson,
                 contactPhone: normalizedContactPhone,
                 contactEmail: normalizedContactEmail,
@@ -649,6 +749,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 showLeaderboard: showLeaderboardDuringGame || showLeaderboardOnFinish,
                 showLeaderboardDuringGame,
                 showLeaderboardOnFinish,
+                hideLeaderboardMinutesBeforeEnd,
                 teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled,
                 hideTaskList,
@@ -675,6 +776,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
               setCustomLanguage(defaultLanguageSelection.customLanguage);
               setIntroText("");
               setGameRules("");
+              setTranslations({});
+              setTextEditingLanguage("polish");
               setInstructors([]);
               setInstructorInput("");
               setNotes("");
@@ -1114,6 +1217,24 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     Pokaż leaderboard na ekranie końcowym (mobile)
                   </label>
 
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Ukryj leaderboard X minut przed końcem czasu (0 = wyłączone)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={hideLeaderboardMinutesBeforeEnd}
+                      onChange={(event) =>
+                        setHideLeaderboardMinutesBeforeEnd(Math.max(0, Math.round(Number(event.target.value) || 0)))
+                      }
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    <p className="text-xs text-zinc-500">
+                      Tablica wyników zniknie z ekranu gry na X minut przed końcem czasu i nie pojawi się też na ekranie końcowym.
+                    </p>
+                  </label>
+
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1233,6 +1354,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       if (nextScenario) {
                         setIntroText(nextScenario.introText ?? "");
                         setGameRules(nextScenario.gameRules ?? "");
+                        setTranslations({});
                       }
                     }}
                     className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}
@@ -1293,18 +1415,63 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   )}
                 </div>
 
+                {textEditableLanguages.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+                      <span>{getRealizationLanguageFlag(baseTextLanguage)}</span>
+                      <span>Podstawowy: {realizationLanguageOptions.find((option) => option.value === baseTextLanguage)?.label}</span>
+                    </span>
+                    <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+                      <span>Edytowany język</span>
+                      <select
+                        value={textEditingLanguage}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          if (isRealizationLanguage(nextValue)) {
+                            setTextEditingLanguage(nextValue);
+                          }
+                        }}
+                        className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                      >
+                        {textEditableLanguages.map((language) => (
+                          <option key={`text-editing-${language}`} value={language}>
+                            {getRealizationLanguageFlag(language)} {realizationLanguageOptions.find((option) => option.value === language)?.label}
+                            {language === baseTextLanguage ? " (podstawowy)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleAutoTranslateText()}
+                      disabled={isTextAutoTranslateDisabled}
+                      title={
+                        isEditingBaseTextLanguage
+                          ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+                          : textEditingLanguage === "other" || baseTextLanguage === "other"
+                            ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                            : undefined
+                      }
+                      className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
+                    </button>
+                  </div>
+                )}
+                {autoTranslateMessage && <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>}
+
                 <StyledMarkdownEditor
                   label="Tekst wstępu"
-                  value={introText}
-                  onChange={setIntroText}
+                  value={effectiveIntroText}
+                  onChange={updateEffectiveIntroText}
                   placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
                   rows={5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
                 <StyledMarkdownEditor
                   label="Zasady gry"
-                  value={gameRules}
-                  onChange={setGameRules}
+                  value={effectiveGameRules}
+                  onChange={updateEffectiveGameRules}
                   placeholder="Wpisz zasady gry widoczne po Welcome screen."
                   rows={8}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
@@ -1465,6 +1632,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </p>
                   <p>
                     <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span> {showLeaderboardOnFinish ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Ukryj leaderboard przed końcem:</span>{" "}
+                    {hideLeaderboardMinutesBeforeEnd > 0 ? `${hideLeaderboardMinutesBeforeEnd} min` : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span> {teamStationNumberingEnabled ? "Tak" : "Nie"}

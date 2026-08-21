@@ -28,6 +28,7 @@ import {
   resolveRealizationStatus,
   toPrismaRealizationLanguage,
   toPrismaRealizationStatus,
+  toPrismaRealizationTranslationsData,
   toPrismaRealizationType,
 } from './mappers/realization.mapper';
 import {
@@ -47,6 +48,7 @@ export type {
   RealizationEntity,
   RealizationLanguage,
   RealizationStatus,
+  RealizationTranslations,
   RealizationType,
 } from './entities/realization.entity';
 
@@ -119,6 +121,7 @@ export class RealizationService {
         customLanguage: validated.customLanguage,
         introText: validated.introText,
         gameRules: validated.gameRules,
+        translations: toPrismaRealizationTranslationsData(validated.translations),
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -149,6 +152,8 @@ export class RealizationService {
         showLeaderboard: validated.showLeaderboard,
         showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
         showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
+        hideLeaderboardMinutesBeforeEnd:
+          validated.hideLeaderboardMinutesBeforeEnd,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
@@ -268,6 +273,9 @@ export class RealizationService {
         gameRules: Object.prototype.hasOwnProperty.call(payload, 'gameRules')
           ? (validated.gameRules ?? null)
           : undefined,
+        translations: Object.prototype.hasOwnProperty.call(payload, 'translations')
+          ? toPrismaRealizationTranslationsData(validated.translations)
+          : undefined,
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -289,6 +297,8 @@ export class RealizationService {
         showLeaderboard: validated.showLeaderboard,
         showLeaderboardDuringGame: validated.showLeaderboardDuringGame,
         showLeaderboardOnFinish: validated.showLeaderboardOnFinish,
+        hideLeaderboardMinutesBeforeEnd:
+          validated.hideLeaderboardMinutesBeforeEnd,
         teamStationNumberingEnabled: validated.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,

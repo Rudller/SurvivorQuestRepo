@@ -34,6 +34,7 @@ function createSessionState(): ExpeditionSessionState {
       showLeaderboard: true,
       showLeaderboardDuringGame: true,
       showLeaderboardOnFinish: true,
+      hideLeaderboardMinutesBeforeEnd: 0,
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: true,
       hideTaskList: false,

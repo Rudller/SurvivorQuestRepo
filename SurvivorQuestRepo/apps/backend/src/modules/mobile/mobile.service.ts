@@ -35,6 +35,7 @@ import {
   resolveCompletionCodeInputMode,
 } from './domain/mobile-station.helpers';
 import {
+  resolveLocalizedRealizationTexts,
   resolveLocalizedStationPresentation,
   resolveRealizationLanguageContext,
 } from './domain/mobile-language.helpers';
@@ -138,6 +139,10 @@ export class MobileService {
           language: realization.language,
           customLanguage: realization.customLanguage,
         });
+        const localizedTexts = resolveLocalizedRealizationTexts(
+          realization,
+          languageContext,
+        );
 
         return {
           id: realization.id,
@@ -147,8 +152,8 @@ export class MobileService {
           customLanguage: languageContext.customLanguage,
           selectedLanguage: languageContext.selectedLanguage,
           availableLanguages: languageContext.availableLanguageOptions,
-          introText: realization.introText,
-          gameRules: realization.gameRules,
+          introText: localizedTexts.introText,
+          gameRules: localizedTexts.gameRules,
           status: this.normalizeStatus(
             realization.status,
             realization.scheduledAt,
@@ -160,6 +165,8 @@ export class MobileService {
           showLeaderboard: realization.showLeaderboard,
           showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
           showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+          hideLeaderboardMinutesBeforeEnd:
+            realization.hideLeaderboardMinutesBeforeEnd,
           teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
           timedStationPointsDecayEnabled:
             realization.timedStationPointsDecayEnabled,
@@ -436,12 +443,17 @@ export class MobileService {
       });
     }
 
+    const localizedTexts = resolveLocalizedRealizationTexts(
+      realization,
+      languageContext,
+    );
+
     return {
       realization: {
         id: realization.id,
         companyName: realization.companyName,
-        introText: realization.introText,
-        gameRules: realization.gameRules,
+        introText: localizedTexts.introText,
+        gameRules: localizedTexts.gameRules,
         contactPerson: realization.contactPerson,
         contactPhone: realization.contactPhone,
         contactEmail: realization.contactEmail,
@@ -462,6 +474,8 @@ export class MobileService {
         showLeaderboard: realization.showLeaderboard,
         showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
         showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+        hideLeaderboardMinutesBeforeEnd:
+          realization.hideLeaderboardMinutesBeforeEnd,
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         timedStationPointsDecayEnabled:
           realization.timedStationPointsDecayEnabled,
@@ -2441,6 +2455,8 @@ export class MobileService {
         showLeaderboard: realization.showLeaderboard,
         showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
         showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+        hideLeaderboardMinutesBeforeEnd:
+          realization.hideLeaderboardMinutesBeforeEnd,
         teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
         hideTaskList: realization.hideTaskList,
         joinCode: realization.joinCode,
@@ -3120,6 +3136,7 @@ export class MobileService {
         showLeaderboard: true,
         showLeaderboardDuringGame: true,
         showLeaderboardOnFinish: true,
+        hideLeaderboardMinutesBeforeEnd: true,
         teamStationNumberingEnabled: true,
         timedStationPointsDecayEnabled: true,
         hideTaskList: true,
@@ -3156,6 +3173,10 @@ export class MobileService {
         item.showLeaderboardOnFinish ??
         rowById.get(item.id)?.showLeaderboard ??
         item.showLeaderboard,
+      hideLeaderboardMinutesBeforeEnd:
+        rowById.get(item.id)?.hideLeaderboardMinutesBeforeEnd ??
+        item.hideLeaderboardMinutesBeforeEnd ??
+        0,
       teamStationNumberingEnabled:
         rowById.get(item.id)?.teamStationNumberingEnabled ??
         item.teamStationNumberingEnabled ??

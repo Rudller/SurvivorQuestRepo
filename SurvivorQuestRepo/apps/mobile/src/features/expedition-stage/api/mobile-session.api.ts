@@ -556,6 +556,12 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       realization.show_leaderboard,
     true,
   );
+  const hideLeaderboardMinutesBeforeEndRaw = asNumber(
+    realization.hideLeaderboardMinutesBeforeEnd ?? realization.hide_leaderboard_minutes_before_end,
+    0,
+  );
+  const hideLeaderboardMinutesBeforeEnd =
+    hideLeaderboardMinutesBeforeEndRaw > 0 ? Math.round(hideLeaderboardMinutesBeforeEndRaw) : 0;
 
   return {
     realization: {
@@ -586,6 +592,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       showLeaderboard: showLeaderboardDuringGame || showLeaderboardOnFinish,
       showLeaderboardDuringGame,
       showLeaderboardOnFinish,
+      hideLeaderboardMinutesBeforeEnd,
       teamStationNumberingEnabled: asBoolean(
         realization.teamStationNumberingEnabled ?? realization.team_station_numbering_enabled,
         true,

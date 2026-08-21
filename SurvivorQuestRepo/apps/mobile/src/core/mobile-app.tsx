@@ -19,9 +19,12 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import { RiskQuizScreen } from "../features/risk-quiz/ui/risk-quiz-screen";
-import type {
-  OnboardingSession,
-  RealizationLanguage,
+import {
+  getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
+  type OnboardingSession,
+  type RealizationLanguage,
+  type RealizationLanguageOption,
 } from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
 import {
@@ -40,6 +43,7 @@ import {
 } from "../features/expedition-stage/api/mobile-session.api";
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 import { AutoScrollingIntroBox, parseInlineRules, parseRulesBlocks } from "../shared/ui/intro-text-preview";
+import { LanguagePickerModal } from "../shared/ui/language-picker-modal";
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
@@ -109,7 +113,7 @@ const MOBILE_APP_TEXT: Record<
     noGameRules: "Brak zasad gry dla tej realizacji.",
     close: "Zamknij",
     introFallback: "Przygotujcie się do gry. Czekajcie na globalny start aplikacji od administratora.",
-    introTextLabel: "Tekst wstępu",
+    introTextLabel: "Fabuła",
     waitForStart: "Czekamy na zatwierdzenie startu aplikacji...",
     sessionRefreshTitle: "Sesja wymaga odświeżenia",
     sessionResetNotice:
@@ -486,6 +490,7 @@ export function MobileApp() {
   const [waitingError, setWaitingError] = useState<string | null>(null);
   const [waitingErrorDetail, setWaitingErrorDetail] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [isWaitingLanguagePickerOpen, setIsWaitingLanguagePickerOpen] = useState(false);
   const consecutivePollFailuresRef = useRef(0);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
   const [themePreference, setThemePreference] = useState<MobileThemePreference>("dark");
@@ -832,6 +837,22 @@ export function MobileApp() {
       : Math.min(Math.max(adaptiveLayout.height * 0.72, 360), 680);
     const waitingFontSize = adaptiveLayout.fs(isTabletLayout ? 17 : 14, 13, 22);
     const waitingDetailFontSize = adaptiveLayout.fs(isTabletLayout ? 13 : 11, 10, 15);
+    const waitingSelectedLanguage: RealizationLanguage =
+      onboardingSession.selectedLanguage ??
+      onboardingSession.realization?.selectedLanguage ??
+      onboardingSession.realization?.language ??
+      "polish";
+    const waitingAvailableLanguageOptions: RealizationLanguageOption[] =
+      onboardingSession.realization?.availableLanguages && onboardingSession.realization.availableLanguages.length > 0
+        ? onboardingSession.realization.availableLanguages
+        : [
+            {
+              value: waitingSelectedLanguage,
+              label: getRealizationLanguageLabel(waitingSelectedLanguage),
+            },
+          ];
+    const hasMultipleWaitingLanguageOptions = waitingAvailableLanguageOptions.length > 1;
+    const waitingLanguageFlag = getRealizationLanguageFlag(waitingSelectedLanguage);
 
     return (
       <SafeAreaProvider>
@@ -886,7 +907,27 @@ export function MobileApp() {
               ) : null}
             </View>
           </View>
+          {hasMultipleWaitingLanguageOptions ? (
+            <Pressable
+              className="absolute right-16 z-50 rounded-full p-2.5 active:opacity-90"
+              style={{
+                top: 14,
+                backgroundColor: activeThemePalette.panelStrong,
+              }}
+              onPress={() => setIsWaitingLanguagePickerOpen(true)}
+            >
+              <Text style={{ fontSize: 18 }}>{waitingLanguageFlag}</Text>
+            </Pressable>
+          ) : null}
           {themeSwitchButton}
+          <LanguagePickerModal
+            visible={isWaitingLanguagePickerOpen}
+            uiLanguage={uiLanguage}
+            options={waitingAvailableLanguageOptions}
+            selectedLanguage={waitingSelectedLanguage}
+            onSelect={(language) => void handleSelectedLanguageChange(language)}
+            onClose={() => setIsWaitingLanguagePickerOpen(false)}
+          />
           <StatusBar style={statusBarStyle} hidden />
         </HorizontalSafeArea>
       </SafeAreaProvider>

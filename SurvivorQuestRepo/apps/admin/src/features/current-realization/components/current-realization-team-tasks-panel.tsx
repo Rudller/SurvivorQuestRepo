@@ -74,8 +74,9 @@ export function CurrentRealizationTeamTasksPanel({
   const [failTask, { isLoading: isFailing }] = useFailCurrentRealizationTeamTaskMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{ stationId: string; action: TaskAction } | null>(null);
+  const [isEndingParticipation, setIsEndingParticipation] = useState(false);
 
-  const isMutating = isResetting || isCompleting || isFailing;
+  const isMutating = isResetting || isCompleting || isFailing || isEndingParticipation;
 
   const stationsWithTaskState = useMemo(() => {
     const taskByStationId = new Map(team.tasks.map((task) => [task.stationId, task]));
@@ -101,6 +102,12 @@ export function CurrentRealizationTeamTasksPanel({
       return left.fallbackOrder - right.fallbackOrder;
     });
   }, [realization.stations, team.tasks]);
+
+  const remainingStationsCount = stationsWithTaskState.filter(
+    (task) => task.status === "todo" || task.status === "in-progress",
+  ).length;
+
+  const title = team.name?.trim() || `Drużyna #${team.slotNumber}`;
 
   async function handleTaskAction(stationId: string, action: TaskAction) {
     if (!canManageTasks) {
@@ -141,7 +148,43 @@ export function CurrentRealizationTeamTasksPanel({
     }
   }
 
-  const title = team.name?.trim() || `Drużyna #${team.slotNumber}`;
+  async function handleEndParticipation() {
+    if (!canManageTasks) {
+      return;
+    }
+
+    const remainingStations = stationsWithTaskState.filter(
+      (task) => task.status === "todo" || task.status === "in-progress",
+    );
+    if (remainingStations.length === 0) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Zakończyć udział drużyny "${title}"? ${remainingStations.length} pozostałych zadań zostanie oznaczonych jako niezaliczone.`,
+      )
+    ) {
+      return;
+    }
+
+    setActionError(null);
+    setIsEndingParticipation(true);
+    try {
+      for (const station of remainingStations) {
+        await failTask({
+          realizationId: selectedRealizationId,
+          teamId: team.id,
+          stationId: station.stationId,
+          reason: "Zakończenie udziału drużyny (decyzja administratora)",
+        }).unwrap();
+      }
+    } catch {
+      setActionError("Nie udało się zakończyć udziału drużyny dla wszystkich zadań.");
+    } finally {
+      setIsEndingParticipation(false);
+    }
+  }
 
   return (
     <>
@@ -179,6 +222,24 @@ export function CurrentRealizationTeamTasksPanel({
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
               {actionError}
             </div>
+          ) : null}
+
+          {canManageTasks ? (
+            <section className="rounded-lg border border-rose-900/70 bg-rose-950/20 p-3">
+              <p className="text-xs uppercase tracking-wider text-rose-300">Zakończ udział drużyny</p>
+              <p className="mt-2 text-xs text-rose-200">
+                Wszystkie pozostałe (nieukończone) zadania tej drużyny zostaną oznaczone jako niezaliczone. Zadania już
+                zaliczone lub niezaliczone nie zostaną zmienione.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleEndParticipation()}
+                disabled={isMutating || remainingStationsCount === 0}
+                className="mt-3 rounded-lg border border-rose-700 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isEndingParticipation ? "Kończenie udziału..." : "Zakończ udział drużyny"}
+              </button>
+            </section>
           ) : null}
 
           <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70">

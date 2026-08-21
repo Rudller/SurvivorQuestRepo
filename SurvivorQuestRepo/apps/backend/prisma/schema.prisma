@@ -205,6 +205,7 @@ model Realization {
   customLanguage      String?
   introText           String?
   gameRules           String?
+  translations        Json?
   contactPerson       String
   contactPhone        String?
   contactEmail        String?
@@ -228,6 +229,7 @@ model Realization {
   showLeaderboard     Boolean            @default(true)
   showLeaderboardDuringGame Boolean      @default(true)
   showLeaderboardOnFinish Boolean        @default(true)
+  hideLeaderboardMinutesBeforeEnd Int    @default(0)
   teamStationNumberingEnabled Boolean    @default(true)
   timedStationPointsDecayEnabled Boolean @default(false)
   hideTaskList        Boolean            @default(false)

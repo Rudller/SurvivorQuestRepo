@@ -1,4 +1,5 @@
 import {
+  Prisma,
   RealizationLanguage as PrismaRealizationLanguage,
   RealizationStatus as PrismaRealizationStatus,
   RealizationType as PrismaRealizationType,
@@ -8,6 +9,8 @@ import type {
   RealizationLanguage,
   RealizationLog,
   RealizationStatus,
+  RealizationTranslation,
+  RealizationTranslations,
   RealizationType,
 } from '../entities/realization.entity';
 
@@ -91,6 +94,99 @@ export function calculateRequiredDevices(teamCount: number) {
   return teamCount + 2;
 }
 
+const REALIZATION_TRANSLATION_LANGUAGES: RealizationLanguage[] = [
+  'polish',
+  'english',
+  'ukrainian',
+  'russian',
+  'other',
+];
+
+export function toPrismaRealizationTranslationsData(
+  translations: RealizationTranslations | undefined,
+) {
+  if (!translations) {
+    return Prisma.DbNull;
+  }
+
+  const normalized = Object.entries(translations).reduce<
+    Record<string, Prisma.InputJsonValue>
+  >((acc, [key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return acc;
+    }
+
+    const next: Record<string, Prisma.InputJsonValue> = {};
+
+    if (typeof value.introText === 'string' && value.introText.trim()) {
+      next.introText = value.introText.trim();
+    }
+
+    if (typeof value.gameRules === 'string' && value.gameRules.trim()) {
+      next.gameRules = value.gameRules.trim();
+    }
+
+    if (Object.keys(next).length === 0) {
+      return acc;
+    }
+
+    acc[key] = next;
+    return acc;
+  }, {});
+
+  if (Object.keys(normalized).length === 0) {
+    return Prisma.DbNull;
+  }
+
+  return normalized as Prisma.InputJsonValue;
+}
+
+export function parseRealizationTranslationsData(
+  translationsData: Prisma.JsonValue | null,
+): RealizationTranslations | undefined {
+  if (
+    !translationsData ||
+    typeof translationsData !== 'object' ||
+    Array.isArray(translationsData)
+  ) {
+    return undefined;
+  }
+
+  const payload = translationsData as Record<string, unknown>;
+  const parsed = Object.entries(payload).reduce<RealizationTranslations>(
+    (acc, [key, value]) => {
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value) ||
+        !REALIZATION_TRANSLATION_LANGUAGES.includes(key as RealizationLanguage)
+      ) {
+        return acc;
+      }
+
+      const item = value as Record<string, unknown>;
+      const translation: RealizationTranslation = {};
+
+      if (typeof item.introText === 'string' && item.introText.trim()) {
+        translation.introText = item.introText.trim();
+      }
+
+      if (typeof item.gameRules === 'string' && item.gameRules.trim()) {
+        translation.gameRules = item.gameRules.trim();
+      }
+
+      if (Object.keys(translation).length > 0) {
+        acc[key as RealizationLanguage] = translation;
+      }
+
+      return acc;
+    },
+    {},
+  );
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 export function mapRealizationLogs(
   logsRaw: Array<{
     id: string;
@@ -128,6 +224,7 @@ export function buildRealizationEntity(input: {
     customLanguage: string | null;
     introText: string | null;
     gameRules: string | null;
+    translations: Prisma.JsonValue | null;
     contactPerson: string;
     contactPhone: string | null;
     contactEmail: string | null;
@@ -153,6 +250,7 @@ export function buildRealizationEntity(input: {
     showLeaderboard: boolean;
     showLeaderboardDuringGame: boolean;
     showLeaderboardOnFinish: boolean;
+    hideLeaderboardMinutesBeforeEnd: number;
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
     hideTaskList: boolean;
@@ -175,6 +273,7 @@ export function buildRealizationEntity(input: {
     customLanguage: realization.customLanguage || undefined,
     introText: realization.introText || undefined,
     gameRules: realization.gameRules || undefined,
+    translations: parseRealizationTranslationsData(realization.translations),
     contactPerson: realization.contactPerson,
     contactPhone: realization.contactPhone || undefined,
     contactEmail: realization.contactEmail || undefined,
@@ -206,6 +305,8 @@ export function buildRealizationEntity(input: {
     showLeaderboard: realization.showLeaderboard,
     showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
     showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+    hideLeaderboardMinutesBeforeEnd:
+      realization.hideLeaderboardMinutesBeforeEnd,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList,

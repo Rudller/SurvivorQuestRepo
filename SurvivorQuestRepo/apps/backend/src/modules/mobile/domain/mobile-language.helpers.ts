@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import type { RealizationLanguage } from '../../realization/realization.service';
+import type {
+  RealizationLanguage,
+  RealizationTranslations,
+} from '../../realization/realization.service';
 import type { StationEntity, StationQuiz } from '../../station/station.service';
 
 type LanguageOption = { value: RealizationLanguage; label: string };
@@ -219,6 +222,40 @@ export function resolveLocalizedStationPresentation(
     quiz: pickFirstQuiz(
       translations.map((value) => value?.quiz),
       station.quiz,
+    ),
+  };
+}
+
+export function resolveLocalizedRealizationTexts(
+  realization: {
+    introText?: string;
+    gameRules?: string;
+    translations?: RealizationTranslations;
+  },
+  context: MobileRealizationLanguageContext,
+) {
+  // Same rule as station content: the realization's own base language always
+  // shows the live introText/gameRules fields the admin edits directly, never
+  // a translations[] snapshot that can go stale.
+  if (context.selectedLanguage === context.baseLanguage) {
+    return {
+      introText: realization.introText,
+      gameRules: realization.gameRules,
+    };
+  }
+
+  const translations = context.fallbackChain
+    .filter((language) => language !== context.baseLanguage)
+    .map((language) => realization.translations?.[language]);
+
+  return {
+    introText: pickFirstString(
+      translations.map((value) => value?.introText),
+      realization.introText ?? '',
+    ),
+    gameRules: pickFirstString(
+      translations.map((value) => value?.gameRules),
+      realization.gameRules ?? '',
     ),
   };
 }

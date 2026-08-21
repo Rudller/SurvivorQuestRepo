@@ -73,6 +73,7 @@ type MobileBootstrapRealization = {
   showLeaderboard?: boolean;
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
+  hideLeaderboardMinutesBeforeEnd?: number;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
   teamCount: number;
@@ -871,6 +872,11 @@ function normalizeDurationMinutes(value: unknown) {
   }
 
   return Math.round(parsed);
+}
+
+function normalizeHideLeaderboardMinutesBeforeEnd(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 function normalizeRealizationStatus(value: unknown): "planned" | "in-progress" | "done" {
@@ -1732,6 +1738,9 @@ export function RealizationOnboardingScreen({
             showLeaderboardOnFinish:
               effectiveRealization.showLeaderboardOnFinish ??
               effectiveRealization.showLeaderboard !== false,
+            hideLeaderboardMinutesBeforeEnd: normalizeHideLeaderboardMinutesBeforeEnd(
+              effectiveRealization.hideLeaderboardMinutesBeforeEnd,
+            ),
             timedStationPointsDecayEnabled:
               effectiveRealization.timedStationPointsDecayEnabled ?? false,
             hideTaskList: effectiveRealization.hideTaskList ?? false,
@@ -1935,6 +1944,9 @@ export function RealizationOnboardingScreen({
         showLeaderboardOnFinish:
           realization.showLeaderboardOnFinish ??
           realization.showLeaderboard !== false,
+        hideLeaderboardMinutesBeforeEnd: normalizeHideLeaderboardMinutesBeforeEnd(
+          realization.hideLeaderboardMinutesBeforeEnd,
+        ),
         timedStationPointsDecayEnabled:
           realization.timedStationPointsDecayEnabled ?? false,
       };

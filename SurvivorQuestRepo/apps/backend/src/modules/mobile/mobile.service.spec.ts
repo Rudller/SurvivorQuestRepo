@@ -357,6 +357,7 @@ describe('MobileService bootstrap', () => {
         showLeaderboard: true,
         showLeaderboardDuringGame: true,
         showLeaderboardOnFinish: true,
+        hideLeaderboardMinutesBeforeEnd: 0,
         teamStationNumberingEnabled: true,
         teamCount: 2,
         stationIds: ['station-1'],
@@ -371,6 +372,7 @@ describe('MobileService bootstrap', () => {
         showLeaderboard: true,
         showLeaderboardDuringGame: true,
         showLeaderboardOnFinish: true,
+        hideLeaderboardMinutesBeforeEnd: 0,
         teamStationNumberingEnabled: true,
       },
     ]);
@@ -378,6 +380,55 @@ describe('MobileService bootstrap', () => {
     const result = await service.getMobileBootstrap();
 
     expect(result.realizations[0]).not.toHaveProperty('joinCode');
+  });
+
+  it('passes through a non-zero hideLeaderboardMinutesBeforeEnd unchanged', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-2',
+        companyName: 'Firma',
+        language: 'polish',
+        customLanguage: null,
+        selectedLanguage: 'polish',
+        availableLanguages: [{ value: 'polish', label: 'Polski' }],
+        introText: null,
+        gameRules: null,
+        status: 'planned',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        joinCode: 'SECRET02',
+        locationRequired: true,
+        showLeaderboard: true,
+        showLeaderboardDuringGame: true,
+        showLeaderboardOnFinish: true,
+        hideLeaderboardMinutesBeforeEnd: 5,
+        teamStationNumberingEnabled: true,
+        teamCount: 2,
+        stationIds: ['station-1'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      {
+        id: 'realization-2',
+        locationRequired: true,
+        showLeaderboard: true,
+        showLeaderboardDuringGame: true,
+        showLeaderboardOnFinish: true,
+        hideLeaderboardMinutesBeforeEnd: 5,
+        teamStationNumberingEnabled: true,
+      },
+    ]);
+
+    const result = await service.getMobileBootstrap();
+
+    expect(result.realizations[0]).toHaveProperty(
+      'hideLeaderboardMinutesBeforeEnd',
+      5,
+    );
   });
 });
 

@@ -21,6 +21,15 @@ export type RealizationLanguage =
   | 'russian'
   | 'other';
 
+export type RealizationTranslation = {
+  introText?: string;
+  gameRules?: string;
+};
+
+export type RealizationTranslations = Partial<
+  Record<RealizationLanguage, RealizationTranslation>
+>;
+
 export type RealizationLog = {
   id: string;
   changedBy: string;
@@ -37,6 +46,7 @@ export type RealizationEntity = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -64,6 +74,7 @@ export type RealizationEntity = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
@@ -113,6 +124,7 @@ export type ValidatedRealizationPayload = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -133,6 +145,7 @@ export type ValidatedRealizationPayload = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;

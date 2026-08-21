@@ -7,6 +7,7 @@ import type {
   RealizationLanguage,
   RealizationStatus,
   RealizationStationDraft,
+  RealizationTranslations,
   RealizationType,
 } from "../types/realization";
 
@@ -72,6 +73,7 @@ type RealizationDto = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -99,6 +101,7 @@ type RealizationDto = {
   showLeaderboard?: boolean;
   showLeaderboardDuringGame?: boolean;
   showLeaderboardOnFinish?: boolean;
+  hideLeaderboardMinutesBeforeEnd?: number;
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
@@ -116,6 +119,7 @@ type CreateRealizationPayload = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -136,6 +140,7 @@ type CreateRealizationPayload = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
@@ -159,6 +164,7 @@ type UpdateRealizationPayload = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -179,6 +185,7 @@ type UpdateRealizationPayload = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
@@ -279,6 +286,45 @@ export type RealizationStationQrResponse = {
   }>;
 };
 
+const REALIZATION_TRANSLATION_LANGUAGES: RealizationLanguage[] = [
+  "polish",
+  "english",
+  "ukrainian",
+  "russian",
+  "other",
+];
+
+function normalizeRealizationTranslations(value: unknown): RealizationTranslations | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const payload = value as Record<string, unknown>;
+  const translations: RealizationTranslations = {};
+
+  for (const language of REALIZATION_TRANSLATION_LANGUAGES) {
+    const entry = payload[language];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+
+    const item = entry as Record<string, unknown>;
+    const introText = typeof item.introText === "string" ? item.introText.trim() : "";
+    const gameRules = typeof item.gameRules === "string" ? item.gameRules.trim() : "";
+
+    if (!introText && !gameRules) {
+      continue;
+    }
+
+    translations[language] = {
+      introText: introText || undefined,
+      gameRules: gameRules || undefined,
+    };
+  }
+
+  return Object.keys(translations).length > 0 ? translations : undefined;
+}
+
 function normalizeRealization(dto: RealizationDto): Realization {
   const scenarioStations = (dto.scenarioStations ?? []).map(normalizeStation);
   const instructors = Array.isArray(dto.instructors)
@@ -297,6 +343,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
       dto.language === "other" ? dto.customLanguage?.trim() || undefined : undefined,
     introText: dto.introText?.trim() || undefined,
     gameRules: dto.gameRules?.trim() || undefined,
+    translations: normalizeRealizationTranslations(dto.translations),
     contactPerson: dto.contactPerson?.trim() || "",
     contactPhone: dto.contactPhone?.trim() || undefined,
     contactEmail: dto.contactEmail?.trim() || undefined,
@@ -344,6 +391,12 @@ function normalizeRealization(dto: RealizationDto): Realization {
         : typeof dto.showLeaderboard === "boolean"
           ? dto.showLeaderboard
           : true,
+    hideLeaderboardMinutesBeforeEnd:
+      typeof dto.hideLeaderboardMinutesBeforeEnd === "number" &&
+      Number.isFinite(dto.hideLeaderboardMinutesBeforeEnd) &&
+      dto.hideLeaderboardMinutesBeforeEnd >= 0
+        ? Math.round(dto.hideLeaderboardMinutesBeforeEnd)
+        : 0,
     teamStationNumberingEnabled:
       typeof dto.teamStationNumberingEnabled === "boolean" ? dto.teamStationNumberingEnabled : true,
     timedStationPointsDecayEnabled:

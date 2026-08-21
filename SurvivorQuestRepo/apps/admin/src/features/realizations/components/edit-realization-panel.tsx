@@ -29,6 +29,7 @@ import { useUploadStationAudioMutation } from "@/features/games/api/station.api"
 import {
   useUpdateRealizationMutation,
   useDeleteRealizationMutation,
+  useTranslateRealizationTextsMutation,
   useUploadRealizationLogoMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
@@ -80,6 +81,10 @@ function isPdfFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+function isRealizationLanguage(value: string): value is RealizationLanguage {
+  return value === "polish" || value === "english" || value === "ukrainian" || value === "russian" || value === "other";
+}
+
 function CalendarInputIcon() {
   return (
     // Icon based on Heroicons (MIT) calendar style.
@@ -106,6 +111,7 @@ export function EditRealizationPanel({
   const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
   const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
   const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
 
   const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [editError, setEditError] = useState<string | null>(null);
@@ -121,6 +127,8 @@ export function EditRealizationPanel({
   const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [textEditingLanguage, setTextEditingLanguage] = useState<RealizationLanguage>(realization.language);
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
   const initialLanguageSelection = useMemo(
     () => parseRealizationLanguageSelection(realization.language, realization.customLanguage),
     [realization.customLanguage, realization.language],
@@ -133,6 +141,7 @@ export function EditRealizationPanel({
     customLanguage: realization.customLanguage ?? "",
     introText: realization.introText ?? "",
     gameRules: realization.gameRules ?? "",
+    translations: realization.translations ?? {},
     contactPerson: realization.contactPerson ?? "",
     contactPhone: realization.contactPhone ?? "",
     contactEmail: realization.contactEmail ?? "",
@@ -153,6 +162,7 @@ export function EditRealizationPanel({
       realization.showLeaderboardDuringGame ?? realization.showLeaderboard,
     showLeaderboardOnFinish:
       realization.showLeaderboardOnFinish ?? realization.showLeaderboard,
+    hideLeaderboardMinutesBeforeEnd: realization.hideLeaderboardMinutesBeforeEnd ?? 0,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList ?? false,
@@ -265,6 +275,99 @@ export function EditRealizationPanel({
   );
   const isLanguageSelectionInvalid = submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
   const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
+  const baseTextLanguage = languagePayload.language;
+  const textEditableLanguages = useMemo(
+    () => (selectedLanguages.includes(baseTextLanguage) ? selectedLanguages : [baseTextLanguage, ...selectedLanguages]),
+    [selectedLanguages, baseTextLanguage],
+  );
+  if (!textEditableLanguages.includes(textEditingLanguage)) {
+    setTextEditingLanguage(baseTextLanguage);
+  }
+  const isEditingBaseTextLanguage = textEditingLanguage === baseTextLanguage;
+  const isTextAutoTranslateDisabled =
+    isAutoTranslating || isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other";
+  const effectiveIntroText = isEditingBaseTextLanguage
+    ? editValues.introText
+    : editValues.translations[textEditingLanguage]?.introText ?? "";
+  const effectiveGameRules = isEditingBaseTextLanguage
+    ? editValues.gameRules
+    : editValues.translations[textEditingLanguage]?.gameRules ?? "";
+
+  function updateEffectiveIntroText(nextValue: string) {
+    if (isEditingBaseTextLanguage) {
+      setEditValues((prev) => ({ ...prev, introText: nextValue }));
+      return;
+    }
+
+    setEditValues((prev) => ({
+      ...prev,
+      translations: {
+        ...prev.translations,
+        [textEditingLanguage]: { ...prev.translations[textEditingLanguage], introText: nextValue },
+      },
+    }));
+  }
+
+  function updateEffectiveGameRules(nextValue: string) {
+    if (isEditingBaseTextLanguage) {
+      setEditValues((prev) => ({ ...prev, gameRules: nextValue }));
+      return;
+    }
+
+    setEditValues((prev) => ({
+      ...prev,
+      translations: {
+        ...prev.translations,
+        [textEditingLanguage]: { ...prev.translations[textEditingLanguage], gameRules: nextValue },
+      },
+    }));
+  }
+
+  async function handleAutoTranslateText() {
+    if (isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other") {
+      return;
+    }
+
+    const texts: string[] = [];
+    const fields: Array<"introText" | "gameRules"> = [];
+    const currentTranslation = editValues.translations[textEditingLanguage];
+
+    if (!currentTranslation?.introText?.trim() && editValues.introText.trim()) {
+      fields.push("introText");
+      texts.push(editValues.introText);
+    }
+    if (!currentTranslation?.gameRules?.trim() && editValues.gameRules.trim()) {
+      fields.push("gameRules");
+      texts.push(editValues.gameRules);
+    }
+
+    if (texts.length === 0) {
+      setAutoTranslateMessage("Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.");
+      return;
+    }
+
+    setAutoTranslateMessage(null);
+    try {
+      const response = await translateRealizationTexts({
+        sourceLanguage: baseTextLanguage,
+        targetLanguage: textEditingLanguage,
+        texts,
+      }).unwrap();
+
+      setEditValues((prev) => {
+        const next = { ...prev.translations[textEditingLanguage] };
+        fields.forEach((field, index) => {
+          const translated = response.texts[index]?.trim();
+          if (translated) {
+            next[field] = translated;
+          }
+        });
+        return { ...prev, translations: { ...prev.translations, [textEditingLanguage]: next } };
+      });
+    } catch {
+      setAutoTranslateMessage("Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+    }
+  }
   const isScheduledAtInvalid = submitAttempted && !editValues.scheduledAt;
   const isDurationInvalid = submitAttempted && (!Number.isFinite(editValues.durationMinutes) || editValues.durationMinutes < 1);
   const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
@@ -330,6 +433,7 @@ export function EditRealizationPanel({
       }
     };
   }, [pendingMapImagePreviewUrl]);
+
 
   useEffect(() => {
     const initialLocation = realization.location?.trim();
@@ -553,6 +657,8 @@ export function EditRealizationPanel({
                 customLanguage: languagePayload.customLanguage,
                 introText: editValues.introText || undefined,
                 gameRules: editValues.gameRules.trim() || undefined,
+                translations:
+                  Object.keys(editValues.translations).length > 0 ? editValues.translations : undefined,
                 contactPerson: normalizedContactPerson,
                 contactPhone: normalizedContactPhone,
                 contactEmail: normalizedContactEmail,
@@ -575,6 +681,7 @@ export function EditRealizationPanel({
                   editValues.showLeaderboardOnFinish,
                 showLeaderboardDuringGame: editValues.showLeaderboardDuringGame,
                 showLeaderboardOnFinish: editValues.showLeaderboardOnFinish,
+                hideLeaderboardMinutesBeforeEnd: editValues.hideLeaderboardMinutesBeforeEnd,
                 teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled: editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
@@ -1067,6 +1174,27 @@ export function EditRealizationPanel({
                     Pokaż leaderboard na ekranie końcowym (mobile)
                   </label>
 
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Ukryj leaderboard X minut przed końcem czasu (0 = wyłączone)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editValues.hideLeaderboardMinutesBeforeEnd}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          hideLeaderboardMinutesBeforeEnd: Math.max(0, Math.round(Number(event.target.value) || 0)),
+                        }))
+                      }
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                    <p className="text-xs text-zinc-500">
+                      Tablica wyników zniknie z ekranu gry na X minut przed końcem czasu i nie pojawi się też na ekranie końcowym.
+                    </p>
+                  </label>
+
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1261,28 +1389,63 @@ export function EditRealizationPanel({
                   )}
                 </div>
 
+                {textEditableLanguages.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
+                      <span>{getRealizationLanguageFlag(baseTextLanguage)}</span>
+                      <span>Podstawowy: {realizationLanguageOptions.find((option) => option.value === baseTextLanguage)?.label}</span>
+                    </span>
+                    <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+                      <span>Edytowany język</span>
+                      <select
+                        value={textEditingLanguage}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          if (isRealizationLanguage(nextValue)) {
+                            setTextEditingLanguage(nextValue);
+                          }
+                        }}
+                        className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                      >
+                        {textEditableLanguages.map((language) => (
+                          <option key={`text-editing-${language}`} value={language}>
+                            {getRealizationLanguageFlag(language)} {realizationLanguageOptions.find((option) => option.value === language)?.label}
+                            {language === baseTextLanguage ? " (podstawowy)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleAutoTranslateText()}
+                      disabled={isTextAutoTranslateDisabled}
+                      title={
+                        isEditingBaseTextLanguage
+                          ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
+                          : textEditingLanguage === "other" || baseTextLanguage === "other"
+                            ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
+                            : undefined
+                      }
+                      className="rounded-md border border-amber-400/60 px-2.5 py-1 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAutoTranslating ? "Tłumaczenie..." : "Auto-tłumacz"}
+                    </button>
+                  </div>
+                )}
+                {autoTranslateMessage && <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>}
+
                 <StyledMarkdownEditor
                   label="Tekst wstępu"
-                  value={editValues.introText}
-                  onChange={(nextValue) =>
-                    setEditValues((prev) => ({
-                      ...prev,
-                      introText: nextValue,
-                    }))
-                  }
+                  value={effectiveIntroText}
+                  onChange={updateEffectiveIntroText}
                   placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
                   rows={5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
                 <StyledMarkdownEditor
                   label="Zasady gry"
-                  value={editValues.gameRules}
-                  onChange={(nextValue) =>
-                    setEditValues((prev) => ({
-                      ...prev,
-                      gameRules: nextValue,
-                    }))
-                  }
+                  value={effectiveGameRules}
+                  onChange={updateEffectiveGameRules}
                   placeholder="Wpisz zasady gry widoczne po Welcome screen."
                   rows={8}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
@@ -1391,6 +1554,12 @@ export function EditRealizationPanel({
                   <p>
                     <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span>{" "}
                     {editValues.showLeaderboardOnFinish ? "Tak" : "Nie"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Ukryj leaderboard przed końcem:</span>{" "}
+                    {editValues.hideLeaderboardMinutesBeforeEnd > 0
+                      ? `${editValues.hideLeaderboardMinutesBeforeEnd} min`
+                      : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span>{" "}

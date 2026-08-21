@@ -55,6 +55,13 @@ export function getRealizationLanguageFlag(language: RealizationLanguage) {
   return realizationLanguageFlagByValue[language] ?? realizationLanguageFlagByValue.polish;
 }
 
+export type RealizationTranslation = {
+  introText?: string;
+  gameRules?: string;
+};
+
+export type RealizationTranslations = Partial<Record<RealizationLanguage, RealizationTranslation>>;
+
 export type RealizationLanguageSelection = {
   selectedLanguages: RealizationLanguage[];
   customLanguage: string;
@@ -192,6 +199,7 @@ export type Realization = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -219,6 +227,7 @@ export type Realization = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
@@ -263,6 +272,7 @@ export type RealizationExportRealizationData = {
   customLanguage?: string;
   introText?: string;
   gameRules?: string;
+  translations?: RealizationTranslations;
   contactPerson: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -280,6 +290,7 @@ export type RealizationExportRealizationData = {
   showLeaderboard: boolean;
   showLeaderboardDuringGame: boolean;
   showLeaderboardOnFinish: boolean;
+  hideLeaderboardMinutesBeforeEnd: number;
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
