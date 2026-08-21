@@ -76,16 +76,29 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
               <h2 className="text-xl font-semibold text-zinc-100">Edytuj scenariusz</h2>
               <p className="mt-1 text-sm text-zinc-400">{scenario.name}</p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Zamknij
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+              >
+                Zamknij
+              </button>
+              <button
+                type="submit"
+                form="edit-scenario-form"
+                disabled={isUpdating}
+                className="rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+              >
+                {isUpdating ? "Zapisywanie..." : "Zapisz"}
+              </button>
+            </div>
           </div>
 
+          {editError && <p className="text-sm text-red-300">{editError}</p>}
+
           <form
+            id="edit-scenario-form"
             onSubmit={async (event) => {
               event.preventDefault();
               const trimmedName = editValues.name.trim();
@@ -198,25 +211,6 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                   );
                 })}
               </div>
-            </div>
-
-            {editError && <p className="text-sm text-red-300">{editError}</p>}
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
-              >
-                Anuluj
-              </button>
-              <button
-                type="submit"
-                disabled={isUpdating}
-                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-              >
-                {isUpdating ? "Zapisywanie..." : "Zapisz"}
-              </button>
             </div>
           </form>
 

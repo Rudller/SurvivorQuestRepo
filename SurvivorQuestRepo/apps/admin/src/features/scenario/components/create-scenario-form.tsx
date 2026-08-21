@@ -104,14 +104,25 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
         >
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Nowy scenariusz</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Zamknij
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500"
+              >
+                Zamknij
+              </button>
+              <button
+                type="submit"
+                disabled={isCreating}
+                className="rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+              >
+                {isCreating ? "Dodawanie..." : "Dodaj scenariusz"}
+              </button>
+            </div>
           </div>
+
+          {formError && <p className="text-sm text-red-300">{formError}</p>}
 
           <div className="grid gap-4">
             <label className="space-y-1.5">
@@ -217,25 +228,6 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
                 )}
               </div>
             </div>
-          </div>
-
-          {formError && <p className="text-sm text-red-300">{formError}</p>}
-
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-500"
-            >
-              Anuluj
-            </button>
-            <button
-              type="submit"
-              disabled={isCreating}
-              className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-            >
-              {isCreating ? "Dodawanie..." : "Dodaj scenariusz"}
-            </button>
           </div>
         </form>
       </aside>
