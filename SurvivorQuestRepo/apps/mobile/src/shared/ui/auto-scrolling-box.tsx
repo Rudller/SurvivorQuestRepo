@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+import { EXPEDITION_THEME } from "../../features/onboarding/model/constants";
+
+const SCROLL_THUMB_WIDTH = 3;
+const SCROLL_THUMB_MIN_HEIGHT = 24;
+const SCROLL_THUMB_RIGHT_OFFSET = 2;
 
 const BOTTOM_FADE_HEIGHT = 28;
 const BOTTOM_FADE_BAND_OPACITIES = [0.08, 0.22, 0.4, 0.62, 0.86] as const;
@@ -62,7 +67,12 @@ export function AutoScrollingBox({
   const maxScrollYRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
+  const scrollYAnimation = useRef(new Animated.Value(0)).current;
   const [isScrollableBelow, setIsScrollableBelow] = useState(false);
+  // Mirrors contentHeightRef/visibleHeightRef into state — only these two
+  // drive the thumb's size/track, so re-rendering on every scroll tick isn't
+  // needed (the thumb's position is native-driven via scrollYAnimation).
+  const [scrollThumbMetrics, setScrollThumbMetrics] = useState({ contentHeight: 0, visibleHeight: 0 });
 
   const updateIsScrollableBelow = () => {
     if (!showsBottomFadeWhenScrollable) {
@@ -141,6 +151,11 @@ export function AutoScrollingBox({
     const nextMaxScrollY = Math.max(0, contentHeightRef.current - visibleHeightRef.current);
     const scrollRangeChanged = nextMaxScrollY !== maxScrollYRef.current;
     maxScrollYRef.current = nextMaxScrollY;
+    setScrollThumbMetrics((current) =>
+      current.contentHeight === contentHeightRef.current && current.visibleHeight === visibleHeightRef.current
+        ? current
+        : { contentHeight: contentHeightRef.current, visibleHeight: visibleHeightRef.current },
+    );
     // Keep the tracked position valid if the scrollable range just shrank —
     // otherwise the next tick's target (clamped to the new max) would land
     // somewhere unrelated to the visually current position, i.e. a jump.
@@ -164,18 +179,37 @@ export function AutoScrollingBox({
     };
   }, []);
 
+  const { contentHeight: thumbContentHeight, visibleHeight: thumbVisibleHeight } = scrollThumbMetrics;
+  const thumbMaxScrollY = Math.max(0, thumbContentHeight - thumbVisibleHeight);
+  const isThumbVisible = thumbMaxScrollY > 0 && thumbVisibleHeight > 0;
+  const thumbHeight = isThumbVisible
+    ? Math.min(thumbVisibleHeight, Math.max(SCROLL_THUMB_MIN_HEIGHT, (thumbVisibleHeight * thumbVisibleHeight) / thumbContentHeight))
+    : 0;
+  const thumbTrackTravel = Math.max(0, thumbVisibleHeight - thumbHeight);
+  const thumbTranslateY = scrollYAnimation.interpolate({
+    inputRange: [0, Math.max(1, thumbMaxScrollY)],
+    outputRange: [0, thumbTrackTravel],
+    extrapolate: "clamp",
+  });
+
   return (
     <View className={className} style={[{ flexShrink: 1, flexGrow: 0, overflow: "hidden" }, style]}>
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         contentContainerStyle={contentContainerStyle}
         style={{ flexShrink: 1, flexGrow: 0 }}
         scrollEventThrottle={16}
-        onScroll={(event) => {
-          currentYRef.current = event.nativeEvent.contentOffset.y;
-          updateIsScrollableBelow();
-        }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollYAnimation } } }],
+          {
+            useNativeDriver: true,
+            listener: (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+              currentYRef.current = event.nativeEvent.contentOffset.y;
+              updateIsScrollableBelow();
+            },
+          },
+        )}
         onScrollBeginDrag={resetIdleCycle}
         onTouchStart={resetIdleCycle}
         onContentSizeChange={(_width, height) => {
@@ -188,7 +222,30 @@ export function AutoScrollingBox({
         }}
       >
         {children}
-      </ScrollView>
+      </Animated.ScrollView>
+      {isThumbVisible ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            right: SCROLL_THUMB_RIGHT_OFFSET,
+            width: SCROLL_THUMB_WIDTH,
+            height: thumbVisibleHeight,
+          }}
+        >
+          <Animated.View
+            style={{
+              width: SCROLL_THUMB_WIDTH,
+              height: thumbHeight,
+              borderRadius: SCROLL_THUMB_WIDTH / 2,
+              backgroundColor: EXPEDITION_THEME.accent,
+              opacity: 0.55,
+              transform: [{ translateY: thumbTranslateY }],
+            }}
+          />
+        </View>
+      ) : null}
       {showsBottomFadeWhenScrollable && isScrollableBelow && bottomFadeColor ? (
         <View
           pointerEvents="none"

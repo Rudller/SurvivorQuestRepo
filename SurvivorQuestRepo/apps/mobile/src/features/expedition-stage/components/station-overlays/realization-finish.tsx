@@ -9,16 +9,8 @@ import type { RealizationFinishOverlayProps } from "./types";
 const REALIZATION_FINISH_TEXT: Record<
   UiLanguage,
   {
-    reasonAllTasksCompleted: string;
-    reasonTimeExpired: string;
-    reasonRealizationFinished: string;
-    reasonManualPreview: string;
-    reasonDefault: string;
-    subtitleAllTasksCompleted: string;
-    subtitleTimeExpired: string;
-    subtitleRealizationFinished: string;
-    subtitleManualPreview: string;
-    subtitleDefault: string;
+    finishedTitle: string;
+    finishedSubtitle: string;
     team: string;
     points: string;
     progress: string;
@@ -42,16 +34,8 @@ const REALIZATION_FINISH_TEXT: Record<
   }
 > = {
   polish: {
-    reasonAllTasksCompleted: "Wszystkie zadania Waszej drużyny zostały ukończone.",
-    reasonTimeExpired: "Czas realizacji dobiegł końca.",
-    reasonRealizationFinished: "Realizacja została zakończona przez organizatora.",
-    reasonManualPreview: "Podgląd ekranu końcowego (tryb testowy).",
-    reasonDefault: "Realizacja została zakończona.",
-    subtitleAllTasksCompleted: "Świetna robota! Jesteście na mecie.",
-    subtitleTimeExpired: "To był intensywny etap. Sprawdźcie końcowe wyniki.",
-    subtitleRealizationFinished: "Dziękujemy za udział. Czas na podsumowanie.",
-    subtitleManualPreview: "Podgląd wizualny ekranu końcowego.",
-    subtitleDefault: "Dziękujemy za wspólną grę.",
+    finishedTitle: "Realizacja została zakończona.",
+    finishedSubtitle: "Gratulujemy ukończenia gry!",
     team: "Drużyna",
     points: "Punkty",
     progress: "Progres",
@@ -74,16 +58,8 @@ const REALIZATION_FINISH_TEXT: Record<
     noTableData: "Brak danych do wyświetlenia tabeli wyników.",
   },
   english: {
-    reasonAllTasksCompleted: "All tasks for your team have been completed.",
-    reasonTimeExpired: "The realization time has ended.",
-    reasonRealizationFinished: "The realization was ended by the organizer.",
-    reasonManualPreview: "Final screen preview (test mode).",
-    reasonDefault: "The realization has ended.",
-    subtitleAllTasksCompleted: "Great job! You reached the finish.",
-    subtitleTimeExpired: "That was an intense stage. Check the final results.",
-    subtitleRealizationFinished: "Thank you for participating. Time for a summary.",
-    subtitleManualPreview: "Visual preview of the final screen.",
-    subtitleDefault: "Thank you for playing together.",
+    finishedTitle: "The realization has ended.",
+    finishedSubtitle: "Thank you for playing together.",
     team: "Team",
     points: "Points",
     progress: "Progress",
@@ -106,16 +82,8 @@ const REALIZATION_FINISH_TEXT: Record<
     noTableData: "No data to display in the results table.",
   },
   ukrainian: {
-    reasonAllTasksCompleted: "Усі завдання вашої команди виконано.",
-    reasonTimeExpired: "Час реалізації завершився.",
-    reasonRealizationFinished: "Реалізацію завершено організатором.",
-    reasonManualPreview: "Попередній перегляд фінального екрана (тестовий режим).",
-    reasonDefault: "Реалізацію завершено.",
-    subtitleAllTasksCompleted: "Чудова робота! Ви на фініші.",
-    subtitleTimeExpired: "Це був насичений етап. Перегляньте фінальні результати.",
-    subtitleRealizationFinished: "Дякуємо за участь. Час підсумків.",
-    subtitleManualPreview: "Візуальний перегляд фінального екрана.",
-    subtitleDefault: "Дякуємо за спільну гру.",
+    finishedTitle: "Реалізацію завершено.",
+    finishedSubtitle: "Дякуємо за спільну гру.",
     team: "Команда",
     points: "Бали",
     progress: "Прогрес",
@@ -138,16 +106,8 @@ const REALIZATION_FINISH_TEXT: Record<
     noTableData: "Немає даних для відображення таблиці результатів.",
   },
   russian: {
-    reasonAllTasksCompleted: "Все задания вашей команды выполнены.",
-    reasonTimeExpired: "Время реализации истекло.",
-    reasonRealizationFinished: "Реализация завершена организатором.",
-    reasonManualPreview: "Предпросмотр финального экрана (тестовый режим).",
-    reasonDefault: "Реализация завершена.",
-    subtitleAllTasksCompleted: "Отличная работа! Вы на финише.",
-    subtitleTimeExpired: "Это был интенсивный этап. Проверьте финальные результаты.",
-    subtitleRealizationFinished: "Спасибо за участие. Время подвести итоги.",
-    subtitleManualPreview: "Визуальный предпросмотр финального экрана.",
-    subtitleDefault: "Спасибо за игру.",
+    finishedTitle: "Реализация завершена.",
+    finishedSubtitle: "Спасибо за игру.",
     team: "Команда",
     points: "Очки",
     progress: "Прогресс",
@@ -179,46 +139,6 @@ const REALIZATION_FINISH_DATE_LOCALE: Record<UiLanguage, string> = {
 };
 
 type RealizationFinishText = (typeof REALIZATION_FINISH_TEXT)["polish"];
-
-function resolveReasonLabel(reason: RealizationFinishOverlayProps["reason"], text: RealizationFinishText) {
-  if (reason === "all-tasks-completed") {
-    return text.reasonAllTasksCompleted;
-  }
-
-  if (reason === "time-expired") {
-    return text.reasonTimeExpired;
-  }
-
-  if (reason === "realization-finished") {
-    return text.reasonRealizationFinished;
-  }
-
-  if (reason === "manual-preview") {
-    return text.reasonManualPreview;
-  }
-
-  return text.reasonDefault;
-}
-
-function resolveReasonSubtitle(reason: RealizationFinishOverlayProps["reason"], text: RealizationFinishText) {
-  if (reason === "all-tasks-completed") {
-    return text.subtitleAllTasksCompleted;
-  }
-
-  if (reason === "time-expired") {
-    return text.subtitleTimeExpired;
-  }
-
-  if (reason === "realization-finished") {
-    return text.subtitleRealizationFinished;
-  }
-
-  if (reason === "manual-preview") {
-    return text.subtitleManualPreview;
-  }
-
-  return text.subtitleDefault;
-}
 
 function resolveCardTextColor(hexColor: string) {
   const normalizedHex = hexColor.replace("#", "");
@@ -419,7 +339,6 @@ function TeamRankRow({ position, entry, isCurrentTeam, compact = false, text }: 
 
 export function RealizationFinishOverlay({
   visible,
-  reason,
   endedAt,
   leaderboardEntries,
   currentTeamId,
@@ -522,10 +441,10 @@ export function RealizationFinishOverlay({
         </View>
 
         <Text className={isTablet ? "mt-2 text-2xl font-semibold" : "mt-2 text-lg font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-          {resolveReasonLabel(reason, text)}
+          {text.finishedTitle}
         </Text>
         <Text className={isTablet ? "mt-1 text-base" : "mt-1 text-sm"} style={{ color: EXPEDITION_THEME.textMuted }}>
-          {resolveReasonSubtitle(reason, text)}
+          {text.finishedSubtitle}
         </Text>
         {endedAt ? (
           <Text className={isTablet ? "mt-1 text-sm" : "mt-1 text-xs"} style={{ color: EXPEDITION_THEME.textMuted }}>

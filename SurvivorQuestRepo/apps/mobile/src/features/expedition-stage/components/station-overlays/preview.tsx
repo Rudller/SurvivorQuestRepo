@@ -2596,6 +2596,20 @@ export function StationPreviewOverlay({
                   </Text>
                 ) : null}
 
+                {(isBoggleStation || isAnagramStation) && stationDescription.length > 0 ? (
+                  <AutoScrollingBox className="mb-1">
+                    <Text
+                      style={{
+                        color: EXPEDITION_THEME.textMuted,
+                        fontSize: stationPanelLayout.descriptionFontSize,
+                        lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
+                      }}
+                    >
+                      {stationDescription}
+                    </Text>
+                  </AutoScrollingBox>
+                ) : null}
+
                 {station.stationType !== "strong-password" &&
                 !requiresQrScan &&
                 !isAnagramStation &&
@@ -2927,7 +2941,7 @@ export function StationPreviewOverlay({
                     </Text>
                   </AutoScrollingBox>
                 </View>
-              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && !requiresQrScan && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && !requiresQrScan && !isBoggleStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
                 <AutoScrollingBox className="mt-1">
                   <Text
                     style={{
@@ -2990,20 +3004,6 @@ export function StationPreviewOverlay({
                     {renderedQuizStation}
                   </StationQuizTaskWrapper>
                 </View>
-              ) : null}
-
-              {isAnagramStation && stationDescription.length > 0 ? (
-                <AutoScrollingBox className="mt-2">
-                  <Text
-                    style={{
-                      color: EXPEDITION_THEME.textMuted,
-                      fontSize: stationPanelLayout.descriptionFontSize,
-                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
-                    }}
-                  >
-                    {stationDescription}
-                  </Text>
-                </AutoScrollingBox>
               ) : null}
 
             </View>

@@ -188,10 +188,18 @@ export function StationMediaPanel({
             // back up to fill the available space otherwise.
             ? { flex: 1, minHeight: Math.max(160, Math.round(viewportHeight * 0.22)) }
             : isWordleStation
-              // Same reasoning as mini-sudoku: the guess grid used to claim a
-              // fixed ~38-40% of the viewport, leaving no room for the
-              // station description below it.
-              ? { flex: 1, minHeight: Math.max(200, Math.round(viewportHeight * 0.24)) }
+              // Same reasoning as mini-sudoku, but wordle also has a whole
+              // separate interaction panel below it (input row + keyboard +
+              // submit button, rendered elsewhere in preview.tsx) that this
+              // media board's minHeight floor was starving: the old
+              // 200px/24vh floor left no guaranteed room for that panel, so
+              // on tall content (long description, small screen) the input
+              // row itself got clipped by the outer overflow:hidden column.
+              // Lowered to match hangman's more conservative reservation —
+              // the attempts-history board can scroll internally (see
+              // WordleMediaBoard) if 6 rows don't fit, but the input row
+              // must always be visible.
+              ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.16)) }
               : isHangmanStation
                 // Same reasoning as mini-sudoku: the word display is already
                 // width-driven (font size fitted from measured width above),

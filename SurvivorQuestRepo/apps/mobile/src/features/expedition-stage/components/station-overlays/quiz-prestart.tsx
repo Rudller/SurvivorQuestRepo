@@ -135,7 +135,7 @@ const QUIZ_PRESTART_TEXT: Record<
     descriptionHangman: "Get ready to guess the phrase.",
     descriptionLogicChallenge: "Get ready for a short interactive task.",
     descriptionQrHunt: "Find and scan all the QR codes hidden around the area.",
-    descriptionQuiz: "Get ready to answer the questions.",
+    descriptionQuiz: "Get ready to answer the question.",
     descriptionPhotoTask: "Get ready to take and submit a photo.",
     pointsDecayWarning: (timeLimit, points) =>
       `You have ${timeLimit} to complete the task. Every second reduces the available ${points} points. Time running out means the task is failed.`,
