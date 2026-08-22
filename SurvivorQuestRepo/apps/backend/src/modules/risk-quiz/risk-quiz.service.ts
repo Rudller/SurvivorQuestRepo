@@ -543,8 +543,9 @@ export class RiskQuizService {
     if (!trimmed) {
       throw new BadRequestException('Category name is required');
     }
+    const codeSlug = await this.generateUniqueCategoryCodeSlug(trimmed);
     return this.prisma.riskCategory.create({
-      data: { name: trimmed },
+      data: { name: trimmed, codeSlug },
       include: RiskQuizService.poolStationsInclude,
     });
   }
@@ -554,10 +555,75 @@ export class RiskQuizService {
     if (!trimmed) {
       throw new BadRequestException('Category name is required');
     }
+
+    const current = await this.prisma.riskCategory.findUnique({
+      where: { id: categoryId },
+    });
+    if (!current) {
+      throw new NotFoundException('Category not found');
+    }
+
+    const data: { name: string; codeSlug?: string } = { name: trimmed };
+    if (!current.codeSlug) {
+      // Backfill from the pre-rename name — a category's printed codes must
+      // never move just because someone renamed it for display, so the slug
+      // is derived from whatever name it had *before* this rename, not the
+      // new one.
+      data.codeSlug = await this.generateUniqueCategoryCodeSlug(
+        current.name,
+        categoryId,
+      );
+    }
+
     return this.prisma.riskCategory.update({
       where: { id: categoryId },
-      data: { name: trimmed },
+      data,
     });
+  }
+
+  // Finds a codeSlug for `name` that isn't already taken by another category,
+  // appending -2, -3, ... on collision (e.g. two names that slugify the same).
+  private async generateUniqueCategoryCodeSlug(
+    name: string,
+    excludeCategoryId?: string,
+  ): Promise<string> {
+    const baseSlug = slugify(name);
+    let candidate = baseSlug;
+    let suffix = 1;
+
+    for (;;) {
+      const existing = await this.prisma.riskCategory.findUnique({
+        where: { codeSlug: candidate },
+      });
+      if (!existing || existing.id === excludeCategoryId) {
+        return candidate;
+      }
+      suffix += 1;
+      candidate = `${baseSlug}-${suffix}`;
+    }
+  }
+
+  // Returns a category's stable code slug, lazily backfilling it (from the
+  // category's current name) and persisting it if this category predates the
+  // codeSlug column — so old categories get one without a manual migration.
+  private async ensureCategoryCodeSlug(category: {
+    id: string;
+    name: string;
+    codeSlug: string | null;
+  }): Promise<string> {
+    if (category.codeSlug) {
+      return category.codeSlug;
+    }
+
+    const codeSlug = await this.generateUniqueCategoryCodeSlug(
+      category.name,
+      category.id,
+    );
+    await this.prisma.riskCategory.update({
+      where: { id: category.id },
+      data: { codeSlug },
+    });
+    return codeSlug;
   }
 
   async deleteCategory(categoryId: string) {
@@ -637,7 +703,7 @@ export class RiskQuizService {
     });
 
     for (const { category } of schemeCategories) {
-      const categorySlug = slugify(category.name);
+      const categorySlug = await this.ensureCategoryCodeSlug(category);
       for (const difficulty of RISK_DIFFICULTY_ORDER) {
         const existingCodes = new Set(
           existingCards
@@ -684,5 +750,514 @@ export class RiskQuizService {
     });
     const totalPoints = teams.reduce((sum, team) => sum + team.points, 0);
     return { teams, totalPoints };
+  }
+
+  // Per-team "which cards has this team already burned" breakdown for the
+  // live-ops admin panel — same (category, difficulty) -> pool-station-count
+  // shape scanCard()/getDeckStatus() use, but for every team at once instead
+  // of the one team a mobile session belongs to.
+  async getTeamCardStatus(realizationId: string) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const teams = await this.prisma.team.findMany({
+      where: { realizationId },
+      orderBy: { slotNumber: 'asc' },
+      select: { id: true, name: true, slotNumber: true, color: true },
+    });
+
+    if (!realization.riskSchemeId) {
+      return {
+        teams: teams.map((team) => ({
+          teamId: team.id,
+          teamName: team.name,
+          slotNumber: team.slotNumber,
+          color: team.color,
+          totalAttempted: 0,
+          totalCards: 0,
+          categories: [] as {
+            categoryId: string;
+            categoryName: string;
+            difficulty: RiskDifficulty;
+            attempted: number;
+            total: number;
+          }[],
+        })),
+      };
+    }
+
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId: realization.riskSchemeId },
+      include: { category: true },
+      orderBy: { order: 'asc' },
+    });
+    const categoryIds = schemeCategories.map((item) => item.categoryId);
+
+    const poolStations = await this.prisma.riskPoolStation.findMany({
+      where: { categoryId: { in: categoryIds } },
+      select: { categoryId: true, difficulty: true, stationId: true },
+    });
+
+    const poolKeyByStationId = new Map<string, string>();
+    const totalByPoolKey = new Map<string, number>();
+    for (const item of poolStations) {
+      const key = `${item.categoryId}:${item.difficulty}`;
+      poolKeyByStationId.set(item.stationId, key);
+      totalByPoolKey.set(key, (totalByPoolKey.get(key) ?? 0) + 1);
+    }
+
+    const attempts = await this.prisma.riskAttempt.findMany({
+      where: {
+        realizationId,
+        stationId: { in: poolStations.map((item) => item.stationId) },
+      },
+      select: { teamId: true, stationId: true },
+    });
+
+    const attemptedByTeam = new Map<string, Map<string, number>>();
+    for (const attempt of attempts) {
+      const key = poolKeyByStationId.get(attempt.stationId);
+      if (!key) continue;
+      const teamCounts =
+        attemptedByTeam.get(attempt.teamId) ?? new Map<string, number>();
+      teamCounts.set(key, (teamCounts.get(key) ?? 0) + 1);
+      attemptedByTeam.set(attempt.teamId, teamCounts);
+    }
+
+    return {
+      teams: teams.map((team) => {
+        const teamAttempted =
+          attemptedByTeam.get(team.id) ?? new Map<string, number>();
+        let totalAttempted = 0;
+        let totalCards = 0;
+        const categories: {
+          categoryId: string;
+          categoryName: string;
+          difficulty: RiskDifficulty;
+          attempted: number;
+          total: number;
+        }[] = [];
+
+        for (const schemeCategory of schemeCategories) {
+          for (const difficulty of RISK_DIFFICULTY_ORDER) {
+            const key = `${schemeCategory.categoryId}:${difficulty}`;
+            const total = totalByPoolKey.get(key) ?? 0;
+            if (total === 0) continue;
+
+            const attempted = teamAttempted.get(key) ?? 0;
+            totalAttempted += attempted;
+            totalCards += total;
+            categories.push({
+              categoryId: schemeCategory.categoryId,
+              categoryName: schemeCategory.category.name,
+              difficulty,
+              attempted,
+              total,
+            });
+          }
+        }
+
+        return {
+          teamId: team.id,
+          teamName: team.name,
+          slotNumber: team.slotNumber,
+          color: team.color,
+          totalAttempted,
+          totalCards,
+          categories,
+        };
+      }),
+    };
+  }
+
+  // Clears one team's Ryzykanci progress without touching the rest of the
+  // realization — for when a single team's device/scanner glitched out,
+  // instead of resetting every team via resetMobileAdminRealization.
+  async resetTeamAttempts(realizationId: string, teamId: string) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const attempts = await this.prisma.riskAttempt.findMany({
+      where: { realizationId: realization.id, teamId },
+      select: { pointsDelta: true },
+    });
+
+    if (attempts.length === 0) {
+      return { teamId, resetCount: 0, pointsAdjusted: 0 };
+    }
+
+    const pointsToRemove = attempts.reduce(
+      (sum, attempt) => sum + attempt.pointsDelta,
+      0,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.riskAttempt.deleteMany({
+        where: { realizationId: realization.id, teamId },
+      }),
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { points: { decrement: pointsToRemove } },
+      }),
+    ]);
+
+    return {
+      teamId,
+      resetCount: attempts.length,
+      pointsAdjusted: -pointsToRemove,
+    };
+  }
+
+  // --- Admin: per-station override for one team's Ryzykanci progress ---
+  // The admin UI calls this "cards", but the unit that actually carries a
+  // status is the pool STATION — a printed card is just an interchangeable
+  // QR key into a (category, difficulty) pool (see generateMissingCards'
+  // doc comment above), so this mirrors the classic game's per-station
+  // task-editing panel one row per pool station instead of one per card.
+
+  async getTeamCardBoard(realizationId: string, teamId: string) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (!realization.riskSchemeId) {
+      return { teamId, tasks: [] };
+    }
+
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId: realization.riskSchemeId },
+      include: { category: true },
+      orderBy: { order: 'asc' },
+    });
+    const categoryIds = schemeCategories.map((item) => item.categoryId);
+    if (categoryIds.length === 0) {
+      return { teamId, tasks: [] };
+    }
+
+    const categoryNameById = new Map(
+      schemeCategories.map((item) => [item.categoryId, item.category.name]),
+    );
+    const categoryOrderById = new Map(
+      schemeCategories.map((item, index) => [item.categoryId, index]),
+    );
+    const difficultyOrderByValue = new Map(
+      RISK_DIFFICULTY_ORDER.map((difficulty, index) => [difficulty, index]),
+    );
+
+    const poolStations = await this.prisma.riskPoolStation.findMany({
+      where: { categoryId: { in: categoryIds } },
+      include: { station: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const attempts = await this.prisma.riskAttempt.findMany({
+      where: {
+        teamId,
+        stationId: { in: poolStations.map((item) => item.stationId) },
+      },
+    });
+    const attemptByStationId = new Map(
+      attempts.map((attempt) => [attempt.stationId, attempt]),
+    );
+
+    const tasks = poolStations
+      .map((poolStation) => {
+        const attempt = attemptByStationId.get(poolStation.stationId);
+        const status: 'todo' | 'done' | 'failed' = !attempt
+          ? 'todo'
+          : attempt.isCorrect
+            ? 'done'
+            : 'failed';
+        return {
+          categoryId: poolStation.categoryId,
+          categoryName: categoryNameById.get(poolStation.categoryId) ?? '',
+          difficulty: poolStation.difficulty,
+          stationId: poolStation.stationId,
+          stationName: poolStation.station.name,
+          status,
+          pointsAwarded: attempt?.pointsDelta ?? 0,
+        };
+      })
+      .sort((left, right) => {
+        const categoryDiff =
+          (categoryOrderById.get(left.categoryId) ?? 0) -
+          (categoryOrderById.get(right.categoryId) ?? 0);
+        if (categoryDiff !== 0) {
+          return categoryDiff;
+        }
+        return (
+          (difficultyOrderByValue.get(left.difficulty) ?? 0) -
+          (difficultyOrderByValue.get(right.difficulty) ?? 0)
+        );
+      });
+
+    return { teamId, tasks };
+  }
+
+  private async requireRiskPoolStationOrThrow(stationId: string) {
+    const poolStation = await this.prisma.riskPoolStation.findFirst({
+      where: { stationId },
+    });
+    if (!poolStation) {
+      throw new NotFoundException('Station is not part of any risk pool');
+    }
+    return poolStation;
+  }
+
+  // Shared by adminCompleteCard/adminFailCard — same flat, difficulty-based
+  // scoring the classic admin Zalicz/Niezalicz buttons use (no dynamic streak
+  // multiplier), so an admin override always awards a predictable amount.
+  // Overwrites any existing attempt in place instead of requiring Reset first.
+  private async setCardOutcome(
+    realizationId: string,
+    teamId: string,
+    stationId: string,
+    isCorrect: boolean,
+  ) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const poolStation = await this.requireRiskPoolStationOrThrow(stationId);
+    const pointsDelta = isCorrect
+      ? RISK_DIFFICULTY_POINTS[poolStation.difficulty].correct
+      : RISK_DIFFICULTY_POINTS[poolStation.difficulty].incorrect;
+
+    const existingAttempt = await this.prisma.riskAttempt.findFirst({
+      where: { teamId, stationId },
+    });
+
+    const updatedTeam = existingAttempt
+      ? await this.applyCardOutcomeUpdate(
+          existingAttempt,
+          isCorrect,
+          pointsDelta,
+          teamId,
+        )
+      : await this.applyCardOutcomeCreate(
+          realizationId,
+          teamId,
+          stationId,
+          poolStation,
+          isCorrect,
+          pointsDelta,
+        );
+
+    return {
+      teamId,
+      stationId,
+      taskStatus: isCorrect ? 'done' : 'failed',
+      pointsAwarded: pointsDelta,
+      teamPoints: updatedTeam.points,
+    };
+  }
+
+  private async applyCardOutcomeUpdate(
+    existingAttempt: { id: string; pointsDelta: number },
+    isCorrect: boolean,
+    pointsDelta: number,
+    teamId: string,
+  ) {
+    const pointsAdjustment = pointsDelta - existingAttempt.pointsDelta;
+    const [, updatedTeam] = await this.prisma.$transaction([
+      this.prisma.riskAttempt.update({
+        where: { id: existingAttempt.id },
+        data: { isCorrect, pointsDelta },
+      }),
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { points: { increment: pointsAdjustment } },
+      }),
+    ]);
+    return updatedTeam;
+  }
+
+  private async applyCardOutcomeCreate(
+    realizationId: string,
+    teamId: string,
+    stationId: string,
+    poolStation: { categoryId: string; difficulty: RiskDifficulty },
+    isCorrect: boolean,
+    pointsDelta: number,
+  ) {
+    const card = await this.prisma.riskCard.findFirst({
+      where: {
+        realizationId,
+        categoryId: poolStation.categoryId,
+        difficulty: poolStation.difficulty,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!card) {
+      throw new BadRequestException(
+        'Brak wygenerowanych kart dla tej puli — najpierw wygeneruj karty.',
+      );
+    }
+
+    const [, updatedTeam] = await this.prisma.$transaction([
+      this.prisma.riskAttempt.create({
+        data: {
+          realizationId,
+          teamId,
+          cardId: card.id,
+          stationId,
+          isCorrect,
+          pointsDelta,
+        },
+      }),
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { points: { increment: pointsDelta } },
+      }),
+    ]);
+    return updatedTeam;
+  }
+
+  async adminCompleteCard(
+    realizationId: string,
+    teamId: string,
+    stationId: string,
+  ) {
+    return this.setCardOutcome(realizationId, teamId, stationId, true);
+  }
+
+  async adminFailCard(
+    realizationId: string,
+    teamId: string,
+    stationId: string,
+  ) {
+    return this.setCardOutcome(realizationId, teamId, stationId, false);
+  }
+
+  async adminResetCard(
+    realizationId: string,
+    teamId: string,
+    stationId: string,
+  ) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const existingAttempt = await this.prisma.riskAttempt.findFirst({
+      where: { teamId, stationId },
+    });
+
+    if (!existingAttempt) {
+      return {
+        teamId,
+        stationId,
+        taskStatus: 'todo' as const,
+        pointsAwarded: 0,
+        teamPoints: team.points,
+      };
+    }
+
+    const [, updatedTeam] = await this.prisma.$transaction([
+      this.prisma.riskAttempt.delete({ where: { id: existingAttempt.id } }),
+      this.prisma.team.update({
+        where: { id: teamId },
+        data: { points: { decrement: existingAttempt.pointsDelta } },
+      }),
+    ]);
+
+    return {
+      teamId,
+      stationId,
+      taskStatus: 'todo' as const,
+      pointsAwarded: 0,
+      teamPoints: updatedTeam.points,
+    };
+  }
+
+  // Queues a random not-yet-attempted station draw for one (category,
+  // difficulty) pool — the admin-panel equivalent of the team scanning a
+  // physical card, delivered to their device by pollPendingDraw() below.
+  async triggerRemoteDraw(
+    realizationId: string,
+    teamId: string,
+    categoryId: string,
+    difficulty: RiskDifficulty,
+  ) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const existingPendingDraw = await this.prisma.riskPendingDraw.findUnique({
+      where: { teamId },
+    });
+    if (existingPendingDraw) {
+      throw new BadRequestException(
+        'Drużyna ma już aktywną kartę — najpierw ją anuluj.',
+      );
+    }
+
+    const poolStations = await this.prisma.riskPoolStation.findMany({
+      where: { categoryId, difficulty },
+    });
+    if (poolStations.length === 0) {
+      throw new NotFoundException('Category/difficulty pool not found');
+    }
+
+    const attempted = await this.prisma.riskAttempt.findMany({
+      where: {
+        teamId,
+        stationId: { in: poolStations.map((item) => item.stationId) },
+      },
+      select: { stationId: true },
+    });
+    const attemptedStationIds = new Set(
+      attempted.map((item) => item.stationId),
+    );
+    const available = poolStations.filter(
+      (item) => !attemptedStationIds.has(item.stationId),
+    );
+    if (available.length === 0) {
+      throw new BadRequestException(
+        'Brak dostępnych zadań w tej puli dla tej drużyny.',
+      );
+    }
+
+    const chosen = available[Math.floor(Math.random() * available.length)];
+
+    const card = await this.prisma.riskCard.findFirst({
+      where: { realizationId, categoryId, difficulty },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!card) {
+      throw new BadRequestException(
+        'Brak wygenerowanych kart dla tej puli — najpierw wygeneruj karty.',
+      );
+    }
+
+    return this.prisma.riskPendingDraw.create({
+      data: { teamId, cardId: card.id, stationId: chosen.stationId },
+    });
+  }
+
+  async cancelRemoteDraw(realizationId: string, teamId: string) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const existing = await this.prisma.riskPendingDraw.findUnique({
+      where: { teamId },
+    });
+    if (!existing) {
+      return { teamId, cancelled: false };
+    }
+
+    await this.prisma.riskPendingDraw.delete({ where: { teamId } });
+    return { teamId, cancelled: true };
   }
 }
