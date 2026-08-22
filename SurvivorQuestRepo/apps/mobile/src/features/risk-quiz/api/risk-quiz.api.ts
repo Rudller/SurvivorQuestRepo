@@ -99,3 +99,24 @@ export async function postRiskQuizAnswer(
     body: JSON.stringify(payload),
   });
 }
+
+export type RiskPendingDraw = {
+  cardId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+  station: RiskDrawnStation;
+};
+
+export async function fetchRiskQuizPendingDraw(
+  apiBaseUrl: string,
+  payload: { sessionToken: string },
+) {
+  return requestMobileApi<{ draw: RiskPendingDraw | null }>(
+    apiBaseUrl,
+    "/mobile/risk-quiz/pending-draw",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}

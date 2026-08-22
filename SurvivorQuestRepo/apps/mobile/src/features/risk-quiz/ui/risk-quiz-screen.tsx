@@ -13,6 +13,7 @@ import {
 } from "../../expedition-stage/api/mobile-session.api";
 import {
   fetchRiskQuizDeckStatus,
+  fetchRiskQuizPendingDraw,
   fetchRiskQuizTestMenu,
   postRiskQuizAnswer,
   postRiskQuizScan,
@@ -62,6 +63,10 @@ const ANSWER_INDEX_TYPES = new Set(["quiz", "audio-quiz"]);
 const INTRO_FALLBACK_TEXT =
   "Witajcie w grze! Za chwilę zaczynamy — skanujcie karty, podejmujcie wyzwania i zdobywajcie punkty dla swojej drużyny. Powodzenia!";
 const START_POLL_INTERVAL_MS = 3000;
+// How often to check for a remote-launched draw ("Uruchom na tablecie" in
+// the admin panel) while idle on the scan screen — see the polling effect
+// below.
+const IDLE_POLL_INTERVAL_MS = 4000;
 // Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
 // same hold-the-team-banner gesture as normal gameplay's station test menu.
 const TEST_MENU_TRIGGER_HOLD_MS = 5000;
@@ -187,6 +192,54 @@ export function RiskQuizScreen({
     // updates come from refreshDeckStatus() calls after each answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showIntro]);
+
+  // Remote "Uruchom na tablecie" support: while idle on this screen (no
+  // active card, not showing intro, no test menu/scanner open), poll for a
+  // draw an admin queued from the web panel and open it exactly like a real
+  // scan would. This can't see a real physical scan happening at the same
+  // instant on this same device — there's no server-side "currently
+  // showing" state for that — so a genuine race between the two is a known,
+  // accepted gap.
+  useEffect(() => {
+    if (showIntro || activeDraw || isTestMenuOpen || isScannerVisible) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollPendingDraw = async () => {
+      try {
+        const result = await fetchRiskQuizPendingDraw(apiBaseUrl, { sessionToken });
+        if (cancelled || !result.draw) {
+          return;
+        }
+        setActiveDraw({
+          exhausted: false,
+          cardId: result.draw.cardId,
+          categoryName: result.draw.categoryName,
+          difficulty: result.draw.difficulty,
+          station: result.draw.station,
+        });
+        setExhaustedNotice(null);
+        setAnswerResult(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (getMobileApiErrorStatusCode(error) === 401) {
+          onSessionInvalid();
+        }
+        // Any other error is silent — the next tick just retries.
+      }
+    };
+
+    const interval = setInterval(() => void pollPendingDraw(), IDLE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showIntro, activeDraw, isTestMenuOpen, isScannerVisible, apiBaseUrl, sessionToken, onSessionInvalid]);
 
   useEffect(() => {
     return () => {
