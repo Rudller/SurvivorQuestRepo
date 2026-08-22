@@ -47,3 +47,6 @@ docker-compose.local.yml
 
 # AI assistant context
 CLAUDE.md
+
+# superpowers subagent-driven-development scratch workspaces
+.superpowers/
