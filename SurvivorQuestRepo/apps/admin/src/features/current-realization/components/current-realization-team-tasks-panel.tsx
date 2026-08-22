@@ -7,7 +7,6 @@ import {
   useResetCurrentRealizationTeamTaskMutation,
 } from "../api/current-realization.api";
 import {
-  useCancelRiskRemoteDrawMutation,
   useCompleteRiskCardMutation,
   useFailRiskCardMutation,
   useGetRiskTeamBoardQuery,
@@ -112,9 +111,7 @@ export function CurrentRealizationTeamTasksPanel({
   );
   const isMutatingRiskCard = isCompletingRiskCard || isFailingRiskCard || isResettingRiskCard;
   const [triggerRemoteDraw, { isLoading: isTriggeringRemoteDraw }] = useTriggerRiskRemoteDrawMutation();
-  const [cancelRemoteDraw, { isLoading: isCancellingRemoteDraw }] = useCancelRiskRemoteDrawMutation();
   const [pendingRemoteDrawKey, setPendingRemoteDrawKey] = useState<string | null>(null);
-  const isMutatingRemoteDraw = isTriggeringRemoteDraw || isCancellingRemoteDraw;
 
   const stationsWithTaskState = useMemo(() => {
     const taskByStationId = new Map(team.tasks.map((task) => [task.stationId, task]));
@@ -257,13 +254,6 @@ export function CurrentRealizationTeamTasksPanel({
     return groups;
   }, [riskBoard]);
 
-  const pendingDrawKey = riskBoard?.pendingDraw
-    ? `${riskBoard.pendingDraw.categoryId}:${riskBoard.pendingDraw.difficulty}`
-    : null;
-  const pendingDrawLabel = riskBoard?.pendingDraw
-    ? `${riskBoard.pendingDraw.categoryName} — ${riskDifficultyLabel(riskBoard.pendingDraw.difficulty)}`
-    : null;
-
   async function handleTriggerRemoteDraw(categoryId: string, difficulty: RiskDifficulty, groupLabel: string) {
     if (!canManageTasks) {
       return;
@@ -279,22 +269,6 @@ export function CurrentRealizationTeamTasksPanel({
       await triggerRemoteDraw({ realizationId: realization.id, teamId: team.id, categoryId, difficulty }).unwrap();
     } catch {
       setActionError("Nie udało się uruchomić karty na tablecie tej drużyny.");
-    } finally {
-      setPendingRemoteDrawKey(null);
-    }
-  }
-
-  async function handleCancelRemoteDraw() {
-    if (!canManageTasks) {
-      return;
-    }
-
-    setActionError(null);
-    setPendingRemoteDrawKey("cancel");
-    try {
-      await cancelRemoteDraw({ realizationId: realization.id, teamId: team.id }).unwrap();
-    } catch {
-      setActionError("Nie udało się anulować aktywnej karty tej drużyny.");
     } finally {
       setPendingRemoteDrawKey(null);
     }
@@ -405,10 +379,7 @@ export function CurrentRealizationTeamTasksPanel({
                     </thead>
                     <tbody>
                       {riskTaskGroups.map((group) => {
-                        const isThisGroupPending = pendingDrawKey === group.key;
-                        const isBlockedByOtherPendingDraw = Boolean(pendingDrawKey) && !isThisGroupPending;
                         const isTriggeringThisGroup = pendingRemoteDrawKey === group.key && isTriggeringRemoteDraw;
-                        const isCancellingThisGroup = pendingRemoteDrawKey === "cancel" && isCancellingRemoteDraw;
 
                         return (
                           <Fragment key={group.key}>
@@ -419,36 +390,20 @@ export function CurrentRealizationTeamTasksPanel({
                                     {group.categoryName} — {riskDifficultyLabel(group.difficulty)}
                                   </span>
                                   {canManageTasks ? (
-                                    isThisGroupPending ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => void handleCancelRemoteDraw()}
-                                        disabled={isMutatingRemoteDraw}
-                                        className="rounded-md border border-rose-400/40 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-55"
-                                      >
-                                        {isCancellingThisGroup ? "Anulowanie..." : "Anuluj aktywną kartę"}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          void handleTriggerRemoteDraw(
-                                            group.categoryId,
-                                            group.difficulty,
-                                            `${group.categoryName} — ${riskDifficultyLabel(group.difficulty)}`,
-                                          )
-                                        }
-                                        disabled={isBlockedByOtherPendingDraw || isMutatingRemoteDraw}
-                                        title={
-                                          isBlockedByOtherPendingDraw
-                                            ? `Drużyna ma już aktywną kartę (${pendingDrawLabel}).`
-                                            : undefined
-                                        }
-                                        className="rounded-md border border-sky-400/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-                                      >
-                                        {isTriggeringThisGroup ? "Uruchamianie..." : "Uruchom na tablecie"}
-                                      </button>
-                                    )
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleTriggerRemoteDraw(
+                                          group.categoryId,
+                                          group.difficulty,
+                                          `${group.categoryName} — ${riskDifficultyLabel(group.difficulty)}`,
+                                        )
+                                      }
+                                      disabled={isTriggeringRemoteDraw}
+                                      className="rounded-md border border-sky-400/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      {isTriggeringThisGroup ? "Uruchamianie..." : "Uruchom na tablecie"}
+                                    </button>
                                   ) : null}
                                 </div>
                               </td>

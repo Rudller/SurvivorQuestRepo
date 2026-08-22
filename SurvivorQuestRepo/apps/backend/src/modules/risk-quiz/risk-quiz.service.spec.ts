@@ -24,6 +24,7 @@ function createService() {
     riskPendingDraw: {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
+      upsert: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
@@ -1246,7 +1247,7 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
     ]);
     prisma.riskAttempt.findMany.mockResolvedValue([{ stationId: 'station-1' }]);
     prisma.riskCard.findFirst.mockResolvedValue({ id: 'card-1' });
-    prisma.riskPendingDraw.create.mockResolvedValue({
+    prisma.riskPendingDraw.upsert.mockResolvedValue({
       id: 'draw-1',
       teamId: 'team-1',
       cardId: 'card-1',
@@ -1260,12 +1261,14 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
       'EASY',
     );
 
-    expect(prisma.riskPendingDraw.create).toHaveBeenCalledWith({
-      data: { teamId: 'team-1', cardId: 'card-1', stationId: 'station-2' },
+    expect(prisma.riskPendingDraw.upsert).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+      create: { teamId: 'team-1', cardId: 'card-1', stationId: 'station-2' },
+      update: { cardId: 'card-1', stationId: 'station-2' },
     });
   });
 
-  it('rejects when the team already has a pending draw', async () => {
+  it('replaces an existing pending draw when launch is sent again', async () => {
     const { service, prisma } = createService();
     prisma.realization.findUnique.mockResolvedValue({
       id: 'realization-1',
@@ -1275,22 +1278,30 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
       id: 'team-1',
       realizationId: 'realization-1',
     });
-    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: 'station-2' },
+    ]);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+    prisma.riskCard.findFirst.mockResolvedValue({ id: 'card-1' });
+    prisma.riskPendingDraw.upsert.mockResolvedValue({
       id: 'draw-1',
       teamId: 'team-1',
       cardId: 'card-1',
-      stationId: 'station-1',
+      stationId: 'station-2',
     });
 
-    await expect(
-      service.triggerRemoteDraw(
-        'realization-1',
-        'team-1',
-        'category-1',
-        'EASY',
-      ),
-    ).rejects.toThrow(BadRequestException);
-    expect(prisma.riskPoolStation.findMany).not.toHaveBeenCalled();
+    await service.triggerRemoteDraw(
+      'realization-1',
+      'team-1',
+      'category-1',
+      'EASY',
+    );
+
+    expect(prisma.riskPendingDraw.upsert).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+      create: { teamId: 'team-1', cardId: 'card-1', stationId: 'station-2' },
+      update: { cardId: 'card-1', stationId: 'station-2' },
+    });
   });
 
   it('rejects when every station in the pool has already been attempted by the team', async () => {
@@ -1345,7 +1356,7 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
         'EASY',
       ),
     ).rejects.toThrow(BadRequestException);
-    expect(prisma.riskPendingDraw.create).not.toHaveBeenCalled();
+    expect(prisma.riskPendingDraw.upsert).not.toHaveBeenCalled();
   });
 
   it("rejects a category that is not assigned to the realization's scheme", async () => {

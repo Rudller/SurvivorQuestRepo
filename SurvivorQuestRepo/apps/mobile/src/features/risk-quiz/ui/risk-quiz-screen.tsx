@@ -193,15 +193,11 @@ export function RiskQuizScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showIntro]);
 
-  // Remote "Uruchom na tablecie" support: while idle on this screen (no
-  // active card, not showing intro, no test menu/scanner open), poll for a
-  // draw an admin queued from the web panel and open it exactly like a real
-  // scan would. This can't see a real physical scan happening at the same
-  // instant on this same device — there's no server-side "currently
-  // showing" state for that — so a genuine race between the two is a known,
-  // accepted gap.
+  // Remote "Uruchom na tablecie" support. Keep consuming commands while a
+  // card is open as well: repeated admin clicks are then harmless instead of
+  // becoming a queued card that unexpectedly opens after the current one.
   useEffect(() => {
-    if (showIntro || activeDraw || isTestMenuOpen || isScannerVisible) {
+    if (showIntro || isTestMenuOpen || isScannerVisible) {
       return;
     }
 
@@ -215,7 +211,7 @@ export function RiskQuizScreen({
       pollInFlight = true;
       try {
         const result = await fetchRiskQuizPendingDraw(apiBaseUrl, { sessionToken });
-        if (cancelled || !result.draw) {
+        if (cancelled || !result.draw || activeDraw) {
           return;
         }
         setActiveDraw({

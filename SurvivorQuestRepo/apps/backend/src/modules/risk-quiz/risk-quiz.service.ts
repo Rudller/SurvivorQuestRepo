@@ -1283,15 +1283,6 @@ export class RiskQuizService {
       throw new NotFoundException('Team not found');
     }
 
-    const existingPendingDraw = await this.prisma.riskPendingDraw.findUnique({
-      where: { teamId },
-    });
-    if (existingPendingDraw) {
-      throw new BadRequestException(
-        'Drużyna ma już aktywną kartę — najpierw ją anuluj.',
-      );
-    }
-
     if (!realization.riskSchemeId) {
       throw new BadRequestException(
         'This realization has no assigned scheme (talia)',
@@ -1344,8 +1335,13 @@ export class RiskQuizService {
       );
     }
 
-    return this.prisma.riskPendingDraw.create({
-      data: { teamId, cardId: card.id, stationId: chosen.stationId },
+    // Treat remote launch as a latest-command-wins signal. Repeated clicks
+    // replace a command that the tablet has not consumed yet instead of
+    // forcing the admin through a misleading "cancel active card" state.
+    return this.prisma.riskPendingDraw.upsert({
+      where: { teamId },
+      create: { teamId, cardId: card.id, stationId: chosen.stationId },
+      update: { cardId: card.id, stationId: chosen.stationId },
     });
   }
 
