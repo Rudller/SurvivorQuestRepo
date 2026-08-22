@@ -241,6 +241,31 @@ describe("station panel interactivity — fresh attempt state", () => {
     expect(onAppendVerificationCode).toHaveBeenCalledWith("1");
   });
 
+  it("code station (time): numeric pinpad has no dot placeholder", async () => {
+    const station = createStation({ stationType: "time", completionCodeInputMode: "numeric" });
+    const model = buildPreviewModel({ station });
+
+    const { queryByPlaceholderText } = await render(
+      <CodeStationPanel
+        station={station}
+        isNumericCodeStation
+        isCodeActionDisabled={model.isCodeActionDisabled}
+        verificationCode=""
+        isCodeInputInvalid={false}
+        isCodeInputSuccess={false}
+        codeResult={null}
+        isSubmittingCode={false}
+        codeInputShakeAnimation={new Animated.Value(0)}
+        onBackspaceVerificationCode={jest.fn()}
+        onAppendVerificationCode={jest.fn()}
+        onSubmitVerificationCode={jest.fn()}
+        onResetCodeFeedback={jest.fn()}
+      />,
+    );
+
+    expect(queryByPlaceholderText("• • • •")).toBeNull();
+  });
+
   it("caesar-cipher: keyboard keys are tappable while the submit button is still disabled", async () => {
     const model = buildPreviewModel({
       station: createStation({ stationType: "caesar-cipher", quizAnswers: ["HELLO WORLD", "A", "B", "C"], quizCorrectAnswerIndex: 0 }),

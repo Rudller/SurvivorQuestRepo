@@ -174,8 +174,6 @@ export function CodeStationPanel({
                 codeInputShakeStyle,
               ]}
               value={verificationCode}
-              placeholder="• • • •"
-              placeholderTextColor={EXPEDITION_THEME.textSubtle}
               editable={false}
               showSoftInputOnFocus={false}
             />
