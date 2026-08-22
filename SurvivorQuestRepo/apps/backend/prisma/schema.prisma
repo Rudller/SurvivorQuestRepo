@@ -163,6 +163,7 @@ model Station {
   riskPoolMemberships RiskPoolStation[]
   riskAttempts     RiskAttempt[]
   riskPendingDraws RiskPendingDraw[]
+  pendingStationLaunches PendingStationLaunch[]
 
   @@unique([realizationId, qrEntryCode])
 }
@@ -278,6 +279,7 @@ model Team {
   pointsQrClaims     PointsQrCodeClaim[]
   riskAttempts       RiskAttempt[]
   riskPendingDraw    RiskPendingDraw?
+  pendingStationLaunch PendingStationLaunch?
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -319,6 +321,20 @@ model TeamTaskProgress {
 
   @@unique([realizationId, teamId, stationId])
   @@index([teamId])
+  @@index([stationId])
+}
+
+// Latest admin command to open a regular-realization station on a team's
+// tablet. The device consumes the row when polling; teamId is unique so a
+// repeated click replaces an undelivered command instead of creating a queue.
+model PendingStationLaunch {
+  id        String   @id @default(uuid())
+  teamId    String   @unique
+  stationId String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  station   Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
   @@index([stationId])
 }
 

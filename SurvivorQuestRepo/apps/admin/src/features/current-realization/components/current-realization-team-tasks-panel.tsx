@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import {
   useCompleteCurrentRealizationTeamTaskMutation,
   useFailCurrentRealizationTeamTaskMutation,
+  useLaunchCurrentRealizationTeamStationMutation,
   useResetCurrentRealizationTeamTaskMutation,
 } from "../api/current-realization.api";
 import {
@@ -85,11 +86,13 @@ export function CurrentRealizationTeamTasksPanel({
   const [resetTask, { isLoading: isResetting }] = useResetCurrentRealizationTeamTaskMutation();
   const [completeTask, { isLoading: isCompleting }] = useCompleteCurrentRealizationTeamTaskMutation();
   const [failTask, { isLoading: isFailing }] = useFailCurrentRealizationTeamTaskMutation();
+  const [launchStation, { isLoading: isLaunchingStation }] = useLaunchCurrentRealizationTeamStationMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{ stationId: string; action: TaskAction } | null>(null);
   const [isEndingParticipation, setIsEndingParticipation] = useState(false);
+  const [pendingStationLaunchId, setPendingStationLaunchId] = useState<string | null>(null);
 
-  const isMutating = isResetting || isCompleting || isFailing || isEndingParticipation;
+  const isMutating = isResetting || isCompleting || isFailing || isEndingParticipation || isLaunchingStation;
   // Ryzykanci realizations don't have a scenario/stations at all — their
   // gameplay is entirely card-driven (RiskCard/RiskAttempt); the board below
   // shows the pool stations behind those cards instead of scenario stations.
@@ -180,6 +183,32 @@ export function CurrentRealizationTeamTasksPanel({
       setActionError("Nie udało się zapisać zmian zadania drużyny.");
     } finally {
       setPendingAction(null);
+    }
+  }
+
+  async function handleLaunchStation(stationId: string) {
+    if (!canManageTasks) {
+      return;
+    }
+
+    const stationLabel =
+      stationsWithTaskState.find((item) => item.stationId === stationId)?.stationName || stationId;
+    if (!window.confirm(`Uruchomić stanowisko "${stationLabel}" na tablecie tej drużyny?`)) {
+      return;
+    }
+
+    setActionError(null);
+    setPendingStationLaunchId(stationId);
+    try {
+      await launchStation({
+        realizationId: selectedRealizationId,
+        teamId: team.id,
+        stationId,
+      }).unwrap();
+    } catch {
+      setActionError("Nie udało się uruchomić stanowiska na tablecie tej drużyny.");
+    } finally {
+      setPendingStationLaunchId(null);
     }
   }
 
@@ -533,6 +562,16 @@ export function CurrentRealizationTeamTasksPanel({
                             {canManageTasks ? (
                               <td className="px-3 py-2">
                                 <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleLaunchStation(task.stationId)}
+                                    disabled={isMutating}
+                                    className="rounded-md border border-sky-400/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55"
+                                  >
+                                    {pendingStationLaunchId === task.stationId && isLaunchingStation
+                                      ? "Uruchamianie..."
+                                      : "Uruchom na tablecie"}
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => void handleTaskAction(task.stationId, "reset")}

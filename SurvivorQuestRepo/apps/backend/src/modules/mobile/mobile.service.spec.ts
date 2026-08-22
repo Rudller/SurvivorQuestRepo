@@ -129,6 +129,117 @@ describe('MobileService team selection', () => {
   });
 });
 
+describe('MobileService remote station launch', () => {
+  function createService() {
+    const prisma = {
+      team: { findUnique: jest.fn() },
+      pendingStationLaunch: {
+        findUnique: jest.fn(),
+        upsert: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+    };
+    const stationService = { findStationById: jest.fn() };
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      stationService as never,
+      {} as never,
+    );
+    return { service, prisma, stationService };
+  }
+
+  it('replaces an undelivered launch for the team', async () => {
+    const { service, prisma, stationService } = createService();
+    jest
+      .spyOn(service as never, 'resolveMobileAdminRealizationOrThrow')
+      .mockResolvedValue({
+        id: 'realization-1',
+        stationIds: ['station-1'],
+      });
+    prisma.team.findUnique.mockResolvedValue({
+      id: 'team-1',
+      realizationId: 'realization-1',
+    });
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      name: 'Quiz',
+      type: 'quiz',
+    });
+    prisma.pendingStationLaunch.upsert.mockResolvedValue({
+      id: 'launch-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+
+    await service.triggerRemoteStationLaunch({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.pendingStationLaunch.upsert).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+      create: { teamId: 'team-1', stationId: 'station-1' },
+      update: { stationId: 'station-1', createdAt: expect.any(Date) },
+    });
+  });
+
+  it('delivers and atomically consumes a pending station launch', async () => {
+    const { service, prisma, stationService } = createService();
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      team: { id: 'team-1' },
+      realization: { id: 'realization-1', stationIds: ['station-1'] },
+    });
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
+    prisma.pendingStationLaunch.findUnique.mockResolvedValue({
+      id: 'launch-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+    prisma.pendingStationLaunch.deleteMany.mockResolvedValue({ count: 1 });
+    stationService.findStationById.mockResolvedValue({
+      id: 'station-1',
+      name: 'Quiz',
+      type: 'quiz',
+    });
+
+    await expect(service.pollPendingStationLaunch('token')).resolves.toEqual({
+      launch: {
+        stationId: 'station-1',
+        stationName: 'Quiz',
+        stationType: 'quiz',
+      },
+    });
+    expect(prisma.pendingStationLaunch.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'launch-1', teamId: 'team-1' },
+    });
+  });
+
+  it('does not deliver a launch consumed concurrently', async () => {
+    const { service, prisma } = createService();
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      team: { id: 'team-1' },
+      realization: { id: 'realization-1', stationIds: ['station-1'] },
+    });
+    jest
+      .spyOn(service as never, 'assertGameplayAllowed')
+      .mockResolvedValue(undefined);
+    prisma.pendingStationLaunch.findUnique.mockResolvedValue({
+      id: 'launch-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+    prisma.pendingStationLaunch.deleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.pollPendingStationLaunch('token')).resolves.toEqual({
+      launch: null,
+    });
+  });
+});
+
 describe('MobileService team customization conflicts', () => {
   function createService() {
     const prisma = {
@@ -1692,6 +1803,9 @@ describe('MobileService realization reset', () => {
       riskPendingDraw: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      pendingStationLaunch: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
 
@@ -1739,6 +1853,9 @@ describe('MobileService realization reset', () => {
       where: { realizationId: 'realization-1' },
     });
     expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { team: { realizationId: 'realization-1' } },
+    });
+    expect(prisma.pendingStationLaunch.deleteMany).toHaveBeenCalledWith({
       where: { team: { realizationId: 'realization-1' } },
     });
   });

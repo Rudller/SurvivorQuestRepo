@@ -2197,6 +2197,76 @@ export class MobileService {
     };
   }
 
+  async triggerRemoteStationLaunch(input: {
+    realizationId: string;
+    teamId: string;
+    stationId: string;
+  }) {
+    const realization = await this.resolveMobileAdminRealizationOrThrow(
+      input.realizationId,
+    );
+    const team = await this.prisma.team.findUnique({
+      where: { id: input.teamId },
+      select: { id: true, realizationId: true },
+    });
+    if (!team || team.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (!realization.stationIds.includes(input.stationId)) {
+      throw new NotFoundException('Station not found in realization');
+    }
+
+    const station = await this.stationService.findStationById(input.stationId);
+    if (!station) {
+      throw new NotFoundException('Station not found');
+    }
+
+    return this.prisma.pendingStationLaunch.upsert({
+      where: { teamId: team.id },
+      create: { teamId: team.id, stationId: station.id },
+      update: { stationId: station.id, createdAt: new Date() },
+    });
+  }
+
+  async pollPendingStationLaunch(sessionToken: string) {
+    const { team, realization } = await this.requireSession(sessionToken);
+    await this.assertGameplayAllowed({ realization, teamId: team.id });
+
+    const pending = await this.prisma.pendingStationLaunch.findUnique({
+      where: { teamId: team.id },
+    });
+    if (!pending) {
+      return { launch: null };
+    }
+
+    const consumed = await this.prisma.pendingStationLaunch.deleteMany({
+      where: { id: pending.id, teamId: team.id },
+    });
+    if (consumed.count === 0) {
+      return { launch: null };
+    }
+
+    if (!realization.stationIds.includes(pending.stationId)) {
+      return { launch: null };
+    }
+
+    const station = await this.stationService.findStationById(
+      pending.stationId,
+    );
+    if (!station) {
+      return { launch: null };
+    }
+
+    return {
+      launch: {
+        stationId: station.id,
+        stationName: station.name,
+        stationType: station.type,
+      },
+    };
+  }
+
   /**
    * Scanned codes that don't match any station's qrEntryCode fall back to a
    * lookup against standalone "points bonus" QR codes — independent of the
@@ -2923,6 +2993,7 @@ export class MobileService {
       deletedStationScans,
       deletedRiskAttempts,
       deletedRiskPendingDraws,
+      deletedPendingStationLaunches,
     ] = await this.prisma.$transaction([
       this.prisma.teamAssignment.deleteMany({
         where: { realizationId: realization.id },
@@ -2953,6 +3024,9 @@ export class MobileService {
         where: { realizationId: realization.id },
       }),
       this.prisma.riskPendingDraw.deleteMany({
+        where: { team: { realizationId: realization.id } },
+      }),
+      this.prisma.pendingStationLaunch.deleteMany({
         where: { team: { realizationId: realization.id } },
       }),
     ]);
@@ -2996,6 +3070,7 @@ export class MobileService {
         deletedStationScans: deletedStationScans.count,
         deletedRiskAttempts: deletedRiskAttempts.count,
         deletedRiskPendingDraws: deletedRiskPendingDraws.count,
+        deletedPendingStationLaunches: deletedPendingStationLaunches.count,
       },
     });
 
@@ -3009,6 +3084,7 @@ export class MobileService {
       deletedStationScans: deletedStationScans.count,
       deletedRiskAttempts: deletedRiskAttempts.count,
       deletedRiskPendingDraws: deletedRiskPendingDraws.count,
+      deletedPendingStationLaunches: deletedPendingStationLaunches.count,
     };
   }
 

@@ -546,6 +546,18 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Realization"],
     }),
+    launchCurrentRealizationTeamStation: build.mutation<
+      { id: string; teamId: string; stationId: string; createdAt: string },
+      { realizationId?: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: toMobileAdminRealizationPath(
+          realizationId,
+          `/teams/${encodeURIComponent(teamId)}/stations/${encodeURIComponent(stationId)}/launch`,
+        ),
+        method: "POST",
+      }),
+    }),
     getPendingPhotoReviews: build.query<
       PendingPhotoReview[],
       { realizationId?: string } | void
@@ -573,5 +585,6 @@ export const {
   useResetCurrentRealizationTeamTaskMutation,
   useCompleteCurrentRealizationTeamTaskMutation,
   useFailCurrentRealizationTeamTaskMutation,
+  useLaunchCurrentRealizationTeamStationMutation,
   useGetPendingPhotoReviewsQuery,
 } = currentRealizationApi;

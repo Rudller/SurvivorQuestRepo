@@ -294,6 +294,15 @@ export class MobileController {
     });
   }
 
+  @Post('station/pending-launch')
+  @Throttle(MOBILE_SESSION_STATE_THROTTLE)
+  async pollPendingStationLaunch(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.mobileService.pollPendingStationLaunch(
+      requireString(payload, 'sessionToken'),
+    );
+  }
+
   @Get('admin/realizations/current')
   @AdminOrInstructor()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
@@ -394,6 +403,20 @@ export class MobileController {
     @Param('stationId') stationId: string,
   ) {
     return this.mobileService.resetMobileAdminTeamTask({
+      realizationId: 'current',
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post('admin/realizations/current/teams/:teamId/stations/:stationId/launch')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async launchMobileAdminCurrentTeamStation(
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.triggerRemoteStationLaunch({
       realizationId: 'current',
       teamId,
       stationId,
@@ -560,6 +583,23 @@ export class MobileController {
     @Param('stationId') stationId: string,
   ) {
     return this.mobileService.resetMobileAdminTeamTask({
+      realizationId,
+      teamId,
+      stationId,
+    });
+  }
+
+  @Post(
+    'admin/realizations/:realizationId/teams/:teamId/stations/:stationId/launch',
+  )
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async launchMobileAdminTeamStation(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.mobileService.triggerRemoteStationLaunch({
       realizationId,
       teamId,
       stationId,

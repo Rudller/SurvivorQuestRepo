@@ -30,6 +30,7 @@ describe('MobileController admin endpoint roles', () => {
     getMobileAdminRealizationOverview: jest.fn(),
     getMobileAdminStationQrs: jest.fn(),
     startMobileAdminRealization: jest.fn(),
+    triggerRemoteStationLaunch: jest.fn(),
   };
 
   async function createApp(role: 'admin' | 'instructor') {
@@ -84,7 +85,13 @@ describe('MobileController admin endpoint roles', () => {
     await request(app.getHttpServer())
       .post('/mobile/admin/realizations/current/start')
       .expect(403);
+    await request(app.getHttpServer())
+      .post(
+        '/mobile/admin/realizations/current/teams/team-1/stations/station-1/launch',
+      )
+      .expect(403);
     expect(mobileService.startMobileAdminRealization).not.toHaveBeenCalled();
+    expect(mobileService.triggerRemoteStationLaunch).not.toHaveBeenCalled();
   });
 
   it('allows admins to mutate event state', async () => {
@@ -97,5 +104,17 @@ describe('MobileController admin endpoint roles', () => {
     expect(mobileService.startMobileAdminRealization).toHaveBeenCalledWith(
       'current',
     );
+
+    mobileService.triggerRemoteStationLaunch.mockResolvedValue({ ok: true });
+    await request(app.getHttpServer())
+      .post(
+        '/mobile/admin/realizations/current/teams/team-1/stations/station-1/launch',
+      )
+      .expect(201);
+    expect(mobileService.triggerRemoteStationLaunch).toHaveBeenCalledWith({
+      realizationId: 'current',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
   });
 });

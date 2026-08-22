@@ -1089,3 +1089,21 @@ export async function postMobileResolveStationQr(
     signal: options?.signal,
   });
 }
+
+export async function postMobilePollPendingStationLaunch(
+  apiBaseUrl: string,
+  payload: { sessionToken: string },
+  options?: MobileApiRequestOptions,
+) {
+  return requestMobileApi<{
+    launch: {
+      stationId: string;
+      stationName: string;
+      stationType: ExpeditionStationType;
+    } | null;
+  }>(apiBaseUrl, "/api/mobile/station/pending-launch", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken: payload.sessionToken }),
+    signal: options?.signal,
+  });
+}

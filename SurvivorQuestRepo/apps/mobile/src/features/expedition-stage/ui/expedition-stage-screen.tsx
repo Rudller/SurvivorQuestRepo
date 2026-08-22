@@ -43,7 +43,11 @@ import { useExpeditionStageQrFlow } from "./hooks/use-expedition-stage-qr-flow";
 import { useExpeditionStageOverlayFlow } from "./hooks/use-expedition-stage-overlay-flow";
 import { useExpeditionStageTransientPopup } from "./hooks/use-expedition-stage-transient-popup";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
-import { getMobileApiErrorCode, getMobileApiErrorStatusCode } from "../api/mobile-session.api";
+import {
+  getMobileApiErrorCode,
+  getMobileApiErrorStatusCode,
+  postMobilePollPendingStationLaunch,
+} from "../api/mobile-session.api";
 
 function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
   return (
@@ -81,6 +85,7 @@ type ExpeditionStageScreenProps = {
 };
 
 const LOCATION_SYNC_THROTTLE_MS = 10_000;
+const REMOTE_STATION_LAUNCH_POLL_INTERVAL_MS = 4_000;
 
 const EXPEDITION_STAGE_TEXT: Record<
   UiLanguage,
@@ -1287,10 +1292,6 @@ export function ExpeditionStageScreen({
     isTaskAlreadyCompletedError,
   });
 
-  useEffect(() => {
-    isAnyStationOverlayOpenRef.current = Boolean(overlayFlow.activeStationTestId);
-  }, [overlayFlow.activeStationTestId]);
-
   const qrFlow = useExpeditionStageQrFlow({
     isSessionEnded,
     locationRequired: sessionState.realization.locationRequired,
@@ -1320,6 +1321,78 @@ export function ExpeditionStageScreen({
     interpolate,
     extractStationQrToken,
   });
+  const openStationByType = overlayFlow.openStationByType;
+
+  useEffect(() => {
+    isAnyStationOverlayOpenRef.current = Boolean(
+      overlayFlow.activeStationTestId ||
+        overlayFlow.pendingQuizStartStationId ||
+        overlayFlow.pendingTimeStartStationId ||
+        overlayFlow.pendingPhotoStartStationId ||
+        overlayFlow.isStationTestMenuOpen ||
+        overlayFlow.isWelcomePreviewOpen ||
+        overlayFlow.isFinishPreviewOpen ||
+        qrFlow.isQrScannerOpen,
+    );
+  }, [
+    overlayFlow.activeStationTestId,
+    overlayFlow.pendingQuizStartStationId,
+    overlayFlow.pendingTimeStartStationId,
+    overlayFlow.pendingPhotoStartStationId,
+    overlayFlow.isStationTestMenuOpen,
+    overlayFlow.isWelcomePreviewOpen,
+    overlayFlow.isFinishPreviewOpen,
+    qrFlow.isQrScannerOpen,
+  ]);
+
+  useEffect(() => {
+    const apiBaseUrl = session.apiBaseUrl?.trim();
+    if (isSessionEnded || !apiBaseUrl) {
+      return;
+    }
+
+    let cancelled = false;
+    let pollInFlight = false;
+
+    const pollPendingLaunch = async () => {
+      if (pollInFlight) {
+        return;
+      }
+      pollInFlight = true;
+      try {
+        const result = await postMobilePollPendingStationLaunch(apiBaseUrl, {
+          sessionToken: session.sessionToken,
+        });
+        if (cancelled || !result.launch || isAnyStationOverlayOpenRef.current) {
+          return;
+        }
+
+        setSelectedStationId(result.launch.stationId);
+        openStationByType(result.launch.stationId, result.launch.stationType);
+        setActionError(null);
+        setActionMessage(interpolate(text.scannedStation, { name: result.launch.stationName }));
+      } catch (error) {
+        if (!cancelled && getMobileApiErrorStatusCode(error) === 401) {
+          onSessionInvalid?.();
+        }
+      } finally {
+        pollInFlight = false;
+      }
+    };
+
+    const interval = setInterval(() => void pollPendingLaunch(), REMOTE_STATION_LAUNCH_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [
+    isSessionEnded,
+    onSessionInvalid,
+    openStationByType,
+    session.apiBaseUrl,
+    session.sessionToken,
+    text.scannedStation,
+  ]);
 
   const sessionContextValue = useMemo(
     () => ({
