@@ -25,6 +25,39 @@ const WORDLE_TILE_COLORS = {
 const WORDLE_FLIP_HALF_DURATION_MS = 120;
 const WORDLE_INPUT_POP_UP_DURATION_MS = 90;
 const WORDLE_INPUT_POP_DOWN_DURATION_MS = 70;
+const WORDLE_MEDIA_PADDING = 12;
+
+type WordleMediaCellSizeInput = {
+  containerWidth: number;
+  containerHeight: number;
+  displayLength: number;
+  preferredCellSize: number;
+  letterGap: number;
+  rowGap: number;
+};
+
+export function resolveWordleMediaCellSize({
+  containerWidth,
+  containerHeight,
+  displayLength,
+  preferredCellSize,
+  letterGap,
+  rowGap,
+}: WordleMediaCellSizeInput) {
+  if (containerWidth <= 0 || containerHeight <= 0) {
+    return preferredCellSize;
+  }
+
+  const columnCount = Math.max(1, displayLength);
+  const availableWidth = Math.max(1, containerWidth - WORDLE_MEDIA_PADDING * 2);
+  const availableHeight = Math.max(1, containerHeight - WORDLE_MEDIA_PADDING * 2);
+  const fitByWidth = Math.floor((availableWidth - letterGap * (columnCount - 1)) / columnCount);
+  const fitByHeight = Math.floor(
+    (availableHeight - rowGap * (WORDLE_MAX_ATTEMPTS - 1)) / WORDLE_MAX_ATTEMPTS,
+  );
+
+  return Math.max(1, Math.min(preferredCellSize, fitByWidth, fitByHeight));
+}
 
 type WordleStationText = {
   checking: string;
@@ -189,8 +222,28 @@ export function WordleMediaBoard({
   letterGap = 6,
   rowGap = 6,
 }: WordleMediaBoardProps) {
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const fittedCellSize = resolveWordleMediaCellSize({
+    containerWidth: containerSize.width,
+    containerHeight: containerSize.height,
+    displayLength,
+    preferredCellSize: cellSize,
+    letterGap,
+    rowGap,
+  });
+
   return (
-    <View className="flex-1 px-3 py-3">
+    <View
+      className="flex-1 px-3 py-3"
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setContainerSize((current) =>
+          Math.abs(current.width - width) > 1 || Math.abs(current.height - height) > 1
+            ? { width, height }
+            : current,
+        );
+      }}
+    >
       <View className="flex-1 justify-center" style={{ rowGap }}>
         {Array.from({ length: WORDLE_MAX_ATTEMPTS }).map((_, rowIndex) => {
           const attempt = attempts[rowIndex];
@@ -213,7 +266,7 @@ export function WordleMediaBoard({
                   <WordleRevealCell
                     key={`${stationId}-wordle-media-cell-${rowIndex}-${columnIndex}`}
                     id={`${stationId}-wordle-media-cell-${rowIndex}-${columnIndex}`}
-                    cellSize={cellSize}
+                    cellSize={fittedCellSize}
                     letter={letter}
                     state={evaluation[columnIndex]}
                     isRevealed={columnIndex < revealedCellCount}
