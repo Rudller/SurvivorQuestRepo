@@ -260,6 +260,37 @@ export class RiskQuizService {
     };
   }
 
+  // Delivers (and consumes) a remote draw an admin queued via
+  // triggerRemoteDraw() — same payload shape scanCard() returns for a
+  // non-exhausted draw, so the mobile client can feed it into the exact
+  // same "active card" state either path produces. Known gap: this has no
+  // way to know about a real physical scan the team might be making at the
+  // same instant on the same device — there's no server-side "currently
+  // showing" state for that today, and a race there is left unhandled.
+  async pollPendingDraw(sessionToken: string) {
+    const { team } = await this.requireTeamSession(sessionToken);
+
+    const pendingDraw = await this.prisma.riskPendingDraw.findUnique({
+      where: { teamId: team.id },
+      include: { card: { include: { category: true } }, station: true },
+    });
+
+    if (!pendingDraw) {
+      return { draw: null };
+    }
+
+    await this.prisma.riskPendingDraw.delete({ where: { teamId: team.id } });
+
+    return {
+      draw: {
+        cardId: pendingDraw.cardId,
+        categoryName: pendingDraw.card.category.name,
+        difficulty: pendingDraw.card.difficulty,
+        station: this.toRiskStationPayload(pendingDraw.station),
+      },
+    };
+  }
+
   private toRiskStationPayload(station: {
     id: string;
     type: PrismaStationType;
@@ -923,8 +954,10 @@ export class RiskQuizService {
       throw new NotFoundException('Team not found');
     }
 
+    const pendingDraw = await this.getPendingDrawSummary(teamId);
+
     if (!realization.riskSchemeId) {
-      return { teamId, tasks: [] };
+      return { teamId, tasks: [], pendingDraw };
     }
 
     const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
@@ -934,7 +967,7 @@ export class RiskQuizService {
     });
     const categoryIds = schemeCategories.map((item) => item.categoryId);
     if (categoryIds.length === 0) {
-      return { teamId, tasks: [] };
+      return { teamId, tasks: [], pendingDraw };
     }
 
     const categoryNameById = new Map(
@@ -994,7 +1027,26 @@ export class RiskQuizService {
         );
       });
 
-    return { teamId, tasks };
+    return { teamId, tasks, pendingDraw };
+  }
+
+  // Shared by getTeamCardBoard (admin) and — indirectly, via the same
+  // uniqueness — the collision check in triggerRemoteDraw. Decoupled from
+  // the current scheme's categories so it stays correct even if the scheme
+  // changed after the draw was queued.
+  private async getPendingDrawSummary(teamId: string) {
+    const pendingDraw = await this.prisma.riskPendingDraw.findUnique({
+      where: { teamId },
+      include: { card: { include: { category: true } } },
+    });
+    if (!pendingDraw) {
+      return null;
+    }
+    return {
+      categoryId: pendingDraw.card.categoryId,
+      categoryName: pendingDraw.card.category.name,
+      difficulty: pendingDraw.card.difficulty,
+    };
   }
 
   private async requireRiskPoolStationOrThrow(stationId: string) {

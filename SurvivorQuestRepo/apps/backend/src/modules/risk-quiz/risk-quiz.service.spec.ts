@@ -764,6 +764,7 @@ describe('RiskQuizService.getTeamCardBoard', () => {
 
     expect(result).toEqual({
       teamId: 'team-1',
+      pendingDraw: null,
       tasks: [
         {
           categoryId: 'category-1',
@@ -833,7 +834,7 @@ describe('RiskQuizService.getTeamCardBoard', () => {
 
     const result = await service.getTeamCardBoard('realization-1', 'team-1');
 
-    expect(result).toEqual({ teamId: 'team-1', tasks: [] });
+    expect(result).toEqual({ teamId: 'team-1', tasks: [], pendingDraw: null });
     expect(prisma.riskSchemeCategory.findMany).not.toHaveBeenCalled();
   });
 
@@ -851,6 +852,89 @@ describe('RiskQuizService.getTeamCardBoard', () => {
     await expect(
       service.getTeamCardBoard('realization-1', 'team-1'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('includes the pending draw summary when the team has one queued', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: null,
+    });
+    prisma.team.findUnique.mockResolvedValue({
+      id: 'team-1',
+      realizationId: 'realization-1',
+    });
+    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+      id: 'draw-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      card: {
+        categoryId: 'category-1',
+        difficulty: 'EASY',
+        category: { name: 'Historia' },
+      },
+    });
+
+    const result = await service.getTeamCardBoard('realization-1', 'team-1');
+
+    expect(result.pendingDraw).toEqual({
+      categoryId: 'category-1',
+      categoryName: 'Historia',
+      difficulty: 'EASY',
+    });
+  });
+});
+
+describe('RiskQuizService.pollPendingDraw', () => {
+  it('returns null when there is no pending draw for the team', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskPendingDraw.findUnique.mockResolvedValue(null);
+
+    const result = await service.pollPendingDraw('token');
+
+    expect(result).toEqual({ draw: null });
+    expect(prisma.riskPendingDraw.delete).not.toHaveBeenCalled();
+  });
+
+  it('returns the drawn station and consumes (deletes) the pending draw', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+      id: 'draw-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      card: { difficulty: 'EASY', category: { name: 'Historia' } } as never,
+      station: quizStation,
+    });
+    prisma.riskPendingDraw.delete.mockResolvedValue({});
+
+    const result = await service.pollPendingDraw('token');
+
+    expect(prisma.riskPendingDraw.delete).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+    });
+    expect(result).toEqual({
+      draw: {
+        cardId: 'card-1',
+        categoryName: 'Historia',
+        difficulty: 'EASY',
+        station: {
+          id: 'station-1',
+          type: 'quiz',
+          name: 'Pytanie',
+          description: 'Opis',
+          imageUrl: null,
+          points: 0,
+          timeLimitSeconds: 0,
+          completionCodeLength: undefined,
+          completionCodeInputMode: 'alphanumeric',
+          quiz: { question: 'Q1?', answers: ['a', 'b'], audioUrl: undefined },
+        },
+      },
+    });
   });
 });
 
