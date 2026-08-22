@@ -14,7 +14,10 @@ import { RiskDifficulty } from '@prisma/client';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { MOBILE_QR_RESOLVE_THROTTLE } from '../../common/security/throttle.constants';
+import {
+  MOBILE_QR_RESOLVE_THROTTLE,
+  RISK_QUIZ_PENDING_DRAW_THROTTLE,
+} from '../../common/security/throttle.constants';
 import { RiskQuizService } from './risk-quiz.service';
 
 type Payload = Record<string, unknown>;
@@ -110,6 +113,15 @@ export class RiskQuizController {
   async getTestMenu(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.riskQuizService.listTestMenuEntries(
+      requireString(payload, 'sessionToken'),
+    );
+  }
+
+  @Post('pending-draw')
+  @Throttle(RISK_QUIZ_PENDING_DRAW_THROTTLE)
+  async getPendingDraw(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.pollPendingDraw(
       requireString(payload, 'sessionToken'),
     );
   }
@@ -256,5 +268,104 @@ export class RiskQuizController {
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async getBoard(@Param('realizationId') realizationId: string) {
     return this.riskQuizService.getBoard(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/team-status')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getTeamCardStatus(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.getTeamCardStatus(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/reset')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async resetTeamAttempts(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+  ) {
+    return this.riskQuizService.resetTeamAttempts(realizationId, teamId);
+  }
+
+  @Get('admin/realizations/:realizationId/teams/:teamId/board')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getTeamCardBoard(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+  ) {
+    return this.riskQuizService.getTeamCardBoard(realizationId, teamId);
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/launch')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async triggerRemoteDraw(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.triggerRemoteDraw(
+      realizationId,
+      teamId,
+      requireString(payload, 'categoryId'),
+      requireDifficulty(payload, 'difficulty'),
+    );
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/cancel-remote-draw')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async cancelRemoteDraw(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+  ) {
+    return this.riskQuizService.cancelRemoteDraw(realizationId, teamId);
+  }
+
+  @Post(
+    'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/complete',
+  )
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async adminCompleteCard(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.riskQuizService.adminCompleteCard(
+      realizationId,
+      teamId,
+      stationId,
+    );
+  }
+
+  @Post('admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/fail')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async adminFailCard(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.riskQuizService.adminFailCard(realizationId, teamId, stationId);
+  }
+
+  @Post(
+    'admin/realizations/:realizationId/teams/:teamId/tasks/:stationId/reset',
+  )
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async adminResetCard(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+    @Param('stationId') stationId: string,
+  ) {
+    return this.riskQuizService.adminResetCard(
+      realizationId,
+      teamId,
+      stationId,
+    );
   }
 }

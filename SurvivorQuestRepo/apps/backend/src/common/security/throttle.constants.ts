@@ -56,3 +56,14 @@ export const MOBILE_SESSION_STATE_THROTTLE = {
   short: { limit: 40, ttl: 60_000, getTracker: mobileSessionTracker },
   long: { limit: 600, ttl: 15 * 60_000, getTracker: mobileSessionTracker },
 } as const;
+
+// Polled every 4s by the Ryzykanci scan screen while idle, waiting for an
+// admin-triggered "Uruchom na tablecie" draw. Keyed per session token (see
+// mobileSessionTracker above) — several tablets behind one venue's
+// shared/carrier IP must not share a bucket, since a busy realization can
+// have many teams polling this at once. Sized to ~2x the steady poll rate
+// per device (4s poll ≈ 15/min).
+export const RISK_QUIZ_PENDING_DRAW_THROTTLE = {
+  short: { limit: 30, ttl: 60_000, getTracker: mobileSessionTracker },
+  long: { limit: 450, ttl: 15 * 60_000, getTracker: mobileSessionTracker },
+} as const;
