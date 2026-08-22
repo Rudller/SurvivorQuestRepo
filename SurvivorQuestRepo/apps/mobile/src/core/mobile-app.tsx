@@ -954,6 +954,9 @@ export function MobileApp() {
               onSessionInvalid={(reason) => {
                 void resetToOnboardingWithMessage(reason);
               }}
+              onExitRealization={() => {
+                void handleExitRealization();
+              }}
               onSelectedLanguageChange={(language) => {
                 void handleSelectedLanguageChange(language);
               }}

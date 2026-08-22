@@ -31,6 +31,7 @@ import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realiz
 type RiskQuizScreenProps = {
   session: OnboardingSession;
   onSessionInvalid: (reason?: string) => void;
+  onExitRealization: () => void;
   onSelectedLanguageChange?: (language: RealizationLanguage) => void;
   themeMode: ExpeditionThemeMode;
   onToggleTheme: () => void;
@@ -74,6 +75,7 @@ const TEST_MENU_TRIGGER_HOLD_MS = 5000;
 export function RiskQuizScreen({
   session,
   onSessionInvalid,
+  onExitRealization,
   onSelectedLanguageChange,
   themeMode,
   onToggleTheme,
@@ -805,6 +807,16 @@ export function RiskQuizScreen({
 
             <Pressable
               className="mt-4 rounded-2xl border px-4 py-3 active:opacity-90"
+              style={{ borderColor: "rgba(248, 113, 113, 0.55)", backgroundColor: "rgba(127, 29, 29, 0.3)" }}
+              onPress={onExitRealization}
+            >
+              <Text className="text-center text-base font-semibold" style={{ color: "#fca5a5" }}>
+                Wyjdź z realizacji
+              </Text>
+            </Pressable>
+
+            <Pressable
+              className="mt-2 rounded-2xl border px-4 py-3 active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
               onPress={() => setIsTestMenuOpen(false)}
             >
