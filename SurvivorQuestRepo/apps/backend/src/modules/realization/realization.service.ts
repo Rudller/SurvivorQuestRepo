@@ -38,6 +38,7 @@ import {
 import { StationService, type StationEntity } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
 import { TranslationService } from '../translation/translation.service';
+import { RiskQuizService } from '../risk-quiz/risk-quiz.service';
 import { RealizationJoinCodeService } from './domain/realization.join-code';
 import {
   normalizeScenarioStationDrafts,
@@ -75,6 +76,7 @@ export class RealizationService {
     private readonly stationService: StationService,
     private readonly stationStorageService: StationStorageService,
     private readonly translationService: TranslationService,
+    private readonly riskQuizService: RiskQuizService,
   ) {}
 
   async listRealizations() {
@@ -91,26 +93,30 @@ export class RealizationService {
   async createRealization(payload: CreateRealizationDto) {
     const validated = validateRealizationPayload(payload);
     const realizationId = crypto.randomUUID();
-    const scenarioIdToClone =
-      validated.type === 'risk-quiz' && !validated.scenarioId
-        ? await this.resolveRiskQuizPlaceholderScenarioId()
-        : validated.scenarioId;
-    const clonedScenario = await this.scenarioService.cloneScenario(
-      scenarioIdToClone,
-      {
+    const isRiskQuizType = validated.type === 'risk-quiz';
+
+    // Ryzykanci realizations don't use the Scenario/Station system at all —
+    // their gameplay is entirely card-driven (RiskCard/RiskAttempt), so they
+    // simply don't get a scenario.
+    let clonedScenario: ScenarioEntity | null = null;
+    let finalStations: StationEntity[] = [];
+
+    if (!isRiskQuizType) {
+      clonedScenario = await this.scenarioService.cloneScenario(
+        validated.scenarioId,
+        { realizationId },
+      );
+
+      if (!clonedScenario) {
+        throw new BadRequestException('Scenario not found');
+      }
+
+      finalStations = await this.syncScenarioStations(
         realizationId,
-      },
-    );
-
-    if (!clonedScenario) {
-      throw new BadRequestException('Scenario not found');
+        clonedScenario,
+        validated.stationDrafts,
+      );
     }
-
-    const finalStations = await this.syncScenarioStations(
-      realizationId,
-      clonedScenario,
-      validated.stationDrafts,
-    );
 
     await this.prisma.realization.create({
       data: {
@@ -121,7 +127,9 @@ export class RealizationService {
         customLanguage: validated.customLanguage,
         introText: validated.introText,
         gameRules: validated.gameRules,
-        translations: toPrismaRealizationTranslationsData(validated.translations),
+        translations: toPrismaRealizationTranslationsData(
+          validated.translations,
+        ),
         contactPerson: validated.contactPerson,
         contactPhone: validated.contactPhone,
         contactEmail: validated.contactEmail,
@@ -133,7 +141,7 @@ export class RealizationService {
         mapImageUrl: validated.mapImageUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
-        scenarioId: clonedScenario.id,
+        scenarioId: clonedScenario?.id ?? null,
         riskSchemeId: validated.riskSchemeId || null,
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
@@ -188,6 +196,14 @@ export class RealizationService {
       );
     }
 
+    if (isRiskQuizType) {
+      // Provisions the (deterministic, per-category) card set right away, so
+      // an operator never has to remember to click "Wygeneruj brakujące
+      // karty" before printing — riskSchemeId is guaranteed set here, DTO
+      // validation already rejects a risk-quiz payload without one.
+      await this.riskQuizService.generateMissingCards(realizationId);
+    }
+
     await this.createLog(
       realizationId,
       validated.changedBy,
@@ -214,51 +230,77 @@ export class RealizationService {
     }
 
     const validated = validateRealizationPayload(payload);
-    const requestedScenario = await this.scenarioService.findScenarioById(
-      validated.scenarioId,
-    );
-    if (!requestedScenario) {
-      throw new BadRequestException('Scenario not found');
+    const isRiskQuizType = validated.type === 'risk-quiz';
+
+    const currentScenario = current.scenarioId
+      ? await this.scenarioService.findScenarioById(current.scenarioId)
+      : null;
+    const currentScenarioOwnedByThisRealization =
+      !!currentScenario && currentScenario.realizationId === realizationId;
+
+    // scenarioInstanceIdToRemove tracks a realization-owned scenario instance
+    // that's being replaced or dropped — it can only be deleted once
+    // Realization.scenarioId stops referencing it (FK), so removal happens
+    // after the update below, whichever branch set it.
+    let scenario: ScenarioEntity | null = null;
+    let finalStations: StationEntity[] = [];
+    let scenarioInstanceIdToRemove: string | null = null;
+
+    if (isRiskQuizType) {
+      // Ryzykanci realizations don't use the Scenario/Station system — drop
+      // whatever scenario instance this realization previously owned (e.g.
+      // switching from another realization type) and don't create a new one.
+      if (currentScenarioOwnedByThisRealization) {
+        await this.stationService.removeStationsByIds(
+          currentScenario.stationIds,
+        );
+        scenarioInstanceIdToRemove = currentScenario.id;
+      }
+    } else {
+      const requestedScenario = await this.scenarioService.findScenarioById(
+        validated.scenarioId,
+      );
+      if (!requestedScenario) {
+        throw new BadRequestException('Scenario not found');
+      }
+      const currentScenarioTemplateId =
+        currentScenario?.sourceTemplateId ?? currentScenario?.id;
+      const isReusingCurrentScenarioInstance =
+        requestedScenario.id === current.scenarioId ||
+        (currentScenarioTemplateId === requestedScenario.id &&
+          !!currentScenario);
+      const isDiscardingCurrentScenarioInstance =
+        !isReusingCurrentScenarioInstance &&
+        currentScenarioOwnedByThisRealization;
+
+      if (isDiscardingCurrentScenarioInstance) {
+        // Remove the old scenario instance's stations *before* cloning the
+        // new one, so the clone's preferred (template) qrEntryCodes can't
+        // collide with the soon-to-be-replaced rows within this realizationId.
+        await this.stationService.removeStationsByIds(
+          currentScenario.stationIds,
+        );
+        scenarioInstanceIdToRemove = currentScenario.id;
+      }
+
+      scenario = isReusingCurrentScenarioInstance
+        ? (requestedScenario.id === current.scenarioId
+            ? requestedScenario
+            : currentScenario)!
+        : await this.scenarioService.cloneScenario(requestedScenario.id, {
+            realizationId,
+          });
+
+      if (!scenario) {
+        throw new BadRequestException('Scenario not found');
+      }
+
+      finalStations = await this.syncScenarioStations(
+        realizationId,
+        scenario,
+        validated.stationDrafts,
+      );
     }
-    const currentScenario = await this.scenarioService.findScenarioById(
-      current.scenarioId,
-    );
-    const currentScenarioTemplateId =
-      currentScenario?.sourceTemplateId ?? currentScenario?.id;
-    const isReusingCurrentScenarioInstance =
-      requestedScenario.id === current.scenarioId ||
-      (currentScenarioTemplateId === requestedScenario.id && !!currentScenario);
-    const isDiscardingCurrentScenarioInstance =
-      !isReusingCurrentScenarioInstance &&
-      !!currentScenario &&
-      currentScenario.realizationId === realizationId;
-
-    if (isDiscardingCurrentScenarioInstance) {
-      // Remove the old scenario instance's stations *before* cloning the new
-      // one, so the clone's preferred (template) qrEntryCodes can't collide
-      // with the soon-to-be-replaced rows within this same realizationId.
-      // The Scenario row itself can only be deleted once Realization.scenarioId
-      // stops referencing it (FK), so that happens later, after the update below.
-      await this.stationService.removeStationsByIds(currentScenario.stationIds);
-    }
-
-    const scenario = isReusingCurrentScenarioInstance
-      ? (requestedScenario.id === current.scenarioId
-          ? requestedScenario
-          : currentScenario)!
-      : await this.scenarioService.cloneScenario(requestedScenario.id, {
-          realizationId,
-        });
-
-    if (!scenario) {
-      throw new BadRequestException('Scenario not found');
-    }
-
-    const finalStations = await this.syncScenarioStations(
-      realizationId,
-      scenario,
-      validated.stationDrafts,
-    );
 
     await this.prisma.realization.update({
       where: { id: realizationId },
@@ -273,7 +315,10 @@ export class RealizationService {
         gameRules: Object.prototype.hasOwnProperty.call(payload, 'gameRules')
           ? (validated.gameRules ?? null)
           : undefined,
-        translations: Object.prototype.hasOwnProperty.call(payload, 'translations')
+        translations: Object.prototype.hasOwnProperty.call(
+          payload,
+          'translations',
+        )
           ? toPrismaRealizationTranslationsData(validated.translations)
           : undefined,
         contactPerson: validated.contactPerson,
@@ -287,7 +332,7 @@ export class RealizationService {
         mapImageUrl: validated.mapImageUrl,
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
-        scenarioId: scenario.id,
+        scenarioId: scenario?.id ?? null,
         riskSchemeId: validated.riskSchemeId || null,
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
@@ -314,8 +359,14 @@ export class RealizationService {
       },
     });
 
-    if (isDiscardingCurrentScenarioInstance) {
-      await this.scenarioService.removeScenario(currentScenario.id);
+    if (scenarioInstanceIdToRemove) {
+      await this.scenarioService.removeScenario(scenarioInstanceIdToRemove);
+    }
+
+    if (isRiskQuizType) {
+      // Same auto-provisioning as createRealization — also covers switching
+      // an existing realization to risk-quiz, or changing its scheme.
+      await this.riskQuizService.generateMissingCards(realizationId);
     }
 
     await this.createLog(
@@ -358,9 +409,9 @@ export class RealizationService {
       );
     }
 
-    const scenario = await this.scenarioService.findScenarioById(
-      realization.scenarioId,
-    );
+    const scenario = realization.scenarioId
+      ? await this.scenarioService.findScenarioById(realization.scenarioId)
+      : null;
 
     if (scenario) {
       await this.stationService.removeStationsByIds(scenario.stationIds);
@@ -572,9 +623,9 @@ export class RealizationService {
       return null;
     }
 
-    const scenario = await this.scenarioService.findScenarioById(
-      realization.scenarioId,
-    );
+    const scenario = realization.scenarioId
+      ? await this.scenarioService.findScenarioById(realization.scenarioId)
+      : null;
     const scenarioTemplateId = scenario?.sourceTemplateId ?? scenario?.id;
     const scenarioTemplate =
       scenarioTemplateId && scenarioTemplateId !== scenario?.id
@@ -610,69 +661,6 @@ export class RealizationService {
       scenarioStations: stations,
       logs: mapRealizationLogs(logsRaw),
     });
-  }
-
-  private static readonly RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME =
-    'Ryzykanci — automatyczny szkielet (nie edytuj)';
-
-  /**
-   * Risk-quiz realizations don't use the Station/Scenario system, but
-   * Realization.scenarioId is a mandatory FK. Rather than making every
-   * consumer of that column handle null, we lazily create one shared,
-   * hidden template scenario (with one harmless station) the first time
-   * it's needed and reuse it for every future risk-quiz realization.
-   */
-  private async resolveRiskQuizPlaceholderScenarioId(): Promise<string> {
-    const existing = await this.prisma.scenario.findFirst({
-      where: {
-        name: RealizationService.RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME,
-        realizationId: null,
-        sourceTemplateId: null,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      return existing.id;
-    }
-
-    const now = new Date().toISOString();
-    const placeholderStation = await this.stationService.addTemplateStation({
-      id: crypto.randomUUID(),
-      name: 'Ryzykanci — pole techniczne',
-      type: 'points',
-      categories: [],
-      description:
-        'Wygenerowane automatycznie dla realizacji typu Ryzykanci. Nieużywane w aplikacji mobilnej.',
-      imageUrl: '',
-      points: 0,
-      timeLimitSeconds: 0,
-      qrScanCodes: [],
-      challengeDifficultyMode: 'admin',
-      challengeDifficulty: 'medium',
-      completionStopwatchEnabled: false,
-      allowConcurrentTeams: false,
-      fastestCompletionBonusPoints: 0,
-      color: '#f59e0b',
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const placeholderScenario = await this.scenarioService.addScenario({
-      id: crypto.randomUUID(),
-      name: RealizationService.RISK_QUIZ_PLACEHOLDER_SCENARIO_NAME,
-      description:
-        'Automatyczny szkielet wymagany przez system dla realizacji typu Ryzykanci.',
-      introText: '',
-      gameRules: '',
-      stationIds: [placeholderStation.id],
-      kind: 'template',
-      isTemplate: true,
-      isInstance: false,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return placeholderScenario.id;
   }
 
   private async createLog(

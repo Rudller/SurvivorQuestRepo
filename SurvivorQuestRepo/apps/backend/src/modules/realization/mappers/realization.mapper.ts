@@ -236,7 +236,7 @@ export function buildRealizationEntity(input: {
     mapImageUrl: string | null;
     offerPdfUrl: string | null;
     offerPdfName: string | null;
-    scenarioId: string;
+    scenarioId: string | null;
     scenarioTemplateId?: string;
     scenarioTemplateName?: string;
     riskSchemeId?: string | null;

@@ -1,6 +1,10 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
 import type { StationType } from "@/features/games/types/station";
+import {
+  realizationTypeOptions,
+  type RealizationType,
+} from "@/features/realizations/types/realization";
 import type { CurrentRealizationOverview } from "../types/current-realization-overview";
 
 type UnknownRecord = Record<string, unknown>;
@@ -17,21 +21,43 @@ function asBoolean(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+const REALIZATION_TYPE_VALUES = new Set(
+  realizationTypeOptions.map((option) => option.value),
+);
+
+function asRealizationType(value: unknown): RealizationType {
+  return typeof value === "string" &&
+    REALIZATION_TYPE_VALUES.has(value as RealizationType)
+    ? (value as RealizationType)
+    : "outdoor-games";
+}
+
 function asRecord(value: unknown): UnknownRecord {
-  return typeof value === "object" && value !== null ? (value as UnknownRecord) : {};
+  return typeof value === "object" && value !== null
+    ? (value as UnknownRecord)
+    : {};
 }
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function toMobileAdminRealizationPath(realizationId: string | undefined, suffix = "") {
+function toMobileAdminRealizationPath(
+  realizationId: string | undefined,
+  suffix = "",
+) {
   const normalizedId = realizationId?.trim();
   if (!normalizedId || normalizedId === "current") {
     return buildApiPath(`/mobile/admin/realizations/current${suffix}`);
   }
 
-  return buildApiPath(`/mobile/admin/realizations/${encodeURIComponent(normalizedId)}${suffix}`);
+  return buildApiPath(
+    `/mobile/admin/realizations/${encodeURIComponent(normalizedId)}${suffix}`,
+  );
 }
 
 function toMobileAdminTeamTaskPath(
@@ -54,7 +80,9 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
   return {
     realization: {
       id: asString(realization.id),
-      companyName: asString(realization.companyName ?? realization.company_name),
+      companyName: asString(
+        realization.companyName ?? realization.company_name,
+      ),
       introText: (() => {
         const value = realization.introText ?? realization.intro_text;
         return typeof value === "string" ? value : null;
@@ -63,11 +91,22 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         const value = realization.location;
         return typeof value === "string" ? value : null;
       })(),
-      status: asString(realization.status, "planned") as CurrentRealizationOverview["realization"]["status"],
-      scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at),
-      locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
+      status: asString(
+        realization.status,
+        "planned",
+      ) as CurrentRealizationOverview["realization"]["status"],
+      scheduledAt: asString(
+        realization.scheduledAt ?? realization.scheduled_at,
+      ),
+      locationRequired: asBoolean(
+        realization.locationRequired ?? realization.location_required,
+      ),
       joinCode: asString(realization.joinCode ?? realization.join_code),
       teamCount: asNumber(realization.teamCount ?? realization.team_count),
+      type: asRealizationType(realization.type),
+      riskSchemeId: asNullableString(
+        realization.riskSchemeId ?? realization.risk_scheme_id,
+      ),
       stationIds: asArray(realization.stationIds ?? realization.station_ids)
         .map((value) => asString(value))
         .filter(Boolean),
@@ -81,14 +120,17 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           stationType: asString(item.stationType ?? item.station_type, "quiz"),
           defaultPoints: asNumber(item.defaultPoints ?? item.default_points),
           completionStopwatchEnabled: asBoolean(
-            item.completionStopwatchEnabled ?? item.completion_stopwatch_enabled,
+            item.completionStopwatchEnabled ??
+              item.completion_stopwatch_enabled,
           ),
           latitude:
-            typeof latitudeCandidate === "number" && Number.isFinite(latitudeCandidate)
+            typeof latitudeCandidate === "number" &&
+            Number.isFinite(latitudeCandidate)
               ? latitudeCandidate
               : null,
           longitude:
-            typeof longitudeCandidate === "number" && Number.isFinite(longitudeCandidate)
+            typeof longitudeCandidate === "number" &&
+            Number.isFinite(longitudeCandidate)
               ? longitudeCandidate
               : null,
         };
@@ -103,11 +145,19 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         slotNumber: asNumber(team.slotNumber ?? team.slot_number),
         name: (team.name as string | null) ?? null,
         color: (team.color as string | null) ?? null,
-        badgeKey: (team.badgeKey as string | null) ?? (team.badge_key as string | null) ?? null,
+        badgeKey:
+          (team.badgeKey as string | null) ??
+          (team.badge_key as string | null) ??
+          null,
         badgeImageUrl:
-          (team.badgeImageUrl as string | null) ?? (team.badge_image_url as string | null) ?? null,
+          (team.badgeImageUrl as string | null) ??
+          (team.badge_image_url as string | null) ??
+          null,
         points: asNumber(team.points),
-        status: asString(team.status, "unassigned") as CurrentRealizationOverview["teams"][number]["status"],
+        status: asString(
+          team.status,
+          "unassigned",
+        ) as CurrentRealizationOverview["teams"][number]["status"],
         taskStats: {
           total: asNumber(asRecord(team.taskStats ?? team.task_stats).total),
           done: asNumber(asRecord(team.taskStats ?? team.task_stats).done),
@@ -133,7 +183,10 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           const device = asRecord(item);
           return {
             deviceId: asString(device.deviceId ?? device.device_id),
-            memberName: (device.memberName as string | null) ?? (device.member_name as string | null) ?? null,
+            memberName:
+              (device.memberName as string | null) ??
+              (device.member_name as string | null) ??
+              null,
             lastSeenAt: asString(device.lastSeenAt ?? device.last_seen_at),
             expiresAt: asString(device.expiresAt ?? device.expires_at),
           };
@@ -143,13 +196,24 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           return {
             stationId: asString(task.stationId ?? task.station_id),
             stationNumber: (() => {
-              const value = Math.round(asNumber(task.stationNumber ?? task.station_number, 0));
+              const value = Math.round(
+                asNumber(task.stationNumber ?? task.station_number, 0),
+              );
               return value > 0 ? value : undefined;
             })(),
-            status: asString(task.status, "todo") as CurrentRealizationOverview["teams"][number]["tasks"][number]["status"],
+            status: asString(
+              task.status,
+              "todo",
+            ) as CurrentRealizationOverview["teams"][number]["tasks"][number]["status"],
             pointsAwarded: asNumber(task.pointsAwarded ?? task.points_awarded),
-            startedAt: (task.startedAt as string | null) ?? (task.started_at as string | null) ?? null,
-            finishedAt: (task.finishedAt as string | null) ?? (task.finished_at as string | null) ?? null,
+            startedAt:
+              (task.startedAt as string | null) ??
+              (task.started_at as string | null) ??
+              null,
+            finishedAt:
+              (task.finishedAt as string | null) ??
+              (task.finished_at as string | null) ??
+              null,
           };
         }),
         updatedAt: asString(team.updatedAt ?? team.updated_at),
@@ -161,7 +225,10 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
       return {
         id: asString(log.id),
         realizationId: asString(log.realizationId ?? log.realization_id),
-        teamId: (log.teamId as string | null) ?? (log.team_id as string | null) ?? null,
+        teamId:
+          (log.teamId as string | null) ??
+          (log.team_id as string | null) ??
+          null,
         teamSlot: (() => {
           const value = log.teamSlot ?? log.team_slot;
           if (value === null || typeof value === "undefined") {
@@ -169,8 +236,14 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
           }
           return asNumber(value, 0);
         })(),
-        teamName: (log.teamName as string | null) ?? (log.team_name as string | null) ?? null,
-        actorType: asString(log.actorType ?? log.actor_type, "system") as CurrentRealizationOverview["logs"][number]["actorType"],
+        teamName:
+          (log.teamName as string | null) ??
+          (log.team_name as string | null) ??
+          null,
+        actorType: asString(
+          log.actorType ?? log.actor_type,
+          "system",
+        ) as CurrentRealizationOverview["logs"][number]["actorType"],
         actorId: asString(log.actorId ?? log.actor_id),
         eventType: asString(log.eventType ?? log.event_type),
         payload: asRecord(log.payload),
@@ -232,7 +305,9 @@ export type PointsQrCodeSuggestion = {
   points: number;
 };
 
-function normalizePointsQrCodeSuggestions(raw: unknown): PointsQrCodeSuggestion[] {
+function normalizePointsQrCodeSuggestions(
+  raw: unknown,
+): PointsQrCodeSuggestion[] {
   const source = asRecord(raw);
 
   return asArray(source.entries).map((value) => {
@@ -252,7 +327,8 @@ function normalizePointsQrCodesResponse(raw: unknown): PointsQrCodesResponse {
     realizationId: asString(source.realizationId),
     entries: asArray(source.entries).map((value) => {
       const item = asRecord(value);
-      const claimMode = item.claimMode === "FIRST_TEAM" ? "FIRST_TEAM" : "PER_TEAM";
+      const claimMode =
+        item.claimMode === "FIRST_TEAM" ? "FIRST_TEAM" : "PER_TEAM";
 
       return {
         id: asString(item.id),
@@ -285,7 +361,9 @@ function normalizePendingPhotoReviews(raw: unknown): PendingPhotoReview[] {
       teamName: asString(item.teamName ?? item.team_name),
       stationId: asString(item.stationId ?? item.station_id),
       stationName: asString(item.stationName ?? item.station_name),
-      stationDescription: asString(item.stationDescription ?? item.station_description),
+      stationDescription: asString(
+        item.stationDescription ?? item.station_description,
+      ),
       photoUrl: asString(item.photoUrl ?? item.photo_url),
       submittedAt: asString(item.submittedAt ?? item.submitted_at),
     };
@@ -307,13 +385,21 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       { realizationId?: string } | void
     >({
       query: (arg) => ({
-        url: toMobileAdminRealizationPath(arg?.realizationId, "/reset-completed-tasks"),
+        url: toMobileAdminRealizationPath(
+          arg?.realizationId,
+          "/reset-completed-tasks",
+        ),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
     }),
     startCurrentRealization: build.mutation<
-      { realizationId: string; status: "in-progress"; started: boolean; startedAt: string },
+      {
+        realizationId: string;
+        status: "in-progress";
+        started: boolean;
+        startedAt: string;
+      },
       { realizationId?: string } | void
     >({
       query: (arg) => ({
@@ -323,7 +409,12 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       invalidatesTags: ["Realization"],
     }),
     finishCurrentRealization: build.mutation<
-      { realizationId: string; status: "done"; finished: boolean; finishedAt: string },
+      {
+        realizationId: string;
+        status: "done";
+        finished: boolean;
+        finishedAt: string;
+      },
       { realizationId?: string } | void
     >({
       query: (arg) => ({
@@ -353,14 +444,17 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       CurrentRealizationStationQrResponse,
       { realizationId?: string } | void
     >({
-      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/station-qr"),
+      query: (arg) =>
+        toMobileAdminRealizationPath(arg?.realizationId, "/station-qr"),
     }),
     getCurrentRealizationPointsQrCodes: build.query<
       PointsQrCodesResponse,
       { realizationId?: string } | void
     >({
-      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/points-qr-codes"),
-      transformResponse: (response: unknown) => normalizePointsQrCodesResponse(response),
+      query: (arg) =>
+        toMobileAdminRealizationPath(arg?.realizationId, "/points-qr-codes"),
+      transformResponse: (response: unknown) =>
+        normalizePointsQrCodesResponse(response),
       providesTags: ["Realization"],
     }),
     createCurrentRealizationPointsQrCode: build.mutation<
@@ -382,7 +476,8 @@ export const currentRealizationApi = baseApi.injectEndpoints({
     }),
     getPointsQrCodeSuggestions: build.query<PointsQrCodeSuggestion[], void>({
       query: () => buildApiPath("/mobile/admin/points-qr-codes/suggestions"),
-      transformResponse: (response: unknown) => normalizePointsQrCodeSuggestions(response),
+      transformResponse: (response: unknown) =>
+        normalizePointsQrCodeSuggestions(response),
     }),
     deleteCurrentRealizationPointsQrCode: build.mutation<
       { ok: boolean },
@@ -402,7 +497,12 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       { realizationId?: string; teamId: string; stationId: string }
     >({
       query: ({ realizationId, teamId, stationId }) => ({
-        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "reset"),
+        url: toMobileAdminTeamTaskPath(
+          realizationId,
+          teamId,
+          stationId,
+          "reset",
+        ),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
@@ -412,19 +512,37 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       { realizationId?: string; teamId: string; stationId: string }
     >({
       query: ({ realizationId, teamId, stationId }) => ({
-        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "complete"),
+        url: toMobileAdminTeamTaskPath(
+          realizationId,
+          teamId,
+          stationId,
+          "complete",
+        ),
         method: "POST",
       }),
       invalidatesTags: ["Realization"],
     }),
     failCurrentRealizationTeamTask: build.mutation<
       TeamTaskAdminMutationResponse,
-      { realizationId?: string; teamId: string; stationId: string; reason?: string }
+      {
+        realizationId?: string;
+        teamId: string;
+        stationId: string;
+        reason?: string;
+      }
     >({
       query: ({ realizationId, teamId, stationId, reason }) => ({
-        url: toMobileAdminTeamTaskPath(realizationId, teamId, stationId, "fail"),
+        url: toMobileAdminTeamTaskPath(
+          realizationId,
+          teamId,
+          stationId,
+          "fail",
+        ),
         method: "POST",
-        body: typeof reason === "string" && reason.trim().length > 0 ? { reason } : undefined,
+        body:
+          typeof reason === "string" && reason.trim().length > 0
+            ? { reason }
+            : undefined,
       }),
       invalidatesTags: ["Realization"],
     }),
@@ -432,8 +550,10 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       PendingPhotoReview[],
       { realizationId?: string } | void
     >({
-      query: (arg) => toMobileAdminRealizationPath(arg?.realizationId, "/photo-reviews"),
-      transformResponse: (response: unknown) => normalizePendingPhotoReviews(response),
+      query: (arg) =>
+        toMobileAdminRealizationPath(arg?.realizationId, "/photo-reviews"),
+      transformResponse: (response: unknown) =>
+        normalizePendingPhotoReviews(response),
       providesTags: ["Realization"],
     }),
   }),

@@ -250,8 +250,7 @@ export function validateRealizationPayload(
   const riskSchemeId = payload.riskSchemeId?.trim() || '';
   const isRiskQuizType = payload.type === 'risk-quiz';
   // Risk-quiz realizations don't use the scenario/station machinery at all —
-  // the backend auto-provisions a shared placeholder scenario for them (see
-  // RealizationService.resolveRiskQuizPlaceholderScenarioId), so the admin
+  // Realization.scenarioId is nullable precisely for this type, so the admin
   // is never required to pick one. They instead pick a "talia" (RiskScheme).
   const requiresScenario = !isRiskQuizType;
   const showLeaderboard = payload.showLeaderboard;

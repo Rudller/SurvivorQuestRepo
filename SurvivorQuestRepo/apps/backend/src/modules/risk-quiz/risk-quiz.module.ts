@@ -7,5 +7,6 @@ import { RiskQuizService } from './risk-quiz.service';
   imports: [AuthModule],
   controllers: [RiskQuizController],
   providers: [RiskQuizService],
+  exports: [RiskQuizService],
 })
 export class RiskQuizModule {}

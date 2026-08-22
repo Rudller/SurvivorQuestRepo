@@ -117,6 +117,25 @@ export class RiskQuizService {
       throw new NotFoundException('Card not found');
     }
 
+    if (!realization.riskSchemeId) {
+      throw new NotFoundException('Card not found');
+    }
+    const activeSchemeCategory = await this.prisma.riskSchemeCategory.findFirst(
+      {
+        where: {
+          schemeId: realization.riskSchemeId,
+          categoryId: card.categoryId,
+        },
+        select: { categoryId: true },
+      },
+    );
+    if (!activeSchemeCategory) {
+      // Keep historical RiskCard/RiskAttempt rows intact when an operator
+      // changes the scheme, but do not let cards from the old scheme remain
+      // scannable in this realization.
+      throw new NotFoundException('Card not found');
+    }
+
     const poolStations = await this.prisma.riskPoolStation.findMany({
       where: { categoryId: card.categoryId, difficulty: card.difficulty },
       include: { station: true },
@@ -279,7 +298,15 @@ export class RiskQuizService {
       return { draw: null };
     }
 
-    await this.prisma.riskPendingDraw.delete({ where: { teamId: team.id } });
+    // Use deleteMany as the atomic consume gate. Two overlapping polls (or an
+    // admin cancellation racing this poll) may both read the same row; only
+    // the request that actually deletes it is allowed to deliver the draw.
+    const consumed = await this.prisma.riskPendingDraw.deleteMany({
+      where: { id: pendingDraw.id, teamId: team.id },
+    });
+    if (consumed.count === 0) {
+      return { draw: null };
+    }
 
     return {
       draw: {
@@ -698,9 +725,20 @@ export class RiskQuizService {
   }
 
   async listCards(realizationId: string) {
-    await this.requireRealizationOrThrow(realizationId);
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    if (!realization.riskSchemeId) {
+      return [];
+    }
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId: realization.riskSchemeId },
+      select: { categoryId: true },
+    });
+    const categoryIds = schemeCategories.map((item) => item.categoryId);
+    if (categoryIds.length === 0) {
+      return [];
+    }
     return this.prisma.riskCard.findMany({
-      where: { realizationId },
+      where: { realizationId, categoryId: { in: categoryIds } },
       include: { category: true },
       orderBy: [{ category: { name: 'asc' } }, { difficulty: 'asc' }],
     });
@@ -915,6 +953,7 @@ export class RiskQuizService {
     });
 
     if (attempts.length === 0) {
+      await this.prisma.riskPendingDraw.deleteMany({ where: { teamId } });
       return { teamId, resetCount: 0, pointsAdjusted: 0 };
     }
 
@@ -924,6 +963,7 @@ export class RiskQuizService {
     );
 
     await this.prisma.$transaction([
+      this.prisma.riskPendingDraw.deleteMany({ where: { teamId } }),
       this.prisma.riskAttempt.deleteMany({
         where: { realizationId: realization.id, teamId },
       }),
@@ -1250,6 +1290,20 @@ export class RiskQuizService {
       throw new BadRequestException(
         'Drużyna ma już aktywną kartę — najpierw ją anuluj.',
       );
+    }
+
+    if (!realization.riskSchemeId) {
+      throw new BadRequestException(
+        'This realization has no assigned scheme (talia)',
+      );
+    }
+
+    const schemeCategory = await this.prisma.riskSchemeCategory.findFirst({
+      where: { schemeId: realization.riskSchemeId, categoryId },
+      select: { categoryId: true },
+    });
+    if (!schemeCategory) {
+      throw new NotFoundException('Category is not assigned to this scheme');
     }
 
     const poolStations = await this.prisma.riskPoolStation.findMany({

@@ -206,8 +206,13 @@ export function RiskQuizScreen({
     }
 
     let cancelled = false;
+    let pollInFlight = false;
 
     const pollPendingDraw = async () => {
+      if (pollInFlight) {
+        return;
+      }
+      pollInFlight = true;
       try {
         const result = await fetchRiskQuizPendingDraw(apiBaseUrl, { sessionToken });
         if (cancelled || !result.draw) {
@@ -230,6 +235,8 @@ export function RiskQuizScreen({
           onSessionInvalid();
         }
         // Any other error is silent — the next tick just retries.
+      } finally {
+        pollInFlight = false;
       }
     };
 

@@ -2,28 +2,54 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { useGenerateRiskCardsMutation, useGetRiskCardsQuery } from "../api/risk-quiz.api";
+import {
+  useGenerateRiskCardsMutation,
+  useGetRiskCardsQuery,
+} from "../api/risk-quiz.api";
 import { RISK_DIFFICULTY_OPTIONS } from "../types/risk-quiz";
 import { buildRiskCardQrFileName } from "@/shared/lib/station-qr-file-name";
-import { addCaptionToQrImageDataUrl } from "@/shared/lib/qr-image-caption";
-import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
+import {
+  QrImageLightbox,
+  type QrImageLightboxImage,
+} from "@/shared/components/qr-image-lightbox";
+
+export type RiskCardQrDownloadEntry = {
+  fileName: string;
+  qrImage: string;
+};
 
 type RiskCardsQrPanelProps = {
   realizationId: string;
   realizationName: string;
+  onDownloadableCardsChange?: (entries: RiskCardQrDownloadEntry[]) => void;
 };
 
 const QR_IMAGE_WIDTH = 220;
 
 function difficultyLabel(value: string) {
-  return RISK_DIFFICULTY_OPTIONS.find((option) => option.value === value)?.label ?? value;
+  return (
+    RISK_DIFFICULTY_OPTIONS.find((option) => option.value === value)?.label ??
+    value
+  );
 }
 
-export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQrPanelProps) {
-  const { data: cards, isLoading, isError } = useGetRiskCardsQuery({ realizationId });
-  const [generateCards, { isLoading: isGenerating }] = useGenerateRiskCardsMutation();
-  const [qrImagesByCardId, setQrImagesByCardId] = useState<Record<string, string>>({});
-  const [lightboxImage, setLightboxImage] = useState<QrImageLightboxImage | null>(null);
+export function RiskCardsQrPanel({
+  realizationId,
+  realizationName,
+  onDownloadableCardsChange,
+}: RiskCardsQrPanelProps) {
+  const {
+    data: cards,
+    isLoading,
+    isError,
+  } = useGetRiskCardsQuery({ realizationId });
+  const [generateCards, { isLoading: isGenerating }] =
+    useGenerateRiskCardsMutation();
+  const [qrImagesByCardId, setQrImagesByCardId] = useState<
+    Record<string, string>
+  >({});
+  const [lightboxImage, setLightboxImage] =
+    useState<QrImageLightboxImage | null>(null);
 
   useEffect(() => {
     if (!cards) {
@@ -34,18 +60,12 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
 
     void Promise.all(
       cards.map(async (card) => {
-        const caption = card.code;
         const qrImage = await QRCode.toDataURL(card.code, {
           margin: 1,
           width: QR_IMAGE_WIDTH,
           errorCorrectionLevel: "M",
         });
-        try {
-          const withCaption = await addCaptionToQrImageDataUrl(qrImage, caption);
-          return [card.id, withCaption] as const;
-        } catch {
-          return [card.id, qrImage] as const;
-        }
+        return [card.id, qrImage] as const;
       }),
     ).then((items) => {
       if (!cancelled) {
@@ -58,12 +78,43 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
     };
   }, [cards]);
 
+  useEffect(() => {
+    if (!onDownloadableCardsChange) {
+      return;
+    }
+
+    if (!cards) {
+      onDownloadableCardsChange([]);
+      return;
+    }
+
+    const entries = cards
+      .map((card) => {
+        const qrImage = qrImagesByCardId[card.id];
+        if (!qrImage) {
+          return null;
+        }
+        return {
+          fileName: buildRiskCardQrFileName(
+            realizationName,
+            card.category.name,
+            card.code,
+          ),
+          qrImage,
+        };
+      })
+      .filter((entry): entry is RiskCardQrDownloadEntry => Boolean(entry));
+
+    onDownloadableCardsChange(entries);
+  }, [cards, qrImagesByCardId, realizationName, onDownloadableCardsChange]);
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500">
-        Każda kombinacja kategoria × poziom trudności dostaje 10 osobnych, zdublowanych kart QR (żeby kilka drużyn
-        mogło ciągnąć z tej samej puli naraz). Wygeneruj brakujące karty po dodaniu kategorii i pytań, wydrukuj i
-        rozłóż na stolikach.
+        Każda kombinacja kategoria × poziom trudności dostaje 10 osobnych,
+        zdublowanych kart QR (żeby kilka drużyn mogło ciągnąć z tej samej puli
+        naraz). Wygeneruj brakujące karty po dodaniu kategorii i pytań, wydrukuj
+        i rozłóż na stolikach.
       </p>
 
       <button
@@ -82,7 +133,9 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
         </div>
       )}
       {!isLoading && !isError && cards && cards.length === 0 ? (
-        <p className="text-sm text-zinc-500">Brak kart. Dodaj kategorie i pytania, a potem wygeneruj karty.</p>
+        <p className="text-sm text-zinc-500">
+          Brak kart. Dodaj kategorie i pytania, a potem wygeneruj karty.
+        </p>
       ) : null}
 
       {!isLoading && !isError && cards && cards.length > 0 ? (
@@ -90,10 +143,17 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
           {cards.map((card) => {
             const qrImage = qrImagesByCardId[card.id];
             const caption = card.code;
-            const fileName = buildRiskCardQrFileName(realizationName, card.category.name, card.code);
+            const fileName = buildRiskCardQrFileName(
+              realizationName,
+              card.category.name,
+              card.code,
+            );
 
             return (
-              <article key={card.id} className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+              <article
+                key={card.id}
+                className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4"
+              >
                 <h3 className="text-sm font-semibold text-zinc-100">
                   {card.category.name} — {difficultyLabel(card.difficulty)}
                 </h3>
@@ -114,10 +174,16 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
                       className="cursor-zoom-in rounded-md transition hover:opacity-90"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={qrImage} alt={`Kod QR ${card.code}`} className="h-48 w-48 rounded-md bg-white p-1" />
+                      <img
+                        src={qrImage}
+                        alt={`Kod QR ${card.code}`}
+                        className="h-48 w-48 rounded-md bg-white p-1"
+                      />
                     </button>
                   ) : (
-                    <p className="text-xs text-zinc-500">Renderowanie kodu...</p>
+                    <p className="text-xs text-zinc-500">
+                      Renderowanie kodu...
+                    </p>
                   )}
                 </div>
                 {qrImage ? (
@@ -135,7 +201,10 @@ export function RiskCardsQrPanel({ realizationId, realizationName }: RiskCardsQr
         </div>
       ) : null}
 
-      <QrImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+      <QrImageLightbox
+        image={lightboxImage}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 }

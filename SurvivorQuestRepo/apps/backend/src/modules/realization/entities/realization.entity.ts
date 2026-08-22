@@ -58,7 +58,7 @@ export type RealizationEntity = {
   mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
-  scenarioId: string;
+  scenarioId: string | null;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;

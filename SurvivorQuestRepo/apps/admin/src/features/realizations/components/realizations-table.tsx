@@ -47,7 +47,10 @@ export function RealizationsTable({
   );
 
   const filteredRealizations = useMemo(
-    () => (hideCompleted ? realizations.filter((realization) => realization.status !== "done") : realizations),
+    () =>
+      hideCompleted
+        ? realizations.filter((realization) => realization.status !== "done")
+        : realizations,
     [hideCompleted, realizations],
   );
 
@@ -56,17 +59,24 @@ export function RealizationsTable({
 
     list.sort((left, right) => {
       if (sortField === "company") {
-        const value = left.companyName.localeCompare(right.companyName, "pl", { sensitivity: "base" });
+        const value = left.companyName.localeCompare(right.companyName, "pl", {
+          sensitivity: "base",
+        });
         return sortDirection === "asc" ? value : -value;
       }
 
       if (sortField === "status") {
-        const value = getStatusOrder(left.status) - getStatusOrder(right.status);
+        const value =
+          getStatusOrder(left.status) - getStatusOrder(right.status);
         return sortDirection === "asc" ? value : -value;
       }
 
-      const leftTime = new Date(sortField === "scheduledAt" ? left.scheduledAt : left.createdAt).getTime();
-      const rightTime = new Date(sortField === "scheduledAt" ? right.scheduledAt : right.createdAt).getTime();
+      const leftTime = new Date(
+        sortField === "scheduledAt" ? left.scheduledAt : left.createdAt,
+      ).getTime();
+      const rightTime = new Date(
+        sortField === "scheduledAt" ? right.scheduledAt : right.createdAt,
+      ).getTime();
       const value = leftTime - rightTime;
       return sortDirection === "asc" ? value : -value;
     });
@@ -91,7 +101,9 @@ export function RealizationsTable({
           <label className="text-xs text-zinc-400">Sortuj po</label>
           <select
             value={sortField}
-            onChange={(event) => onSortFieldChange(event.target.value as RealizationSortField)}
+            onChange={(event) =>
+              onSortFieldChange(event.target.value as RealizationSortField)
+            }
             className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
           >
             <option value="scheduledAt">Termin</option>
@@ -101,7 +113,9 @@ export function RealizationsTable({
           </select>
           <select
             value={sortDirection}
-            onChange={(event) => onSortDirectionChange(event.target.value as SortDirection)}
+            onChange={(event) =>
+              onSortDirectionChange(event.target.value as SortDirection)
+            }
             className="rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
           >
             <option value="asc">Rosnąco</option>
@@ -129,43 +143,85 @@ export function RealizationsTable({
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-zinc-900 text-zinc-300">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Firma</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Lokalizacja</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Typ</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Termin</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Scenariusz</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Drużyny</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Stanowiska</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Ostatnia zmiana</th>
-                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Firma
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Lokalizacja
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Typ
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Termin
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Scenariusz
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Drużyny
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Stanowiska
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Ostatnia zmiana
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                    Akcje
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {sortedRealizations.map((realization) => {
                   const linkedScenario = scenarioById.get(
-                    realization.scenarioTemplateId ?? realization.scenarioId,
+                    realization.scenarioTemplateId ??
+                      realization.scenarioId ??
+                      "",
                   );
                   const linkedScenarioName =
-                    linkedScenario?.name ?? realization.scenarioTemplateName ?? null;
+                    linkedScenario?.name ??
+                    realization.scenarioTemplateName ??
+                    null;
                   const realizationStations =
                     realization.scenarioStations.length > 0
                       ? realization.scenarioStations
                       : realization.stationIds
-                          .map((stationId) => stations.find((station) => station.id === stationId))
-                          .filter((station): station is NonNullable<typeof station> => Boolean(station));
+                          .map((stationId) =>
+                            stations.find(
+                              (station) => station.id === stationId,
+                            ),
+                          )
+                          .filter(
+                            (station): station is NonNullable<typeof station> =>
+                              Boolean(station),
+                          );
 
                   const stationCount = realizationStations.length;
 
                   return (
-                    <tr key={realization.id} className="border-t border-zinc-800 bg-zinc-900/70">
-                      <td className="px-3 py-2 font-medium text-zinc-100">{realization.companyName}</td>
-                      <td className="px-3 py-2 text-zinc-300">{realization.location?.trim() || "-"}</td>
-                      <td className="px-3 py-2 text-zinc-300">
-                        {realizationTypeOptions.find((opt) => opt.value === realization.type)?.label ?? realization.type}
+                    <tr
+                      key={realization.id}
+                      className="border-t border-zinc-800 bg-zinc-900/70"
+                    >
+                      <td className="px-3 py-2 font-medium text-zinc-100">
+                        {realization.companyName}
                       </td>
                       <td className="px-3 py-2 text-zinc-300">
-                        {new Date(realization.scheduledAt).toLocaleString("pl-PL")}
+                        {realization.location?.trim() || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {realizationTypeOptions.find(
+                          (opt) => opt.value === realization.type,
+                        )?.label ?? realization.type}
+                      </td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {new Date(realization.scheduledAt).toLocaleString(
+                          "pl-PL",
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <span
@@ -178,16 +234,24 @@ export function RealizationsTable({
                         {linkedScenarioName ? (
                           <>
                             <p className="line-clamp-1">{linkedScenarioName}</p>
-                            <p className="text-xs text-zinc-500">Stanowiska: {stationCount}</p>
+                            <p className="text-xs text-zinc-500">
+                              Stanowiska: {stationCount}
+                            </p>
                           </>
                         ) : (
                           "-"
                         )}
                       </td>
-                      <td className="px-3 py-2 text-zinc-300">{realization.teamCount}</td>
-                      <td className="px-3 py-2 text-zinc-300">{realization.positionsCount}</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {realization.teamCount}
+                      </td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {realization.positionsCount}
+                      </td>
                       <td className="px-3 py-2 text-zinc-500">
-                        {new Date(realization.updatedAt).toLocaleString("pl-PL")}
+                        {new Date(realization.updatedAt).toLocaleString(
+                          "pl-PL",
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -209,7 +273,9 @@ export function RealizationsTable({
                           ) : null}
                           <button
                             type="button"
-                            onClick={() => downloadRealizationExport(realization)}
+                            onClick={() =>
+                              downloadRealizationExport(realization)
+                            }
                             className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
                           >
                             Pobierz JSON

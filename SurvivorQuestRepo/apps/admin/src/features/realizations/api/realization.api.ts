@@ -1,6 +1,12 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { ChallengeDifficulty, ChallengeDifficultyMode, Station, StationKind, StationType } from "@/features/games/types/station";
+import type {
+  ChallengeDifficulty,
+  ChallengeDifficultyMode,
+  Station,
+  StationKind,
+  StationType,
+} from "@/features/games/types/station";
 import { normalizeStationQuiz } from "@/features/games/station.utils";
 import type {
   Realization,
@@ -29,31 +35,27 @@ type StationDto = {
   fastestCompletionBonusPoints?: number | null;
   qrScanCodes?: string[] | null;
   color?: string | null;
-  quiz?:
-    | {
-        question?: string;
-        answers?: string[];
-        correctAnswerIndex?: number;
-        audioUrl?: string;
+  quiz?: {
+    question?: string;
+    answers?: string[];
+    correctAnswerIndex?: number;
+    audioUrl?: string;
+  } | null;
+  translations?: Partial<
+    Record<
+      "polish" | "english" | "ukrainian" | "russian" | "other",
+      {
+        name?: string;
+        description?: string;
+        quiz?: {
+          question?: string;
+          answers?: string[];
+          correctAnswerIndex?: number;
+          audioUrl?: string;
+        };
       }
-    | null;
-  translations?:
-    | Partial<
-        Record<
-          "polish" | "english" | "ukrainian" | "russian" | "other",
-          {
-            name?: string;
-            description?: string;
-            quiz?: {
-              question?: string;
-              answers?: string[];
-              correctAnswerIndex?: number;
-              audioUrl?: string;
-            };
-          }
-        >
-      >
-    | null;
+    >
+  > | null;
   latitude?: number | null;
   longitude?: number | null;
   sourceTemplateId?: string;
@@ -85,7 +87,7 @@ type RealizationDto = {
   mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
-  scenarioId: string;
+  scenarioId: string | null;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;
@@ -176,7 +178,7 @@ type UpdateRealizationPayload = {
   mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
-  scenarioId: string;
+  scenarioId?: string;
   riskSchemeId?: string;
   teamCount: number;
   peopleCount: number;
@@ -240,7 +242,12 @@ type MobileAdminRealizationOverview = {
     points: number;
     status: "unassigned" | "active" | "offline";
     taskStats: { total: number; done: number };
-    lastLocation: { lat: number; lng: number; accuracy?: number; at: string } | null;
+    lastLocation: {
+      lat: number;
+      lng: number;
+      accuracy?: number;
+      at: string;
+    } | null;
     deviceCount: number;
     devices: Array<{
       deviceId: string;
@@ -294,7 +301,9 @@ const REALIZATION_TRANSLATION_LANGUAGES: RealizationLanguage[] = [
   "other",
 ];
 
-function normalizeRealizationTranslations(value: unknown): RealizationTranslations | undefined {
+function normalizeRealizationTranslations(
+  value: unknown,
+): RealizationTranslations | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
@@ -309,8 +318,10 @@ function normalizeRealizationTranslations(value: unknown): RealizationTranslatio
     }
 
     const item = entry as Record<string, unknown>;
-    const introText = typeof item.introText === "string" ? item.introText.trim() : "";
-    const gameRules = typeof item.gameRules === "string" ? item.gameRules.trim() : "";
+    const introText =
+      typeof item.introText === "string" ? item.introText.trim() : "";
+    const gameRules =
+      typeof item.gameRules === "string" ? item.gameRules.trim() : "";
 
     if (!introText && !gameRules) {
       continue;
@@ -340,7 +351,9 @@ function normalizeRealization(dto: RealizationDto): Realization {
     location: dto.location?.trim() || undefined,
     language: dto.language ?? "polish",
     customLanguage:
-      dto.language === "other" ? dto.customLanguage?.trim() || undefined : undefined,
+      dto.language === "other"
+        ? dto.customLanguage?.trim() || undefined
+        : undefined,
     introText: dto.introText?.trim() || undefined,
     gameRules: dto.gameRules?.trim() || undefined,
     translations: normalizeRealizationTranslations(dto.translations),
@@ -355,7 +368,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     mapImageUrl: dto.mapImageUrl,
     offerPdfUrl: dto.offerPdfUrl,
     offerPdfName: dto.offerPdfName,
-    scenarioId: dto.scenarioId,
+    scenarioId: dto.scenarioId ?? undefined,
     scenarioTemplateId: dto.scenarioTemplateId?.trim() || undefined,
     scenarioTemplateName: dto.scenarioTemplateName?.trim() || undefined,
     riskSchemeId: dto.riskSchemeId?.trim() || undefined,
@@ -377,8 +390,10 @@ function normalizeRealization(dto: RealizationDto): Realization {
       dto.durationMinutes >= 1
         ? Math.round(dto.durationMinutes)
         : 120,
-    locationRequired: typeof dto.locationRequired === "boolean" ? dto.locationRequired : false,
-    showLeaderboard: typeof dto.showLeaderboard === "boolean" ? dto.showLeaderboard : true,
+    locationRequired:
+      typeof dto.locationRequired === "boolean" ? dto.locationRequired : false,
+    showLeaderboard:
+      typeof dto.showLeaderboard === "boolean" ? dto.showLeaderboard : true,
     showLeaderboardDuringGame:
       typeof dto.showLeaderboardDuringGame === "boolean"
         ? dto.showLeaderboardDuringGame
@@ -398,9 +413,13 @@ function normalizeRealization(dto: RealizationDto): Realization {
         ? Math.round(dto.hideLeaderboardMinutesBeforeEnd)
         : 0,
     teamStationNumberingEnabled:
-      typeof dto.teamStationNumberingEnabled === "boolean" ? dto.teamStationNumberingEnabled : true,
+      typeof dto.teamStationNumberingEnabled === "boolean"
+        ? dto.teamStationNumberingEnabled
+        : true,
     timedStationPointsDecayEnabled:
-      typeof dto.timedStationPointsDecayEnabled === "boolean" ? dto.timedStationPointsDecayEnabled : false,
+      typeof dto.timedStationPointsDecayEnabled === "boolean"
+        ? dto.timedStationPointsDecayEnabled
+        : false,
     hideTaskList: dto.hideTaskList === true,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
@@ -453,9 +472,11 @@ function normalizeStationCategories(categories: string[] | null | undefined) {
 
 function normalizeStation(station: StationDto): Station {
   const trimmedName = station.name?.trim() || "Untitled station";
-  const safePoints = Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
+  const safePoints =
+    Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
   const safeTimeLimitSeconds =
-    Number.isFinite(station.timeLimitSeconds) && (station.timeLimitSeconds ?? -1) >= 0
+    Number.isFinite(station.timeLimitSeconds) &&
+    (station.timeLimitSeconds ?? -1) >= 0
       ? Math.round(station.timeLimitSeconds as number)
       : 0;
   const kind = deriveStationKind(station);
@@ -466,51 +487,65 @@ function normalizeStation(station: StationDto): Station {
     type: station.type ?? "quiz",
     categories: normalizeStationCategories(station.categories),
     description: station.description?.trim() || "",
-    imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
+    imageUrl:
+      station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
     qrEntryCode: station.qrEntryCode?.trim() || undefined,
-    challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
+    challengeDifficultyMode:
+      station.challengeDifficultyMode === "player" ? "player" : "admin",
     challengeDifficulty:
-      station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
+      station.challengeDifficulty === "easy" ||
+      station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
     completionStopwatchEnabled: station.completionStopwatchEnabled === true,
     allowConcurrentTeams: station.allowConcurrentTeams === true,
     fastestCompletionBonusPoints:
-      Number.isFinite(station.fastestCompletionBonusPoints) && (station.fastestCompletionBonusPoints ?? -1) >= 0
+      Number.isFinite(station.fastestCompletionBonusPoints) &&
+      (station.fastestCompletionBonusPoints ?? -1) >= 0
         ? Math.round(station.fastestCompletionBonusPoints as number)
         : 0,
     qrScanCodes: normalizeStationCategories(station.qrScanCodes),
     quiz:
-      station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
-        ? normalizeStationQuiz({
+      station.quiz &&
+      typeof station.quiz.question === "string" &&
+      Array.isArray(station.quiz.answers)
+        ? (normalizeStationQuiz({
             question: station.quiz.question,
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
             audioUrl: station.quiz.audioUrl,
-          }) ?? undefined
+          }) ?? undefined)
         : undefined,
     translations:
       station.translations && typeof station.translations === "object"
-        ? Object.entries(station.translations).reduce<NonNullable<Station["translations"]>>((acc, [language, value]) => {
+        ? Object.entries(station.translations).reduce<
+            NonNullable<Station["translations"]>
+          >((acc, [language, value]) => {
             if (!value || typeof value !== "object") {
               return acc;
             }
 
             const quiz =
-              value.quiz && typeof value.quiz.question === "string" && Array.isArray(value.quiz.answers)
-                ? normalizeStationQuiz({
+              value.quiz &&
+              typeof value.quiz.question === "string" &&
+              Array.isArray(value.quiz.answers)
+                ? (normalizeStationQuiz({
                     question: value.quiz.question,
                     answers: value.quiz.answers,
                     correctAnswerIndex: Number(value.quiz.correctAnswerIndex),
                     audioUrl: value.quiz.audioUrl,
-                  }) ?? undefined
+                  }) ?? undefined)
                 : undefined;
 
-            const name = typeof value.name === "string" ? value.name.trim() : "";
-            const description = typeof value.description === "string" ? value.description.trim() : "";
+            const name =
+              typeof value.name === "string" ? value.name.trim() : "";
+            const description =
+              typeof value.description === "string"
+                ? value.description.trim()
+                : "";
             if (!name && !description && !quiz) {
               return acc;
             }
@@ -532,14 +567,23 @@ function normalizeStation(station: StationDto): Station {
             return acc;
           }, {})
         : undefined,
-    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
-    latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
-    longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "")
+      ? (station.color as string)
+      : "#f59e0b",
+    latitude: Number.isFinite(station.latitude)
+      ? (station.latitude ?? undefined)
+      : undefined,
+    longitude: Number.isFinite(station.longitude)
+      ? (station.longitude ?? undefined)
+      : undefined,
     sourceTemplateId: station.sourceTemplateId,
     scenarioInstanceId: station.scenarioInstanceId,
     realizationId: station.realizationId,
     kind,
-    isTemplate: typeof station.isTemplate === "boolean" ? station.isTemplate : kind === "template",
+    isTemplate:
+      typeof station.isTemplate === "boolean"
+        ? station.isTemplate
+        : kind === "template",
     createdAt: station.createdAt,
     updatedAt: station.updatedAt,
   };
@@ -549,7 +593,8 @@ export const realizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getRealizations: build.query<Realization[], void>({
       query: () => buildApiPath("/realizations"),
-      transformResponse: (response: RealizationDto[]) => response.map(normalizeRealization),
+      transformResponse: (response: RealizationDto[]) =>
+        response.map(normalizeRealization),
       providesTags: ["Realization"],
     }),
     createRealization: build.mutation<Realization, CreateRealizationPayload>({
@@ -558,7 +603,8 @@ export const realizationApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      transformResponse: (response: RealizationDto) => normalizeRealization(response),
+      transformResponse: (response: RealizationDto) =>
+        normalizeRealization(response),
       invalidatesTags: ["Realization", "Scenario"],
     }),
     updateRealization: build.mutation<Realization, UpdateRealizationPayload>({
@@ -567,29 +613,42 @@ export const realizationApi = baseApi.injectEndpoints({
         method: "PUT",
         body,
       }),
-      transformResponse: (response: RealizationDto) => normalizeRealization(response),
-      invalidatesTags: ["Realization", "Scenario"],
+      transformResponse: (response: RealizationDto) =>
+        normalizeRealization(response),
+      // Saving stations here can delete/replace realization-owned Station rows
+      // server-side (see syncScenarioStations), which cascades to delete any
+      // Ryzykanci pool assignment pointing at a removed station — without
+      // these tags the admin's station list and risk-quiz pools kept showing
+      // the deleted station until a full page reload.
+      invalidatesTags: ["Realization", "Scenario", "Station", "RiskQuiz"],
     }),
-    deleteRealization: build.mutation<{ id: string }, DeleteRealizationPayload>({
-      query: (body) => ({
-        url: buildApiPath("/realizations"),
-        method: "DELETE",
-        body,
-      }),
-      invalidatesTags: ["Realization", "Scenario"],
-    }),
-    uploadRealizationLogo: build.mutation<UploadRealizationAssetResponse, File>({
-      query: (file) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        return {
-          url: buildApiPath("/realizations/upload-logo"),
-          method: "POST",
-          body: formData,
-        };
+    deleteRealization: build.mutation<{ id: string }, DeleteRealizationPayload>(
+      {
+        query: (body) => ({
+          url: buildApiPath("/realizations"),
+          method: "DELETE",
+          body,
+        }),
+        invalidatesTags: ["Realization", "Scenario", "Station", "RiskQuiz"],
       },
-    }),
-    uploadRealizationMapImage: build.mutation<UploadRealizationAssetResponse, File>({
+    ),
+    uploadRealizationLogo: build.mutation<UploadRealizationAssetResponse, File>(
+      {
+        query: (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+          return {
+            url: buildApiPath("/realizations/upload-logo"),
+            method: "POST",
+            body: formData,
+          };
+        },
+      },
+    ),
+    uploadRealizationMapImage: build.mutation<
+      UploadRealizationAssetResponse,
+      File
+    >({
       query: (file) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -612,7 +671,10 @@ export const realizationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["MediaLibrary", "Realization"],
     }),
-    uploadRealizationOffer: build.mutation<UploadRealizationAssetResponse, File>({
+    uploadRealizationOffer: build.mutation<
+      UploadRealizationAssetResponse,
+      File
+    >({
       query: (file) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -623,8 +685,12 @@ export const realizationApi = baseApi.injectEndpoints({
         };
       },
     }),
-    getMobileAdminRealizationOverview: build.query<MobileAdminRealizationOverview, string>({
-      query: (realizationId) => buildApiPath(`/mobile/admin/realizations/${realizationId}`),
+    getMobileAdminRealizationOverview: build.query<
+      MobileAdminRealizationOverview,
+      string
+    >({
+      query: (realizationId) =>
+        buildApiPath(`/mobile/admin/realizations/${realizationId}`),
     }),
     getRealizationStationQrs: build.query<
       RealizationStationQrResponse,
@@ -635,7 +701,11 @@ export const realizationApi = baseApi.injectEndpoints({
     }),
     translateRealizationTexts: build.mutation<
       { texts: string[] },
-      { sourceLanguage: RealizationLanguage; targetLanguage: RealizationLanguage; texts: string[] }
+      {
+        sourceLanguage: RealizationLanguage;
+        targetLanguage: RealizationLanguage;
+        texts: string[];
+      }
     >({
       query: (body) => ({
         url: buildApiPath("/realizations/translate-texts"),

@@ -456,7 +456,7 @@ export function CurrentRealizationTeamTasksPanel({
                             {group.tasks.map((task) => {
                               const isPendingForRow = pendingRiskAction?.stationId === task.stationId;
                               return (
-                                <tr key={task.stationId} className="border-t border-zinc-800 bg-zinc-900/60">
+                                <tr key={`${group.key}:${task.stationId}`} className="border-t border-zinc-800 bg-zinc-900/60">
                                   <td className="px-3 py-2 text-zinc-100">{task.categoryName}</td>
                                   <td className="px-3 py-2 text-zinc-300">{riskDifficultyLabel(task.difficulty)}</td>
                                   <td className="px-3 py-2 text-zinc-100">{task.stationName}</td>

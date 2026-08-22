@@ -29,15 +29,13 @@ type StationDto = {
   fastestCompletionBonusPoints?: number | null;
   qrScanCodes?: string[] | null;
   color?: string | null;
-  quiz?:
-    | {
-        question?: string;
-        answers?: string[];
-        correctAnswerIndex?: number;
-        audioUrl?: string;
-        acceptedAnswers?: string[];
-      }
-    | null;
+  quiz?: {
+    question?: string;
+    answers?: string[];
+    correctAnswerIndex?: number;
+    audioUrl?: string;
+    acceptedAnswers?: string[];
+  } | null;
   translations?: StationTranslations | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -149,9 +147,11 @@ function normalizeStationCategories(categories: string[] | null | undefined) {
 
 function normalizeStation(station: StationDto): Station {
   const trimmedName = station.name?.trim() || "Untitled station";
-  const safePoints = Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
+  const safePoints =
+    Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
   const safeTimeLimitSeconds =
-    Number.isFinite(station.timeLimitSeconds) && (station.timeLimitSeconds ?? -1) >= 0
+    Number.isFinite(station.timeLimitSeconds) &&
+    (station.timeLimitSeconds ?? -1) >= 0
       ? Math.round(station.timeLimitSeconds as number)
       : 0;
   const kind = deriveStationKind(station);
@@ -162,42 +162,57 @@ function normalizeStation(station: StationDto): Station {
     type: station.type ?? "quiz",
     categories: normalizeStationCategories(station.categories),
     description: station.description?.trim() || "",
-    imageUrl: station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
+    imageUrl:
+      station.imageUrl?.trim() || getFallbackImage(station.id || trimmedName),
     points: safePoints,
     timeLimitSeconds: safeTimeLimitSeconds,
     completionCode: station.completionCode?.trim() || undefined,
     qrEntryCode: station.qrEntryCode?.trim() || undefined,
-    challengeDifficultyMode: station.challengeDifficultyMode === "player" ? "player" : "admin",
+    challengeDifficultyMode:
+      station.challengeDifficultyMode === "player" ? "player" : "admin",
     challengeDifficulty:
-      station.challengeDifficulty === "easy" || station.challengeDifficulty === "hard"
+      station.challengeDifficulty === "easy" ||
+      station.challengeDifficulty === "hard"
         ? station.challengeDifficulty
         : "medium",
     completionStopwatchEnabled: station.completionStopwatchEnabled === true,
     allowConcurrentTeams: station.allowConcurrentTeams === true,
     fastestCompletionBonusPoints:
-      Number.isFinite(station.fastestCompletionBonusPoints) && (station.fastestCompletionBonusPoints ?? -1) >= 0
+      Number.isFinite(station.fastestCompletionBonusPoints) &&
+      (station.fastestCompletionBonusPoints ?? -1) >= 0
         ? Math.round(station.fastestCompletionBonusPoints as number)
         : 0,
     qrScanCodes: normalizeStationCategories(station.qrScanCodes),
-    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "") ? (station.color as string) : "#f59e0b",
+    color: /^#[0-9a-fA-F]{6}$/.test(station.color ?? "")
+      ? (station.color as string)
+      : "#f59e0b",
     quiz:
-      station.quiz && typeof station.quiz.question === "string" && Array.isArray(station.quiz.answers)
-        ? normalizeStationQuiz({
+      station.quiz &&
+      typeof station.quiz.question === "string" &&
+      Array.isArray(station.quiz.answers)
+        ? (normalizeStationQuiz({
             question: station.quiz.question,
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
             audioUrl: station.quiz.audioUrl,
             acceptedAnswers: station.quiz.acceptedAnswers,
-          }) ?? undefined
+          }) ?? undefined)
         : undefined,
     translations: station.translations ?? undefined,
-    latitude: Number.isFinite(station.latitude) ? station.latitude ?? undefined : undefined,
-    longitude: Number.isFinite(station.longitude) ? station.longitude ?? undefined : undefined,
+    latitude: Number.isFinite(station.latitude)
+      ? (station.latitude ?? undefined)
+      : undefined,
+    longitude: Number.isFinite(station.longitude)
+      ? (station.longitude ?? undefined)
+      : undefined,
     sourceTemplateId: station.sourceTemplateId,
     scenarioInstanceId: station.scenarioInstanceId,
     realizationId: station.realizationId,
     kind,
-    isTemplate: typeof station.isTemplate === "boolean" ? station.isTemplate : kind === "template",
+    isTemplate:
+      typeof station.isTemplate === "boolean"
+        ? station.isTemplate
+        : kind === "template",
     createdAt: station.createdAt,
     updatedAt: station.updatedAt,
   };
@@ -207,7 +222,8 @@ export const stationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getStations: build.query<Station[], void>({
       query: () => buildApiPath("/station"),
-      transformResponse: (response: StationDto[]) => response.map(normalizeStation),
+      transformResponse: (response: StationDto[]) =>
+        response.map(normalizeStation),
       providesTags: ["Station"],
     }),
     createStation: build.mutation<Station, CreateStationPayload>({
@@ -234,7 +250,11 @@ export const stationApi = baseApi.injectEndpoints({
         method: "DELETE",
         body,
       }),
-      invalidatesTags: ["Station"],
+      // Deleting a station cascades to any Ryzykanci pool assignment pointing
+      // at it (RiskPoolStation.station is onDelete: Cascade) — without this,
+      // the risk-quiz category/pool views kept showing the deleted station
+      // until a full page reload.
+      invalidatesTags: ["Station", "RiskQuiz"],
     }),
     uploadStationImage: build.mutation<UploadStationImageResponse, File>({
       query: (file) => {

@@ -1947,6 +1947,14 @@ export class MobileService {
   async getMobileAdminStationQrs(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
+
+    // Ryzykanci realizations don't have a scenario/stations at all — their
+    // gameplay is entirely card-driven (RiskCard/RiskAttempt) — so there's
+    // nothing to print QR codes for.
+    if (realization.type === 'risk-quiz') {
+      return { realizationId: realization.id, entries: [] };
+    }
+
     const stationById = new Map(
       realization.scenarioStations.map((station) => [station.id, station]),
     );
@@ -2461,6 +2469,8 @@ export class MobileService {
         hideTaskList: realization.hideTaskList,
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
+        type: realization.type,
+        riskSchemeId: realization.riskSchemeId ?? null,
         stationIds: realization.stationIds,
         stations: await Promise.all(
           realization.stationIds.map((stationId) =>
@@ -2911,6 +2921,8 @@ export class MobileService {
       deletedProgress,
       deletedRuntimeEvents,
       deletedStationScans,
+      deletedRiskAttempts,
+      deletedRiskPendingDraws,
     ] = await this.prisma.$transaction([
       this.prisma.teamAssignment.deleteMany({
         where: { realizationId: realization.id },
@@ -2931,6 +2943,17 @@ export class MobileService {
       // "fresh" realization would still show old scan counts for qr-hunt tasks.
       this.prisma.teamStationScan.deleteMany({
         where: { realizationId: realization.id },
+      }),
+      // Ryzykanci ("who's attempted which station") is tracked here, not on
+      // TeamTaskProgress — left out of this reset, teams keep the same id
+      // across a reset (only their fields are cleared, see team.updateMany
+      // below) so scanCard() would keep seeing every station as "already
+      // attempted" and every card pool as exhausted after a restart.
+      this.prisma.riskAttempt.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.riskPendingDraw.deleteMany({
+        where: { team: { realizationId: realization.id } },
       }),
     ]);
 
@@ -2971,6 +2994,8 @@ export class MobileService {
         deletedTaskProgress: deletedProgress.count,
         deletedRuntimeEvents: deletedRuntimeEvents.count,
         deletedStationScans: deletedStationScans.count,
+        deletedRiskAttempts: deletedRiskAttempts.count,
+        deletedRiskPendingDraws: deletedRiskPendingDraws.count,
       },
     });
 
@@ -2982,6 +3007,8 @@ export class MobileService {
       deletedTaskProgress: deletedProgress.count,
       deletedRuntimeEvents: deletedRuntimeEvents.count,
       deletedStationScans: deletedStationScans.count,
+      deletedRiskAttempts: deletedRiskAttempts.count,
+      deletedRiskPendingDraws: deletedRiskPendingDraws.count,
     };
   }
 

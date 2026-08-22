@@ -1,3 +1,5 @@
+import type { RealizationType } from "@/features/realizations/types/realization";
+
 export type CurrentRealizationStatus = "planned" | "in-progress" | "done";
 
 export type CurrentTeamTaskStatus = "todo" | "in-progress" | "done" | "failed";
@@ -15,6 +17,8 @@ export type CurrentRealizationOverview = {
     locationRequired: boolean;
     joinCode: string;
     teamCount: number;
+    type: RealizationType;
+    riskSchemeId: string | null;
     stationIds: string[];
     stations: Array<{
       stationId: string;
@@ -37,7 +41,12 @@ export type CurrentRealizationOverview = {
     points: number;
     status: CurrentTeamStatus;
     taskStats: { total: number; done: number };
-    lastLocation: { lat: number; lng: number; accuracy?: number; at: string } | null;
+    lastLocation: {
+      lat: number;
+      lng: number;
+      accuracy?: number;
+      at: string;
+    } | null;
     deviceCount: number;
     devices: Array<{
       deviceId: string;

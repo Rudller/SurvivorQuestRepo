@@ -1619,6 +1619,129 @@ describe('MobileService admin station QR export', () => {
     expect(qrHuntEntry?.entryUrl).toContain('K3M9QXZ7');
     expect(quizEntry?.qrEntryCode).toBe('AB3K9XQ2');
   });
+
+  it('returns no entries for a risk-quiz realization, hiding the technical placeholder station', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        introText: null,
+        gameRules: null,
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        locationRequired: true,
+        joinCode: 'JOIN01',
+        teamCount: 2,
+        type: 'risk-quiz',
+        stationIds: ['station-placeholder'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        scenarioStations: [
+          {
+            id: 'station-placeholder',
+            name: 'Ryzykanci — pole techniczne',
+            type: 'points',
+            completionCode: null,
+            qrEntryCode: null,
+            qrScanCodes: [],
+          },
+        ],
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      { id: 'realization-1', locationRequired: true },
+    ]);
+
+    const result = await service.getMobileAdminStationQrs('realization-1');
+
+    expect(result).toEqual({ realizationId: 'realization-1', entries: [] });
+  });
+});
+
+describe('MobileService realization reset', () => {
+  function createService() {
+    const prisma = {
+      realization: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      team: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: 'team-1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      teamAssignment: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      teamTaskProgress: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      eventLog: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn(),
+      },
+      teamStationScan: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskAttempt: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskPendingDraw: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+
+    const realizationService = {
+      listRealizations: jest.fn(),
+    };
+
+    const service = new MobileService(
+      prisma as never,
+      realizationService as never,
+      {} as never,
+    );
+    return { service, prisma, realizationService };
+  }
+
+  it('clears risk-quiz attempts so a reset realization has no pre-attempted cards', async () => {
+    const { service, prisma, realizationService } = createService();
+
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        introText: null,
+        gameRules: null,
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        locationRequired: true,
+        joinCode: 'JOIN01',
+        teamCount: 0,
+        stationIds: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        scenarioStations: [],
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      { id: 'realization-1', locationRequired: true },
+    ]);
+    prisma.realization.update.mockResolvedValue({ id: 'realization-1' });
+
+    await service.resetMobileAdminRealization('realization-1');
+
+    expect(prisma.riskAttempt.deleteMany).toHaveBeenCalledWith({
+      where: { realizationId: 'realization-1' },
+    });
+    expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { team: { realizationId: 'realization-1' } },
+    });
+  });
 });
 
 describe('MobileService resolveMobileStationQr', () => {

@@ -25,8 +25,12 @@ function createService() {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
-    riskSchemeCategory: { findMany: jest.fn() },
+    riskSchemeCategory: {
+      findMany: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue({ categoryId: 'category-1' }),
+    },
     station: { findUnique: jest.fn() },
     riskAttempt: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -75,7 +79,10 @@ const quizStation = {
 describe('RiskQuizService.scanCard', () => {
   it('draws a random station assignment that the team has not attempted yet', async () => {
     const { service, prisma } = createService();
-    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
     prisma.riskCard.findUnique.mockResolvedValue(card);
     prisma.riskPoolStation.findMany.mockResolvedValue([
       { stationId: 'already-attempted', station: { id: 'already-attempted' } },
@@ -112,7 +119,10 @@ describe('RiskQuizService.scanCard', () => {
 
   it('reports the pool as exhausted once every assigned station has been attempted', async () => {
     const { service, prisma } = createService();
-    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
     prisma.riskCard.findUnique.mockResolvedValue(card);
     prisma.riskPoolStation.findMany.mockResolvedValue([
       { stationId: quizStation.id, station: quizStation },
@@ -131,6 +141,21 @@ describe('RiskQuizService.scanCard', () => {
       categoryName: 'Historia',
       difficulty: 'EASY',
     });
+  });
+
+  it("rejects a card whose category is no longer in the realization's scheme", async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskSchemeCategory.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.scanCard({ sessionToken: 'token', code: 'abc123' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.riskPoolStation.findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -683,6 +708,9 @@ describe('RiskQuizService.resetTeamAttempts', () => {
     expect(prisma.riskAttempt.deleteMany).toHaveBeenCalledWith({
       where: { realizationId: 'realization-1', teamId: 'team-1' },
     });
+    expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+    });
     expect(prisma.team.update).toHaveBeenCalledWith({
       where: { id: 'team-1' },
       data: { points: { decrement: 5 } },
@@ -694,7 +722,7 @@ describe('RiskQuizService.resetTeamAttempts', () => {
     });
   });
 
-  it('does nothing when the team has no attempts to clear', async () => {
+  it('cancels a pending draw even when the team has no attempts to clear', async () => {
     const { service, prisma } = createService();
     prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
     prisma.team.findUnique.mockResolvedValue({
@@ -707,6 +735,9 @@ describe('RiskQuizService.resetTeamAttempts', () => {
 
     expect(prisma.riskAttempt.deleteMany).not.toHaveBeenCalled();
     expect(prisma.team.update).not.toHaveBeenCalled();
+    expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: 'team-1' },
+    });
     expect(result).toEqual({
       teamId: 'team-1',
       resetCount: 0,
@@ -895,7 +926,7 @@ describe('RiskQuizService.pollPendingDraw', () => {
     const result = await service.pollPendingDraw('token');
 
     expect(result).toEqual({ draw: null });
-    expect(prisma.riskPendingDraw.delete).not.toHaveBeenCalled();
+    expect(prisma.riskPendingDraw.deleteMany).not.toHaveBeenCalled();
   });
 
   it('returns the drawn station and consumes (deletes) the pending draw', async () => {
@@ -909,12 +940,12 @@ describe('RiskQuizService.pollPendingDraw', () => {
       card: { difficulty: 'EASY', category: { name: 'Historia' } } as never,
       station: quizStation,
     });
-    prisma.riskPendingDraw.delete.mockResolvedValue({});
+    prisma.riskPendingDraw.deleteMany.mockResolvedValue({ count: 1 });
 
     const result = await service.pollPendingDraw('token');
 
-    expect(prisma.riskPendingDraw.delete).toHaveBeenCalledWith({
-      where: { teamId: 'team-1' },
+    expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'draw-1', teamId: 'team-1' },
     });
     expect(result).toEqual({
       draw: {
@@ -934,6 +965,24 @@ describe('RiskQuizService.pollPendingDraw', () => {
           quiz: { question: 'Q1?', answers: ['a', 'b'], audioUrl: undefined },
         },
       },
+    });
+  });
+
+  it('does not deliver a draw consumed concurrently by another request', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+      id: 'draw-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      card: { difficulty: 'EASY', category: { name: 'Historia' } } as never,
+      station: quizStation,
+    });
+    prisma.riskPendingDraw.deleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.pollPendingDraw('token')).resolves.toEqual({
+      draw: null,
     });
   });
 });
@@ -1111,7 +1160,10 @@ describe('RiskQuizService.adminCompleteCard / adminFailCard', () => {
 describe('RiskQuizService.adminResetCard', () => {
   it("deletes the team's attempt for that station and reverts the points delta", async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1147,7 +1199,10 @@ describe('RiskQuizService.adminResetCard', () => {
 
   it('does nothing when the team has no attempt for that station', async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1176,7 +1231,10 @@ describe('RiskQuizService.adminResetCard', () => {
 describe('RiskQuizService.triggerRemoteDraw', () => {
   it('creates a pending draw for a randomly chosen not-yet-attempted station in the pool', async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1209,7 +1267,10 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
 
   it('rejects when the team already has a pending draw', async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1234,7 +1295,10 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
 
   it('rejects when every station in the pool has already been attempted by the team', async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1258,7 +1322,10 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
 
   it('rejects when no cards have been generated yet for the pool', async () => {
     const { service, prisma } = createService();
-    prisma.realization.findUnique.mockResolvedValue({ id: 'realization-1' });
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
     prisma.team.findUnique.mockResolvedValue({
       id: 'team-1',
       realizationId: 'realization-1',
@@ -1279,6 +1346,30 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
       ),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.riskPendingDraw.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a category that is not assigned to the realization's scheme", async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.team.findUnique.mockResolvedValue({
+      id: 'team-1',
+      realizationId: 'realization-1',
+    });
+    prisma.riskPendingDraw.findUnique.mockResolvedValue(null);
+    prisma.riskSchemeCategory.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.triggerRemoteDraw(
+        'realization-1',
+        'team-1',
+        'other-category',
+        'EASY',
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.riskPoolStation.findMany).not.toHaveBeenCalled();
   });
 
   it('rejects a team that does not belong to the realization', async () => {

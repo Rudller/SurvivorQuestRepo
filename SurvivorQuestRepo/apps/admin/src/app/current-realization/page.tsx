@@ -22,6 +22,8 @@ import {
 import type { CurrentRealizationOverview } from "@/features/current-realization/types/current-realization-overview";
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
+import { CurrentRealizationRiskQuizPanel } from "@/features/current-realization/components/current-realization-risk-quiz-panel";
+import { useGetRiskTeamStatusQuery, useResetRiskTeamAttemptsMutation } from "@/features/risk-quiz/api/risk-quiz.api";
 import { AdminShell } from "@/shared/components/admin-shell";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
@@ -107,10 +109,7 @@ function renderQrRejectedReason(reason: string) {
   return "Kod QR został odrzucony";
 }
 
-function renderLogTitle(
-  log: CurrentRealizationOverview["logs"][number],
-  stationName: string | null,
-) {
+function renderLogTitle(log: CurrentRealizationOverview["logs"][number], stationName: string | null) {
   if (log.eventType === "task_started") {
     return `Start zadania${stationName ? ` - ${stationName}` : ""}`;
   }
@@ -178,17 +177,13 @@ function renderLogTitle(
   return log.eventType.replaceAll("_", " ");
 }
 
-function renderLogDescription(
-  log: CurrentRealizationOverview["logs"][number],
-  stationName: string | null,
-) {
+function renderLogDescription(log: CurrentRealizationOverview["logs"][number], stationName: string | null) {
   if (log.eventType === "task_failed") {
     return `Powód: ${renderTaskFailedReason(log.payload) || "nieznany"}`;
   }
 
   if (log.eventType === "task_completed") {
-    const pointsAwarded =
-      typeof log.payload.pointsAwarded === "number" ? log.payload.pointsAwarded : null;
+    const pointsAwarded = typeof log.payload.pointsAwarded === "number" ? log.payload.pointsAwarded : null;
     return pointsAwarded !== null ? `Zdobyte punkty: ${pointsAwarded}` : null;
   }
 
@@ -239,12 +234,7 @@ export default function CurrentRealizationPage() {
   const [joinCodeQrImage, setJoinCodeQrImage] = useState<QrImageLightboxImage | null>(null);
   const [isGeneratingJoinCodeQr, setIsGeneratingJoinCodeQr] = useState(false);
 
-  const {
-    data: meData,
-    isLoading: isMeLoading,
-    isError: isMeError,
-    error: meError,
-  } = useMeQuery();
+  const { data: meData, isLoading: isMeLoading, isError: isMeError, error: meError } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const canManageCurrentRealization = meData?.user.role === "admin";
@@ -253,37 +243,28 @@ export default function CurrentRealizationPage() {
   const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
   const [resetCurrentRealization, { isLoading: isResettingRealization }] = useResetCurrentRealizationMutation();
-  const {
-    data: realizations,
-    isLoading: isRealizationsLoading,
-  } = useGetRealizationsQuery(undefined, {
+  const { data: realizations, isLoading: isRealizationsLoading } = useGetRealizationsQuery(undefined, {
     skip: !meData,
     pollingInterval: 30_000,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
-  const {
-    data: scenarios,
-    isLoading: isScenariosLoading,
-  } = useGetScenariosQuery(undefined, { skip: !canManageCurrentRealization });
-  const {
-    data: stations,
-    isLoading: isStationsLoading,
-  } = useGetStationsQuery(undefined, { skip: !canManageCurrentRealization });
+  const { data: scenarios, isLoading: isScenariosLoading } = useGetScenariosQuery(undefined, {
+    skip: !canManageCurrentRealization,
+  });
+  const { data: stations, isLoading: isStationsLoading } = useGetStationsQuery(undefined, {
+    skip: !canManageCurrentRealization,
+  });
   const realizationOptions = useMemo(
     () =>
       [...(realizations ?? [])].sort(
-        (left, right) =>
-          new Date(left.scheduledAt).getTime() -
-          new Date(right.scheduledAt).getTime(),
+        (left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
       ),
     [realizations],
   );
   const effectiveSelectedRealizationId =
     selectedRealizationId !== "current" &&
-    realizationOptions.some(
-      (realization) => realization.id === selectedRealizationId,
-    )
+    realizationOptions.some((realization) => realization.id === selectedRealizationId)
       ? selectedRealizationId
       : "current";
 
@@ -294,9 +275,7 @@ export default function CurrentRealizationPage() {
     error: overviewError,
     refetch,
   } = useGetCurrentRealizationOverviewQuery(
-    effectiveSelectedRealizationId === "current"
-      ? undefined
-      : { realizationId: effectiveSelectedRealizationId },
+    effectiveSelectedRealizationId === "current" ? undefined : { realizationId: effectiveSelectedRealizationId },
     {
       skip: !meData,
       pollingInterval: 10_000,
@@ -305,9 +284,44 @@ export default function CurrentRealizationPage() {
     },
   );
   const selectedRealizationArg =
-    effectiveSelectedRealizationId === "current"
-      ? undefined
-      : { realizationId: effectiveSelectedRealizationId };
+    effectiveSelectedRealizationId === "current" ? undefined : { realizationId: effectiveSelectedRealizationId };
+
+  const isRiskQuizRealization = overview?.realization.type === "risk-quiz";
+  const { data: riskTeamStatus } = useGetRiskTeamStatusQuery(
+    { realizationId: overview?.realization.id ?? "" },
+    { skip: !isRiskQuizRealization },
+  );
+  const riskCardsByTeamId = useMemo(
+    () => new Map((riskTeamStatus?.teams ?? []).map((team) => [team.teamId, team])),
+    [riskTeamStatus],
+  );
+  const [resetRiskTeamAttempts, { isLoading: isResettingRiskCards }] = useResetRiskTeamAttemptsMutation();
+  const [pendingRiskResetTeamId, setPendingRiskResetTeamId] = useState<string | null>(null);
+
+  async function handleResetTeamCards(teamId: string, teamLabel: string) {
+    if (!canManageCurrentRealization || !overview) {
+      return;
+    }
+    if (
+      !window.confirm(
+        `Zresetować karty Ryzykantów dla drużyny "${teamLabel}"? Drużyna będzie mogła ponownie wylosować te same stacje, a przyznane za nie punkty zostaną odjęte.`,
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    setPendingRiskResetTeamId(teamId);
+    try {
+      await resetRiskTeamAttempts({
+        realizationId: overview.realization.id,
+        teamId,
+      }).unwrap();
+    } catch {
+      setActionError("Nie udało się zresetować kart Ryzykantów dla tej drużyny.");
+    } finally {
+      setPendingRiskResetTeamId(null);
+    }
+  }
 
   const topTeams = useMemo(
     () => [...(overview?.teams ?? [])].sort((left, right) => right.points - left.points),
@@ -315,11 +329,7 @@ export default function CurrentRealizationPage() {
   );
   const topTeam = topTeams[0] ?? null;
   const remainingTasks = useMemo(
-    () =>
-      topTeams.reduce(
-        (sum, team) => sum + Math.max(team.taskStats.total - team.taskStats.done, 0),
-        0,
-      ),
+    () => topTeams.reduce((sum, team) => sum + Math.max(team.taskStats.total - team.taskStats.done, 0), 0),
     [topTeams],
   );
   const sortedLogs = useMemo(
@@ -329,10 +339,7 @@ export default function CurrentRealizationPage() {
       ),
     [overview?.logs],
   );
-  const visibleLogs = useMemo(
-    () => sortedLogs.slice(0, visibleLogCount),
-    [sortedLogs, visibleLogCount],
-  );
+  const visibleLogs = useMemo(() => sortedLogs.slice(0, visibleLogCount), [sortedLogs, visibleLogCount]);
   const hasMoreLogs = visibleLogCount < sortedLogs.length;
   const stationNameById = useMemo(
     () => new Map((overview?.realization.stations ?? []).map((station) => [station.stationId, station.stationName])),
@@ -340,23 +347,15 @@ export default function CurrentRealizationPage() {
   );
   const selectedOverviewRealization = useMemo(
     () =>
-      overview
-        ? realizationOptions.find((realization) => realization.id === overview.realization.id) ?? null
-        : null,
+      overview ? (realizationOptions.find((realization) => realization.id === overview.realization.id) ?? null) : null,
     [overview, realizationOptions],
   );
   const editingTeam = useMemo(
-    () =>
-      editingTeamId
-        ? overview?.teams.find((team) => team.id === editingTeamId) || null
-        : null,
+    () => (editingTeamId ? overview?.teams.find((team) => team.id === editingTeamId) || null : null),
     [editingTeamId, overview?.teams],
   );
   const isEditActionDisabled =
-    !selectedOverviewRealization ||
-    isRealizationsLoading ||
-    isScenariosLoading ||
-    isStationsLoading;
+    !selectedOverviewRealization || isRealizationsLoading || isScenariosLoading || isStationsLoading;
   const actionButtonBaseClassName =
     "rounded-xl border px-4 py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-20px_rgba(0,0,0,0.9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 disabled:hover:shadow-none";
   const actionButtonNeutralClassName =
@@ -431,7 +430,8 @@ export default function CurrentRealizationPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Aktualna realizacja</h1>
             {overview && (
               <p className="mt-2 text-sm text-zinc-400">
-                {overview.realization.companyName} • {new Date(overview.realization.scheduledAt).toLocaleString("pl-PL")}
+                {overview.realization.companyName} •{" "}
+                {new Date(overview.realization.scheduledAt).toLocaleString("pl-PL")}
               </p>
             )}
             {overview && (
@@ -442,9 +442,7 @@ export default function CurrentRealizationPage() {
           </div>
           <div className="self-start rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
             <p>Kod dołączenia</p>
-            <p className="mt-0.5 text-sm font-semibold tracking-widest">
-              {overview?.realization.joinCode ?? "---"}
-            </p>
+            <p className="mt-0.5 text-sm font-semibold tracking-widest">{overview?.realization.joinCode ?? "---"}</p>
             <button
               type="button"
               onClick={() => void showJoinCodeQr()}
@@ -458,9 +456,7 @@ export default function CurrentRealizationPage() {
 
         {overview && realizationOptions.length > 0 ? (
           <div className="mt-4 max-w-96 space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-zinc-500">
-              Wybór realizacji
-            </label>
+            <label className="text-[11px] uppercase tracking-wider text-zinc-500">Wybór realizacji</label>
             <select
               value={
                 effectiveSelectedRealizationId === "current"
@@ -472,22 +468,17 @@ export default function CurrentRealizationPage() {
                 setEditingRealization(null);
                 setEditingTeamId(null);
                 setSelectedRealizationId(
-                  event.target.value === AUTO_CURRENT_REALIZATION_VALUE
-                    ? "current"
-                    : event.target.value,
+                  event.target.value === AUTO_CURRENT_REALIZATION_VALUE ? "current" : event.target.value,
                 );
               }}
               disabled={isOverviewLoading || isRealizationsLoading}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-60"
             >
-              <option value={AUTO_CURRENT_REALIZATION_VALUE}>
-                Aktualna (auto)
-              </option>
+              <option value={AUTO_CURRENT_REALIZATION_VALUE}>Aktualna (auto)</option>
               {realizationOptions.map((realization) => (
                 <option key={realization.id} value={realization.id}>
-                  {realization.companyName} •{" "}
-                  {new Date(realization.scheduledAt).toLocaleString("pl-PL")}{" "}
-                  • {realization.status}
+                  {realization.companyName} • {new Date(realization.scheduledAt).toLocaleString("pl-PL")} •{" "}
+                  {realization.status}
                 </option>
               ))}
             </select>
@@ -498,9 +489,7 @@ export default function CurrentRealizationPage() {
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
             {canManageCurrentRealization ? (
               <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/55 p-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  Akcje główne
-                </p>
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Akcje główne</p>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   <button
                     type="button"
@@ -513,9 +502,7 @@ export default function CurrentRealizationPage() {
                       try {
                         await startCurrentRealization(selectedRealizationArg).unwrap();
                       } catch (error) {
-                        setActionError(
-                          resolveApiErrorMessage(error) ?? "Nie udało się uruchomić aplikacji.",
-                        );
+                        setActionError(resolveApiErrorMessage(error) ?? "Nie udało się uruchomić aplikacji.");
                       }
                     }}
                     disabled={
@@ -544,9 +531,7 @@ export default function CurrentRealizationPage() {
                       try {
                         await finishCurrentRealization(selectedRealizationArg).unwrap();
                       } catch (error) {
-                        setActionError(
-                          resolveApiErrorMessage(error) ?? "Nie udało się zakończyć realizacji.",
-                        );
+                        setActionError(resolveApiErrorMessage(error) ?? "Nie udało się zakończyć realizacji.");
                       }
                     }}
                     disabled={isFinishingRealization || overview.realization.status === "done"}
@@ -564,9 +549,7 @@ export default function CurrentRealizationPage() {
             ) : null}
 
             <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/55 p-4">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
-                Akcje dodatkowe
-              </p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">Akcje dodatkowe</p>
               <div className="grid gap-2">
                 {canManageCurrentRealization ? (
                   <button
@@ -597,9 +580,7 @@ export default function CurrentRealizationPage() {
 
             {canManageCurrentRealization ? (
               <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-red-200/90">
-                  Akcje krytyczne
-                </p>
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-red-200/90">Akcje krytyczne</p>
                 <div className="grid gap-2">
                   <button
                     type="button"
@@ -612,9 +593,7 @@ export default function CurrentRealizationPage() {
                       try {
                         await resetCompletedTasks(selectedRealizationArg).unwrap();
                       } catch (error) {
-                        setActionError(
-                          resolveApiErrorMessage(error) ?? "Nie udało się zresetować ukończonych zadań.",
-                        );
+                        setActionError(resolveApiErrorMessage(error) ?? "Nie udało się zresetować ukończonych zadań.");
                       }
                     }}
                     disabled={isResettingTasks}
@@ -637,9 +616,7 @@ export default function CurrentRealizationPage() {
                       try {
                         await resetCurrentRealization(selectedRealizationArg).unwrap();
                       } catch (error) {
-                        setActionError(
-                          resolveApiErrorMessage(error) ?? "Nie udało się zresetować realizacji.",
-                        );
+                        setActionError(resolveApiErrorMessage(error) ?? "Nie udało się zresetować realizacji.");
                       }
                     }}
                     disabled={isResettingRealization}
@@ -659,7 +636,9 @@ export default function CurrentRealizationPage() {
         {isOverviewError && (
           <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
             <p>Nie udało się pobrać podglądu aktualnej realizacji.</p>
-            <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">{JSON.stringify(overviewError, null, 2)}</pre>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-red-100/90">
+              {JSON.stringify(overviewError, null, 2)}
+            </pre>
             <button
               type="button"
               onClick={() => refetch()}
@@ -675,12 +654,14 @@ export default function CurrentRealizationPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                 <p className="text-xs uppercase tracking-wider text-zinc-500">Aktywne drużyny</p>
-                <p className="mt-1 text-xl font-semibold text-zinc-100">{overview.stats.activeTeams}/{overview.realization.teamCount}</p>
+                <p className="mt-1 text-xl font-semibold text-zinc-100">
+                  {overview.stats.activeTeams}/{overview.realization.teamCount}
+                </p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                 <p className="text-xs uppercase tracking-wider text-zinc-500">Lider punktów</p>
                 <p className="mt-1 text-xl font-semibold text-amber-300">
-                  {topTeam ? (topTeam.name || `Drużyna #${topTeam.slotNumber}`) : "-"}
+                  {topTeam ? topTeam.name || `Drużyna #${topTeam.slotNumber}` : "-"}
                 </p>
                 <p className="mt-1 text-xs text-zinc-400">{topTeam ? `${topTeam.points} pkt` : "Brak danych"}</p>
               </div>
@@ -724,9 +705,32 @@ export default function CurrentRealizationPage() {
                           <p className="text-sm font-semibold text-amber-300">{team.points} pkt</p>
                         </div>
                         <div className="grid gap-1.5 text-xs text-zinc-300">
-                          <p>
-                            <span className="text-zinc-500">Zadania:</span> {team.taskStats.done}/{team.taskStats.total}
-                          </p>
+                          {isRiskQuizRealization ? (
+                            <p className="flex items-center gap-2">
+                              <span className="text-zinc-500">Karty:</span>{" "}
+                              {riskCardsByTeamId.get(team.id)?.totalAttempted ?? 0}/
+                              {riskCardsByTeamId.get(team.id)?.totalCards ?? 0}
+                              {canManageCurrentRealization ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleResetTeamCards(team.id, team.name || `Drużyna #${team.slotNumber}`)
+                                  }
+                                  disabled={
+                                    isResettingRiskCards || (riskCardsByTeamId.get(team.id)?.totalAttempted ?? 0) === 0
+                                  }
+                                  className="rounded border border-rose-400/40 px-1.5 py-0.5 text-[10px] font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {pendingRiskResetTeamId === team.id ? "..." : "Reset"}
+                                </button>
+                              ) : null}
+                            </p>
+                          ) : (
+                            <p>
+                              <span className="text-zinc-500">Zadania:</span> {team.taskStats.done}/
+                              {team.taskStats.total}
+                            </p>
+                          )}
                           <p>
                             <span className="text-zinc-500">Kolor:</span> {team.color || "-"}
                           </p>
@@ -757,7 +761,13 @@ export default function CurrentRealizationPage() {
                           onClick={() => setEditingTeamId(team.id)}
                           className="w-full rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20"
                         >
-                          {canManageCurrentRealization ? "Edytuj zadania" : "Zobacz zadania"}
+                          {isRiskQuizRealization
+                            ? canManageCurrentRealization
+                              ? "Edytuj"
+                              : "Zobacz"
+                            : canManageCurrentRealization
+                              ? "Edytuj zadania"
+                              : "Zobacz zadania"}
                         </button>
                       </article>
                     ))}
@@ -772,7 +782,9 @@ export default function CurrentRealizationPage() {
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Kolor</th>
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Flaga</th>
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Punkty</th>
-                          <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Zadania</th>
+                          <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">
+                            {isRiskQuizRealization ? "Karty" : "Zadania"}
+                          </th>
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Status drużyny</th>
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Lokalizacja</th>
                           <th className="px-3 py-2 text-left text-xs uppercase tracking-wider">Akcje</th>
@@ -799,7 +811,33 @@ export default function CurrentRealizationPage() {
                               )}
                             </td>
                             <td className="px-3 py-2 font-semibold text-amber-300">{team.points}</td>
-                            <td className="px-3 py-2 text-zinc-300">{team.taskStats.done}/{team.taskStats.total}</td>
+                            <td className="px-3 py-2 text-zinc-300">
+                              {isRiskQuizRealization ? (
+                                <div className="flex items-center gap-2">
+                                  <span>
+                                    {riskCardsByTeamId.get(team.id)?.totalAttempted ?? 0}/
+                                    {riskCardsByTeamId.get(team.id)?.totalCards ?? 0}
+                                  </span>
+                                  {canManageCurrentRealization ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleResetTeamCards(team.id, team.name || `Drużyna #${team.slotNumber}`)
+                                      }
+                                      disabled={
+                                        isResettingRiskCards ||
+                                        (riskCardsByTeamId.get(team.id)?.totalAttempted ?? 0) === 0
+                                      }
+                                      className="rounded border border-rose-400/40 px-1.5 py-0.5 text-[10px] font-medium text-rose-300 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      {pendingRiskResetTeamId === team.id ? "..." : "Reset"}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                `${team.taskStats.done}/${team.taskStats.total}`
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-zinc-300">{renderTeamStatusLabel(team.status)}</td>
                             <td className="px-3 py-2 text-zinc-400">
                               {team.lastLocation
@@ -812,7 +850,13 @@ export default function CurrentRealizationPage() {
                                 onClick={() => setEditingTeamId(team.id)}
                                 className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20"
                               >
-                                {canManageCurrentRealization ? "Edytuj zadania" : "Zobacz zadania"}
+                                {isRiskQuizRealization
+                                  ? canManageCurrentRealization
+                                    ? "Edytuj"
+                                    : "Zobacz"
+                                  : canManageCurrentRealization
+                                    ? "Edytuj zadania"
+                                    : "Zobacz zadania"}
                               </button>
                             </td>
                           </tr>
@@ -834,10 +878,14 @@ export default function CurrentRealizationPage() {
                       <span className="text-zinc-500">Lokalizacja wymagana:</span>{" "}
                       {overview.realization.locationRequired ? "Tak" : "Nie"}
                     </p>
-                    <p>
-                      <span className="text-zinc-500">Stanowiska:</span>{" "}
-                      {overview.realization.stations.map((station) => station.stationName || station.stationId).join(", ")}
-                    </p>
+                    {isRiskQuizRealization ? null : (
+                      <p>
+                        <span className="text-zinc-500">Stanowiska:</span>{" "}
+                        {overview.realization.stations
+                          .map((station) => station.stationName || station.stationId)
+                          .join(", ")}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -847,10 +895,9 @@ export default function CurrentRealizationPage() {
                     {visibleLogs.map((log) => (
                       <article key={log.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3.5">
                         {(() => {
-                          const stationId =
-                            typeof log.payload.stationId === "string" ? log.payload.stationId : null;
+                          const stationId = typeof log.payload.stationId === "string" ? log.payload.stationId : null;
                           const stationName = stationId
-                            ? stationNameById.get(stationId) ?? `Stanowisko ${stationId}`
+                            ? (stationNameById.get(stationId) ?? `Stanowisko ${stationId}`)
                             : null;
                           const title = renderLogTitle(log, stationName);
                           const description = renderLogDescription(log, stationName);
@@ -863,14 +910,10 @@ export default function CurrentRealizationPage() {
                           return (
                             <>
                               <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
-                              {description ? (
-                                <p className="mt-1 text-xs text-zinc-300">{description}</p>
-                              ) : null}
+                              {description ? <p className="mt-1 text-xs text-zinc-300">{description}</p> : null}
                               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
                                 <p>Drużyna: {teamLabel}</p>
-                                <time dateTime={log.createdAt}>
-                                  {new Date(log.createdAt).toLocaleString("pl-PL")}
-                                </time>
+                                <time dateTime={log.createdAt}>{new Date(log.createdAt).toLocaleString("pl-PL")}</time>
                               </div>
                             </>
                           );
@@ -893,6 +936,13 @@ export default function CurrentRealizationPage() {
                 </div>
               </div>
             </div>
+
+            {isRiskQuizRealization ? (
+              <CurrentRealizationRiskQuizPanel
+                realizationId={overview.realization.id}
+                realizationName={overview.realization.companyName}
+              />
+            ) : null}
           </div>
         )}
       </div>
@@ -929,5 +979,3 @@ export default function CurrentRealizationPage() {
     </AdminShell>
   );
 }
-
-

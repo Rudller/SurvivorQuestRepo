@@ -78,20 +78,51 @@ const assetInputModeOptions = [
 ] as const;
 
 function isPdfFile(file: File) {
-  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  return (
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+  );
 }
 
 function isRealizationLanguage(value: string): value is RealizationLanguage {
-  return value === "polish" || value === "english" || value === "ukrainian" || value === "russian" || value === "other";
+  return (
+    value === "polish" ||
+    value === "english" ||
+    value === "ukrainian" ||
+    value === "russian" ||
+    value === "other"
+  );
 }
 
 function CalendarInputIcon() {
   return (
     // Icon based on Heroicons (MIT) calendar style.
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-      <path d="M8 2v3M16 2v3M3 10h18" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="3" y="5" width="18" height="16" rx="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        d="M8 2v3M16 2v3M3 10h18"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect
+        x="3"
+        y="5"
+        width="18"
+        height="16"
+        rx="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -105,13 +136,20 @@ export function EditRealizationPanel({
   onClose,
   onSaved,
 }: EditRealizationPanelProps) {
-  const [updateRealization, { isLoading: isUpdating }] = useUpdateRealizationMutation();
-  const [deleteRealization, { isLoading: isDeleting }] = useDeleteRealizationMutation();
-  const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
-  const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] = useUploadRealizationMapImageMutation();
-  const [uploadRealizationOffer, { isLoading: isUploadingOffer }] = useUploadRealizationOfferMutation();
-  const [uploadStationAudio, { isLoading: isUploadingStationAudio }] = useUploadStationAudioMutation();
-  const [translateRealizationTexts, { isLoading: isAutoTranslating }] = useTranslateRealizationTextsMutation();
+  const [updateRealization, { isLoading: isUpdating }] =
+    useUpdateRealizationMutation();
+  const [deleteRealization, { isLoading: isDeleting }] =
+    useDeleteRealizationMutation();
+  const [uploadRealizationLogo, { isLoading: isUploadingLogo }] =
+    useUploadRealizationLogoMutation();
+  const [uploadRealizationMapImage, { isLoading: isUploadingMapImage }] =
+    useUploadRealizationMapImageMutation();
+  const [uploadRealizationOffer, { isLoading: isUploadingOffer }] =
+    useUploadRealizationOfferMutation();
+  const [uploadStationAudio, { isLoading: isUploadingStationAudio }] =
+    useUploadStationAudioMutation();
+  const [translateRealizationTexts, { isLoading: isAutoTranslating }] =
+    useTranslateRealizationTextsMutation();
 
   const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [editError, setEditError] = useState<string | null>(null);
@@ -119,18 +157,36 @@ export function EditRealizationPanel({
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
   const [instructorInput, setInstructorInput] = useState("");
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
-  const [logoInputMode, setLogoInputMode] = useState<"upload" | "existing">("upload");
-  const [pendingMapImageFile, setPendingMapImageFile] = useState<File | null>(null);
-  const [mapImageInputMode, setMapImageInputMode] = useState<"upload" | "existing">("upload");
-  const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(null);
+  const [logoInputMode, setLogoInputMode] = useState<"upload" | "existing">(
+    "upload",
+  );
+  const [pendingMapImageFile, setPendingMapImageFile] = useState<File | null>(
+    null,
+  );
+  const [mapImageInputMode, setMapImageInputMode] = useState<
+    "upload" | "existing"
+  >("upload");
+  const [pendingOfferPdfFile, setPendingOfferPdfFile] = useState<File | null>(
+    null,
+  );
   const [offerPdfError, setOfferPdfError] = useState<string | null>(null);
-  const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationSuggestedCenter, setLocationSuggestedCenter] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [textEditingLanguage, setTextEditingLanguage] = useState<RealizationLanguage>(realization.language);
-  const [autoTranslateMessage, setAutoTranslateMessage] = useState<string | null>(null);
+  const [textEditingLanguage, setTextEditingLanguage] =
+    useState<RealizationLanguage>(realization.language);
+  const [autoTranslateMessage, setAutoTranslateMessage] = useState<
+    string | null
+  >(null);
   const initialLanguageSelection = useMemo(
-    () => parseRealizationLanguageSelection(realization.language, realization.customLanguage),
+    () =>
+      parseRealizationLanguageSelection(
+        realization.language,
+        realization.customLanguage,
+      ),
     [realization.customLanguage, realization.language],
   );
   const scheduledAtInputRef = useRef<DateTimeInputElement | null>(null);
@@ -162,7 +218,8 @@ export function EditRealizationPanel({
       realization.showLeaderboardDuringGame ?? realization.showLeaderboard,
     showLeaderboardOnFinish:
       realization.showLeaderboardOnFinish ?? realization.showLeaderboard,
-    hideLeaderboardMinutesBeforeEnd: realization.hideLeaderboardMinutesBeforeEnd ?? 0,
+    hideLeaderboardMinutesBeforeEnd:
+      realization.hideLeaderboardMinutesBeforeEnd ?? 0,
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList ?? false,
@@ -182,7 +239,8 @@ export function EditRealizationPanel({
     }
 
     if (
-      scenario.id === (realization.scenarioTemplateId ?? realization.scenarioId) &&
+      scenario.id ===
+        (realization.scenarioTemplateId ?? realization.scenarioId) &&
       realization.scenarioStations.length > 0
     ) {
       return realization.scenarioStations.map(toRealizationStationDraft);
@@ -190,18 +248,24 @@ export function EditRealizationPanel({
 
     return (scenario.stationIds ?? [])
       .map((stationId) => stations.find((station) => station.id === stationId))
-      .filter((station): station is NonNullable<typeof station> => Boolean(station))
+      .filter((station): station is NonNullable<typeof station> =>
+        Boolean(station),
+      )
       .map(toRealizationStationDraft);
   }
 
-  async function uploadPendingStationAudioFiles(stationDrafts: RealizationStationDraft[]) {
+  async function uploadPendingStationAudioFiles(
+    stationDrafts: RealizationStationDraft[],
+  ) {
     return Promise.all(
       stationDrafts.map(async (station) => {
         if (station.type !== "audio-quiz" || !station.pendingAudioFile) {
           return station;
         }
 
-        const uploadedAudio = await uploadStationAudio(station.pendingAudioFile).unwrap();
+        const uploadedAudio = await uploadStationAudio(
+          station.pendingAudioFile,
+        ).unwrap();
         const targetLanguage = station.pendingAudioLanguage ?? "polish";
         const clearedPending = {
           pendingAudioFile: null,
@@ -248,19 +312,37 @@ export function EditRealizationPanel({
   }
 
   const [scenarioStations, setScenarioStations] = useState(() =>
-    mapScenarioStations(realization.scenarioTemplateId ?? realization.scenarioId),
+    mapScenarioStations(
+      realization.scenarioTemplateId ?? realization.scenarioId ?? "",
+    ),
   );
-  const [selectedLanguages, setSelectedLanguages] = useState<RealizationLanguage[]>(
-    initialLanguageSelection.selectedLanguages,
+  const [selectedLanguages, setSelectedLanguages] = useState<
+    RealizationLanguage[]
+  >(initialLanguageSelection.selectedLanguages);
+  const [customLanguageInput, setCustomLanguageInput] = useState(
+    initialLanguageSelection.customLanguage,
   );
-  const [customLanguageInput, setCustomLanguageInput] = useState(initialLanguageSelection.customLanguage);
-  const editStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
-  const isBusy = isUpdating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
-  const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
-  const isCompanyNameInvalid = submitAttempted && !editValues.companyName.trim();
+  const editStationsPoints = scenarioStations.reduce(
+    (sum, station) => sum + station.points,
+    0,
+  );
+  const isBusy =
+    isUpdating ||
+    isUploadingLogo ||
+    isUploadingMapImage ||
+    isUploadingOffer ||
+    isUploadingStationAudio;
+  const hasInvalidScenarioStations =
+    hasInvalidRealizationStationDrafts(scenarioStations);
+  const isCompanyNameInvalid =
+    submitAttempted && !editValues.companyName.trim();
   const isScenarioInvalid = submitAttempted && !editValues.scenarioId;
-  const isContactPersonInvalid = submitAttempted && !editValues.contactPerson.trim();
-  const isContactChannelInvalid = submitAttempted && !editValues.contactPhone.trim() && !editValues.contactEmail.trim();
+  const isContactPersonInvalid =
+    submitAttempted && !editValues.contactPerson.trim();
+  const isContactChannelInvalid =
+    submitAttempted &&
+    !editValues.contactPhone.trim() &&
+    !editValues.contactEmail.trim();
   const languageSelection = useMemo(
     () => ({
       selectedLanguages,
@@ -268,16 +350,24 @@ export function EditRealizationPanel({
     }),
     [customLanguageInput, selectedLanguages],
   );
-  const selectedLanguagesSet = useMemo(() => new Set(selectedLanguages), [selectedLanguages]);
+  const selectedLanguagesSet = useMemo(
+    () => new Set(selectedLanguages),
+    [selectedLanguages],
+  );
   const languagePayload = useMemo(
     () => toRealizationLanguagePayload(languageSelection),
     [languageSelection],
   );
-  const isLanguageSelectionInvalid = submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
-  const isCustomLanguageInvalid = isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
+  const isLanguageSelectionInvalid =
+    submitAttempted && isRealizationLanguageSelectionInvalid(languageSelection);
+  const isCustomLanguageInvalid =
+    isLanguageSelectionInvalid && selectedLanguagesSet.has("other");
   const baseTextLanguage = languagePayload.language;
   const textEditableLanguages = useMemo(
-    () => (selectedLanguages.includes(baseTextLanguage) ? selectedLanguages : [baseTextLanguage, ...selectedLanguages]),
+    () =>
+      selectedLanguages.includes(baseTextLanguage)
+        ? selectedLanguages
+        : [baseTextLanguage, ...selectedLanguages],
     [selectedLanguages, baseTextLanguage],
   );
   if (!textEditableLanguages.includes(textEditingLanguage)) {
@@ -285,13 +375,16 @@ export function EditRealizationPanel({
   }
   const isEditingBaseTextLanguage = textEditingLanguage === baseTextLanguage;
   const isTextAutoTranslateDisabled =
-    isAutoTranslating || isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other";
+    isAutoTranslating ||
+    isEditingBaseTextLanguage ||
+    textEditingLanguage === "other" ||
+    baseTextLanguage === "other";
   const effectiveIntroText = isEditingBaseTextLanguage
     ? editValues.introText
-    : editValues.translations[textEditingLanguage]?.introText ?? "";
+    : (editValues.translations[textEditingLanguage]?.introText ?? "");
   const effectiveGameRules = isEditingBaseTextLanguage
     ? editValues.gameRules
-    : editValues.translations[textEditingLanguage]?.gameRules ?? "";
+    : (editValues.translations[textEditingLanguage]?.gameRules ?? "");
 
   function updateEffectiveIntroText(nextValue: string) {
     if (isEditingBaseTextLanguage) {
@@ -303,7 +396,10 @@ export function EditRealizationPanel({
       ...prev,
       translations: {
         ...prev.translations,
-        [textEditingLanguage]: { ...prev.translations[textEditingLanguage], introText: nextValue },
+        [textEditingLanguage]: {
+          ...prev.translations[textEditingLanguage],
+          introText: nextValue,
+        },
       },
     }));
   }
@@ -318,13 +414,20 @@ export function EditRealizationPanel({
       ...prev,
       translations: {
         ...prev.translations,
-        [textEditingLanguage]: { ...prev.translations[textEditingLanguage], gameRules: nextValue },
+        [textEditingLanguage]: {
+          ...prev.translations[textEditingLanguage],
+          gameRules: nextValue,
+        },
       },
     }));
   }
 
   async function handleAutoTranslateText() {
-    if (isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other") {
+    if (
+      isEditingBaseTextLanguage ||
+      textEditingLanguage === "other" ||
+      baseTextLanguage === "other"
+    ) {
       return;
     }
 
@@ -342,7 +445,9 @@ export function EditRealizationPanel({
     }
 
     if (texts.length === 0) {
-      setAutoTranslateMessage("Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.");
+      setAutoTranslateMessage(
+        "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
+      );
       return;
     }
 
@@ -362,15 +467,24 @@ export function EditRealizationPanel({
             next[field] = translated;
           }
         });
-        return { ...prev, translations: { ...prev.translations, [textEditingLanguage]: next } };
+        return {
+          ...prev,
+          translations: { ...prev.translations, [textEditingLanguage]: next },
+        };
       });
     } catch {
-      setAutoTranslateMessage("Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
+      setAutoTranslateMessage(
+        "Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.",
+      );
     }
   }
   const isScheduledAtInvalid = submitAttempted && !editValues.scheduledAt;
-  const isDurationInvalid = submitAttempted && (!Number.isFinite(editValues.durationMinutes) || editValues.durationMinutes < 1);
-  const isScenarioStationsEmpty = submitAttempted && scenarioStations.length === 0;
+  const isDurationInvalid =
+    submitAttempted &&
+    (!Number.isFinite(editValues.durationMinutes) ||
+      editValues.durationMinutes < 1);
+  const isScenarioStationsEmpty =
+    submitAttempted && scenarioStations.length === 0;
   const basicTabHasError =
     isCompanyNameInvalid ||
     isContactPersonInvalid ||
@@ -380,14 +494,17 @@ export function EditRealizationPanel({
     isScheduledAtInvalid ||
     isDurationInvalid;
   const scenarioTabHasError = isScenarioInvalid;
-  const stationsTabHasError = isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
+  const stationsTabHasError =
+    isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
   const isRiskQuizType = editValues.type === "risk-quiz";
-  const { data: riskSchemes, isLoading: isRiskSchemesLoading } = useGetRiskSchemesQuery(undefined, {
-    skip: !isRiskQuizType,
-  });
+  const { data: riskSchemes, isLoading: isRiskSchemesLoading } =
+    useGetRiskSchemesQuery(undefined, {
+      skip: !isRiskQuizType,
+    });
   const tabs: TabItem[] = REALIZATION_FORM_TAB_ORDER.filter((id) => {
     if (id === "riskQuiz") return isRiskQuizType;
-    if (id === "scenario" || id === "stations" || id === "pointsQr") return !isRiskQuizType;
+    if (id === "scenario" || id === "stations" || id === "pointsQr")
+      return !isRiskQuizType;
     return true;
   }).map((id) => ({
     id,
@@ -406,7 +523,10 @@ export function EditRealizationPanel({
     [pendingLogoFile],
   );
   const pendingMapImagePreviewUrl = useMemo(
-    () => (pendingMapImageFile ? URL.createObjectURL(pendingMapImageFile) : undefined),
+    () =>
+      pendingMapImageFile
+        ? URL.createObjectURL(pendingMapImageFile)
+        : undefined,
     [pendingMapImageFile],
   );
   const usedLogoOptions = useMemo(
@@ -434,7 +554,6 @@ export function EditRealizationPanel({
     };
   }, [pendingMapImagePreviewUrl]);
 
-
   useEffect(() => {
     const initialLocation = realization.location?.trim();
     if (!initialLocation) {
@@ -461,7 +580,12 @@ export function EditRealizationPanel({
     }
 
     setEditValues((current) => {
-      if (current.instructors.some((item) => item.toLocaleLowerCase("pl-PL") === name.toLocaleLowerCase("pl-PL"))) {
+      if (
+        current.instructors.some(
+          (item) =>
+            item.toLocaleLowerCase("pl-PL") === name.toLocaleLowerCase("pl-PL"),
+        )
+      ) {
         return current;
       }
 
@@ -533,7 +657,9 @@ export function EditRealizationPanel({
   // immediately after a successful save, instead of staying dirty for the
   // rest of the panel's lifetime.
   const serializedFormSnapshot = JSON.stringify(formSnapshotFields);
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(serializedFormSnapshot);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(
+    serializedFormSnapshot,
+  );
   const hasUnsavedChanges = serializedFormSnapshot !== lastSavedSnapshot;
 
   return (
@@ -559,18 +685,29 @@ export function EditRealizationPanel({
             const basicTabInvalid =
               !editValues.companyName.trim() ||
               !editValues.contactPerson.trim() ||
-              (!editValues.contactPhone.trim() && !editValues.contactEmail.trim()) ||
+              (!editValues.contactPhone.trim() &&
+                !editValues.contactEmail.trim()) ||
               isRealizationLanguageSelectionInvalid(languageSelection) ||
               !editValues.scheduledAt ||
               !Number.isFinite(editValues.durationMinutes) ||
               editValues.durationMinutes < 1;
-            const scenarioTabInvalid = !editValues.scenarioId;
-            const stationsTabInvalid = scenarioStations.length === 0;
-            const hasIncompleteFields = basicTabInvalid || scenarioTabInvalid || stationsTabInvalid;
+            // Ryzykanci realizations don't have a scenario/stations at all
+            // (Realization.scenarioId is nullable for this type) — both tabs
+            // are already hidden from the tab strip, so their validation must
+            // be skipped too, or saving gets hard-blocked on fields the user
+            // can no longer see.
+            const scenarioTabInvalid =
+              !isRiskQuizType && !editValues.scenarioId;
+            const stationsTabInvalid =
+              !isRiskQuizType && scenarioStations.length === 0;
+            const hasIncompleteFields =
+              basicTabInvalid || scenarioTabInvalid || stationsTabInvalid;
 
-            if (hasInvalidScenarioStations) {
+            if (!isRiskQuizType && hasInvalidScenarioStations) {
               setActiveTab("stations");
-              setEditError("Nie można zapisać realizacji: popraw dane stanowisk (nazwa/opis/punkty/kody/quiz).");
+              setEditError(
+                "Nie można zapisać realizacji: popraw dane stanowisk (nazwa/opis/punkty/kody/quiz).",
+              );
               return;
             }
 
@@ -582,46 +719,81 @@ export function EditRealizationPanel({
                   : "stations";
               setActiveTab(firstInvalidTab);
 
-              if (!window.confirm("Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?")) {
+              if (
+                !window.confirm(
+                  "Uwaga: część pól nie jest uzupełniona lub zawiera niepoprawne dane. Czy chcesz kontynuować?",
+                )
+              ) {
                 return;
               }
             }
 
-            const fallbackScenarioId =
-              editValues.scenarioId ||
-              realization.scenarioTemplateId ||
-              realization.scenarioId ||
-              scenarios.find((scenario) => !scenario.sourceTemplateId)?.id ||
-              scenarios[0]?.id ||
-              "";
-            if (!fallbackScenarioId) {
-              setEditError("Brak dostępnego scenariusza do zapisania realizacji.");
-              return;
+            let fallbackScenarioId = "";
+            if (!isRiskQuizType) {
+              fallbackScenarioId =
+                editValues.scenarioId ||
+                realization.scenarioTemplateId ||
+                realization.scenarioId ||
+                scenarios.find((scenario) => !scenario.sourceTemplateId)?.id ||
+                scenarios[0]?.id ||
+                "";
+              if (!fallbackScenarioId) {
+                setEditError(
+                  "Brak dostępnego scenariusza do zapisania realizacji.",
+                );
+                return;
+              }
+
+              const selectedScenarioTemplate =
+                scenarioById.get(fallbackScenarioId);
+              if (
+                !selectedScenarioTemplate ||
+                selectedScenarioTemplate.sourceTemplateId
+              ) {
+                setEditError("Wybierz scenariusz szablonowy.");
+                return;
+              }
             }
 
-            const selectedScenarioTemplate = scenarioById.get(fallbackScenarioId);
-            if (!selectedScenarioTemplate || selectedScenarioTemplate.sourceTemplateId) {
-              setEditError("Wybierz scenariusz szablonowy.");
-              return;
-            }
-
-            const scenarioStationsWithUploadedAudio = await uploadPendingStationAudioFiles(scenarioStations);
-            const normalizedScenarioStations = normalizeRealizationStationDrafts(scenarioStationsWithUploadedAudio);
-            const useCustomScenarioStations = scenarioStations.length > 0;
-            const fallbackScenarioStations = mapScenarioStations(fallbackScenarioId);
-            const positionsCountForSubmit = Math.max(
-              1,
-              useCustomScenarioStations ? normalizedScenarioStations.length : fallbackScenarioStations.length,
-            );
-            const normalizedCompanyName = editValues.companyName.trim() || "Nowa realizacja";
-            const normalizedContactPerson = editValues.contactPerson.trim() || "Brak osoby kontaktowej";
-            const normalizedContactEmail = editValues.contactEmail.trim() || undefined;
+            const scenarioStationsWithUploadedAudio =
+              await uploadPendingStationAudioFiles(scenarioStations);
+            const normalizedScenarioStations =
+              normalizeRealizationStationDrafts(
+                scenarioStationsWithUploadedAudio,
+              );
+            const useCustomScenarioStations =
+              !isRiskQuizType && scenarioStations.length > 0;
+            const fallbackScenarioStations = isRiskQuizType
+              ? []
+              : mapScenarioStations(fallbackScenarioId);
+            const positionsCountForSubmit = isRiskQuizType
+              ? 1
+              : Math.max(
+                  1,
+                  useCustomScenarioStations
+                    ? normalizedScenarioStations.length
+                    : fallbackScenarioStations.length,
+                );
+            const normalizedCompanyName =
+              editValues.companyName.trim() || "Nowa realizacja";
+            const normalizedContactPerson =
+              editValues.contactPerson.trim() || "Brak osoby kontaktowej";
+            const normalizedContactEmail =
+              editValues.contactEmail.trim() || undefined;
             const normalizedContactPhone =
-              editValues.contactPhone.trim() || (normalizedContactEmail ? undefined : "Nie podano");
+              editValues.contactPhone.trim() ||
+              (normalizedContactEmail ? undefined : "Nie podano");
             const normalizedScheduledAt =
-              toIsoFromDateTimeLocal(editValues.scheduledAt) || new Date().toISOString();
-            const normalizedTeamCount = Math.max(1, Math.round(editValues.teamCount) || 1);
-            const normalizedPeopleCount = Math.max(1, Math.round(editValues.peopleCount) || 1);
+              toIsoFromDateTimeLocal(editValues.scheduledAt) ||
+              new Date().toISOString();
+            const normalizedTeamCount = Math.max(
+              1,
+              Math.round(editValues.teamCount) || 1,
+            );
+            const normalizedPeopleCount = Math.max(
+              1,
+              Math.round(editValues.peopleCount) || 1,
+            );
             const normalizedDurationMinutes = Math.max(
               1,
               Math.round(editValues.durationMinutes) || 120,
@@ -633,18 +805,21 @@ export function EditRealizationPanel({
               let nextOfferPdfName = editValues.offerPdfName;
 
               if (pendingLogoFile) {
-                const uploadedLogo = await uploadRealizationLogo(pendingLogoFile).unwrap();
+                const uploadedLogo =
+                  await uploadRealizationLogo(pendingLogoFile).unwrap();
                 nextLogoUrl = uploadedLogo.url;
               }
 
               let nextMapImageUrl = editValues.mapImageUrl;
               if (pendingMapImageFile) {
-                const uploadedMapImage = await uploadRealizationMapImage(pendingMapImageFile).unwrap();
+                const uploadedMapImage =
+                  await uploadRealizationMapImage(pendingMapImageFile).unwrap();
                 nextMapImageUrl = uploadedMapImage.url;
               }
 
               if (pendingOfferPdfFile) {
-                const uploadedOffer = await uploadRealizationOffer(pendingOfferPdfFile).unwrap();
+                const uploadedOffer =
+                  await uploadRealizationOffer(pendingOfferPdfFile).unwrap();
                 nextOfferPdfUrl = uploadedOffer.url;
                 nextOfferPdfName = pendingOfferPdfFile.name;
               }
@@ -658,7 +833,9 @@ export function EditRealizationPanel({
                 introText: editValues.introText || undefined,
                 gameRules: editValues.gameRules.trim() || undefined,
                 translations:
-                  Object.keys(editValues.translations).length > 0 ? editValues.translations : undefined,
+                  Object.keys(editValues.translations).length > 0
+                    ? editValues.translations
+                    : undefined,
                 contactPerson: normalizedContactPerson,
                 contactPhone: normalizedContactPhone,
                 contactEmail: normalizedContactEmail,
@@ -670,8 +847,10 @@ export function EditRealizationPanel({
                 mapImageUrl: nextMapImageUrl,
                 offerPdfUrl: nextOfferPdfUrl,
                 offerPdfName: nextOfferPdfName,
-                scenarioId: fallbackScenarioId,
-                riskSchemeId: isRiskQuizType ? editValues.riskSchemeId || undefined : undefined,
+                scenarioId: isRiskQuizType ? undefined : fallbackScenarioId,
+                riskSchemeId: isRiskQuizType
+                  ? editValues.riskSchemeId || undefined
+                  : undefined,
                 teamCount: normalizedTeamCount,
                 peopleCount: normalizedPeopleCount,
                 positionsCount: positionsCountForSubmit,
@@ -681,28 +860,40 @@ export function EditRealizationPanel({
                   editValues.showLeaderboardOnFinish,
                 showLeaderboardDuringGame: editValues.showLeaderboardDuringGame,
                 showLeaderboardOnFinish: editValues.showLeaderboardOnFinish,
-                hideLeaderboardMinutesBeforeEnd: editValues.hideLeaderboardMinutesBeforeEnd,
-                teamStationNumberingEnabled: editValues.teamStationNumberingEnabled,
-                timedStationPointsDecayEnabled: editValues.timedStationPointsDecayEnabled,
+                hideLeaderboardMinutesBeforeEnd:
+                  editValues.hideLeaderboardMinutesBeforeEnd,
+                teamStationNumberingEnabled:
+                  editValues.teamStationNumberingEnabled,
+                timedStationPointsDecayEnabled:
+                  editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
                 status: editValues.status,
                 scheduledAt: normalizedScheduledAt,
-                scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
+                scenarioStations: useCustomScenarioStations
+                  ? normalizedScenarioStations
+                  : undefined,
                 changedBy: userEmail,
               }).unwrap();
               onSaved?.(updatedRealization);
               setSubmitAttempted(false);
               setLastSavedSnapshot(serializedFormSnapshot);
             } catch (error) {
-              setEditError(resolveApiErrorMessage(error) ?? "Nie udało się zapisać zmian realizacji.");
+              setEditError(
+                resolveApiErrorMessage(error) ??
+                  "Nie udało się zapisać zmian realizacji.",
+              );
             }
           }}
           className="sq-form flex h-full min-h-0 flex-col"
         >
           <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 sm:px-6">
             <div className="min-w-0">
-              <h2 className="text-xl font-semibold text-zinc-100">Edytuj realizację</h2>
-              <p className="mt-1 truncate text-sm text-zinc-400">{realization.companyName}</p>
+              <h2 className="text-xl font-semibold text-zinc-100">
+                Edytuj realizację
+              </h2>
+              <p className="mt-1 truncate text-sm text-zinc-400">
+                {realization.companyName}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -723,7 +914,9 @@ export function EditRealizationPanel({
               >
                 {isUpdating
                   ? "Zapisywanie..."
-                  : isUploadingLogo || isUploadingOffer || isUploadingStationAudio
+                  : isUploadingLogo ||
+                      isUploadingOffer ||
+                      isUploadingStationAudio
                     ? "Przesyłanie plików..."
                     : !hasUnsavedChanges
                       ? "Zapisano"
@@ -732,9 +925,16 @@ export function EditRealizationPanel({
             </div>
           </div>
 
-          <TabStrip tabs={tabs} activeId={activeTab} onChange={(id) => setActiveTab(id as RealizationFormTabId)} className="px-4 sm:px-6" />
+          <TabStrip
+            tabs={tabs}
+            activeId={activeTab}
+            onChange={(id) => setActiveTab(id as RealizationFormTabId)}
+            className="px-4 sm:px-6"
+          />
 
-          {editError && <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{editError}</p>}
+          {editError && (
+            <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{editError}</p>
+          )}
 
           <div className="sq-thin-scrollbar min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             {activeTab === "basic" && (
@@ -742,13 +942,21 @@ export function EditRealizationPanel({
                 <SummaryCard title="Informacje o realizacji">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wider text-zinc-500">ID realizacji</p>
-                      <p className="break-all font-mono text-xs text-zinc-300">{realization.id}</p>
+                      <p className="text-xs uppercase tracking-wider text-zinc-500">
+                        ID realizacji
+                      </p>
+                      <p className="break-all font-mono text-xs text-zinc-300">
+                        {realization.id}
+                      </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wider text-zinc-500">Kod dołączenia</p>
+                      <p className="text-xs uppercase tracking-wider text-zinc-500">
+                        Kod dołączenia
+                      </p>
                       <div className="flex items-center gap-2">
-                        <p className="font-mono text-sm font-semibold tracking-wider text-zinc-100">{realization.joinCode}</p>
+                        <p className="font-mono text-sm font-semibold tracking-wider text-zinc-100">
+                          {realization.joinCode}
+                        </p>
                         <button
                           type="button"
                           onClick={() => void copyJoinCode()}
@@ -759,10 +967,18 @@ export function EditRealizationPanel({
                       </div>
                     </div>
                     <div className="space-y-1 sm:col-span-2">
-                      <p className="text-xs uppercase tracking-wider text-zinc-500">Daty</p>
+                      <p className="text-xs uppercase tracking-wider text-zinc-500">
+                        Daty
+                      </p>
                       <p className="text-xs text-zinc-400">
-                        Utworzono: {new Date(realization.createdAt).toLocaleString("pl-PL")} • Ostatnia zmiana:{" "}
-                        {new Date(realization.updatedAt).toLocaleString("pl-PL")}
+                        Utworzono:{" "}
+                        {new Date(realization.createdAt).toLocaleString(
+                          "pl-PL",
+                        )}{" "}
+                        • Ostatnia zmiana:{" "}
+                        {new Date(realization.updatedAt).toLocaleString(
+                          "pl-PL",
+                        )}
                       </p>
                     </div>
                   </div>
@@ -770,20 +986,38 @@ export function EditRealizationPanel({
 
                 <FormSection title="Klient">
                   <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa firmy</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Nazwa firmy
+                    </span>
                     <input
                       value={editValues.companyName}
-                      onChange={(event) => setEditValues((prev) => ({ ...prev, companyName: event.target.value }))}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          companyName: event.target.value,
+                        }))
+                      }
                       className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCompanyNameInvalid)}`}
                     />
-                    {isCompanyNameInvalid ? <p className="text-xs text-red-300">Uzupełnij nazwę firmy.</p> : null}
+                    {isCompanyNameInvalid ? (
+                      <p className="text-xs text-red-300">
+                        Uzupełnij nazwę firmy.
+                      </p>
+                    ) : null}
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Typ realizacji</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Typ realizacji
+                    </span>
                     <select
                       value={editValues.type}
-                      onChange={(event) => setEditValues((prev) => ({ ...prev, type: event.target.value as RealizationType }))}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          type: event.target.value as RealizationType,
+                        }))
+                      }
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     >
                       {realizationTypeOptions.map((option) => (
@@ -795,16 +1029,25 @@ export function EditRealizationPanel({
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Język realizacji
+                    </span>
                     <div
                       className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
-                        isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
+                        isLanguageSelectionInvalid
+                          ? "border-red-500/70"
+                          : "border-zinc-700"
                       }`}
                     >
                       {realizationLanguageOptions.map((option) => {
-                        const isChecked = selectedLanguagesSet.has(option.value);
+                        const isChecked = selectedLanguagesSet.has(
+                          option.value,
+                        );
                         return (
-                          <label key={option.value} className="inline-flex items-center gap-2 text-sm text-zinc-200">
+                          <label
+                            key={option.value}
+                            className="inline-flex items-center gap-2 text-sm text-zinc-200"
+                          >
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -812,81 +1055,134 @@ export function EditRealizationPanel({
                                 setSelectedLanguages((current) => {
                                   if (event.target.checked) {
                                     return [...current, option.value].filter(
-                                      (value, index, list) => list.indexOf(value) === index,
+                                      (value, index, list) =>
+                                        list.indexOf(value) === index,
                                     );
                                   }
-                                  return current.filter((value) => value !== option.value);
+                                  return current.filter(
+                                    (value) => value !== option.value,
+                                  );
                                 });
                               }}
                               className="h-4 w-4 accent-amber-400"
                             />
-                            <span>{getRealizationLanguageFlag(option.value)}</span>
+                            <span>
+                              {getRealizationLanguageFlag(option.value)}
+                            </span>
                             <span>{option.label}</span>
                           </label>
                         );
                       })}
                     </div>
                     {isLanguageSelectionInvalid ? (
-                      <p className="text-xs text-red-300">Wybierz co najmniej jeden język realizacji.</p>
+                      <p className="text-xs text-red-300">
+                        Wybierz co najmniej jeden język realizacji.
+                      </p>
                     ) : null}
                   </label>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     {selectedLanguagesSet.has("other") && (
                       <label className="space-y-1.5 sm:col-span-2">
-                        <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
+                        <span className="text-xs uppercase tracking-wider text-zinc-400">
+                          Wpisz język
+                        </span>
                         <input
                           value={customLanguageInput}
-                          onChange={(event) => setCustomLanguageInput(event.target.value)}
+                          onChange={(event) =>
+                            setCustomLanguageInput(event.target.value)
+                          }
                           className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isCustomLanguageInvalid)}`}
                         />
-                        {isCustomLanguageInvalid ? <p className="text-xs text-red-300">Wpisz własny język realizacji.</p> : null}
+                        {isCustomLanguageInvalid ? (
+                          <p className="text-xs text-red-300">
+                            Wpisz własny język realizacji.
+                          </p>
+                        ) : null}
                       </label>
                     )}
 
                     <label className="space-y-1.5 sm:col-span-2">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Lokalizacja realizacji
+                      </span>
                       <input
                         value={editValues.location}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, location: event.target.value }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            location: event.target.value,
+                          }))
+                        }
                         onBlur={handleLocationBlur}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       />
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Osoba kontaktowa</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Osoba kontaktowa
+                      </span>
                       <input
                         value={editValues.contactPerson}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, contactPerson: event.target.value }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            contactPerson: event.target.value,
+                          }))
+                        }
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactPersonInvalid)}`}
                       />
-                      {isContactPersonInvalid ? <p className="text-xs text-red-300">Uzupełnij osobę kontaktową.</p> : null}
+                      {isContactPersonInvalid ? (
+                        <p className="text-xs text-red-300">
+                          Uzupełnij osobę kontaktową.
+                        </p>
+                      ) : null}
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Telefon kontaktowy</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Telefon kontaktowy
+                      </span>
                       <input
                         value={editValues.contactPhone}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, contactPhone: event.target.value }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            contactPhone: event.target.value,
+                          }))
+                        }
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
                       />
                     </label>
 
                     <label className="space-y-1.5 sm:col-span-2">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">E-mail kontaktowy</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        E-mail kontaktowy
+                      </span>
                       <input
                         type="email"
                         value={editValues.contactEmail}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, contactEmail: event.target.value }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            contactEmail: event.target.value,
+                          }))
+                        }
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isContactChannelInvalid)}`}
                       />
-                      {isContactChannelInvalid ? <p className="text-xs text-red-300">Podaj telefon lub e-mail kontaktowy.</p> : null}
+                      {isContactChannelInvalid ? (
+                        <p className="text-xs text-red-300">
+                          Podaj telefon lub e-mail kontaktowy.
+                        </p>
+                      ) : null}
                     </label>
                   </div>
 
                   <div className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Logo klienta</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Logo klienta
+                    </span>
                     {(pendingLogoPreviewUrl || editValues.logoUrl) && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -896,9 +1192,14 @@ export function EditRealizationPanel({
                       />
                     )}
                     {usedLogoOptions.length > 0 && (
-                      <SegmentedToggle options={assetInputModeOptions} value={logoInputMode} onChange={setLogoInputMode} />
+                      <SegmentedToggle
+                        options={assetInputModeOptions}
+                        value={logoInputMode}
+                        onChange={setLogoInputMode}
+                      />
                     )}
-                    {logoInputMode === "existing" && usedLogoOptions.length > 0 ? (
+                    {logoInputMode === "existing" &&
+                    usedLogoOptions.length > 0 ? (
                       <UploadedAssetPicker
                         options={usedLogoOptions}
                         selectedUrl={editValues.logoUrl}
@@ -924,13 +1225,20 @@ export function EditRealizationPanel({
                         className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                       />
                     )}
-                    {isUploadingLogo && <p className="text-xs text-amber-300">Przesyłanie logo...</p>}
+                    {isUploadingLogo && (
+                      <p className="text-xs text-amber-300">
+                        Przesyłanie logo...
+                      </p>
+                    )}
                     {(pendingLogoFile || editValues.logoUrl) && (
                       <button
                         type="button"
                         onClick={() => {
                           setPendingLogoFile(null);
-                          setEditValues((prev) => ({ ...prev, logoUrl: undefined }));
+                          setEditValues((prev) => ({
+                            ...prev,
+                            logoUrl: undefined,
+                          }));
                         }}
                         className="text-xs text-red-400 hover:text-red-300"
                       >
@@ -944,7 +1252,9 @@ export function EditRealizationPanel({
                   <div className="flex gap-2">
                     <input
                       value={instructorInput}
-                      onChange={(event) => setInstructorInput(event.target.value)}
+                      onChange={(event) =>
+                        setInstructorInput(event.target.value)
+                      }
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -978,37 +1288,55 @@ export function EditRealizationPanel({
                         </button>
                       </span>
                     ))}
-                    {editValues.instructors.length === 0 && <p className="text-xs text-zinc-500">Brak dodanych instruktorów.</p>}
+                    {editValues.instructors.length === 0 && (
+                      <p className="text-xs text-zinc-500">
+                        Brak dodanych instruktorów.
+                      </p>
+                    )}
                   </div>
                 </FormSection>
 
                 <FormSection title="Notatki">
                   <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Notatki wewnętrzne</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Notatki wewnętrzne
+                    </span>
                     <textarea
                       value={editValues.notes}
                       onChange={(event) =>
-                        setEditValues((prev) => ({ ...prev, notes: event.target.value }))
+                        setEditValues((prev) => ({
+                          ...prev,
+                          notes: event.target.value,
+                        }))
                       }
                       placeholder="Notatki robocze widoczne tylko w panelu admina."
                       rows={4}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
-                    <p className="text-xs text-zinc-500">Widoczne tylko w panelu admina, nie w aplikacji mobilnej.</p>
+                    <p className="text-xs text-zinc-500">
+                      Widoczne tylko w panelu admina, nie w aplikacji mobilnej.
+                    </p>
                   </label>
                 </FormSection>
 
                 <FormSection title="Harmonogram i status">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Termin realizacji
+                      </span>
                       <div className="flex gap-2">
                         <div className="relative min-w-0 flex-1">
                           <input
                             ref={scheduledAtInputRef}
                             type="datetime-local"
                             value={editValues.scheduledAt}
-                            onChange={(event) => setEditValues((prev) => ({ ...prev, scheduledAt: event.target.value }))}
+                            onChange={(event) =>
+                              setEditValues((prev) => ({
+                                ...prev,
+                                scheduledAt: event.target.value,
+                              }))
+                            }
                             className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 pr-10 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScheduledAtInvalid)}`}
                           />
                           <button
@@ -1022,20 +1350,38 @@ export function EditRealizationPanel({
                         </div>
                         <button
                           type="button"
-                          onClick={() => setEditValues((prev) => ({ ...prev, scheduledAt: toDateTimeLocalValue(new Date().toISOString()) }))}
+                          onClick={() =>
+                            setEditValues((prev) => ({
+                              ...prev,
+                              scheduledAt: toDateTimeLocalValue(
+                                new Date().toISOString(),
+                              ),
+                            }))
+                          }
                           className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 transition hover:border-amber-400/80 hover:text-amber-300"
                         >
                           Teraz
                         </button>
                       </div>
-                      {isScheduledAtInvalid ? <p className="text-xs text-red-300">Uzupełnij termin realizacji.</p> : null}
+                      {isScheduledAtInvalid ? (
+                        <p className="text-xs text-red-300">
+                          Uzupełnij termin realizacji.
+                        </p>
+                      ) : null}
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Status</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Status
+                      </span>
                       <select
                         value={editValues.status}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, status: event.target.value as RealizationStatus }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            status: event.target.value as RealizationStatus,
+                          }))
+                        }
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       >
                         <option value="planned">Zaplanowana</option>
@@ -1049,29 +1395,45 @@ export function EditRealizationPanel({
                 <FormSection title="Liczebność">
                   <div className="grid gap-3 sm:grid-cols-3">
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Drużyny
+                      </span>
                       <input
                         type="number"
                         min={1}
                         value={editValues.teamCount}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, teamCount: Number(event.target.value) }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            teamCount: Number(event.target.value),
+                          }))
+                        }
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       />
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Osoby</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Osoby
+                      </span>
                       <input
                         type="number"
                         min={1}
                         value={editValues.peopleCount}
-                        onChange={(event) => setEditValues((prev) => ({ ...prev, peopleCount: Number(event.target.value) }))}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            peopleCount: Number(event.target.value),
+                          }))
+                        }
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       />
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Czas trwania (min)</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Czas trwania (min)
+                      </span>
                       <input
                         type="number"
                         min={1}
@@ -1084,21 +1446,31 @@ export function EditRealizationPanel({
                         }
                         className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isDurationInvalid)}`}
                       />
-                      {isDurationInvalid ? <p className="text-xs text-red-300">Czas trwania musi być większy od 0.</p> : null}
+                      {isDurationInvalid ? (
+                        <p className="text-xs text-red-300">
+                          Czas trwania musi być większy od 0.
+                        </p>
+                      ) : null}
                     </label>
                   </div>
                 </FormSection>
 
                 <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-                  <h3 className="text-sm font-semibold text-red-200">Usuń realizację</h3>
+                  <h3 className="text-sm font-semibold text-red-200">
+                    Usuń realizację
+                  </h3>
                   {realization.status === "in-progress" ? (
                     <p className="text-xs text-red-200/90">
-                      Nie można usunąć realizacji, która jest w trakcie. Zmień jej status, aby móc ją usunąć.
+                      Nie można usunąć realizacji, która jest w trakcie. Zmień
+                      jej status, aby móc ją usunąć.
                     </p>
                   ) : (
                     <>
                       <p className="text-xs text-red-200/90">
-                        Aby usunąć realizację, wpisz dokładnie jej nazwę: <span className="font-semibold">{realization.companyName}</span>
+                        Aby usunąć realizację, wpisz dokładnie jej nazwę:{" "}
+                        <span className="font-semibold">
+                          {realization.companyName}
+                        </span>
                       </p>
                       <input
                         value={deleteConfirmName}
@@ -1111,12 +1483,19 @@ export function EditRealizationPanel({
                       />
                       <button
                         type="button"
-                        disabled={isDeleting || deleteConfirmName.trim() !== realization.companyName}
+                        disabled={
+                          isDeleting ||
+                          deleteConfirmName.trim() !== realization.companyName
+                        }
                         onClick={async () => {
                           setDeleteError(null);
 
-                          if (deleteConfirmName.trim() !== realization.companyName) {
-                            setDeleteError("Nazwa realizacji nie zgadza się z potwierdzeniem.");
+                          if (
+                            deleteConfirmName.trim() !== realization.companyName
+                          ) {
+                            setDeleteError(
+                              "Nazwa realizacji nie zgadza się z potwierdzeniem.",
+                            );
                             return;
                           }
 
@@ -1127,14 +1506,19 @@ export function EditRealizationPanel({
                             }).unwrap();
                             onClose();
                           } catch (error) {
-                            setDeleteError(resolveApiErrorMessage(error) ?? "Nie udało się usunąć realizacji.");
+                            setDeleteError(
+                              resolveApiErrorMessage(error) ??
+                                "Nie udało się usunąć realizacji.",
+                            );
                           }
                         }}
                         className="rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isDeleting ? "Usuwanie..." : "Usuń realizację"}
                       </button>
-                      {deleteError && <p className="text-sm text-red-200">{deleteError}</p>}
+                      {deleteError && (
+                        <p className="text-sm text-red-200">{deleteError}</p>
+                      )}
                     </>
                   )}
                 </section>
@@ -1176,7 +1560,8 @@ export function EditRealizationPanel({
 
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">
-                      Ukryj leaderboard X minut przed końcem czasu (0 = wyłączone)
+                      Ukryj leaderboard X minut przed końcem czasu (0 =
+                      wyłączone)
                     </span>
                     <input
                       type="number"
@@ -1185,13 +1570,17 @@ export function EditRealizationPanel({
                       onChange={(event) =>
                         setEditValues((prev) => ({
                           ...prev,
-                          hideLeaderboardMinutesBeforeEnd: Math.max(0, Math.round(Number(event.target.value) || 0)),
+                          hideLeaderboardMinutesBeforeEnd: Math.max(
+                            0,
+                            Math.round(Number(event.target.value) || 0),
+                          ),
                         }))
                       }
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
                     <p className="text-xs text-zinc-500">
-                      Tablica wyników zniknie z ekranu gry na X minut przed końcem czasu i nie pojawi się też na ekranie końcowym.
+                      Tablica wyników zniknie z ekranu gry na X minut przed
+                      końcem czasu i nie pojawi się też na ekranie końcowym.
                     </p>
                   </label>
 
@@ -1259,25 +1648,38 @@ export function EditRealizationPanel({
 
                   {editValues.hideMap && (
                     <div className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Grafika zamiast mapy</span>
-                      {(pendingMapImagePreviewUrl || editValues.mapImageUrl) && (
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Grafika zamiast mapy
+                      </span>
+                      {(pendingMapImagePreviewUrl ||
+                        editValues.mapImageUrl) && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={pendingMapImagePreviewUrl ?? editValues.mapImageUrl}
+                          src={
+                            pendingMapImagePreviewUrl ?? editValues.mapImageUrl
+                          }
                           alt="Grafika mapy"
                           className="mb-2 h-24 w-full rounded-lg border border-zinc-700 object-cover"
                         />
                       )}
                       {usedMapImageOptions.length > 0 && (
-                        <SegmentedToggle options={assetInputModeOptions} value={mapImageInputMode} onChange={setMapImageInputMode} />
+                        <SegmentedToggle
+                          options={assetInputModeOptions}
+                          value={mapImageInputMode}
+                          onChange={setMapImageInputMode}
+                        />
                       )}
-                      {mapImageInputMode === "existing" && usedMapImageOptions.length > 0 ? (
+                      {mapImageInputMode === "existing" &&
+                      usedMapImageOptions.length > 0 ? (
                         <UploadedAssetPicker
                           options={usedMapImageOptions}
                           selectedUrl={editValues.mapImageUrl}
                           onSelect={(url) => {
                             setPendingMapImageFile(null);
-                            setEditValues((prev) => ({ ...prev, mapImageUrl: url }));
+                            setEditValues((prev) => ({
+                              ...prev,
+                              mapImageUrl: url,
+                            }));
                           }}
                         />
                       ) : (
@@ -1298,15 +1700,23 @@ export function EditRealizationPanel({
                         />
                       )}
                       <p className="text-xs text-zinc-500">
-                        Jeśli nie dodasz grafiki, zostanie użyte domyślne logo SurvivorQuest.
+                        Jeśli nie dodasz grafiki, zostanie użyte domyślne logo
+                        SurvivorQuest.
                       </p>
-                      {isUploadingMapImage && <p className="text-xs text-amber-300">Przesyłanie grafiki...</p>}
+                      {isUploadingMapImage && (
+                        <p className="text-xs text-amber-300">
+                          Przesyłanie grafiki...
+                        </p>
+                      )}
                       {(pendingMapImageFile || editValues.mapImageUrl) && (
                         <button
                           type="button"
                           onClick={() => {
                             setPendingMapImageFile(null);
-                            setEditValues((prev) => ({ ...prev, mapImageUrl: undefined }));
+                            setEditValues((prev) => ({
+                              ...prev,
+                              mapImageUrl: undefined,
+                            }));
                           }}
                           className="text-xs text-red-400 hover:text-red-300"
                         >
@@ -1322,28 +1732,39 @@ export function EditRealizationPanel({
             {activeTab === "scenario" && (
               <FormSection title="Scenariusz i oferta">
                 <label className="block space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Scenariusz
+                  </span>
                   <select
                     value={editValues.scenarioId}
                     onChange={(event) => {
                       const nextScenarioId = event.target.value;
-                      setEditValues((prev) => ({ ...prev, scenarioId: nextScenarioId }));
+                      setEditValues((prev) => ({
+                        ...prev,
+                        scenarioId: nextScenarioId,
+                      }));
                       setScenarioStations(mapScenarioStations(nextScenarioId));
                     }}
                     className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}
                   >
                     <option value="">Wybierz scenariusz</option>
-                    {scenarios.filter((scenario) => !scenario.sourceTemplateId).map((scenario) => (
-                      <option key={scenario.id} value={scenario.id}>
-                        {scenario.name}
-                      </option>
-                    ))}
+                    {scenarios
+                      .filter((scenario) => !scenario.sourceTemplateId)
+                      .map((scenario) => (
+                        <option key={scenario.id} value={scenario.id}>
+                          {scenario.name}
+                        </option>
+                      ))}
                   </select>
-                  {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
+                  {isScenarioInvalid ? (
+                    <p className="text-xs text-red-300">Wybierz scenariusz.</p>
+                  ) : null}
                 </label>
 
                 <div className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Oferta PDF
+                  </span>
                   {(pendingOfferPdfFile?.name ?? editValues.offerPdfName) && (
                     <p className="mb-1 break-all text-xs text-zinc-300">
                       📄 {pendingOfferPdfFile?.name ?? editValues.offerPdfName}
@@ -1360,7 +1781,9 @@ export function EditRealizationPanel({
 
                       if (!isPdfFile(file)) {
                         setPendingOfferPdfFile(null);
-                        setOfferPdfError("Niedozwolony format pliku. Wybierz plik PDF.");
+                        setOfferPdfError(
+                          "Niedozwolony format pliku. Wybierz plik PDF.",
+                        );
                         event.currentTarget.value = "";
                         return;
                       }
@@ -1372,15 +1795,23 @@ export function EditRealizationPanel({
                     }}
                     className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-700 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300"
                   />
-                  {offerPdfError && <p className="text-xs text-red-300">{offerPdfError}</p>}
-                  {isUploadingOffer && <p className="text-xs text-amber-300">Przesyłanie PDF...</p>}
+                  {offerPdfError && (
+                    <p className="text-xs text-red-300">{offerPdfError}</p>
+                  )}
+                  {isUploadingOffer && (
+                    <p className="text-xs text-amber-300">Przesyłanie PDF...</p>
+                  )}
                   {(pendingOfferPdfFile || editValues.offerPdfUrl) && (
                     <button
                       type="button"
                       onClick={() => {
                         setPendingOfferPdfFile(null);
                         setOfferPdfError(null);
-                        setEditValues((prev) => ({ ...prev, offerPdfUrl: undefined, offerPdfName: undefined }));
+                        setEditValues((prev) => ({
+                          ...prev,
+                          offerPdfUrl: undefined,
+                          offerPdfName: undefined,
+                        }));
                       }}
                       className="text-xs text-red-400 hover:text-red-300"
                     >
@@ -1392,8 +1823,17 @@ export function EditRealizationPanel({
                 {textEditableLanguages.length > 1 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
-                      <span>{getRealizationLanguageFlag(baseTextLanguage)}</span>
-                      <span>Podstawowy: {realizationLanguageOptions.find((option) => option.value === baseTextLanguage)?.label}</span>
+                      <span>
+                        {getRealizationLanguageFlag(baseTextLanguage)}
+                      </span>
+                      <span>
+                        Podstawowy:{" "}
+                        {
+                          realizationLanguageOptions.find(
+                            (option) => option.value === baseTextLanguage,
+                          )?.label
+                        }
+                      </span>
                     </span>
                     <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
                       <span>Edytowany język</span>
@@ -1408,9 +1848,19 @@ export function EditRealizationPanel({
                         className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
                       >
                         {textEditableLanguages.map((language) => (
-                          <option key={`text-editing-${language}`} value={language}>
-                            {getRealizationLanguageFlag(language)} {realizationLanguageOptions.find((option) => option.value === language)?.label}
-                            {language === baseTextLanguage ? " (podstawowy)" : ""}
+                          <option
+                            key={`text-editing-${language}`}
+                            value={language}
+                          >
+                            {getRealizationLanguageFlag(language)}{" "}
+                            {
+                              realizationLanguageOptions.find(
+                                (option) => option.value === language,
+                              )?.label
+                            }
+                            {language === baseTextLanguage
+                              ? " (podstawowy)"
+                              : ""}
                           </option>
                         ))}
                       </select>
@@ -1422,7 +1872,8 @@ export function EditRealizationPanel({
                       title={
                         isEditingBaseTextLanguage
                           ? "Wybierz inny język niż podstawowy, aby przetłumaczyć"
-                          : textEditingLanguage === "other" || baseTextLanguage === "other"
+                          : textEditingLanguage === "other" ||
+                              baseTextLanguage === "other"
                             ? "Auto-tłumaczenie jest niedostępne dla języka niestandardowego"
                             : undefined
                       }
@@ -1432,7 +1883,11 @@ export function EditRealizationPanel({
                     </button>
                   </div>
                 )}
-                {autoTranslateMessage && <p className="text-xs text-zinc-400">{autoTranslateMessage}</p>}
+                {autoTranslateMessage && (
+                  <p className="text-xs text-zinc-400">
+                    {autoTranslateMessage}
+                  </p>
+                )}
 
                 <StyledMarkdownEditor
                   label="Tekst wstępu"
@@ -1456,7 +1911,8 @@ export function EditRealizationPanel({
             {activeTab === "stations" && (
               <div className="space-y-2">
                 <p className="text-xs text-zinc-500">
-                  Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole przy stanowisku lub po rozwinięciu).
+                  Dla stanowisk Na czas i Na punkty ustaw kod zaliczenia (pole
+                  przy stanowisku lub po rozwinięciu).
                 </p>
                 <RealizationStationsEditor
                   stations={scenarioStations}
@@ -1466,28 +1922,40 @@ export function EditRealizationPanel({
                   suggestedCenter={locationSuggestedCenter}
                 />
                 {isScenarioStationsEmpty ? (
-                  <p className="mt-2 text-xs text-red-300">Dodaj co najmniej jedno stanowisko do realizacji.</p>
+                  <p className="mt-2 text-xs text-red-300">
+                    Dodaj co najmniej jedno stanowisko do realizacji.
+                  </p>
                 ) : null}
               </div>
             )}
 
             {activeTab === "pointsQr" && (
-              <PointsQrCodesManager realizationId={realization.id} realizationName={realization.companyName} />
+              <PointsQrCodesManager
+                realizationId={realization.id}
+                realizationName={realization.companyName}
+              />
             )}
 
             {activeTab === "riskQuiz" && (
               <div className="space-y-6">
                 <div className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Talia</span>
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Talia
+                  </span>
                   <select
                     value={editValues.riskSchemeId}
                     onChange={(event) =>
-                      setEditValues((prev) => ({ ...prev, riskSchemeId: event.target.value }))
+                      setEditValues((prev) => ({
+                        ...prev,
+                        riskSchemeId: event.target.value,
+                      }))
                     }
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                   >
                     <option value="">
-                      {isRiskSchemesLoading ? "Ładowanie talii..." : "— wybierz talię —"}
+                      {isRiskSchemesLoading
+                        ? "Ładowanie talii..."
+                        : "— wybierz talię —"}
                     </option>
                     {(riskSchemes ?? []).map((scheme) => (
                       <option key={scheme.id} value={scheme.id}>
@@ -1496,8 +1964,9 @@ export function EditRealizationPanel({
                     ))}
                   </select>
                   <p className="text-xs text-zinc-500">
-                    Talie tworzysz i edytujesz w osobnej zakładce „Ryzykanci” w panelu bocznym. Zmiana talii tutaj
-                    wymaga zapisania realizacji.
+                    Talie tworzysz i edytujesz w osobnej zakładce „Ryzykanci” w
+                    panelu bocznym. Zmiana talii tutaj wymaga zapisania
+                    realizacji.
                   </p>
                 </div>
                 <StyledMarkdownEditor
@@ -1514,7 +1983,10 @@ export function EditRealizationPanel({
                   helperText="Opcjonalne. Jeśli zostawisz puste, w aplikacji mobilnej wyświetli się tekst z placeholdera."
                 />
 
-                <RiskQuizManager realizationId={realization.id} realizationName={realization.companyName} />
+                <RiskQuizManager
+                  realizationId={realization.id}
+                  realizationName={realization.companyName}
+                />
               </div>
             )}
 
@@ -1522,14 +1994,19 @@ export function EditRealizationPanel({
               <SummaryCard title="Podsumowanie">
                 <div className="space-y-1.5 text-sm text-zinc-300">
                   <p>
-                    <span className="text-zinc-500">Kontakt:</span> {editValues.contactPerson || "-"}
+                    <span className="text-zinc-500">Kontakt:</span>{" "}
+                    {editValues.contactPerson || "-"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Lokalizacja:</span> {editValues.location.trim() || "-"}
+                    <span className="text-zinc-500">Lokalizacja:</span>{" "}
+                    {editValues.location.trim() || "-"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Język realizacji:</span>{" "}
-                    {formatRealizationLanguageSummary(languagePayload.language, languagePayload.customLanguage)}
+                    {formatRealizationLanguageSummary(
+                      languagePayload.language,
+                      languagePayload.customLanguage,
+                    )}
                   </p>
                   <p>
                     <span className="text-zinc-500">Dane kontaktowe:</span>{" "}
@@ -1539,56 +2016,80 @@ export function EditRealizationPanel({
                   </p>
                   <p>
                     <span className="text-zinc-500">Kod dołączenia:</span>{" "}
-                    <span className="font-mono text-zinc-200">{realization.joinCode}</span>
+                    <span className="font-mono text-zinc-200">
+                      {realization.joinCode}
+                    </span>
                   </p>
                   <p>
-                    <span className="text-zinc-500">Tekst wstępu:</span> {editValues.introText.trim() ? "Tak" : "Nie"}
+                    <span className="text-zinc-500">Tekst wstępu:</span>{" "}
+                    {editValues.introText.trim() ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Zasady gry:</span> {editValues.gameRules.trim() ? "Tak" : "Nie"}
+                    <span className="text-zinc-500">Zasady gry:</span>{" "}
+                    {editValues.gameRules.trim() ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Leaderboard w trakcie gry:</span>{" "}
+                    <span className="text-zinc-500">
+                      Leaderboard w trakcie gry:
+                    </span>{" "}
                     {editValues.showLeaderboardDuringGame ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Leaderboard na ekranie końcowym:</span>{" "}
+                    <span className="text-zinc-500">
+                      Leaderboard na ekranie końcowym:
+                    </span>{" "}
                     {editValues.showLeaderboardOnFinish ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Ukryj leaderboard przed końcem:</span>{" "}
+                    <span className="text-zinc-500">
+                      Ukryj leaderboard przed końcem:
+                    </span>{" "}
                     {editValues.hideLeaderboardMinutesBeforeEnd > 0
                       ? `${editValues.hideLeaderboardMinutesBeforeEnd} min`
                       : "Wyłączone"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Numeracja stanowisk dla drużyn:</span>{" "}
+                    <span className="text-zinc-500">
+                      Numeracja stanowisk dla drużyn:
+                    </span>{" "}
                     {editValues.teamStationNumberingEnabled ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Spadek punktów w grach czasowych:</span>{" "}
+                    <span className="text-zinc-500">
+                      Spadek punktów w grach czasowych:
+                    </span>{" "}
                     {editValues.timedStationPointsDecayEnabled ? "Tak" : "Nie"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Lista zadań (mobile):</span> {editValues.hideTaskList ? "Ukryta" : "Widoczna"}
+                    <span className="text-zinc-500">Lista zadań (mobile):</span>{" "}
+                    {editValues.hideTaskList ? "Ukryta" : "Widoczna"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Mapa:</span>{" "}
-                    {editValues.hideMap ? "Ukryta (grafika statyczna)" : "Widoczna (interaktywna)"}
+                    {editValues.hideMap
+                      ? "Ukryta (grafika statyczna)"
+                      : "Widoczna (interaktywna)"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Suma punktów stanowisk scenariusza:</span>{" "}
-                    <span className="font-medium text-amber-300">{editStationsPoints}</span>
+                    <span className="text-zinc-500">
+                      Suma punktów stanowisk scenariusza:
+                    </span>{" "}
+                    <span className="font-medium text-amber-300">
+                      {editStationsPoints}
+                    </span>
                   </p>
                   <p>
                     <span className="text-zinc-500">Czas trwania:</span>{" "}
-                    {Math.max(1, Math.round(editValues.durationMinutes) || 120)} min
+                    {Math.max(1, Math.round(editValues.durationMinutes) || 120)}{" "}
+                    min
                   </p>
                   <p>
-                    <span className="text-zinc-500">Instruktorzy:</span> {editValues.instructors.length}
+                    <span className="text-zinc-500">Instruktorzy:</span>{" "}
+                    {editValues.instructors.length}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Notatki:</span> {editValues.notes.trim() ? "Tak" : "Nie"}
+                    <span className="text-zinc-500">Notatki:</span>{" "}
+                    {editValues.notes.trim() ? "Tak" : "Nie"}
                   </p>
                 </div>
               </SummaryCard>
@@ -1596,17 +2097,25 @@ export function EditRealizationPanel({
 
             {activeTab === "history" && (
               <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-                <h3 className="text-sm font-semibold text-zinc-100">Logi zmian</h3>
+                <h3 className="text-sm font-semibold text-zinc-100">
+                  Logi zmian
+                </h3>
                 <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
                   {realization.logs.map((log) => (
-                    <article key={log.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
+                    <article
+                      key={log.id}
+                      className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-sm"
+                    >
                       <p className="text-zinc-200">{log.description}</p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {log.changedBy} • {new Date(log.changedAt).toLocaleString("pl-PL")}
+                        {log.changedBy} •{" "}
+                        {new Date(log.changedAt).toLocaleString("pl-PL")}
                       </p>
                     </article>
                   ))}
-                  {realization.logs.length === 0 && <p className="text-xs text-zinc-500">Brak logów zmian.</p>}
+                  {realization.logs.length === 0 && (
+                    <p className="text-xs text-zinc-500">Brak logów zmian.</p>
+                  )}
                 </div>
               </section>
             )}

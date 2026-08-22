@@ -4,6 +4,7 @@ import { ScenarioService } from '../scenario/scenario.service';
 import { StationService } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
 import { TranslationService } from '../translation/translation.service';
+import { RiskQuizService } from '../risk-quiz/risk-quiz.service';
 import { RealizationService } from './realization.service';
 
 describe('RealizationService.translateTexts', () => {
@@ -18,6 +19,7 @@ describe('RealizationService.translateTexts', () => {
       {} as StationService,
       {} as StationStorageService,
       translationService,
+      {} as RiskQuizService,
     );
 
     return { service, translationService };

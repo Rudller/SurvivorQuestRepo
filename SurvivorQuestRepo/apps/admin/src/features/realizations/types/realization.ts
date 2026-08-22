@@ -18,7 +18,10 @@ export type RealizationLanguage =
   | "russian"
   | "other";
 
-export const realizationTypeOptions: { value: RealizationType; label: string }[] = [
+export const realizationTypeOptions: {
+  value: RealizationType;
+  label: string;
+}[] = [
   { value: "outdoor-games", label: "Gry terenowe" },
   { value: "hotel-games", label: "Gry hotelowe" },
   { value: "workshops", label: "Warsztaty" },
@@ -28,7 +31,10 @@ export const realizationTypeOptions: { value: RealizationType; label: string }[]
   { value: "risk-quiz", label: "Ryzykanci" },
 ];
 
-export const realizationLanguageOptions: { value: RealizationLanguage; label: string }[] = [
+export const realizationLanguageOptions: {
+  value: RealizationLanguage;
+  label: string;
+}[] = [
   { value: "polish", label: "Polski" },
   { value: "english", label: "Angielski" },
   { value: "ukrainian", label: "Ukraiński" },
@@ -36,7 +42,10 @@ export const realizationLanguageOptions: { value: RealizationLanguage; label: st
   { value: "other", label: "Inne" },
 ];
 
-export const realizationLanguageFlagByValue: Record<RealizationLanguage, string> = {
+export const realizationLanguageFlagByValue: Record<
+  RealizationLanguage,
+  string
+> = {
   polish: "🇵🇱",
   english: "🇬🇧",
   ukrainian: "🇺🇦",
@@ -46,13 +55,16 @@ export const realizationLanguageFlagByValue: Record<RealizationLanguage, string>
 
 export function getRealizationLanguageLabel(language: RealizationLanguage) {
   return (
-    realizationLanguageOptions.find((option) => option.value === language)?.label ??
-    realizationLanguageOptions[0].label
+    realizationLanguageOptions.find((option) => option.value === language)
+      ?.label ?? realizationLanguageOptions[0].label
   );
 }
 
 export function getRealizationLanguageFlag(language: RealizationLanguage) {
-  return realizationLanguageFlagByValue[language] ?? realizationLanguageFlagByValue.polish;
+  return (
+    realizationLanguageFlagByValue[language] ??
+    realizationLanguageFlagByValue.polish
+  );
 }
 
 export type RealizationTranslation = {
@@ -60,14 +72,18 @@ export type RealizationTranslation = {
   gameRules?: string;
 };
 
-export type RealizationTranslations = Partial<Record<RealizationLanguage, RealizationTranslation>>;
+export type RealizationTranslations = Partial<
+  Record<RealizationLanguage, RealizationTranslation>
+>;
 
 export type RealizationLanguageSelection = {
   selectedLanguages: RealizationLanguage[];
   customLanguage: string;
 };
 
-const REALIZATION_LANGUAGE_ORDER = realizationLanguageOptions.map((option) => option.value);
+const REALIZATION_LANGUAGE_ORDER = realizationLanguageOptions.map(
+  (option) => option.value,
+);
 
 const LANGUAGE_TOKEN_TO_VALUE = new Map<string, RealizationLanguage>(
   realizationLanguageOptions.flatMap((option) => [
@@ -134,11 +150,17 @@ export function parseRealizationLanguageSelection(
   };
 }
 
-export function isRealizationLanguageSelectionInvalid(selection: RealizationLanguageSelection) {
+export function isRealizationLanguageSelectionInvalid(
+  selection: RealizationLanguageSelection,
+) {
   const selectedSet = new Set(selection.selectedLanguages);
-  const hasKnownLanguage = selection.selectedLanguages.some((value) => value !== "other");
+  const hasKnownLanguage = selection.selectedLanguages.some(
+    (value) => value !== "other",
+  );
   const hasOtherLanguage = selectedSet.has("other");
-  const normalizedCustomLanguage = normalizeCustomLanguage(selection.customLanguage);
+  const normalizedCustomLanguage = normalizeCustomLanguage(
+    selection.customLanguage,
+  );
 
   if (!hasKnownLanguage && !hasOtherLanguage) {
     return true;
@@ -151,16 +173,24 @@ export function isRealizationLanguageSelectionInvalid(selection: RealizationLang
   return false;
 }
 
-export function toRealizationLanguagePayload(selection: RealizationLanguageSelection): {
+export function toRealizationLanguagePayload(
+  selection: RealizationLanguageSelection,
+): {
   language: RealizationLanguage;
   customLanguage?: string;
 } {
-  const selectedLanguages = normalizeLanguageSelection(selection.selectedLanguages);
+  const selectedLanguages = normalizeLanguageSelection(
+    selection.selectedLanguages,
+  );
   const selectedSet = new Set(selectedLanguages);
   const knownLanguages = selectedLanguages.filter((value) => value !== "other");
   const customParts = splitLanguageTokens(selection.customLanguage);
 
-  if (knownLanguages.length === 1 && !selectedSet.has("other") && customParts.length === 0) {
+  if (
+    knownLanguages.length === 1 &&
+    !selectedSet.has("other") &&
+    customParts.length === 0
+  ) {
     return {
       language: knownLanguages[0],
     };
@@ -177,7 +207,10 @@ export function toRealizationLanguagePayload(selection: RealizationLanguageSelec
   };
 }
 
-export function formatRealizationLanguageSummary(language: RealizationLanguage, customLanguage?: string) {
+export function formatRealizationLanguageSummary(
+  language: RealizationLanguage,
+  customLanguage?: string,
+) {
   return language === "other"
     ? customLanguage?.trim() || "Inne"
     : getRealizationLanguageLabel(language);
@@ -211,7 +244,7 @@ export type Realization = {
   mapImageUrl?: string;
   offerPdfUrl?: string;
   offerPdfName?: string;
-  scenarioId: string;
+  scenarioId?: string;
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;
