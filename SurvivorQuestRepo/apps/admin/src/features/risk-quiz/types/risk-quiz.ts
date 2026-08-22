@@ -66,6 +66,83 @@ export type RiskBoard = {
   totalPoints: number;
 };
 
+export type RiskTeamCategoryStatus = {
+  categoryId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+  attempted: number;
+  total: number;
+};
+
+export type RiskTeamStatus = {
+  teamId: string;
+  teamName: string | null;
+  slotNumber: number;
+  color: string | null;
+  totalAttempted: number;
+  totalCards: number;
+  categories: RiskTeamCategoryStatus[];
+};
+
+export type RiskTeamStatusResponse = {
+  teams: RiskTeamStatus[];
+};
+
+export type RiskTeamResetResult = {
+  teamId: string;
+  resetCount: number;
+  pointsAdjusted: number;
+};
+
+// One row per pool station (task) in the team's scheme — the granular unit
+// that actually carries a per-team status, mirroring the classic game's
+// per-station task table. A printed card is just an interchangeable QR key
+// into a (category, difficulty) pool, so it isn't the unit shown here.
+export type RiskTeamBoardTaskStatus = "todo" | "done" | "failed";
+
+export type RiskTeamBoardTask = {
+  categoryId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+  stationId: string;
+  stationName: string;
+  status: RiskTeamBoardTaskStatus;
+  pointsAwarded: number;
+};
+
+export type RiskTeamPendingDraw = {
+  categoryId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+};
+
+export type RiskTeamBoard = {
+  teamId: string;
+  tasks: RiskTeamBoardTask[];
+  pendingDraw: RiskTeamPendingDraw | null;
+};
+
+export type RiskTeamCardActionResult = {
+  teamId: string;
+  stationId: string;
+  taskStatus: "done" | "failed" | "todo";
+  pointsAwarded: number;
+  teamPoints: number;
+};
+
+export type RiskRemoteDrawResult = {
+  id: string;
+  teamId: string;
+  cardId: string;
+  stationId: string;
+  createdAt: string;
+};
+
+export type RiskCancelRemoteDrawResult = {
+  teamId: string;
+  cancelled: boolean;
+};
+
 export const RISK_DIFFICULTY_OPTIONS: { value: RiskDifficulty; label: string }[] = [
   { value: "EASY", label: "Łatwe" },
   { value: "MEDIUM", label: "Średnie" },

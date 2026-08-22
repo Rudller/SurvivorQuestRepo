@@ -2,15 +2,32 @@ import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
 import type {
   RiskBoard,
+  RiskCancelRemoteDrawResult,
   RiskCardWithCategory,
   RiskCategory,
   RiskDifficulty,
+  RiskRemoteDrawResult,
   RiskScheme,
   RiskSchemeCategory,
+  RiskTeamBoard,
+  RiskTeamCardActionResult,
+  RiskTeamResetResult,
+  RiskTeamStatusResponse,
 } from "../types/risk-quiz";
 
 function adminPath(suffix: string) {
   return buildApiPath(`/mobile/risk-quiz/admin${suffix}`);
+}
+
+function teamTaskPath(
+  realizationId: string,
+  teamId: string,
+  stationId: string,
+  action: "complete" | "fail" | "reset",
+) {
+  return adminPath(
+    `/realizations/${encodeURIComponent(realizationId)}/teams/${encodeURIComponent(teamId)}/tasks/${encodeURIComponent(stationId)}/${action}`,
+  );
 }
 
 export const riskQuizApi = baseApi.injectEndpoints({
@@ -128,6 +145,88 @@ export const riskQuizApi = baseApi.injectEndpoints({
       query: ({ realizationId }) =>
         adminPath(`/realizations/${encodeURIComponent(realizationId)}/board`),
     }),
+    getRiskTeamStatus: build.query<RiskTeamStatusResponse, { realizationId: string }>({
+      query: ({ realizationId }) =>
+        adminPath(`/realizations/${encodeURIComponent(realizationId)}/team-status`),
+      providesTags: ["RiskQuiz"],
+    }),
+    resetRiskTeamAttempts: build.mutation<
+      RiskTeamResetResult,
+      { realizationId: string; teamId: string }
+    >({
+      query: ({ realizationId, teamId }) => ({
+        url: adminPath(
+          `/realizations/${encodeURIComponent(realizationId)}/teams/${encodeURIComponent(teamId)}/reset`,
+        ),
+        method: "POST",
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
+    getRiskTeamBoard: build.query<
+      RiskTeamBoard,
+      { realizationId: string; teamId: string }
+    >({
+      query: ({ realizationId, teamId }) =>
+        adminPath(
+          `/realizations/${encodeURIComponent(realizationId)}/teams/${encodeURIComponent(teamId)}/board`,
+        ),
+      providesTags: ["RiskQuiz"],
+    }),
+    completeRiskCard: build.mutation<
+      RiskTeamCardActionResult,
+      { realizationId: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: teamTaskPath(realizationId, teamId, stationId, "complete"),
+        method: "POST",
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
+    failRiskCard: build.mutation<
+      RiskTeamCardActionResult,
+      { realizationId: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: teamTaskPath(realizationId, teamId, stationId, "fail"),
+        method: "POST",
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
+    resetRiskCard: build.mutation<
+      RiskTeamCardActionResult,
+      { realizationId: string; teamId: string; stationId: string }
+    >({
+      query: ({ realizationId, teamId, stationId }) => ({
+        url: teamTaskPath(realizationId, teamId, stationId, "reset"),
+        method: "POST",
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
+    triggerRiskRemoteDraw: build.mutation<
+      RiskRemoteDrawResult,
+      { realizationId: string; teamId: string; categoryId: string; difficulty: RiskDifficulty }
+    >({
+      query: ({ realizationId, teamId, categoryId, difficulty }) => ({
+        url: adminPath(
+          `/realizations/${encodeURIComponent(realizationId)}/teams/${encodeURIComponent(teamId)}/launch`,
+        ),
+        method: "POST",
+        body: { categoryId, difficulty },
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
+    cancelRiskRemoteDraw: build.mutation<
+      RiskCancelRemoteDrawResult,
+      { realizationId: string; teamId: string }
+    >({
+      query: ({ realizationId, teamId }) => ({
+        url: adminPath(
+          `/realizations/${encodeURIComponent(realizationId)}/teams/${encodeURIComponent(teamId)}/cancel-remote-draw`,
+        ),
+        method: "POST",
+      }),
+      invalidatesTags: ["RiskQuiz"],
+    }),
   }),
 });
 
@@ -147,4 +246,12 @@ export const {
   useGetRiskCardsQuery,
   useGenerateRiskCardsMutation,
   useGetRiskBoardQuery,
+  useGetRiskTeamStatusQuery,
+  useResetRiskTeamAttemptsMutation,
+  useGetRiskTeamBoardQuery,
+  useCompleteRiskCardMutation,
+  useFailRiskCardMutation,
+  useResetRiskCardMutation,
+  useTriggerRiskRemoteDrawMutation,
+  useCancelRiskRemoteDrawMutation,
 } = riskQuizApi;
