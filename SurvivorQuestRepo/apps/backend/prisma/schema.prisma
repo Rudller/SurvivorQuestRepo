@@ -162,6 +162,7 @@ model Station {
   stationScans     TeamStationScan[]
   riskPoolMemberships RiskPoolStation[]
   riskAttempts     RiskAttempt[]
+  riskPendingDraws RiskPendingDraw[]
 
   @@unique([realizationId, qrEntryCode])
 }
@@ -217,7 +218,7 @@ model Realization {
   mapImageUrl         String?
   offerPdfUrl         String?
   offerPdfName        String?
-  scenarioId          String
+  scenarioId          String?
   teamCount           Int
   requiredDevicesCount Int
   peopleCount         Int
@@ -237,7 +238,7 @@ model Realization {
   riskSchemeId        String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
-  scenario            Scenario           @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  scenario            Scenario?          @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
   riskScheme          RiskScheme?        @relation(fields: [riskSchemeId], references: [id], onDelete: SetNull)
   teams               Team[]
   teamAssignments     TeamAssignment[]
@@ -276,6 +277,7 @@ model Team {
   stationScans       TeamStationScan[]
   pointsQrClaims     PointsQrCodeClaim[]
   riskAttempts       RiskAttempt[]
+  riskPendingDraw    RiskPendingDraw?
 
   @@unique([realizationId, slotNumber])
   @@unique([realizationId, color])
@@ -411,6 +413,11 @@ model RiskSchemeCategory {
 model RiskCategory {
   id           String              @id @default(uuid())
   name         String              @unique
+  // Base slug for this category's printed card codes (<codeSlug>-<difficulty>-<n>).
+  // Set once (at creation, or lazily backfilled from the name in place on first
+  // use) and never recomputed on rename, so renaming a category for display never
+  // invalidates cards that are already printed and glued to physical decks.
+  codeSlug     String?             @unique
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
   poolStations RiskPoolStation[]
@@ -445,6 +452,7 @@ model RiskCard {
   realization   Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)
   category      RiskCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   attempts      RiskAttempt[]
+  pendingDraws  RiskPendingDraw[]
 
   @@unique([realizationId, code])
   @@index([categoryId, difficulty])
@@ -467,6 +475,22 @@ model RiskAttempt {
 
   @@index([teamId, stationId])
   @@index([realizationId, teamId])
+}
+
+// A draw ("losowanie") triggered remotely by an admin instead of a real
+// physical QR scan — queued here until the team's device polls for it and
+// consumes it (RiskQuizService.pollPendingDraw). teamId is unique: a team
+// can only have one such draw in flight at a time, which doubles as the
+// collision check on the admin trigger endpoint.
+model RiskPendingDraw {
+  id        String   @id @default(uuid())
+  teamId    String   @unique
+  cardId    String
+  stationId String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  card      RiskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  station   Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
 }
 
 model EventLog {
