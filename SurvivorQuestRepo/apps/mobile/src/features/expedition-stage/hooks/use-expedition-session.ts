@@ -38,6 +38,8 @@ const TASK_REQUEST_RETRY_DELAYS_MS = [350, 900];
 const UNSAFE_MUTATION_RETRY_DELAYS_MS: readonly number[] = [];
 const MOBILE_REQUEST_TIMEOUT_MS = 12_000;
 const MOBILE_PHOTO_UPLOAD_TIMEOUT_MS = 45_000;
+const PHOTO_UPLOAD_STATUS_CHECK_TIMEOUT_MS = 4_000;
+const PHOTO_UPLOAD_STATUS_CHECK_DELAYS_MS = [0, 1_500, 3_000] as const;
 const PENDING_TASK_MUTATIONS_STORAGE_PREFIX = "sq.mobile.pending-task-mutations.v1";
 const PENDING_SYNC_RETRY_INTERVAL_MS = 3_000;
 
@@ -488,6 +490,11 @@ export function applyPendingTaskMutationState(current: ExpeditionSessionState, m
 
 export function applyPendingTaskMutationsState(current: ExpeditionSessionState, mutations: PendingTaskMutation[]) {
   return mutations.reduce(applyPendingTaskMutationState, current);
+}
+
+export function isPhotoSubmissionRecorded(state: ExpeditionSessionState, stationId: string) {
+  const status = state.tasks.find((task) => task.stationId === stationId)?.status;
+  return status === "in-progress" || status === "done";
 }
 
 function computeLinearTimePoints(basePoints: number, timeLimitSeconds: number, startedAt: string, finishedAt: string) {
@@ -1078,13 +1085,42 @@ export function useExpeditionSession(
           text.requestTimedOut,
         );
       } catch (error) {
+        const shouldVerifyServerState =
+          isRetriableNetworkError(error) ||
+          (error instanceof Error && error.message === text.requestTimedOut);
+
+        if (shouldVerifyServerState) {
+          for (const delayMs of PHOTO_UPLOAD_STATUS_CHECK_DELAYS_MS) {
+            if (delayMs > 0) {
+              await wait(delayMs);
+            }
+
+            try {
+              const nextState = await withRequestTimeout(
+                (signal) => fetchMobileSessionState(apiBaseUrl, session.sessionToken, selectedLanguage, { signal }),
+                PHOTO_UPLOAD_STATUS_CHECK_TIMEOUT_MS,
+                text.requestTimedOut,
+              );
+              const reconciledState = applyPendingTaskMutationsState(nextState, pendingTaskMutations);
+              setSessionState(reconciledState);
+
+              if (isPhotoSubmissionRecorded(reconciledState, normalizedStationId)) {
+                return null;
+              }
+            } catch {
+              // A status probe is best-effort. Preserve the original upload
+              // error when the server cannot confirm receiving the photo.
+            }
+          }
+        }
+
         return getApiErrorMessage(error, text.submitPhotoFailed);
       }
 
       void refreshSessionState();
       return null;
     },
-    [offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+    [offlineMode, pendingTaskMutations, refreshSessionState, selectedLanguage, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const submitStationQrScan = useCallback(

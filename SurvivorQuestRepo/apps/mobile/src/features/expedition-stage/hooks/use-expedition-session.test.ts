@@ -16,6 +16,7 @@ import {
 import {
   applyCompletedTaskState,
   applyPendingTaskMutationsState,
+  isPhotoSubmissionRecorded,
   isRetriableNetworkError,
   runRequestWithRetry,
 } from "./use-expedition-session";
@@ -214,6 +215,25 @@ describe("applyPendingTaskMutationsState", () => {
 
     expect(nextState.tasks[0]?.status).toBe("failed");
     expect(nextState.tasks[0]?.pointsAwarded).toBe(0);
+  });
+});
+
+describe("isPhotoSubmissionRecorded", () => {
+  it("confirms a photo when the server moved the task to review or completed it", () => {
+    const state = createSessionState();
+
+    expect(isPhotoSubmissionRecorded(state, "station-1")).toBe(true);
+
+    state.tasks[0] = { ...state.tasks[0], status: "done" };
+    expect(isPhotoSubmissionRecorded(state, "station-1")).toBe(true);
+  });
+
+  it("does not confirm a photo while the task is still untouched", () => {
+    const state = createSessionState();
+    state.tasks[0] = { ...state.tasks[0], status: "todo" };
+
+    expect(isPhotoSubmissionRecorded(state, "station-1")).toBe(false);
+    expect(isPhotoSubmissionRecorded(state, "another-station")).toBe(false);
   });
 });
 
