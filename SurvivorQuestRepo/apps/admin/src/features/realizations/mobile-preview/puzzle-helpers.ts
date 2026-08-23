@@ -68,9 +68,9 @@ export const MASTERMIND_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, {
   },
 };
 export const MINI_SUDOKU_DIFFICULTY_CONFIG: Record<ChallengeDifficulty, { givenCount: number }> = {
-  easy: { givenCount: 45 },
-  medium: { givenCount: 35 },
-  hard: { givenCount: 25 },
+  easy: { givenCount: 42 },
+  medium: { givenCount: 36 },
+  hard: { givenCount: 28 },
 };
 export const TEXT_PUZZLE_MAX_ATTEMPTS = 3;
 export const MEMORY_MAX_MISTAKES = 7;
@@ -143,30 +143,22 @@ export const SIMON_BUTTONS = [
   { id: "8", label: "8", color: "#a855f7" },
   { id: "9", label: "9", color: "#ec4899" },
 ] as const;
-const MINI_SUDOKU_SOLUTIONS: string[][] = [
-  [
-    "5", "3", "4", "6", "7", "8", "9", "1", "2",
-    "6", "7", "2", "1", "9", "5", "3", "4", "8",
-    "1", "9", "8", "3", "4", "2", "5", "6", "7",
-    "8", "5", "9", "7", "6", "1", "4", "2", "3",
-    "4", "2", "6", "8", "5", "3", "7", "9", "1",
-    "7", "1", "3", "9", "2", "4", "8", "5", "6",
-    "9", "6", "1", "5", "3", "7", "2", "8", "4",
-    "2", "8", "7", "4", "1", "9", "6", "3", "5",
-    "3", "4", "5", "2", "8", "6", "1", "7", "9",
-  ],
-  [
-    "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    "4", "5", "6", "7", "8", "9", "1", "2", "3",
-    "7", "8", "9", "1", "2", "3", "4", "5", "6",
-    "2", "3", "4", "5", "6", "7", "8", "9", "1",
-    "5", "6", "7", "8", "9", "1", "2", "3", "4",
-    "8", "9", "1", "2", "3", "4", "5", "6", "7",
-    "3", "4", "5", "6", "7", "8", "9", "1", "2",
-    "6", "7", "8", "9", "1", "2", "3", "4", "5",
-    "9", "1", "2", "3", "4", "5", "6", "7", "8",
-  ],
-];
+// Curated, uniquely solvable boards. Digit/row/column permutations below
+// preserve both uniqueness and difficulty while making each station look different.
+const MINI_SUDOKU_TEMPLATES: Record<ChallengeDifficulty, { puzzle: string; solution: string }> = {
+  easy: {
+    puzzle: "530670010602195000098040060800760403420803001700024006060030280080419005005086079",
+    solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+  },
+  medium: {
+    puzzle: "000260701680070090190004500820100040004602900050003028009300074040050036703018000",
+    solution: "435269781682571493197834562826195347374682915951743628519326874248957136763418259",
+  },
+  hard: {
+    puzzle: "000000907000420180000705026100904000050000040000507009920108000034059000507000000",
+    solution: "462831957795426183381795426173984265659312748248567319926178534834259671517643892",
+  },
+};
 export const HANGMAN_ALPHABET = [
   "A",
   "Ą",
@@ -629,16 +621,33 @@ export function resolveMiniSudokuPuzzle(
   station: StationPuzzleViewModel,
   difficulty: ChallengeDifficulty = "medium",
 ) {
-  const solution = MINI_SUDOKU_SOLUTIONS[resolveSeed(station.stationId) % MINI_SUDOKU_SOLUTIONS.length];
-  const givenCount =
-    MINI_SUDOKU_DIFFICULTY_CONFIG[difficulty]?.givenCount ?? MINI_SUDOKU_DIFFICULTY_CONFIG.medium.givenCount;
-  const revealedIndexes = new Set(
-    shuffleDeterministic(
-      solution.map((_, index) => index),
-      `${station.stationId}-mini-sudoku-${difficulty}`,
-    ).slice(0, givenCount),
+  const resolvedDifficulty = MINI_SUDOKU_TEMPLATES[difficulty] ? difficulty : "medium";
+  const template = MINI_SUDOKU_TEMPLATES[resolvedDifficulty];
+  const seed = `${station.stationId}-mini-sudoku-${resolvedDifficulty}`;
+  const digitOrder = shuffleDeterministic(["1", "2", "3", "4", "5", "6", "7", "8", "9"], `${seed}-digits`);
+  const digitMap = new Map(digitOrder.map((digit, index) => [String(index + 1), digit]));
+  const bandOrder = shuffleDeterministic([0, 1, 2], `${seed}-bands`);
+  const stackOrder = shuffleDeterministic([0, 1, 2], `${seed}-stacks`);
+  const rowOrder = bandOrder.flatMap((band) =>
+    shuffleDeterministic([0, 1, 2], `${seed}-rows-${band}`).map((row) => band * 3 + row),
   );
-  const given = solution.map((value, index) => (revealedIndexes.has(index) ? value : null));
+  const columnOrder = stackOrder.flatMap((stack) =>
+    shuffleDeterministic([0, 1, 2], `${seed}-columns-${stack}`).map((column) => stack * 3 + column),
+  );
+  const shouldTranspose = resolveSeed(`${seed}-transpose`) % 2 === 1;
+
+  const transformGrid = (grid: string) =>
+    Array.from({ length: 81 }, (_, index) => {
+      const outputRow = Math.floor(index / 9);
+      const outputColumn = index % 9;
+      const sourceRow = rowOrder[shouldTranspose ? outputColumn : outputRow];
+      const sourceColumn = columnOrder[shouldTranspose ? outputRow : outputColumn];
+      const value = grid[sourceRow * 9 + sourceColumn];
+      return value === "0" ? null : (digitMap.get(value) ?? value);
+    });
+
+  const solution = transformGrid(template.solution).map((value) => value ?? "");
+  const given = transformGrid(template.puzzle);
   return { given, solution };
 }
 
