@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
@@ -91,6 +91,20 @@ export function usePhotoTaskCapture(
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasSubmittedThisVisit, setHasSubmittedThisVisit] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const previousStationIdRef = useRef(station?.stationId);
+
+  useEffect(() => {
+    if (previousStationIdRef.current === station?.stationId) {
+      return;
+    }
+
+    previousStationIdRef.current = station?.stationId;
+    setIsCaptureActive(false);
+    setIsUploading(false);
+    setUploadError(null);
+    setHasSubmittedThisVisit(false);
+    setPreviewUri(null);
+  }, [station?.stationId]);
 
   const hasPendingSubmission = station?.status === "in-progress" || hasSubmittedThisVisit;
   const isApproved = station?.status === "done";

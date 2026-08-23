@@ -409,7 +409,7 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   outcomePassed: "Passed",
   outcomeTimedOut: "Time expired",
   outcomeFailed: "Failed",
-  outcomePending: "Submitted",
+  outcomePending: "Waiting for approval",
   photoTaskRejectedPopup: "Your photo was rejected by the Game Master. The task was not completed.",
   pendingReviewPopupMessage:
     "The task has been submitted. The Game Master will now check whether the photo shows what it should, then you'll continue in the game.",
@@ -548,7 +548,7 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   outcomePassed: "Зараховано",
   outcomeTimedOut: "Час вичерпано",
   outcomeFailed: "Не зараховано",
-  outcomePending: "Надіслано",
+  outcomePending: "Очікуємо на підтвердження",
   photoTaskRejectedPopup: "Ваше фото відхилено організатором. Завдання не зараховано.",
   pendingReviewPopupMessage:
     "Завдання надіслано. Організатор тепер перевірить, чи фото показує потрібне, після чого ви зможете продовжити гру.",
@@ -688,7 +688,7 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   outcomePassed: "Зачтено",
   outcomeTimedOut: "Время истекло",
   outcomeFailed: "Не зачтено",
-  outcomePending: "Отправлено",
+  outcomePending: "Ожидаем подтверждения",
   photoTaskRejectedPopup: "Ваше фото отклонено организатором. Задание не зачтено.",
   pendingReviewPopupMessage:
     "Задание отправлено. Организатор теперь проверит, соответствует ли фото заданию, после чего вы сможете продолжить игру.",
@@ -829,7 +829,7 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     outcomePassed: "Zaliczono",
     outcomeTimedOut: "Czas minął",
     outcomeFailed: "Nie zaliczono",
-    outcomePending: "Wysłano",
+    outcomePending: "Czekamy na zatwierdzenie",
     photoTaskRejectedPopup: "Zdjęcie zostało odrzucone przez organizatora. Zadanie nie zostało zaliczone.",
     pendingReviewPopupMessage:
       "Zadanie zostało wysłane. Organizator (Mistrz Gry) sprawdzi teraz, czy zdjęcie przedstawia to, co powinno, a potem będziesz mógł kontynuować grę.",
