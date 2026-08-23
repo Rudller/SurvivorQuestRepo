@@ -37,6 +37,7 @@ const LOCATION_SYNC_RETRY_DELAYS_MS = [350, 900];
 const TASK_REQUEST_RETRY_DELAYS_MS = [350, 900];
 const UNSAFE_MUTATION_RETRY_DELAYS_MS: readonly number[] = [];
 const MOBILE_REQUEST_TIMEOUT_MS = 12_000;
+const MOBILE_PHOTO_UPLOAD_TIMEOUT_MS = 45_000;
 const PENDING_TASK_MUTATIONS_STORAGE_PREFIX = "sq.mobile.pending-task-mutations.v1";
 const PENDING_SYNC_RETRY_INTERVAL_MS = 3_000;
 
@@ -1073,7 +1074,7 @@ export function useExpeditionSession(
               stationId: normalizedStationId,
               fileUri,
             }, { signal }),
-          MOBILE_REQUEST_TIMEOUT_MS,
+          MOBILE_PHOTO_UPLOAD_TIMEOUT_MS,
           text.requestTimedOut,
         );
       } catch (error) {
