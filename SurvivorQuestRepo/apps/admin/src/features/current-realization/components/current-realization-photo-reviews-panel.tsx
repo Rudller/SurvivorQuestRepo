@@ -51,7 +51,7 @@ export function CurrentRealizationPhotoReviewsPanel({
       if (action === "approve") {
         await completeTask(basePayload).unwrap();
       } else {
-        await failTask(basePayload).unwrap();
+        await failTask({ ...basePayload, reason: "photo_rejected_by_admin" }).unwrap();
       }
     } catch {
       setActionError("Nie udało się zapisać decyzji dotyczącej zdjęcia.");

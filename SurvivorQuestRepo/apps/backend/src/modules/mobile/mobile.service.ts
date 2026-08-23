@@ -4071,6 +4071,14 @@ export class MobileService {
       } as const;
     }
 
+    if (normalized === 'photo_rejected_by_admin') {
+      return {
+        code: 'photo_rejected_by_admin',
+        label: 'Zdjęcie odrzucone przez organizatora',
+        raw,
+      } as const;
+    }
+
     if (!raw) {
       return {
         code: 'manual_fail',

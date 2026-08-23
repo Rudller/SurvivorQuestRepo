@@ -443,13 +443,13 @@ export class MobileController {
   async failMobileAdminCurrentTeamTask(
     @Param('teamId') teamId: string,
     @Param('stationId') stationId: string,
-    @Body() payload: AdminFailTaskPayload,
+    @Body() payload?: AdminFailTaskPayload,
   ) {
     return this.mobileService.failMobileAdminTeamTask({
       realizationId: 'current',
       teamId,
       stationId,
-      reason: payload.reason,
+      reason: payload?.reason,
     });
   }
 
@@ -630,13 +630,13 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
     @Param('teamId') teamId: string,
     @Param('stationId') stationId: string,
-    @Body() payload: AdminFailTaskPayload,
+    @Body() payload?: AdminFailTaskPayload,
   ) {
     return this.mobileService.failMobileAdminTeamTask({
       realizationId,
       teamId,
       stationId,
-      reason: payload.reason,
+      reason: payload?.reason,
     });
   }
 }

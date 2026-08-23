@@ -1200,6 +1200,54 @@ describe('MobileService task scoring', () => {
     expect(result.taskStatus).toBe('todo');
   });
 
+  it('records the dedicated failure event when an admin rejects a photo', async () => {
+    const { service, prisma } = createService();
+
+    jest
+      .spyOn(service as never, 'resolveMobileAdminTeamTaskContext')
+      .mockResolvedValue({
+        realization: { id: 'realization-1' },
+        team: { id: 'team-1' },
+        station: { id: 'station-1', type: 'photo-task' },
+        existingProgress: {
+          id: 'progress-1',
+          status: TaskStatus.IN_PROGRESS,
+          pointsAwarded: 0,
+          startedAt: new Date('2026-05-10T10:00:00.000Z'),
+        },
+        stationId: 'station-1',
+      });
+    const emitEvent = jest
+      .spyOn(service as never, 'emitEvent')
+      .mockResolvedValue(undefined);
+    jest.spyOn(service as never, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    const result = await service.failMobileAdminTeamTask({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+      reason: 'photo_rejected_by_admin',
+    });
+
+    expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
+      where: { id: 'progress-1' },
+      data: expect.objectContaining({
+        status: TaskStatus.DONE,
+        pointsAwarded: 0,
+      }),
+    });
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'task_failed',
+        payload: expect.objectContaining({
+          reason: 'photo_rejected_by_admin',
+          reasonLabel: 'Zdjęcie odrzucone przez organizatora',
+        }),
+      }),
+    );
+    expect(result.taskStatus).toBe('failed');
+  });
+
   it('requires a location update before starting tasks when realization requires location', async () => {
     const { service, prisma } = createService();
 

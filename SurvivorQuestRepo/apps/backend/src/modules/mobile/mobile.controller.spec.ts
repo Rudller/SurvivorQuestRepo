@@ -8,6 +8,7 @@ describe('MobileController payload validation', () => {
       updateMobileTeamLocation: jest.fn(),
       joinMobileSession: jest.fn(),
       completeMobileTask: jest.fn(),
+      failMobileAdminTeamTask: jest.fn(),
     };
 
     const controller = new MobileController(mobileService as never);
@@ -60,5 +61,25 @@ describe('MobileController payload validation', () => {
       BadRequestException,
     );
     expect(mobileService.completeMobileTask).not.toHaveBeenCalled();
+  });
+
+  it('allows an admin to fail a task without an optional reason body', async () => {
+    const { controller, mobileService } = createController();
+    mobileService.failMobileAdminTeamTask.mockResolvedValue({
+      taskStatus: 'failed',
+    });
+
+    await controller.failMobileAdminCurrentTeamTask(
+      'team-1',
+      'station-1',
+      undefined,
+    );
+
+    expect(mobileService.failMobileAdminTeamTask).toHaveBeenCalledWith({
+      realizationId: 'current',
+      teamId: 'team-1',
+      stationId: 'station-1',
+      reason: undefined,
+    });
   });
 });
