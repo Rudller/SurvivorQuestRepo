@@ -269,6 +269,9 @@ describe('RealizationService.createRealization (risk-quiz)', () => {
 
     const riskQuizService = {
       generateMissingCards: jest.fn().mockResolvedValue(undefined),
+      // Risk-quiz realizations clone their deck on create/update, exactly like
+      // non-risk ones clone their Scenario.
+      ensureRealizationOwnedScheme: jest.fn().mockResolvedValue('cloned-scheme'),
     };
 
     const service = new RealizationService(
@@ -353,6 +356,9 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
 
     const riskQuizService = {
       generateMissingCards: jest.fn().mockResolvedValue(undefined),
+      // Risk-quiz realizations clone their deck on create/update, exactly like
+      // non-risk ones clone their Scenario.
+      ensureRealizationOwnedScheme: jest.fn().mockResolvedValue('cloned-scheme'),
     };
 
     const service = new RealizationService(

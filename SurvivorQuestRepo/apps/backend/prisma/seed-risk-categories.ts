@@ -432,11 +432,13 @@ async function main() {
   let totalCreatedStations = 0;
 
   for (const categorySeed of categories) {
-    const category = await prisma.riskCategory.upsert({
-      where: { name: categorySeed.name },
-      update: {},
-      create: { name: categorySeed.name },
-    });
+    // Category names are only unique among templates now (realization-owned
+    // clones reuse their source's name), so this can't be a by-name upsert.
+    const category =
+      (await prisma.riskCategory.findFirst({
+        where: { name: categorySeed.name, realizationId: null },
+      })) ??
+      (await prisma.riskCategory.create({ data: { name: categorySeed.name } }));
 
     console.log(`Kategoria "${category.name}" (${category.id}) gotowa.`);
 

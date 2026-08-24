@@ -190,11 +190,13 @@ const labelByDifficulty: Record<RiskDifficulty, string> = {
 };
 
 async function main() {
-  const category = await prisma.riskCategory.upsert({
-    where: { name: CATEGORY_NAME },
-    update: {},
-    create: { name: CATEGORY_NAME },
-  });
+  // Category names are only unique among templates now (realization-owned
+  // clones reuse their source's name), so this can't be a by-name upsert.
+  const category =
+    (await prisma.riskCategory.findFirst({
+      where: { name: CATEGORY_NAME, realizationId: null },
+    })) ??
+    (await prisma.riskCategory.create({ data: { name: CATEGORY_NAME } }));
 
   console.log(`Kategoria "${category.name}" (${category.id}) gotowa.`);
 

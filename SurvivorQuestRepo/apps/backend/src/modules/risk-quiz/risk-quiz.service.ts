@@ -9,6 +9,7 @@ import {
   StationType as PrismaStationType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StationService } from '../station/station.service';
 import { getOpaqueTokenCandidates } from '../../shared/lib/opaque-token';
 import {
   parseCompletionCode,
@@ -61,7 +62,187 @@ function slugify(value: string) {
 
 @Injectable()
 export class RiskQuizService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stationService: StationService,
+  ) {}
+
+  // --- Realization-owned deck clones ---
+  //
+  // Mirrors Scenario -> Realization cloning (see ScenarioService.cloneScenario):
+  // a realization plays its OWN copy of a deck, so editing a task from inside one
+  // realization can never leak into another realization or into the library.
+  // Library listings therefore only ever show templates (realizationId: null).
+
+  /**
+   * Deep-copies a template deck (scheme -> categories -> pools -> stations) into
+   * a realization-owned clone and returns the new scheme id.
+   *
+   * The cloned categories keep their source's `codeSlug` verbatim. That is load
+   * bearing: printed card codes are `<codeSlug>-<difficulty>-<n>`, so reusing the
+   * slug is what keeps one physical QR sticker valid across every realization
+   * built from the same template deck.
+   */
+  async cloneSchemeForRealization(
+    sourceSchemeId: string,
+    realizationId: string,
+  ): Promise<string> {
+    const source = await this.prisma.riskScheme.findUnique({
+      where: { id: sourceSchemeId },
+      include: {
+        schemeCategories: {
+          orderBy: { order: 'asc' },
+          include: { category: { include: { poolStations: true } } },
+        },
+      },
+    });
+    if (!source) {
+      throw new NotFoundException('Scheme not found');
+    }
+
+    const clonedScheme = await this.prisma.riskScheme.create({
+      data: {
+        name: source.name,
+        realizationId,
+        sourceTemplateId: source.sourceTemplateId ?? source.id,
+      },
+    });
+
+    for (const [order, schemeCategory] of source.schemeCategories.entries()) {
+      const sourceCategory = schemeCategory.category;
+      const clonedCategory = await this.prisma.riskCategory.create({
+        data: {
+          name: sourceCategory.name,
+          codeSlug: sourceCategory.codeSlug,
+          realizationId,
+          sourceTemplateId: sourceCategory.sourceTemplateId ?? sourceCategory.id,
+        },
+      });
+
+      await this.prisma.riskSchemeCategory.create({
+        data: { schemeId: clonedScheme.id, categoryId: clonedCategory.id, order },
+      });
+
+      // Cards already minted for this realization still point at the SOURCE
+      // category. scanCard() resolves a scanned code by checking that the card's
+      // category is part of the realization's current deck, so leaving them
+      // behind would make every already-printed sticker unscannable the moment
+      // the deck got adopted. Re-point them instead — the code strings are
+      // unaffected (the clone inherited the slug), so the physical cards stay valid.
+      await this.prisma.riskCard.updateMany({
+        where: { realizationId, categoryId: sourceCategory.id },
+        data: { categoryId: clonedCategory.id },
+      });
+
+      if (sourceCategory.poolStations.length === 0) {
+        continue;
+      }
+
+      // Clone the pool's stations too, so their content (question, answers,
+      // time limit, ...) is editable per realization. Passing only realizationId
+      // leaves scenarioInstanceId null — these are risk-pool stations, never
+      // scenario stations, which is exactly what assignStationToPool's guard
+      // below relies on to keep RiskAttempt and TeamTaskProgress disjoint.
+      const clonedStations = await this.stationService.cloneStationsForScenario(
+        sourceCategory.poolStations.map((poolStation) => poolStation.stationId),
+        { realizationId },
+      );
+
+      const clonedStationIdBySourceId = new Map(
+        clonedStations.map((station, index) => [
+          sourceCategory.poolStations[index].stationId,
+          station.id,
+        ]),
+      );
+
+      for (const poolStation of sourceCategory.poolStations) {
+        const clonedStationId = clonedStationIdBySourceId.get(
+          poolStation.stationId,
+        );
+        if (!clonedStationId) {
+          continue;
+        }
+        await this.prisma.riskPoolStation.create({
+          data: {
+            categoryId: clonedCategory.id,
+            difficulty: poolStation.difficulty,
+            stationId: clonedStationId,
+          },
+        });
+
+        // Same reasoning as the card re-point above: "has this team already done
+        // this task" is decided by comparing RiskAttempt.stationId against the
+        // pool's station ids. Attempts recorded before adoption reference the
+        // source station, so without this a mid-game adoption would silently
+        // hand every team their finished tasks again.
+        await this.prisma.riskAttempt.updateMany({
+          where: { realizationId, stationId: poolStation.stationId },
+          data: { stationId: clonedStationId },
+        });
+      }
+    }
+
+    // Pending remote-launch draws are ephemeral commands that still reference
+    // pre-clone card/station ids. They're re-issued with one click, so dropping
+    // them is cleaner than rewriting them.
+    const teams = await this.prisma.team.findMany({
+      where: { realizationId },
+      select: { id: true },
+    });
+    if (teams.length > 0) {
+      await this.prisma.riskPendingDraw.deleteMany({
+        where: { teamId: { in: teams.map((team) => team.id) } },
+      });
+    }
+
+    return clonedScheme.id;
+  }
+
+  /**
+   * Returns the realization's own deck id, cloning the template it currently
+   * points at if it hasn't been cloned yet. Realizations created before
+   * per-realization decks existed still reference a template directly, so every
+   * realization-scoped edit funnels through here first (lazy adoption) instead
+   * of silently editing the shared library.
+   */
+  async ensureRealizationOwnedScheme(realizationId: string): Promise<string> {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    if (!realization.riskSchemeId) {
+      throw new BadRequestException(
+        'This realization has no assigned scheme (talia)',
+      );
+    }
+
+    const scheme = await this.prisma.riskScheme.findUnique({
+      where: { id: realization.riskSchemeId },
+      select: { id: true, realizationId: true },
+    });
+    if (!scheme) {
+      throw new NotFoundException('Scheme not found');
+    }
+    if (scheme.realizationId === realizationId) {
+      return scheme.id;
+    }
+
+    const clonedSchemeId = await this.cloneSchemeForRealization(
+      scheme.id,
+      realizationId,
+    );
+    await this.prisma.realization.update({
+      where: { id: realizationId },
+      data: { riskSchemeId: clonedSchemeId },
+    });
+    return clonedSchemeId;
+  }
+
+  /** The realization's own deck with everything the admin editor renders. */
+  async getRealizationScheme(realizationId: string) {
+    const schemeId = await this.ensureRealizationOwnedScheme(realizationId);
+    return this.prisma.riskScheme.findUnique({
+      where: { id: schemeId },
+      include: RiskQuizService.schemeCategoriesInclude,
+    });
+  }
 
   private async requireTeamSession(sessionToken: string) {
     if (!sessionToken?.trim()) {
@@ -329,14 +510,13 @@ export class RiskQuizService {
     completionCode: string | null;
     quizData: unknown;
   }) {
-    const isAnswerIndexType = ANSWER_INDEX_STATION_TYPES.has(station.type);
-    const quiz = isAnswerIndexType
-      ? (station.quizData as {
-          question?: string;
-          answers?: string[];
-          audioUrl?: string;
-        } | null)
-      : null;
+    const quiz = station.quizData as {
+      question?: string;
+      answers?: string[];
+      correctAnswerIndex?: number;
+      audioUrl?: string;
+      acceptedAnswers?: string[];
+    } | null;
     const completionCodeLength =
       parseCompletionCode(station.completionCode)?.length ?? 0;
 
@@ -348,19 +528,26 @@ export class RiskQuizService {
       imageUrl: station.imageUrl,
       points: station.points,
       timeLimitSeconds: station.timeLimitSeconds,
-      // Deliberately no correct-answer data here — only revealed after the
-      // team submits, in submitAnswer's response.
       completionCodeLength:
         completionCodeLength > 0 ? completionCodeLength : undefined,
       completionCodeInputMode: resolveCompletionCodeInputMode(
         station.completionCode,
       ),
+      // Full quiz payload (including the correct answer / secret) is exposed
+      // here for every type now, not just quiz/audio-quiz — the mobile client
+      // renders the real interactive station panels for non-answer-index
+      // types (wordle, mastermind, ...), which need their secret client-side
+      // the same way normal (non-risk-quiz) stations already do. Quiz/audio-
+      // quiz correctness is still verified server-side in submitAnswer() via
+      // resolveOutcome() below, so this doesn't change how those are scored.
       quiz:
         quiz && Array.isArray(quiz.answers)
           ? {
               question: quiz.question,
               answers: quiz.answers,
+              correctAnswerIndex: quiz.correctAnswerIndex,
               audioUrl: quiz.audioUrl,
+              acceptedAnswers: quiz.acceptedAnswers,
             }
           : undefined,
     };
@@ -532,6 +719,9 @@ export class RiskQuizService {
 
   async listSchemes() {
     return this.prisma.riskScheme.findMany({
+      // Templates only — realization-owned clones are reached through
+      // getRealizationScheme(), never through the shared library.
+      where: { realizationId: null },
       orderBy: { name: 'asc' },
       include: RiskQuizService.schemeCategoriesInclude,
     });
@@ -591,6 +781,8 @@ export class RiskQuizService {
 
   async listCategories() {
     return this.prisma.riskCategory.findMany({
+      // Templates only — see listSchemes().
+      where: { realizationId: null },
       orderBy: { name: 'asc' },
       include: RiskQuizService.poolStationsInclude,
     });
@@ -639,8 +831,12 @@ export class RiskQuizService {
     });
   }
 
-  // Finds a codeSlug for `name` that isn't already taken by another category,
-  // appending -2, -3, ... on collision (e.g. two names that slugify the same).
+  // Finds a codeSlug for `name` that isn't already taken by another TEMPLATE
+  // category, appending -2, -3, ... on collision (e.g. two names that slugify
+  // the same). Only templates are considered: realization-owned clones
+  // deliberately duplicate their source's slug (that is what keeps printed QR
+  // stickers portable across realizations), so counting them as collisions
+  // would push every new template onto a needless -2 suffix.
   private async generateUniqueCategoryCodeSlug(
     name: string,
     excludeCategoryId?: string,
@@ -650,8 +846,8 @@ export class RiskQuizService {
     let suffix = 1;
 
     for (;;) {
-      const existing = await this.prisma.riskCategory.findUnique({
-        where: { codeSlug: candidate },
+      const existing = await this.prisma.riskCategory.findFirst({
+        where: { codeSlug: candidate, realizationId: null },
       });
       if (!existing || existing.id === excludeCategoryId) {
         return candidate;
@@ -699,6 +895,39 @@ export class RiskQuizService {
     });
     if (!station) {
       throw new BadRequestException('Station not found');
+    }
+
+    // Ryzykanci must stay fully separate from the normal game: a station that
+    // belongs to a scenario instance tracks its progress via TeamTaskProgress,
+    // keyed by that row's id. If the same row were also referenced by a
+    // RiskPoolStation, admin resets of one system (e.g. resetMobileAdminTeamTask)
+    // would silently leave the other's progress (RiskAttempt) stale, since
+    // neither reset touches both tables.
+    //
+    // Scenario membership is the real disqualifier — NOT realizationId, which a
+    // legitimately risk-owned station now carries too (see
+    // cloneSchemeForRealization). A realization-owned risk station is fine as
+    // long as it belongs to the same realization as the category receiving it.
+    if (station.scenarioInstanceId !== null) {
+      throw new BadRequestException(
+        'Stanowisko należące do scenariusza nie może trafić do puli Ryzykantów.',
+      );
+    }
+
+    const category = await this.prisma.riskCategory.findUnique({
+      where: { id: input.categoryId },
+      select: { realizationId: true },
+    });
+    if (!category) {
+      throw new BadRequestException('Category not found');
+    }
+    if (
+      station.realizationId !== null &&
+      station.realizationId !== category.realizationId
+    ) {
+      throw new BadRequestException(
+        'Stanowisko należy do innej realizacji niż ta pula.',
+      );
     }
 
     try {

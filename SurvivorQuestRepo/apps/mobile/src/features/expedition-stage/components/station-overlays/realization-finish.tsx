@@ -22,9 +22,11 @@ const REALIZATION_FINISH_TEXT: Record<
     topThreeTeams: string;
     yourTeam: string;
     yourTeamUnavailable: string;
+    finalInstructionIntro: string;
     finalInstruction: string;
     finalInstructionBold: string;
     finalInstructionSuffix: string;
+    finalInstructionOutro: string;
     closePreview: string;
     matchSummary: string;
     fullResultsTable: string;
@@ -47,9 +49,11 @@ const REALIZATION_FINISH_TEXT: Record<
     topThreeTeams: "Top 3 drużyny",
     yourTeam: "Wasza drużyna",
     yourTeamUnavailable: "Dane Waszej drużyny nie są jeszcze dostępne.",
-    finalInstruction: "Świetna robota! Po zakończeniu realizacji prosimy całą drużynę o powrót na miejsce startu,",
+    finalInstructionIntro: "Świetna robota!",
+    finalInstruction: "Po zakończeniu realizacji prosimy całą drużynę o powrót na miejsce startu,",
     finalInstructionBold: "oddanie tabletów organizatorowi",
-    finalInstructionSuffix: "oraz potwierdzenie zakończenia udziału. Dziękujemy za grę 💚",
+    finalInstructionSuffix: "oraz potwierdzenie zakończenia udziału.",
+    finalInstructionOutro: "Dziękujemy za grę 💚",
     closePreview: "Zamknij podgląd",
     matchSummary: "Podsumowanie",
     fullResultsTable: "📊 Pełna tabela wyników",
@@ -71,9 +75,11 @@ const REALIZATION_FINISH_TEXT: Record<
     topThreeTeams: "Top 3 teams",
     yourTeam: "Your team",
     yourTeamUnavailable: "Your team data is not available yet.",
-    finalInstruction: "Great job! After the realization ends, please return to the start point,",
+    finalInstructionIntro: "Great job!",
+    finalInstruction: "After the realization ends, please return to the start point,",
     finalInstructionBold: "hand the tablets to the organizer",
-    finalInstructionSuffix: "and confirm the end of participation. Thank you for playing 💚",
+    finalInstructionSuffix: "and confirm the end of participation.",
+    finalInstructionOutro: "Thank you for playing 💚",
     closePreview: "Close preview",
     matchSummary: "Match summary",
     fullResultsTable: "📊 Full results table",
@@ -95,9 +101,11 @@ const REALIZATION_FINISH_TEXT: Record<
     topThreeTeams: "Топ 3 команди",
     yourTeam: "Ваша команда",
     yourTeamUnavailable: "Дані вашої команди ще недоступні.",
-    finalInstruction: "Чудова робота! Після завершення реалізації просимо всю команду повернутися до місця старту,",
+    finalInstructionIntro: "Чудова робота!",
+    finalInstruction: "Після завершення реалізації просимо всю команду повернутися до місця старту,",
     finalInstructionBold: "передати планшети організатору",
-    finalInstructionSuffix: "та підтвердити завершення участі. Дякуємо за гру 💚",
+    finalInstructionSuffix: "та підтвердити завершення участі.",
+    finalInstructionOutro: "Дякуємо за гру 💚",
     closePreview: "Закрити перегляд",
     matchSummary: "Підсумок",
     fullResultsTable: "📊 Повна таблиця результатів",
@@ -119,9 +127,11 @@ const REALIZATION_FINISH_TEXT: Record<
     topThreeTeams: "Топ-3 команды",
     yourTeam: "Ваша команда",
     yourTeamUnavailable: "Данные вашей команды пока недоступны.",
-    finalInstruction: "Отличная работа! После завершения реализации просим всю команду вернуться на место старта,",
+    finalInstructionIntro: "Отличная работа!",
+    finalInstruction: "После завершения реализации просим всю команду вернуться на место старта,",
     finalInstructionBold: "передать планшеты организатору",
-    finalInstructionSuffix: "и подтвердить завершение участия. Спасибо за игру 💚",
+    finalInstructionSuffix: "и подтвердить завершение участия.",
+    finalInstructionOutro: "Спасибо за игру 💚",
     closePreview: "Закрыть просмотр",
     matchSummary: "Сводка",
     fullResultsTable: "📊 Полная таблица результатов",
@@ -512,11 +522,26 @@ export function RealizationFinishOverlay({
           style={{ borderColor: EXPEDITION_THEME.accentStrong, backgroundColor: EXPEDITION_THEME.panelStrong }}
         >
           <Text
-            className={isTablet ? "text-xl font-semibold" : "text-lg font-semibold"}
+            className={isTablet ? "text-3xl font-extrabold" : "text-2xl font-extrabold"}
+            style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center" }}
+          >
+            {text.finalInstructionIntro}
+          </Text>
+          <Text
+            className={isTablet ? "mt-2 text-xl font-semibold" : "mt-2 text-lg font-semibold"}
             style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center", lineHeight: isTablet ? 32 : 27 }}
           >
             {text.finalInstruction}{" "}
-            <Text style={{ fontWeight: "900" }}>{text.finalInstructionBold}</Text> {text.finalInstructionSuffix}
+            <Text style={{ fontWeight: "900", textDecorationLine: "underline", textTransform: "uppercase" }}>
+              {text.finalInstructionBold}
+            </Text>{" "}
+            {text.finalInstructionSuffix}
+          </Text>
+          <Text
+            className={isTablet ? "mt-2 text-2xl font-extrabold" : "mt-2 text-xl font-extrabold"}
+            style={{ color: EXPEDITION_THEME.accentStrong, textAlign: "center" }}
+          >
+            {text.finalInstructionOutro}
           </Text>
         </View>
 

@@ -197,6 +197,13 @@ export class RealizationService {
     }
 
     if (isRiskQuizType) {
+      // Give the realization its OWN copy of the chosen deck, exactly like a
+      // non-risk realization gets its own cloned Scenario + Stations above. The
+      // realization is created pointing at the template; this repoints it at the
+      // clone. Must run before card generation so the cards are minted against
+      // the realization's own categories.
+      await this.riskQuizService.ensureRealizationOwnedScheme(realizationId);
+
       // Provisions the (deterministic, per-category) card set right away, so
       // an operator never has to remember to click "Wygeneruj brakujące
       // karty" before printing — riskSchemeId is guaranteed set here, DTO
@@ -364,6 +371,14 @@ export class RealizationService {
     }
 
     if (isRiskQuizType) {
+      // Picking a different deck in the editor sets riskSchemeId back to a
+      // template id, so re-clone here. A no-op when the realization is already
+      // pointing at its own clone. The previous clone is deliberately left in
+      // place rather than deleted — it may still be referenced by RiskAttempt
+      // rows, and losing played history to a dropdown change would be worse
+      // than an orphaned row.
+      await this.riskQuizService.ensureRealizationOwnedScheme(realizationId);
+
       // Same auto-provisioning as createRealization — also covers switching
       // an existing realization to risk-quiz, or changing its scheme.
       await this.riskQuizService.generateMissingCards(realizationId);

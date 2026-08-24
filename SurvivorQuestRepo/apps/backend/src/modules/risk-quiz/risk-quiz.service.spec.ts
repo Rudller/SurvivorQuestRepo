@@ -4,15 +4,20 @@ import { RiskQuizService } from './risk-quiz.service';
 function createService() {
   const prisma = {
     teamAssignment: { findFirst: jest.fn() },
-    realization: { findUnique: jest.fn() },
+    realization: { findUnique: jest.fn(), update: jest.fn() },
     riskCard: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
       create: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     riskCategory: {
       findUnique: jest.fn().mockResolvedValue(null),
+      // Slug-collision lookups are template-scoped findFirst now (codeSlug is no
+      // longer a unique column); default to "no collision".
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -20,6 +25,7 @@ function createService() {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      create: jest.fn(),
     },
     riskPendingDraw: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -28,9 +34,18 @@ function createService() {
       delete: jest.fn(),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    riskScheme: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
     riskSchemeCategory: {
       findMany: jest.fn(),
       findFirst: jest.fn().mockResolvedValue({ categoryId: 'category-1' }),
+      create: jest.fn(),
     },
     station: { findUnique: jest.fn() },
     riskAttempt: {
@@ -38,15 +53,24 @@ function createService() {
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
-    team: { update: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
+    team: {
+      update: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn(),
+    },
     $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 
-  const service = new RiskQuizService(prisma as never);
-  return { service, prisma };
+  const stationService = {
+    cloneStationsForScenario: jest.fn().mockResolvedValue([]),
+  };
+
+  const service = new RiskQuizService(prisma as never, stationService as never);
+  return { service, prisma, stationService };
 }
 
 const team = { id: 'team-1', points: 0 };
@@ -113,7 +137,13 @@ describe('RiskQuizService.scanCard', () => {
         timeLimitSeconds: 0,
         completionCodeLength: undefined,
         completionCodeInputMode: 'alphanumeric',
-        quiz: { question: 'Q1?', answers: ['a', 'b'], audioUrl: undefined },
+        quiz: {
+          question: 'Q1?',
+          answers: ['a', 'b'],
+          correctAnswerIndex: 1,
+          audioUrl: undefined,
+          acceptedAnswers: undefined,
+        },
       },
     });
   });
@@ -338,7 +368,8 @@ describe('RiskQuizService.createCategory', () => {
 
   it('appends a numeric suffix when the derived slug collides with an existing category', async () => {
     const { service, prisma } = createService();
-    prisma.riskCategory.findUnique
+    // Slug collisions are looked up with a template-scoped findFirst now.
+    prisma.riskCategory.findFirst
       .mockResolvedValueOnce({ id: 'other-category', codeSlug: 'historia' })
       .mockResolvedValueOnce(null);
     prisma.riskCategory.create.mockResolvedValue({
@@ -411,6 +442,269 @@ describe('RiskQuizService.updateCategory', () => {
       service.updateCategory('missing-category', 'Nowa nazwa'),
     ).rejects.toThrow(NotFoundException);
     expect(prisma.riskCategory.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RiskQuizService.cloneSchemeForRealization', () => {
+  function arrangeTemplateDeck(prisma: ReturnType<typeof createService>['prisma']) {
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'template-scheme',
+      name: 'Standardowa',
+      sourceTemplateId: null,
+      schemeCategories: [
+        {
+          order: 0,
+          category: {
+            id: 'template-category',
+            name: 'Historia',
+            codeSlug: 'historia',
+            sourceTemplateId: null,
+            poolStations: [
+              { stationId: 'template-station', difficulty: 'EASY' },
+            ],
+          },
+        },
+      ],
+    });
+    prisma.riskScheme.create.mockResolvedValue({ id: 'cloned-scheme' });
+    prisma.riskCategory.create.mockResolvedValue({ id: 'cloned-category' });
+    prisma.riskSchemeCategory.create.mockResolvedValue({ id: 'cloned-link' });
+    prisma.riskPoolStation.create.mockResolvedValue({ id: 'cloned-pool' });
+  }
+
+  it('clones the deck onto the realization and rewires the pool to the cloned station', async () => {
+    const { service, prisma, stationService } = createService();
+    arrangeTemplateDeck(prisma);
+    stationService.cloneStationsForScenario.mockResolvedValue([
+      { id: 'cloned-station' },
+    ]);
+
+    const clonedSchemeId = await service.cloneSchemeForRealization(
+      'template-scheme',
+      'realization-1',
+    );
+
+    expect(clonedSchemeId).toBe('cloned-scheme');
+    expect(prisma.riskScheme.create).toHaveBeenCalledWith({
+      data: {
+        name: 'Standardowa',
+        realizationId: 'realization-1',
+        sourceTemplateId: 'template-scheme',
+      },
+    });
+    // Stations are cloned with realizationId only — never scenarioInstanceId,
+    // which is what keeps them out of TeamTaskProgress territory.
+    expect(stationService.cloneStationsForScenario).toHaveBeenCalledWith(
+      ['template-station'],
+      { realizationId: 'realization-1' },
+    );
+    expect(prisma.riskPoolStation.create).toHaveBeenCalledWith({
+      data: {
+        categoryId: 'cloned-category',
+        difficulty: 'EASY',
+        stationId: 'cloned-station',
+      },
+    });
+  });
+
+  // Adopting a deck mid-game must not strand the cards already printed for this
+  // realization: scanCard() only accepts a card whose category is in the current
+  // deck, so the cards have to follow the category into the clone.
+  it('re-points already-minted cards and recorded attempts onto the clone', async () => {
+    const { service, prisma, stationService } = createService();
+    arrangeTemplateDeck(prisma);
+    stationService.cloneStationsForScenario.mockResolvedValue([
+      { id: 'cloned-station' },
+    ]);
+    prisma.team.findMany.mockResolvedValue([{ id: 'team-1' }]);
+
+    await service.cloneSchemeForRealization('template-scheme', 'realization-1');
+
+    expect(prisma.riskCard.updateMany).toHaveBeenCalledWith({
+      where: { realizationId: 'realization-1', categoryId: 'template-category' },
+      data: { categoryId: 'cloned-category' },
+    });
+    expect(prisma.riskAttempt.updateMany).toHaveBeenCalledWith({
+      where: { realizationId: 'realization-1', stationId: 'template-station' },
+      data: { stationId: 'cloned-station' },
+    });
+    expect(prisma.riskPendingDraw.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: { in: ['team-1'] } },
+    });
+  });
+
+  // Load-bearing: printed card codes are <codeSlug>-<difficulty>-<n>, so a clone
+  // that invented a fresh slug would invalidate every physical QR sticker.
+  it("copies the source category's codeSlug verbatim", async () => {
+    const { service, prisma, stationService } = createService();
+    arrangeTemplateDeck(prisma);
+    stationService.cloneStationsForScenario.mockResolvedValue([
+      { id: 'cloned-station' },
+    ]);
+
+    await service.cloneSchemeForRealization('template-scheme', 'realization-1');
+
+    expect(prisma.riskCategory.create).toHaveBeenCalledWith({
+      data: {
+        name: 'Historia',
+        codeSlug: 'historia',
+        realizationId: 'realization-1',
+        sourceTemplateId: 'template-category',
+      },
+    });
+  });
+});
+
+describe('RiskQuizService.ensureRealizationOwnedScheme', () => {
+  it('returns the existing scheme untouched when it is already realization-owned', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'already-cloned',
+    });
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'already-cloned',
+      realizationId: 'realization-1',
+    });
+
+    await expect(
+      service.ensureRealizationOwnedScheme('realization-1'),
+    ).resolves.toBe('already-cloned');
+    expect(prisma.riskScheme.create).not.toHaveBeenCalled();
+    expect(prisma.realization.update).not.toHaveBeenCalled();
+  });
+
+  it('lazily clones a template deck and repoints the realization at the clone', async () => {
+    const { service, prisma, stationService } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'template-scheme',
+    });
+    prisma.riskScheme.findUnique
+      // ensureRealizationOwnedScheme's own lookup: still a template.
+      .mockResolvedValueOnce({ id: 'template-scheme', realizationId: null })
+      // cloneSchemeForRealization's deep read.
+      .mockResolvedValueOnce({
+        id: 'template-scheme',
+        name: 'Standardowa',
+        sourceTemplateId: null,
+        schemeCategories: [],
+      });
+    prisma.riskScheme.create.mockResolvedValue({ id: 'cloned-scheme' });
+    stationService.cloneStationsForScenario.mockResolvedValue([]);
+
+    await expect(
+      service.ensureRealizationOwnedScheme('realization-1'),
+    ).resolves.toBe('cloned-scheme');
+    expect(prisma.realization.update).toHaveBeenCalledWith({
+      where: { id: 'realization-1' },
+      data: { riskSchemeId: 'cloned-scheme' },
+    });
+  });
+});
+
+describe('RiskQuizService library listings', () => {
+  it('excludes realization-owned clones from the shared library', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findMany.mockResolvedValue([]);
+    prisma.riskCategory.findMany.mockResolvedValue([]);
+
+    await service.listSchemes();
+    await service.listCategories();
+
+    expect(prisma.riskScheme.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { realizationId: null } }),
+    );
+    expect(prisma.riskCategory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { realizationId: null } }),
+    );
+  });
+});
+
+describe('RiskQuizService.assignStationToPool', () => {
+  it('assigns an unattached template station (no scenarioInstanceId/realizationId)', async () => {
+    const { service, prisma } = createService();
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      scenarioInstanceId: null,
+      realizationId: null,
+    });
+    prisma.riskCategory.findUnique.mockResolvedValue({ realizationId: null });
+    prisma.riskPoolStation.create.mockResolvedValue({ id: 'pool-1' });
+
+    await service.assignStationToPool({
+      categoryId: 'category-1',
+      difficulty: 'EASY' as never,
+      stationId: quizStation.id,
+    });
+
+    expect(prisma.riskPoolStation.create).toHaveBeenCalledWith({
+      data: { categoryId: 'category-1', difficulty: 'EASY', stationId: quizStation.id },
+      include: { station: true },
+    });
+  });
+
+  it('rejects a station already cloned into a scenario', async () => {
+    const { service, prisma } = createService();
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      scenarioInstanceId: 'scenario-1',
+      realizationId: null,
+    });
+
+    await expect(
+      service.assignStationToPool({
+        categoryId: 'category-1',
+        difficulty: 'EASY' as never,
+        stationId: quizStation.id,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.riskPoolStation.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a station owned by a DIFFERENT realization than the pool', async () => {
+    const { service, prisma } = createService();
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      scenarioInstanceId: null,
+      realizationId: 'realization-OTHER',
+    });
+    prisma.riskCategory.findUnique.mockResolvedValue({
+      realizationId: 'realization-1',
+    });
+
+    await expect(
+      service.assignStationToPool({
+        categoryId: 'category-1',
+        difficulty: 'EASY' as never,
+        stationId: quizStation.id,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.riskPoolStation.create).not.toHaveBeenCalled();
+  });
+
+  // The whole point of per-realization decks: a station cloned into realization X
+  // must be assignable to realization X's own pools (it no longer qualifies as a
+  // "pure template", which the previous guard demanded).
+  it('accepts a station owned by the SAME realization as the pool', async () => {
+    const { service, prisma } = createService();
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      scenarioInstanceId: null,
+      realizationId: 'realization-1',
+    });
+    prisma.riskCategory.findUnique.mockResolvedValue({
+      realizationId: 'realization-1',
+    });
+    prisma.riskPoolStation.create.mockResolvedValue({ id: 'pool-1' });
+
+    await service.assignStationToPool({
+      categoryId: 'category-1',
+      difficulty: 'EASY' as never,
+      stationId: quizStation.id,
+    });
+
+    expect(prisma.riskPoolStation.create).toHaveBeenCalled();
   });
 });
 
@@ -963,7 +1257,13 @@ describe('RiskQuizService.pollPendingDraw', () => {
           timeLimitSeconds: 0,
           completionCodeLength: undefined,
           completionCodeInputMode: 'alphanumeric',
-          quiz: { question: 'Q1?', answers: ['a', 'b'], audioUrl: undefined },
+          quiz: {
+            question: 'Q1?',
+            answers: ['a', 'b'],
+            correctAnswerIndex: 1,
+            audioUrl: undefined,
+            acceptedAnswers: undefined,
+          },
         },
       },
     });

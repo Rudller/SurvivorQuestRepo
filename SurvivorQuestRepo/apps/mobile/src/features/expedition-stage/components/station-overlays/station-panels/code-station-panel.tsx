@@ -61,6 +61,7 @@ const ALPHANUMERIC_CODE_KEYBOARD_ROWS = [
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 type CodeStationPanelProps = {
+  minimalChrome?: boolean;
   station: StationTestViewModel;
   isNumericCodeStation: boolean;
   isCodeActionDisabled: boolean;
@@ -77,6 +78,7 @@ type CodeStationPanelProps = {
 };
 
 export function CodeStationPanel({
+  minimalChrome = false,
   station,
   isNumericCodeStation,
   isCodeActionDisabled,
@@ -98,7 +100,7 @@ export function CodeStationPanel({
   // Reserve empty space below the keyboard so it never renders under the
   // absolutely-positioned timer/points footer (preview.tsx) — that footer
   // floats over the card and doesn't push this panel's layout on its own.
-  const footerClearance = adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
+  const footerClearance = minimalChrome ? 0 : adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
   const successColor = "#34d399";
   const successSurfaceColor = withAlpha(successColor, 0.2);
   const dangerSurfaceColor = withAlpha(EXPEDITION_THEME.danger, 0.16);
@@ -136,8 +138,12 @@ export function CodeStationPanel({
 
   return (
     <View
-      className={`${isNumericCodeStation ? "mt-2" : "mt-3"} rounded-2xl border px-3 ${isNumericCodeStation ? "py-2" : "py-3"}`}
-      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted, marginBottom: footerClearance }}
+      className={`${isNumericCodeStation ? "mt-2" : "mt-3"} px-3 ${isNumericCodeStation ? "py-2" : "py-3"}${minimalChrome ? "" : " rounded-2xl border"}`}
+      style={{
+        borderColor: minimalChrome ? "transparent" : EXPEDITION_THEME.border,
+        backgroundColor: minimalChrome ? "transparent" : EXPEDITION_THEME.panelMuted,
+        marginBottom: footerClearance,
+      }}
     >
       {station.completionCodeInputMode === "numeric" ? (
         <View className={isNumericCodeStation ? "mt-1" : "mt-2"}>

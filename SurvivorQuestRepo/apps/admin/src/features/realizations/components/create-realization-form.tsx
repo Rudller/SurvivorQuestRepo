@@ -14,6 +14,7 @@ import { buildRealizationExport, parseRealizationExportFile } from "../realizati
 import { geocodeLocation } from "../realization-geocoding";
 import {
   formatRealizationLanguageSummary,
+  formatStationsTotalTime,
   getRealizationLanguageFlag,
   isRealizationLanguageSelectionInvalid,
   parseRealizationLanguageSelection,
@@ -258,6 +259,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     }
   }
   const selectedStationsPoints = scenarioStations.reduce((sum, station) => sum + station.points, 0);
+  const selectedStationsTimeSeconds = scenarioStations.reduce(
+    (sum, station) => sum + (station.timeLimitSeconds || 0),
+    0,
+  );
   const isBusy = isCreating || isUploadingLogo || isUploadingMapImage || isUploadingOffer || isUploadingStationAudio;
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !companyName.trim();
@@ -1656,6 +1661,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p>
                     <span className="text-zinc-500">Suma punktów:</span>{" "}
                     <span className="font-medium text-amber-300">{selectedStationsPoints}</span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Suma czasu zadań:</span>{" "}
+                    <span className="font-medium text-amber-300">
+                      {formatStationsTotalTime(selectedStationsTimeSeconds)}
+                    </span>
                   </p>
                   <p>
                     <span className="text-zinc-500">Instruktorzy:</span> {instructors.length}
