@@ -194,6 +194,16 @@ export class RiskQuizController {
     return this.riskQuizService.listCategories();
   }
 
+  // The realization's OWN deck (a clone, see cloneSchemeForRealization). Reading
+  // it adopts the deck if this realization still points at a shared template, so
+  // every edit made from the realization editor lands on the clone.
+  @Get('admin/realizations/:realizationId/scheme')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async getRealizationScheme(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.getRealizationScheme(realizationId);
+  }
+
   @Post('admin/categories')
   @AdminOnly()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)

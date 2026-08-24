@@ -10,6 +10,7 @@ import type {
 } from "../types/realization";
 import {
   formatRealizationLanguageSummary,
+  formatStationsTotalTime,
   getRealizationLanguageFlag,
   isRealizationLanguageSelectionInvalid,
   parseRealizationLanguageSelection,
@@ -50,6 +51,7 @@ import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesManager } from "./points-qr-codes-manager";
 import { RiskQuizManager } from "@/features/risk-quiz/components/risk-quiz-manager";
+import { RealizationRiskDeckEditor } from "@/features/risk-quiz/components/realization-risk-deck-editor";
 import { useGetRiskSchemesQuery } from "@/features/risk-quiz/api/risk-quiz.api";
 import { geocodeLocation } from "../realization-geocoding";
 import {
@@ -324,6 +326,10 @@ export function EditRealizationPanel({
   );
   const editStationsPoints = scenarioStations.reduce(
     (sum, station) => sum + station.points,
+    0,
+  );
+  const editStationsTimeSeconds = scenarioStations.reduce(
+    (sum, station) => sum + (station.timeLimitSeconds || 0),
     0,
   );
   const isBusy =
@@ -1964,11 +1970,13 @@ export function EditRealizationPanel({
                     ))}
                   </select>
                   <p className="text-xs text-zinc-500">
-                    Talie tworzysz i edytujesz w osobnej zakładce „Ryzykanci” w
-                    panelu bocznym. Zmiana talii tutaj wymaga zapisania
-                    realizacji.
+                    Wybór innej talii kopiuje ją na własność tej realizacji po
+                    zapisaniu. Szablony talii tworzysz w osobnej zakładce
+                    „Ryzykanci” w panelu bocznym.
                   </p>
                 </div>
+
+                <RealizationRiskDeckEditor realizationId={realization.id} />
                 <StyledMarkdownEditor
                   label="Tekst wstępu"
                   value={editValues.introText}
@@ -2076,6 +2084,12 @@ export function EditRealizationPanel({
                     </span>{" "}
                     <span className="font-medium text-amber-300">
                       {editStationsPoints}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Suma czasu zadań:</span>{" "}
+                    <span className="font-medium text-amber-300">
+                      {formatStationsTotalTime(editStationsTimeSeconds)}
                     </span>
                   </p>
                   <p>

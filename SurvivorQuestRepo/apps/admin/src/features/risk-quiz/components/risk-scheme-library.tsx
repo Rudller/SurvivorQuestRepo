@@ -16,7 +16,15 @@ import { EditCategoryModal } from "./edit-category-modal";
 import type { RiskCategory, RiskScheme } from "../types/risk-quiz";
 import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
 
-function SchemeCard({ scheme }: { scheme: RiskScheme }) {
+type SchemeCardProps = {
+  scheme: RiskScheme;
+  /** Realization-owned decks can't be deleted from here — the realization needs one. */
+  allowDelete?: boolean;
+  /** When given, each assigned category gets an "edit tasks" button. */
+  onEditCategory?: (category: RiskCategory) => void;
+};
+
+export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: SchemeCardProps) {
   const { data: allCategories } = useGetRiskCategoriesQuery();
   const [renameScheme] = useRenameRiskSchemeMutation();
   const [deleteScheme, { isLoading: isDeleting }] = useDeleteRiskSchemeMutation();
@@ -64,14 +72,16 @@ function SchemeCard({ scheme }: { scheme: RiskScheme }) {
           }}
           className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-semibold text-zinc-100 outline-none focus:border-amber-400/80"
         />
-        <button
-          type="button"
-          onClick={() => void deleteScheme({ schemeId: scheme.id })}
-          disabled={isDeleting}
-          className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400 disabled:opacity-60"
-        >
-          Usuń talię
-        </button>
+        {allowDelete ? (
+          <button
+            type="button"
+            onClick={() => void deleteScheme({ schemeId: scheme.id })}
+            disabled={isDeleting}
+            className="shrink-0 rounded-md border border-red-500/40 px-2.5 py-1.5 text-xs text-red-300 transition hover:border-red-400 disabled:opacity-60"
+          >
+            Usuń talię
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -87,13 +97,24 @@ function SchemeCard({ scheme }: { scheme: RiskScheme }) {
                 <p className="text-sm text-zinc-100">{item.category.name}</p>
                 <p className="text-xs text-zinc-500">{item.category.poolStations.length} zadań w puli</p>
               </div>
-              <button
-                type="button"
-                onClick={() => void removeCategory({ schemeCategoryId: item.id })}
-                className="shrink-0 rounded-md border border-red-500/40 px-2 py-0.5 text-[11px] text-red-300 transition hover:border-red-400"
-              >
-                Usuń
-              </button>
+              <div className="flex shrink-0 gap-2">
+                {onEditCategory ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditCategory(item.category)}
+                    className="rounded-md border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Edytuj zadania
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void removeCategory({ schemeCategoryId: item.id })}
+                  className="rounded-md border border-red-500/40 px-2 py-0.5 text-[11px] text-red-300 transition hover:border-red-400"
+                >
+                  Usuń
+                </button>
+              </div>
             </div>
           ))
         )}

@@ -86,6 +86,14 @@ export const riskQuizApi = baseApi.injectEndpoints({
       query: () => adminPath("/schemes"),
       providesTags: ["RiskQuiz"],
     }),
+    // The realization's own deck (a clone). Fetching it also adopts the deck if
+    // the realization still points at a shared template, so anything edited from
+    // the realization editor stays private to that realization.
+    getRealizationRiskScheme: build.query<RiskScheme, { realizationId: string }>({
+      query: ({ realizationId }) =>
+        adminPath(`/realizations/${realizationId}/scheme`),
+      providesTags: ["RiskQuiz"],
+    }),
     createRiskScheme: build.mutation<RiskScheme, { name: string }>({
       query: ({ name }) => ({
         url: adminPath("/schemes"),
@@ -238,6 +246,7 @@ export const {
   useAssignRiskStationToPoolMutation,
   useRemoveRiskStationFromPoolMutation,
   useGetRiskSchemesQuery,
+  useGetRealizationRiskSchemeQuery,
   useCreateRiskSchemeMutation,
   useRenameRiskSchemeMutation,
   useDeleteRiskSchemeMutation,

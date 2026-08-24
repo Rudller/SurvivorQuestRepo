@@ -240,7 +240,11 @@ model Realization {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   scenario            Scenario?          @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
-  riskScheme          RiskScheme?        @relation(fields: [riskSchemeId], references: [id], onDelete: SetNull)
+  riskScheme          RiskScheme?        @relation("RealizationChosenRiskScheme", fields: [riskSchemeId], references: [id], onDelete: SetNull)
+  // Clones this realization owns (see RiskScheme/RiskCategory.realizationId). The
+  // deck it actually plays is riskScheme above — normally one of these clones.
+  ownedRiskSchemes    RiskScheme[]       @relation("RealizationOwnedRiskSchemes")
+  ownedRiskCategories RiskCategory[]     @relation("RealizationOwnedRiskCategories")
   teams               Team[]
   teamAssignments     TeamAssignment[]
   teamTaskProgresses  TeamTaskProgress[]
@@ -403,11 +407,21 @@ model PointsQrCodeClaim {
 // already-existing content, it doesn't own or clone it.
 model RiskScheme {
   id               String              @id @default(uuid())
-  name             String              @unique
+  // Unique only among templates (realizationId IS NULL) — enforced by a partial
+  // index created in the migration, since Prisma's DSL can't express one. Clones
+  // deliberately reuse their source's name.
+  name             String
+  // Set => this deck is a realization-owned clone, not a library template. Mirrors
+  // Scenario/Station's realizationId + sourceTemplateId pair.
+  realizationId    String?
+  sourceTemplateId String?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   schemeCategories RiskSchemeCategory[]
-  realizations     Realization[]
+  realizations     Realization[]       @relation("RealizationChosenRiskScheme")
+  realization      Realization?        @relation("RealizationOwnedRiskSchemes", fields: [realizationId], references: [id], onDelete: Cascade)
+
+  @@index([realizationId])
 }
 
 model RiskSchemeCategory {
@@ -428,17 +442,28 @@ model RiskSchemeCategory {
 // decks — same standalone-library shape as Station templates.
 model RiskCategory {
   id           String              @id @default(uuid())
-  name         String              @unique
+  // Unique only among templates — see the RiskScheme.name note above.
+  name         String
   // Base slug for this category's printed card codes (<codeSlug>-<difficulty>-<n>).
   // Set once (at creation, or lazily backfilled from the name in place on first
   // use) and never recomputed on rename, so renaming a category for display never
   // invalidates cards that are already printed and glued to physical decks.
-  codeSlug     String?             @unique
+  // A realization-owned clone COPIES its source's slug verbatim (and is therefore
+  // only unique among templates, same partial index treatment as name) — that is
+  // what keeps one printed QR sticker valid across every realization built from
+  // the same template deck.
+  codeSlug     String?
+  // Set => realization-owned clone. See RiskScheme above.
+  realizationId String?
+  sourceTemplateId String?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
   poolStations RiskPoolStation[]
   cards        RiskCard[]
   schemes      RiskSchemeCategory[]
+  realization  Realization?        @relation("RealizationOwnedRiskCategories", fields: [realizationId], references: [id], onDelete: Cascade)
+
+  @@index([realizationId])
 }
 
 // Assigns an existing Station (any of the 19 library types — quiz, wordle,
