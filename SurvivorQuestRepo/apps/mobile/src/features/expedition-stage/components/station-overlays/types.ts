@@ -82,6 +82,20 @@ export type StationPreviewOverlayProps = {
   languageFlag?: string;
   showLanguageButton?: boolean;
   onOpenLanguagePicker?: () => void;
+  // "overlay" (default): full-screen dimmed popup with its own bordered card,
+  // header and close button — the normal in-game station flow. "inline":
+  // same station panels/logic, but rendered as a plain block that fills
+  // whatever parent it's placed in — no backdrop dimming, no card border, no
+  // header row — for hosts (like Ryzykanci) that already render their own
+  // header/close affordance and want the station content to look like it's
+  // part of the main screen instead of a popup.
+  presentation?: "overlay" | "inline";
+  // Inline mode only: squeeze the station's media box (image/board) down and
+  // stack what's left against the bottom edge, for when the host has very
+  // little vertical room — e.g. while the on-screen keyboard is up and the
+  // answer input has to stay visible. The picture keeps filling the box (and
+  // so stays cropped to it) at the reduced height.
+  compactMedia?: boolean;
 };
 
 export type QuizPrestartOverlayProps = {

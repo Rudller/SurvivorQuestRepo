@@ -25,6 +25,7 @@ const CAMERA_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/camera.svg";
 
 type StationMediaPanelProps = {
+  minimalChrome?: boolean;
   stationId: string;
   stationType: StationTestType;
   viewportHeight: number;
@@ -81,6 +82,7 @@ type StationMediaPanelProps = {
 };
 
 export function StationMediaPanel({
+  minimalChrome = false,
   stationId,
   stationType,
   viewportHeight,
@@ -178,7 +180,7 @@ export function StationMediaPanel({
   };
   return (
     <View
-      className={`${isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden rounded-2xl border`}
+      className={`${minimalChrome ? "" : isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden${minimalChrome ? "" : " rounded-2xl border"}`}
       style={{
         ...(requiresCode
           ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
@@ -199,9 +201,11 @@ export function StationMediaPanel({
                 // so it just needs to flex-fill whatever height is left after
                 // the description, not claim a fixed guessed height.
                 ? { flex: 1, minHeight: Math.max(120, Math.round(viewportHeight * 0.16)) }
-                : { height: stationMediaHeight }),
-        borderColor: EXPEDITION_THEME.border,
-        backgroundColor: EXPEDITION_THEME.panelMuted,
+                : isPhotoTaskStation && minimalChrome
+                  ? { height: Math.max(150, Math.round(viewportHeight * 0.2)) }
+                  : { height: stationMediaHeight }),
+        borderColor: minimalChrome ? "transparent" : EXPEDITION_THEME.border,
+        backgroundColor: minimalChrome ? "transparent" : EXPEDITION_THEME.panelMuted,
       }}
     >
       {isCaesarStation ? (

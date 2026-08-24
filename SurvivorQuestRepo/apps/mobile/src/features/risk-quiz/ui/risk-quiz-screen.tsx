@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Rect, SvgUri } from "react-native-svg";
+import { useAudioQuizPlayback } from "../../expedition-stage/components/station-overlays/station-panels/use-audio-quiz-playback";
 import type { OnboardingSession, RealizationLanguage, RealizationLanguageOption } from "../../onboarding/model/types";
 import { getRealizationLanguageFlag, getRealizationLanguageLabel } from "../../onboarding/model/types";
 import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 import { resolveUiLanguage } from "../../i18n";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
+import {
+  StationPreviewOverlay,
+  type StationTestType,
+  type StationTestViewModel,
+} from "../../expedition-stage/components/station-overlays";
 import {
   fetchMobileSessionState,
   getMobileApiErrorStatusCode,
@@ -58,6 +65,86 @@ type LiveTeamInfo = {
 
 const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
 const ANSWER_INDEX_TYPES = new Set(["quiz", "audio-quiz"]);
+const AUDIO_PLAY_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-play.svg";
+const AUDIO_PAUSE_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-pause.svg";
+// Decorative static waveform — purely visual, not driven by real audio data.
+const AUDIO_TRACK_BAR_HEIGHTS = [10, 18, 26, 16, 30, 20, 34, 22, 14, 28, 18, 32, 20, 12, 26, 16, 30, 20, 24, 14, 18, 28, 22, 16, 30, 20, 12, 24, 18, 10];
+
+const AUDIO_TRACK_HEIGHT = 220;
+
+function AudioTrackCard({ isPlaying, isLoading, onPress }: { isPlaying: boolean; isLoading: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isLoading}
+      className="w-full items-center justify-center"
+      style={{ height: AUDIO_TRACK_HEIGHT, opacity: isLoading ? 0.6 : 1 }}
+    >
+      <Svg
+        width="100%"
+        height={AUDIO_TRACK_HEIGHT}
+        viewBox={`0 0 300 ${AUDIO_TRACK_HEIGHT}`}
+        preserveAspectRatio="none"
+        style={{ position: "absolute" }}
+      >
+        {AUDIO_TRACK_BAR_HEIGHTS.map((height, index) => {
+          const scaledHeight = height * 4.2;
+          return (
+            <Rect
+              key={index}
+              x={index * 10 + 1}
+              y={(AUDIO_TRACK_HEIGHT - scaledHeight) / 2}
+              width={8}
+              rx={4}
+              height={scaledHeight}
+              fill={EXPEDITION_THEME.accent}
+              opacity={isPlaying ? 0.85 : 0.35}
+            />
+          );
+        })}
+      </Svg>
+      <View
+        className="items-center justify-center rounded-full"
+        style={{ width: 84, height: 84, backgroundColor: EXPEDITION_THEME.accent }}
+      >
+        {isLoading ? (
+          <ActivityIndicator color={EXPEDITION_THEME.background} />
+        ) : (
+          <SvgUri
+            uri={isPlaying ? AUDIO_PAUSE_ICON_SVG_URI : AUDIO_PLAY_ICON_SVG_URI}
+            width={38}
+            height={38}
+            color={EXPEDITION_THEME.background}
+            fill={EXPEDITION_THEME.background}
+          />
+        )}
+      </View>
+    </Pressable>
+  );
+}
+// Polish display labels for every station type — mirrors
+// stationTypeOptions in apps/admin/src/features/games/types/station.ts.
+const STATION_TYPE_LABELS: Record<StationTestType, string> = {
+  quiz: "Quiz",
+  "audio-quiz": "Quiz audio",
+  time: "Na czas",
+  points: "Na punkty",
+  wordle: "Wordle",
+  hangman: "Wisielec",
+  mastermind: "Mastermind",
+  anagram: "Anagram",
+  "caesar-cipher": "Szyfr Cezara",
+  memory: "Memory",
+  simon: "Simon mówi",
+  rebus: "Rebus",
+  boggle: "Boggle",
+  "mini-sudoku": "Mini Sudoku",
+  matching: "Dopasowywanie",
+  "strong-password": "Mocne hasło",
+  "photo-task": "Zadanie fotograficzne",
+  "qr-hunt": "Skanowanie kodów QR",
+  "open-quiz": "Quiz – pytanie otwarte",
+};
 // Keep in sync with RISK_QUIZ_INTRO_TEXT_PLACEHOLDER in
 // apps/admin/src/features/realizations/realization.utils.ts — shown to
 // players whenever the admin leaves the "Tekst wstępu" field empty.
@@ -71,6 +158,11 @@ const IDLE_POLL_INTERVAL_MS = 4000;
 // Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
 // same hold-the-team-banner gesture as normal gameplay's station test menu.
 const TEST_MENU_TRIGGER_HOLD_MS = 5000;
+// Must match the screen container's own `px-3 py-3` / rowGap below — the
+// always-visible timer is positioned absolutely against that box, so it has
+// to re-derive where the in-flow content actually starts.
+const SCREEN_EDGE_PADDING = 12;
+const SCREEN_ROW_GAP = 10;
 
 export function RiskQuizScreen({
   session,
@@ -96,6 +188,10 @@ export function RiskQuizScreen({
   const [isResolvingScan, setIsResolvingScan] = useState(false);
   const [exhaustedNotice, setExhaustedNotice] = useState<{ categoryName: string } | null>(null);
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [topPanelHeight, setTopPanelHeight] = useState(0);
+  const [timerHeight, setTimerHeight] = useState(0);
+  const [remainingTaskSeconds, setRemainingTaskSeconds] = useState<number | null>(null);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerResult, setAnswerResult] = useState<RiskAnswerResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -105,7 +201,9 @@ export function RiskQuizScreen({
   const [testMenuError, setTestMenuError] = useState<string | null>(null);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const questionRevealAnimation = useRef(new Animated.Value(0)).current;
+  const timerShakeAnimation = useRef(new Animated.Value(0)).current;
   const autoDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentScrollViewRef = useRef<ScrollView>(null);
 
   // Mirrors the normal realization's "waiting for admin start" poll: while the
   // intro screen is showing, keep checking realization status and reveal the
@@ -254,6 +352,31 @@ export function RiskQuizScreen({
     };
   }, []);
 
+  // Same mechanism the normal (full-screen) station overlay uses to keep a
+  // focused input above the keyboard: track the keyboard's height and shrink
+  // the whole content container by it, so everything inside reflows into the
+  // space that's left (see preview.tsx's identical listener + its card's
+  // paddingBottom). Unlike that overlay, this screen doesn't own the entire
+  // viewport — the top panel, big timer and bottom panel would eat all the
+  // remaining room — so while the keyboard is up the timer and bottom panel
+  // are hidden too (see below), freeing that space for the station itself.
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      contentScrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   // Fade-and-slide-up reveal every time a new card is drawn (keyed off
   // cardId, not just activeDraw !== null, so re-rendering the same question
   // — e.g. after an answer submission — doesn't replay the animation).
@@ -269,6 +392,53 @@ export function RiskQuizScreen({
     }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDraw?.cardId]);
+
+  // Countdown for the current card's time-to-answer, shown under the top
+  // panel — stops updating once the card has been answered.
+  useEffect(() => {
+    const timeLimitSeconds = activeDraw?.station.timeLimitSeconds ?? 0;
+    if (!activeDraw || timeLimitSeconds <= 0 || answerResult) {
+      setRemainingTaskSeconds(null);
+      return;
+    }
+
+    const endsAtMs = Date.now() + timeLimitSeconds * 1000;
+    setRemainingTaskSeconds(timeLimitSeconds);
+
+    const interval = setInterval(() => {
+      setRemainingTaskSeconds(Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000)));
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [activeDraw?.cardId, activeDraw?.station.timeLimitSeconds, answerResult]);
+
+  const isTimerUrgent =
+    remainingTaskSeconds !== null && remainingTaskSeconds <= 10 && remainingTaskSeconds > 0;
+
+  // Shake burst on every tick of the final 10 seconds — raises the tension as
+  // time runs out instead of just changing color.
+  useEffect(() => {
+    if (!isTimerUrgent) {
+      timerShakeAnimation.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(timerShakeAnimation, { toValue: 1, duration: 70, useNativeDriver: true }),
+        Animated.timing(timerShakeAnimation, { toValue: -1, duration: 70, useNativeDriver: true }),
+        Animated.timing(timerShakeAnimation, { toValue: 1, duration: 70, useNativeDriver: true }),
+        Animated.timing(timerShakeAnimation, { toValue: -1, duration: 70, useNativeDriver: true }),
+        Animated.timing(timerShakeAnimation, { toValue: 0, duration: 70, useNativeDriver: true }),
+        Animated.delay(450),
+      ]),
+    );
+    loop.start();
+
+    return () => {
+      loop.stop();
+    };
+  }, [isTimerUrgent, timerShakeAnimation]);
 
   // Shared by the auto-dismiss timer below and the bottom panel's flipped
   // "close card" button — slides the card back out downward (mirroring the
@@ -433,6 +603,41 @@ export function RiskQuizScreen({
     }
   }
 
+  // Adapts the real station panels' pass/fail callbacks (StationPreviewOverlay)
+  // to Ryzykanci's own scoring endpoint — every non-quiz/audio-quiz type is
+  // scored server-side as a plain "completed = correct" self-report (see
+  // resolveOutcome() in risk-quiz.service.ts), same as the "Ukończone" /
+  // "Poddaję się" buttons this replaces for those types.
+  async function completeCurrentCard(completed: boolean): Promise<string | null> {
+    await submitOutcome({ completed });
+    return null;
+  }
+
+  function buildStationPreviewViewModel(draw: ActiveDraw): StationTestViewModel {
+    const station = draw.station;
+    const quiz = station.quiz;
+    return {
+      stationId: station.id,
+      stationType: station.type as StationTestType,
+      completionCodeInputMode: station.completionCodeInputMode,
+      completionCodeLength: station.completionCodeLength,
+      name: station.name,
+      typeLabel: STATION_TYPE_LABELS[station.type as StationTestType] ?? station.type,
+      description: station.description,
+      imageUrl: station.imageUrl ?? "",
+      points: station.points,
+      timeLimitSeconds: station.timeLimitSeconds,
+      timeLimitLabel: formatTimeLimitLabel(station.timeLimitSeconds),
+      quizQuestion: quiz?.question,
+      quizAnswers: quiz?.answers && quiz.answers.length === 4 ? (quiz.answers as [string, string, string, string]) : undefined,
+      quizCorrectAnswerIndex: quiz?.correctAnswerIndex,
+      quizAudioUrl: quiz?.audioUrl,
+      quizAcceptedAnswers: quiz?.acceptedAnswers,
+      status: "todo",
+      startedAt: new Date().toISOString(),
+    };
+  }
+
   async function openTestMenu() {
     setIsTestMenuOpen(true);
     setIsLoadingTestMenu(true);
@@ -471,7 +676,17 @@ export function RiskQuizScreen({
   }
 
   const isAnswerIndexType = activeDraw ? ANSWER_INDEX_TYPES.has(activeDraw.station.type) : false;
+  const isAudioQuizType = activeDraw?.station.type === "audio-quiz";
   const answers = activeDraw?.station.quiz?.answers ?? [];
+  const { isAudioPlaying, isAudioLoading, handlePlayAudio, handleStopAudio } = useAudioQuizPlayback({
+    stationType: activeDraw ? (activeDraw.station.type as StationTestType) : null,
+    quizAudioUrl: activeDraw?.station.quiz?.audioUrl,
+    text: {
+      audioSourceMissing: "Brak nagrania audio dla tego zadania.",
+      audioLoadFailed: "Nie udało się załadować nagrania.",
+      audioPlayFailed: "Nie udało się odtworzyć nagrania.",
+    },
+  });
 
   if (showIntro) {
     return (
@@ -502,8 +717,12 @@ export function RiskQuizScreen({
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       <RiskQuizBackground isLightTheme={isLightTheme} />
-      <View className="flex-1 px-3 py-3" style={{ rowGap: 10 }}>
-        <Pressable onPressIn={handleTestMenuHoldStart} onPressOut={handleTestMenuHoldEnd}>
+      <View className="flex-1 px-3 py-3" style={{ rowGap: 10, paddingBottom: keyboardHeight || undefined }}>
+        <Pressable
+          onPressIn={handleTestMenuHoldStart}
+          onPressOut={handleTestMenuHoldEnd}
+          onLayout={(event) => setTopPanelHeight(event.nativeEvent.layout.height)}
+        >
           <TopRealizationPanel
             companyName={companyName}
             logoUrl={liveRealization?.logoUrl}
@@ -522,8 +741,74 @@ export function RiskQuizScreen({
           />
         </Pressable>
 
-        <View className="flex-1 items-center justify-center">
-          {activeDraw ? (
+        {remainingTaskSeconds !== null ? (
+          <Animated.View
+            className="items-center"
+            pointerEvents="none"
+            onLayout={(event) => setTimerHeight(event.nativeEvent.layout.height)}
+            style={{
+              // Floated above the content instead of sitting in the column:
+              // the timer must stay visible at all times (including while the
+              // keyboard is up), but it must not eat any of the vertical room
+              // the station content needs — especially once the keyboard has
+              // already taken half the screen.
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: SCREEN_EDGE_PADDING + topPanelHeight + SCREEN_ROW_GAP,
+              zIndex: 40,
+              alignItems: "center",
+              opacity: questionRevealAnimation,
+              transform: [
+                {
+                  translateY: questionRevealAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [28, 0],
+                  }),
+                },
+                {
+                  translateX: timerShakeAnimation.interpolate({
+                    inputRange: [-1, 1],
+                    outputRange: [-8, 8],
+                  }),
+                },
+                {
+                  rotate: timerShakeAnimation.interpolate({
+                    inputRange: [-1, 1],
+                    outputRange: ["-4deg", "4deg"],
+                  }),
+                },
+              ],
+            }}
+          >
+            <Text
+              style={{
+                color: remainingTaskSeconds <= 10 ? "#ef4444" : EXPEDITION_THEME.accentStrong,
+                fontSize: 72,
+                fontWeight: "900",
+              }}
+            >
+              {`${Math.floor(remainingTaskSeconds / 60)}:${String(remainingTaskSeconds % 60).padStart(2, "0")}`}
+            </Text>
+          </Animated.View>
+        ) : null}
+
+        <ScrollView
+          ref={contentScrollViewRef}
+          style={{
+            width: "100%",
+            flex: 1,
+            // The timer floats over this area, so keep the content clear of it
+            // in the roomy (no keyboard) state. While typing, space is scarce
+            // and the content is bottom-aligned anyway, so it can slide under
+            // the timer instead of being pushed off-screen.
+            marginTop: remainingTaskSeconds !== null && keyboardHeight === 0 ? timerHeight : 0,
+          }}
+          contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+          keyboardShouldPersistTaps="handled"
+          onTouchEnd={() => Keyboard.dismiss()}
+        >
+          {activeDraw && isAnswerIndexType ? (
             <Animated.View
               className="w-full"
               style={{
@@ -543,11 +828,11 @@ export function RiskQuizScreen({
                 {activeDraw.categoryName} • {difficultyLabel(activeDraw.difficulty)} • {activeDraw.station.name}
               </Text>
               <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 22, fontWeight: "700" }}>
-                {isAnswerIndexType ? activeDraw.station.quiz?.question ?? activeDraw.station.name : activeDraw.station.description}
+                {activeDraw.station.quiz?.question ?? activeDraw.station.name}
               </Text>
 
-              {isAnswerIndexType ? (
-                answers.map((option, index) => {
+              <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 8, rowGap: 10 }}>
+                {answers.map((option, index) => {
                   const isSelected = answerResult !== null && index === answerResult.correctIndex;
                   const showAsWrong =
                     answerResult !== null && !answerResult.isCorrect && index !== answerResult.correctIndex;
@@ -556,8 +841,9 @@ export function RiskQuizScreen({
                       key={index}
                       disabled={isSubmittingAnswer || answerResult !== null}
                       onPress={() => void submitOutcome({ selectedIndex: index })}
-                      className="rounded-2xl border px-4 py-3"
+                      className="rounded-2xl border px-4 py-5 justify-center"
                       style={{
+                        width: "47%",
                         borderColor: isSelected
                           ? EXPEDITION_THEME.accent
                           : showAsWrong
@@ -572,37 +858,8 @@ export function RiskQuizScreen({
                       </Text>
                     </Pressable>
                   );
-                })
-              ) : answerResult === null ? (
-                <View style={{ flexDirection: "row", columnGap: 10 }}>
-                  <Pressable
-                    disabled={isSubmittingAnswer}
-                    onPress={() => void submitOutcome({ completed: true })}
-                    className="flex-1 rounded-2xl px-4 py-3"
-                    style={{ backgroundColor: EXPEDITION_THEME.accent }}
-                  >
-                    <Text
-                      className="text-center"
-                      style={{ color: EXPEDITION_THEME.background, fontSize: 16, fontWeight: "700" }}
-                    >
-                      Ukończone
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={isSubmittingAnswer}
-                    onPress={() => void submitOutcome({ completed: false })}
-                    className="flex-1 rounded-2xl border px-4 py-3"
-                    style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
-                  >
-                    <Text
-                      className="text-center"
-                      style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 16, fontWeight: "700" }}
-                    >
-                      Poddaję się
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
+                })}
+              </View>
 
               {isSubmittingAnswer ? <ActivityIndicator color={EXPEDITION_THEME.accent} /> : null}
 
@@ -621,6 +878,35 @@ export function RiskQuizScreen({
                   </Text>
                 </View>
               ) : null}
+            </Animated.View>
+          ) : activeDraw ? (
+            <Animated.View
+              className="w-full flex-1"
+              style={{
+                opacity: questionRevealAnimation,
+                transform: [
+                  {
+                    translateY: questionRevealAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [28, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <StationPreviewOverlay
+                presentation="inline"
+                compactMedia={keyboardHeight > 0}
+                station={buildStationPreviewViewModel(activeDraw)}
+                onClose={dismissActiveCard}
+                onRequestClose={dismissActiveCard}
+                onCompleteTask={async () => completeCurrentCard(true)}
+                onSubmitPhotoTask={async () => completeCurrentCard(true)}
+                onQuizFailed={() => void completeCurrentCard(false)}
+                onQuizPassed={() => void completeCurrentCard(true)}
+                onTimeExpired={() => void completeCurrentCard(false)}
+                timedStationPointsDecayEnabled={false}
+              />
             </Animated.View>
           ) : (
             <View style={{ alignItems: "center", rowGap: 16 }}>
@@ -641,26 +927,53 @@ export function RiskQuizScreen({
             </View>
           )}
 
+          {activeDraw && isAudioQuizType ? (
+            <Animated.View
+              className="w-full max-w-[560px]"
+              style={{
+                marginTop: 32,
+                opacity: questionRevealAnimation,
+                transform: [
+                  {
+                    translateY: questionRevealAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [28, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <AudioTrackCard
+                isPlaying={isAudioPlaying}
+                isLoading={isAudioLoading}
+                onPress={() => void (isAudioPlaying ? handleStopAudio() : handlePlayAudio())}
+              />
+            </Animated.View>
+          ) : null}
+
           {errorMessage ? (
             <Text style={{ color: "#ef4444", fontSize: 13, marginTop: 16, textAlign: "center" }}>{errorMessage}</Text>
           ) : null}
-        </View>
+        </ScrollView>
 
-        <View className="w-full items-center">
-          <View className="w-full max-w-[560px]">
-            <RiskQuizBottomPanel
-              remainingLabel={countdown.remainingLabel}
-              isCompleted={countdown.isCompleted}
-              streak={streak}
-              multiplier={multiplier}
-              onOpenQrScanner={() => setIsScannerVisible(true)}
-              isScannerOpening={isResolvingScan}
-              isCardOpen={Boolean(activeDraw)}
-              onCloseCard={dismissActiveCard}
-            />
+        {keyboardHeight === 0 ? (
+          <View className="w-full items-center">
+            <View className="w-full max-w-[560px]">
+              <RiskQuizBottomPanel
+                remainingLabel={countdown.remainingLabel}
+                isCompleted={countdown.isCompleted}
+                streak={streak}
+                multiplier={multiplier}
+                onOpenQrScanner={() => setIsScannerVisible(true)}
+                isScannerOpening={isResolvingScan}
+                isCardOpen={Boolean(activeDraw)}
+                onCloseCard={dismissActiveCard}
+              />
+            </View>
           </View>
-        </View>
+        ) : null}
       </View>
+
 
       <QrScannerOverlay
         visible={isScannerVisible}
@@ -829,6 +1142,15 @@ export function RiskQuizScreen({
       </Modal>
     </SafeAreaView>
   );
+}
+
+function formatTimeLimitLabel(timeLimitSeconds: number) {
+  if (!Number.isFinite(timeLimitSeconds) || timeLimitSeconds <= 0) {
+    return "";
+  }
+  const minutes = Math.floor(timeLimitSeconds / 60);
+  const seconds = timeLimitSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function difficultyLabel(difficulty: "EASY" | "MEDIUM" | "HARD") {

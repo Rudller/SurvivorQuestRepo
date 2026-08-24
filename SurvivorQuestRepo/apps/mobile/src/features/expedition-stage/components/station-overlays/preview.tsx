@@ -867,7 +867,10 @@ export function StationPreviewOverlay({
   languageFlag,
   showLanguageButton = false,
   onOpenLanguagePicker,
+  presentation = "overlay",
+  compactMedia = false,
 }: StationPreviewOverlayProps) {
+  const isInlinePresentation = presentation === "inline";
   const adaptiveLayout = useAdaptiveLayout();
   const stationPanelLayout = useStationPanelLayout();
   const uiLanguage = useUiLanguage();
@@ -2417,6 +2420,7 @@ export function StationPreviewOverlay({
         },
       },
     openQuizStationPanelProps: {
+      hideAttempts: isInlinePresentation,
       openQuizAttemptsLeft,
       openQuizInput,
       openQuizResult,
@@ -2452,9 +2456,15 @@ export function StationPreviewOverlay({
 
   return (
     <Animated.View
-      className="absolute inset-0 z-50"
+      className={isInlinePresentation ? "flex-1" : "absolute inset-0 z-50"}
       style={[
-        { backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.9)" },
+        {
+          backgroundColor: isInlinePresentation
+            ? "transparent"
+            : isLightTheme
+              ? "rgba(17, 30, 23, 0.34)"
+              : "rgba(15, 25, 20, 0.9)",
+        },
         overlayBackdropStyle,
       ]}
     >
@@ -2463,14 +2473,19 @@ export function StationPreviewOverlay({
         style={[
           {
             paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
-            paddingTop: adaptiveLayout.s(isTabletOverlay ? 36 : 20, 16, 44),
+            // In inline mode the host (Ryzykanci) already provides the gap
+            // above this component via its own rowGap between siblings —
+            // this panel's own top padding would stack on top of that and
+            // make the gap after the timer visibly bigger than the gap
+            // before it.
+            paddingTop: isInlinePresentation ? 0 : adaptiveLayout.s(isTabletOverlay ? 36 : 20, 16, 44),
             paddingBottom: adaptiveLayout.s(isTabletOverlay ? 20 : 12, 10, 28),
           },
           overlayPanelStyle,
         ]}
       >
         <View
-          className="flex-1 border"
+          className={isInlinePresentation ? "flex-1" : "flex-1 border"}
           onTouchEnd={() => {
             // Tapping empty space anywhere in the card dismisses the
             // keyboard; nested Pressables/TextInputs still claim their own
@@ -2484,12 +2499,17 @@ export function StationPreviewOverlay({
             Keyboard.dismiss();
           }}
           style={{
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panel,
-            borderRadius: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 30),
-            paddingBottom: keyboardHeight,
+            borderColor: isInlinePresentation ? "transparent" : EXPEDITION_THEME.border,
+            backgroundColor: isInlinePresentation ? "transparent" : EXPEDITION_THEME.panel,
+            borderRadius: isInlinePresentation ? 0 : adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 30),
+            // In inline mode the host screen (e.g. Ryzykanci) wraps this in
+            // its own KeyboardAvoidingView, which already shrinks the space
+            // available here — adding this panel's own keyboard padding on
+            // top would double-compensate and shift content too far.
+            paddingBottom: isInlinePresentation ? 0 : keyboardHeight,
           }}
         >
+          {!isInlinePresentation ? (
           <View
             className="flex-row items-start justify-between"
             style={{
@@ -2566,20 +2586,43 @@ export function StationPreviewOverlay({
               </Text>
             </Pressable>
             </View>
+          ) : null}
 
             <View
               className="flex-1"
-              style={{ paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22), overflow: "hidden" }}
+              style={{
+                paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22),
+                // With the keyboard up (compactMedia), stack this column's
+                // content against its bottom edge — the host has already
+                // shrunk that edge to sit right on top of the keyboard, so
+                // this is what removes the dead gap between the answer input
+                // and the keyboard instead of leaving the content pinned to
+                // the top of the freed space.
+                ...(compactMedia ? { justifyContent: "flex-end" as const } : {}),
+                // Inline presentation shares screen space with a host's own
+                // chrome (top bar, timer, bottom panel) instead of owning the
+                // full screen like the overlay does, so content that doesn't
+                // fit must be reachable by scrolling the host's own container
+                // rather than clipped here.
+                overflow: isInlinePresentation ? "visible" : "hidden",
+              }}
             >
               <View
-                className="flex-1"
+                // This wrapper's flex-1 greedily claims all remaining
+                // vertical space in the overlay's much larger full-screen
+                // layout — fine there, but in the host-shared inline layout
+                // (Ryzykanci) it leaves nothing for the actual quiz task
+                // content (question/input) that follows as a sibling below,
+                // for types whose media box has a fixed (not flex-filled)
+                // height. Let it size to its own content instead for those.
+                className={isInlinePresentation && isOpenQuizStation ? undefined : "flex-1"}
                 style={{
                   // Reserve space so station content never renders under the
                   // absolutely-positioned timer/points footer below (this
                   // used to be duplicated per-panel in code-station-panel.tsx
                   // and wordle-station-panel.tsx — centralized here instead).
                   marginBottom:
-                    requiresCode || isMiniSudokuStation || isOpenQuizStation
+                    isInlinePresentation || requiresCode || isMiniSudokuStation || isOpenQuizStation
                       ? 0
                       : adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132),
                 }}
@@ -2614,12 +2657,18 @@ export function StationPreviewOverlay({
                 !requiresQrScan &&
                 !isAnagramStation &&
                 !(station.stationType === "quiz" && !hasRealStationImage) &&
-                !(station.stationType === "time" && !hasRealStationImage) ? (
+                !(station.stationType === "time" && !hasRealStationImage) &&
+                !(isOpenQuizStation && isInlinePresentation && !hasRealStationImage) ? (
                   <StationMediaPanel
+                    minimalChrome={isInlinePresentation}
                     stationId={station.stationId}
                     stationType={station.stationType}
                     viewportHeight={viewportHeight}
-                    stationMediaHeight={stationMediaHeight}
+                    stationMediaHeight={
+                      compactMedia
+                        ? Math.min(stationMediaHeight, adaptiveLayout.s(240, 180, 280))
+                        : stationMediaHeight
+                    }
                     requiresCode={requiresCode || requiresPhotoUpload}
                     isNumericCodeStation={isNumericCodeStation}
                     renderedStationMedia={renderedStationMedia}
@@ -2990,7 +3039,10 @@ export function StationPreviewOverlay({
                     // space) so it never renders under the absolutely-
                     // positioned timer/points footer below, same treatment as
                     // code-station-panel.tsx / mini-sudoku's keypad section.
-                    marginBottom: isOpenQuizStation ? adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132) : 0,
+                    marginBottom:
+                      isOpenQuizStation && !isInlinePresentation
+                        ? adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132)
+                        : 0,
                   }}
                 >
                   <StationQuizTaskWrapper
@@ -3010,6 +3062,7 @@ export function StationPreviewOverlay({
 
             {requiresCode ? (
               <CodeStationPanel
+                minimalChrome={isInlinePresentation}
                 station={station}
                 isNumericCodeStation={isNumericCodeStation}
                 isCodeActionDisabled={isCodeActionDisabled}
@@ -3042,6 +3095,7 @@ export function StationPreviewOverlay({
 
           </View>
 
+          {!isInlinePresentation ? (
           <View
             pointerEvents="box-none"
             style={{
@@ -3119,6 +3173,7 @@ export function StationPreviewOverlay({
               </Text>
             </View>
           </View>
+          ) : null}
 
         </View>
       </Animated.View>

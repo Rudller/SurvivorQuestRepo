@@ -15,7 +15,9 @@ export type RiskDrawnStation = {
   quiz?: {
     question?: string;
     answers?: string[];
+    correctAnswerIndex?: number;
     audioUrl?: string;
+    acceptedAnswers?: string[];
   };
 };
 
