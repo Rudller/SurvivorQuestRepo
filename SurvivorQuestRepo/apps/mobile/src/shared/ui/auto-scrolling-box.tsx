@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
 import { EXPEDITION_THEME } from "../../features/onboarding/model/constants";
+import { useReduceMotion } from "../a11y/use-reduce-motion";
 
 const SCROLL_THUMB_WIDTH = 3;
 const SCROLL_THUMB_MIN_HEIGHT = 24;
@@ -73,6 +74,12 @@ export function AutoScrollingBox({
   // drive the thumb's size/track, so re-rendering on every scroll tick isn't
   // needed (the thumb's position is native-driven via scrollYAnimation).
   const [scrollThumbMetrics, setScrollThumbMetrics] = useState({ contentHeight: 0, visibleHeight: 0 });
+  // A box that scrolls itself is the most literal kind of unrequested motion
+  // there is, so the crawl is off entirely when the device asks for less of it.
+  // The box stays scrollable by hand, and the thumb below still shows there is
+  // more text than fits — the cue survives, only the automatic drift goes.
+  const isReduceMotionEnabled = useReduceMotion();
+  const isAutoScrollActive = autoScrollEnabled && !isReduceMotionEnabled;
 
   const updateIsScrollableBelow = () => {
     if (!showsBottomFadeWhenScrollable) {
@@ -142,7 +149,7 @@ export function AutoScrollingBox({
 
   const resetIdleCycle = () => {
     clearAutoScrollTimers();
-    if (autoScrollEnabled && maxScrollYRef.current > 0) {
+    if (isAutoScrollActive && maxScrollYRef.current > 0) {
       scheduleIdle(startDownScroll);
     }
   };
@@ -178,6 +185,14 @@ export function AutoScrollingBox({
       clearAutoScrollTimers();
     };
   }, []);
+
+  // Someone can turn the setting on while a crawl is already running — stop it
+  // where it stands rather than letting the current pass finish.
+  useEffect(() => {
+    if (isReduceMotionEnabled) {
+      clearAutoScrollTimers();
+    }
+  }, [isReduceMotionEnabled]);
 
   const { contentHeight: thumbContentHeight, visibleHeight: thumbVisibleHeight } = scrollThumbMetrics;
   const thumbMaxScrollY = Math.max(0, thumbContentHeight - thumbVisibleHeight);

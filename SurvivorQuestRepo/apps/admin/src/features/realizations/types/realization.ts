@@ -256,6 +256,7 @@ export type Realization = {
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;
+  riskSchemeTemplateId?: string;
   stationIds: string[];
   scenarioStations: Station[];
   joinCode: string;

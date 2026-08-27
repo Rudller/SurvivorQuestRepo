@@ -133,6 +133,14 @@ function asNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+// Absent, null, or nonsense all mean the same thing here: no countdown to run.
+// Deliberately not folded into asNumber's zero-default — a countdown of 0 and
+// no countdown at all are different states downstream.
+function normalizeStartsInMs(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.round(value));
+}
+
 function asBoolean(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -588,6 +596,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         .map((item) => asString(item))
         .filter((value) => value.trim().length > 0),
       status: asString(realization.status, "planned") as ExpeditionSessionState["realization"]["status"],
+      startsInMs: normalizeStartsInMs(realization.startsInMs ?? realization.starts_in_ms),
       locationRequired: asBoolean(realization.locationRequired ?? realization.location_required),
       showLeaderboard: showLeaderboardDuringGame || showLeaderboardOnFinish,
       showLeaderboardDuringGame,

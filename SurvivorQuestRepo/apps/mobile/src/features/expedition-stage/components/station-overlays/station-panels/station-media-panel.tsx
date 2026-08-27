@@ -183,7 +183,16 @@ export function StationMediaPanel({
       className={`${minimalChrome ? "" : isNumericCodeStation ? "mt-0.5" : "mt-1"} w-full overflow-hidden${minimalChrome ? "" : " rounded-2xl border"}`}
       style={{
         ...(requiresCode
-          ? { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
+          ? minimalChrome
+            ? {
+                // In Ryzykanci the photo absorbs the remaining height. The
+                // input and keyboard below keep a stable, fixed layout.
+                flexGrow: 1,
+                flexBasis: 0,
+                flexShrink: 1,
+                minHeight: 0,
+              }
+            : { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
           : isMiniSudokuStation
             // Flex + minHeight (instead of a fixed height) so the grid
             // shrinks when the station description needs room, and grows

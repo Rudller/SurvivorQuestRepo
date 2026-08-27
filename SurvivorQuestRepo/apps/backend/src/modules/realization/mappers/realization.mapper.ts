@@ -240,6 +240,7 @@ export function buildRealizationEntity(input: {
     scenarioTemplateId?: string;
     scenarioTemplateName?: string;
     riskSchemeId?: string | null;
+    riskSchemeTemplateId?: string;
     joinCode: string;
     teamCount: number;
     requiredDevicesCount: number;
@@ -256,6 +257,7 @@ export function buildRealizationEntity(input: {
     hideTaskList: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
+    startedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -293,6 +295,7 @@ export function buildRealizationEntity(input: {
     scenarioTemplateId: realization.scenarioTemplateId,
     scenarioTemplateName: realization.scenarioTemplateName,
     riskSchemeId: realization.riskSchemeId ?? undefined,
+    riskSchemeTemplateId: realization.riskSchemeTemplateId,
     stationIds: input.stationIds,
     scenarioStations: input.scenarioStations,
     joinCode: realization.joinCode,
@@ -316,6 +319,7 @@ export function buildRealizationEntity(input: {
       realization.durationMinutes,
     ),
     scheduledAt: realization.scheduledAt.toISOString(),
+    startedAt: realization.startedAt?.toISOString() ?? null,
     createdAt: realization.createdAt.toISOString(),
     updatedAt: realization.updatedAt.toISOString(),
     logs: input.logs,

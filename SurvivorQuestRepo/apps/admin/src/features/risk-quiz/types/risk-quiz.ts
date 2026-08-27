@@ -1,21 +1,19 @@
-import type { StationType } from "@/features/games/types/station";
+import type { Station } from "@/features/games/types/station";
 
 export type RiskDifficulty = "EASY" | "MEDIUM" | "HARD";
-
-export type RiskStationSummary = {
-  id: string;
-  name: string;
-  type: StationType;
-};
 
 // A station from the shared station library assigned to a category's
 // (difficulty) pool — the pool's content IS the assigned station, whatever
 // type it is (quiz, wordle, hangman, memory, ...).
+//
+// `station` is the WHOLE station, not a summary: a realization-owned deck's
+// stations never appear in the template list GET /station returns, so this is
+// the only place the editor can read their content from.
 export type RiskPoolStation = {
   id: string;
   difficulty: RiskDifficulty;
   stationId: string;
-  station: RiskStationSummary;
+  station: Station;
 };
 
 export type RiskCard = {

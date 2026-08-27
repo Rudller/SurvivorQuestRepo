@@ -39,7 +39,7 @@ export function LanguagePickerModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
         className="flex-1 justify-center px-6"
-        style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
+        style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)" }}
         onPress={onClose}
       >
         <Pressable

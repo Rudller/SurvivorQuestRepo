@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import {
   RiskDifficulty,
+  RiskPoolStation as PrismaRiskPoolStationRow,
+  Station as PrismaStationRow,
   StationType as PrismaStationType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,7 +17,10 @@ import {
   parseCompletionCode,
   resolveCompletionCodeInputMode,
 } from '../mobile/domain/mobile-station.helpers';
-import { fromPrismaStationType } from '../station/mappers/station.mapper';
+import {
+  fromPrismaStationType,
+  mapStation,
+} from '../station/mappers/station.mapper';
 import {
   RISK_CARDS_PER_POOL,
   RISK_DIFFICULTY_ORDER,
@@ -115,12 +120,17 @@ export class RiskQuizService {
           name: sourceCategory.name,
           codeSlug: sourceCategory.codeSlug,
           realizationId,
-          sourceTemplateId: sourceCategory.sourceTemplateId ?? sourceCategory.id,
+          sourceTemplateId:
+            sourceCategory.sourceTemplateId ?? sourceCategory.id,
         },
       });
 
       await this.prisma.riskSchemeCategory.create({
-        data: { schemeId: clonedScheme.id, categoryId: clonedCategory.id, order },
+        data: {
+          schemeId: clonedScheme.id,
+          categoryId: clonedCategory.id,
+          order,
+        },
       });
 
       // Cards already minted for this realization still point at the SOURCE
@@ -235,13 +245,59 @@ export class RiskQuizService {
     return clonedSchemeId;
   }
 
+  /**
+   * Ownership/lineage of one deck, without the adoption side effect
+   * ensureRealizationOwnedScheme carries — safe to call on plain reads.
+   */
+  async findSchemeSummaryById(schemeId: string) {
+    return this.prisma.riskScheme.findUnique({
+      where: { id: schemeId },
+      select: { id: true, realizationId: true, sourceTemplateId: true },
+    });
+  }
+
+  /**
+   * The deck id an update should store. The realization editor's dropdown lists
+   * templates only, so a realization that already owns a clone submits the
+   * *template* it was cloned from. Storing that verbatim would send
+   * ensureRealizationOwnedScheme off to clone the template again and strand
+   * every edit made to the realization's own deck, so only a genuinely
+   * different template counts as picking another deck. Mirrors the
+   * isReusingCurrentScenarioInstance check on the Scenario side.
+   */
+  async resolveSelectedSchemeId({
+    realizationId,
+    requestedSchemeId,
+    currentSchemeId,
+  }: {
+    realizationId: string;
+    requestedSchemeId: string | null;
+    currentSchemeId: string | null;
+  }): Promise<string | null> {
+    if (!requestedSchemeId || !currentSchemeId) {
+      return requestedSchemeId ?? null;
+    }
+    if (requestedSchemeId === currentSchemeId) {
+      return currentSchemeId;
+    }
+
+    const currentScheme = await this.findSchemeSummaryById(currentSchemeId);
+    const isOwnedByThisRealization =
+      currentScheme?.realizationId === realizationId;
+    return isOwnedByThisRealization &&
+      currentScheme?.sourceTemplateId === requestedSchemeId
+      ? currentSchemeId
+      : requestedSchemeId;
+  }
+
   /** The realization's own deck with everything the admin editor renders. */
   async getRealizationScheme(realizationId: string) {
     const schemeId = await this.ensureRealizationOwnedScheme(realizationId);
-    return this.prisma.riskScheme.findUnique({
+    const scheme = await this.prisma.riskScheme.findUnique({
       where: { id: schemeId },
       include: RiskQuizService.schemeCategoriesInclude,
     });
+    return scheme ? RiskQuizService.mapSchemeStations(scheme) : scheme;
   }
 
   private async requireTeamSession(sessionToken: string) {
@@ -516,6 +572,7 @@ export class RiskQuizService {
       correctAnswerIndex?: number;
       audioUrl?: string;
       acceptedAnswers?: string[];
+      caesarShift?: number;
     } | null;
     const completionCodeLength =
       parseCompletionCode(station.completionCode)?.length ?? 0;
@@ -548,6 +605,12 @@ export class RiskQuizService {
               correctAnswerIndex: quiz.correctAnswerIndex,
               audioUrl: quiz.audioUrl,
               acceptedAnswers: quiz.acceptedAnswers,
+              // caesar-cipher stations need the admin-set shift client-side,
+              // otherwise the panel falls back to a derived one and shows a
+              // different cipher than the admin previewed.
+              ...(typeof quiz.caesarShift === 'number'
+                ? { caesarShift: quiz.caesarShift }
+                : {}),
             }
           : undefined,
     };
@@ -714,17 +777,52 @@ export class RiskQuizService {
     },
   };
 
+  // A pool row ships its station mapped exactly like GET /station, not as the
+  // raw Prisma row. Two reasons, both load bearing for the admin editor:
+  // `type` has to be the kebab-case string the admin uses (the raw row carries
+  // the SCREAMING_CASE enum), and a realization-owned deck's stations exist
+  // nowhere else the admin can reach — GET /station lists templates only — so
+  // this response is the only source for their editable content.
+  private static mapCategoryStations<
+    TCategory extends { poolStations: { station: PrismaStationRow }[] },
+  >(category: TCategory) {
+    return {
+      ...category,
+      poolStations: category.poolStations.map((poolStation) => ({
+        ...poolStation,
+        station: mapStation(poolStation.station),
+      })),
+    };
+  }
+
+  private static mapSchemeStations<
+    TScheme extends {
+      schemeCategories: {
+        category: { poolStations: { station: PrismaStationRow }[] };
+      }[];
+    },
+  >(scheme: TScheme) {
+    return {
+      ...scheme,
+      schemeCategories: scheme.schemeCategories.map((schemeCategory) => ({
+        ...schemeCategory,
+        category: RiskQuizService.mapCategoryStations(schemeCategory.category),
+      })),
+    };
+  }
+
   // --- Schemes ("talie") — assemble existing Categories, same relationship
   // shape as Scenario -> Station: a scheme assigns, it doesn't own content. ---
 
   async listSchemes() {
-    return this.prisma.riskScheme.findMany({
+    const schemes = await this.prisma.riskScheme.findMany({
       // Templates only — realization-owned clones are reached through
       // getRealizationScheme(), never through the shared library.
       where: { realizationId: null },
       orderBy: { name: 'asc' },
       include: RiskQuizService.schemeCategoriesInclude,
     });
+    return schemes.map((scheme) => RiskQuizService.mapSchemeStations(scheme));
   }
 
   async createScheme(name: string) {
@@ -732,10 +830,12 @@ export class RiskQuizService {
     if (!trimmed) {
       throw new BadRequestException('Scheme name is required');
     }
-    return this.prisma.riskScheme.create({
-      data: { name: trimmed },
-      include: RiskQuizService.schemeCategoriesInclude,
-    });
+    return RiskQuizService.mapSchemeStations(
+      await this.prisma.riskScheme.create({
+        data: { name: trimmed },
+        include: RiskQuizService.schemeCategoriesInclude,
+      }),
+    );
   }
 
   async renameScheme(schemeId: string, name: string) {
@@ -759,10 +859,14 @@ export class RiskQuizService {
       where: { schemeId },
     });
     try {
-      return await this.prisma.riskSchemeCategory.create({
+      const schemeCategory = await this.prisma.riskSchemeCategory.create({
         data: { schemeId, categoryId, order: count },
         include: { category: { include: RiskQuizService.poolStationsInclude } },
       });
+      return {
+        ...schemeCategory,
+        category: RiskQuizService.mapCategoryStations(schemeCategory.category),
+      };
     } catch {
       throw new BadRequestException(
         'This category is already assigned to this scheme',
@@ -780,12 +884,15 @@ export class RiskQuizService {
   // --- Categories ("kategorie") — standalone, reusable task pools ---
 
   async listCategories() {
-    return this.prisma.riskCategory.findMany({
+    const categories = await this.prisma.riskCategory.findMany({
       // Templates only — see listSchemes().
       where: { realizationId: null },
       orderBy: { name: 'asc' },
       include: RiskQuizService.poolStationsInclude,
     });
+    return categories.map((category) =>
+      RiskQuizService.mapCategoryStations(category),
+    );
   }
 
   async createCategory(name: string) {
@@ -794,10 +901,12 @@ export class RiskQuizService {
       throw new BadRequestException('Category name is required');
     }
     const codeSlug = await this.generateUniqueCategoryCodeSlug(trimmed);
-    return this.prisma.riskCategory.create({
-      data: { name: trimmed, codeSlug },
-      include: RiskQuizService.poolStationsInclude,
-    });
+    return RiskQuizService.mapCategoryStations(
+      await this.prisma.riskCategory.create({
+        data: { name: trimmed, codeSlug },
+        include: RiskQuizService.poolStationsInclude,
+      }),
+    );
   }
 
   async updateCategory(categoryId: string, name: string) {
@@ -930,8 +1039,9 @@ export class RiskQuizService {
       );
     }
 
+    let created: PrismaRiskPoolStationRow & { station: PrismaStationRow };
     try {
-      return await this.prisma.riskPoolStation.create({
+      created = await this.prisma.riskPoolStation.create({
         data: {
           categoryId: input.categoryId,
           difficulty: input.difficulty,
@@ -944,6 +1054,8 @@ export class RiskQuizService {
         'This station is already assigned to this pool',
       );
     }
+
+    return { ...created, station: mapStation(created.station) };
   }
 
   async removeStationFromPool(poolStationId: string) {

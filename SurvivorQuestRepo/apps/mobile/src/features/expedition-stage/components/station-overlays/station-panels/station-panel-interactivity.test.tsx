@@ -324,18 +324,20 @@ describe("station panel interactivity — fresh attempt state", () => {
     expect(model.hangmanIsGuessDisabled).toBe(false);
 
     const onSubmitLetter = jest.fn();
-    const { getByText } = await render(
+    const { getByText, queryByText } = await render(
       <HangmanStationPanel
         stationId="station-1"
         hangmanMisses={[]}
         hangmanAttemptsLeft={model.hangmanAttemptsLeft}
         guessedHangmanSet={model.guessedHangmanSet}
+        hideAttempts
         isGuessDisabled={model.hangmanIsGuessDisabled}
         isSubmittingHangmanGuess={false}
         onSubmitLetter={onSubmitLetter}
       />,
     );
 
+    expect(queryByText("Próby")).toBeNull();
     await fireEvent.press(getByText("Q"));
     expect(onSubmitLetter).toHaveBeenCalledWith("Q");
   });

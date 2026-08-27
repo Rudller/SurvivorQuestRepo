@@ -47,7 +47,7 @@ export function WelcomePreviewOverlay({ visible, introText, onClose }: WelcomePr
   return (
     <View
       className="absolute inset-0 z-50 items-center justify-center px-4"
-      style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.78)" }}
+      style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.78)` }}
     >
       <View
         className="w-full max-w-[560px] rounded-3xl border p-5"

@@ -415,7 +415,7 @@ export function RealizationFinishOverlay({
   return (
     <View
       className="absolute inset-0 z-[70] items-center justify-center px-4"
-      style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.56)" }}
+      style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.56)" }}
     >
       <Animated.View
         className="w-full rounded-3xl border"
@@ -561,7 +561,7 @@ export function RealizationFinishOverlay({
       {showLeaderboard && isFullLeaderboardVisible ? (
         <View
           className="absolute inset-0 items-center justify-center px-4"
-          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(4, 10, 8, 0.82)" }}
+          style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : `rgba(${EXPEDITION_THEME.scrimAbyssRgb}, 0.82)` }}
         >
           <View
             className="w-full overflow-hidden rounded-3xl border"

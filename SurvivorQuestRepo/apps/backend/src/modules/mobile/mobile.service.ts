@@ -34,6 +34,7 @@ import {
   parseCompletionCode,
   resolveCompletionCodeInputMode,
 } from './domain/mobile-station.helpers';
+import { resolveStartCountdownMs } from './domain/mobile-countdown.helpers';
 import {
   resolveLocalizedRealizationTexts,
   resolveLocalizedStationPresentation,
@@ -470,6 +471,12 @@ export class MobileService {
         availableLanguages: languageContext.availableLanguageOptions,
         instructors: realization.instructors,
         status: normalizedRealizationStatus,
+        // Milliseconds the tablet should still count down before opening the
+        // game, measured on this clock so every device lands on zero together.
+        startsInMs: resolveStartCountdownMs({
+          status: normalizedRealizationStatus,
+          startedAt: realization.startedAt,
+        }),
         locationRequired: realization.locationRequired,
         showLeaderboard: realization.showLeaderboard,
         showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
@@ -2916,6 +2923,10 @@ export class MobileService {
         data: {
           status: PrismaRealizationStatus.IN_PROGRESS,
           scheduledAt: startedAt,
+          // This is the path the organiser's "Uruchom" button takes, so this
+          // is the stamp the tablets count down from. RealizationService's
+          // form-save path stamps it too, for a status changed by hand there.
+          startedAt,
         },
       });
     }

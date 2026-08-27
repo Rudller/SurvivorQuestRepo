@@ -10,6 +10,7 @@ type HangmanStationPanelProps = {
   hangmanMisses: string[];
   hangmanAttemptsLeft: number;
   guessedHangmanSet: Set<string>;
+  hideAttempts?: boolean;
   isGuessDisabled: boolean;
   isSubmittingHangmanGuess: boolean;
   onSubmitLetter: (letter: string) => void;
@@ -53,6 +54,7 @@ export function HangmanStationPanel({
   hangmanMisses,
   hangmanAttemptsLeft,
   guessedHangmanSet,
+  hideAttempts = false,
   isGuessDisabled,
   isSubmittingHangmanGuess,
   onSubmitLetter,
@@ -72,27 +74,31 @@ export function HangmanStationPanel({
 
   return (
     <View className="mt-3">
-      <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.attempts}
-      </Text>
-      <View className="mt-1 flex-row justify-center" style={{ columnGap: attemptsDotGap }}>
-        {Array.from({ length: safeMaxAttempts }).map((_, index) => {
-          const isActive = index < safeAttemptsLeft;
-          const activeColor = EXPEDITION_THEME.accentStrong;
-          return (
-            <View
-              key={`${stationId}-hangman-attempt-${index}`}
-              className="rounded-full border"
-              style={{
-                width: attemptsDotSize,
-                height: attemptsDotSize,
-                borderColor: isActive ? activeColor : EXPEDITION_THEME.border,
-                backgroundColor: isActive ? activeColor : "transparent",
-              }}
-            />
-          );
-        })}
-      </View>
+      {!hideAttempts ? (
+        <>
+          <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
+            {text.attempts}
+          </Text>
+          <View className="mt-1 flex-row justify-center" style={{ columnGap: attemptsDotGap }}>
+            {Array.from({ length: safeMaxAttempts }).map((_, index) => {
+              const isActive = index < safeAttemptsLeft;
+              const activeColor = EXPEDITION_THEME.accentStrong;
+              return (
+                <View
+                  key={`${stationId}-hangman-attempt-${index}`}
+                  className="rounded-full border"
+                  style={{
+                    width: attemptsDotSize,
+                    height: attemptsDotSize,
+                    borderColor: isActive ? activeColor : EXPEDITION_THEME.border,
+                    backgroundColor: isActive ? activeColor : "transparent",
+                  }}
+                />
+              );
+            })}
+          </View>
+        </>
+      ) : null}
       {/*
         Fixed minHeight regardless of whether there are any misses yet, so
         the keyboard below doesn't jump up when the first wrong letter

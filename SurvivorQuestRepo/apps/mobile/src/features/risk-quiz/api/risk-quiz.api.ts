@@ -18,6 +18,7 @@ export type RiskDrawnStation = {
     correctAnswerIndex?: number;
     audioUrl?: string;
     acceptedAnswers?: string[];
+    caesarShift?: number;
   };
 };
 

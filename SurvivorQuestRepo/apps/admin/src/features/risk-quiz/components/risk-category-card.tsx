@@ -86,10 +86,13 @@ export function StationAssignmentForm({
 
 export function PoolStationRow({ poolStation }: { poolStation: RiskCategory["poolStations"][number] }) {
   const [removeStation, { isLoading }] = useRemoveRiskStationFromPoolMutation();
-  const { data: allStations } = useGetStationsQuery();
   const [isEditing, setIsEditing] = useState(false);
 
-  const fullStation = allStations?.find((station) => station.id === poolStation.stationId);
+  // The pool row already carries the whole station, so don't look it up in the
+  // template library: a realization-owned deck's stations are clones that the
+  // library deliberately never lists, and searching for them there left this
+  // button permanently disabled.
+  const fullStation = poolStation.station;
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2.5">
@@ -101,8 +104,7 @@ export function PoolStationRow({ poolStation }: { poolStation: RiskCategory["poo
         <button
           type="button"
           onClick={() => setIsEditing(true)}
-          disabled={!fullStation}
-          className="rounded-md border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 transition hover:border-zinc-500 disabled:opacity-60"
+          className="rounded-md border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-200 transition hover:border-zinc-500"
         >
           Edytuj
         </button>
@@ -116,7 +118,7 @@ export function PoolStationRow({ poolStation }: { poolStation: RiskCategory["poo
         </button>
       </div>
 
-      {isEditing && fullStation ? (
+      {isEditing ? (
         <EditStationModal station={fullStation} onClose={() => setIsEditing(false)} />
       ) : null}
     </div>

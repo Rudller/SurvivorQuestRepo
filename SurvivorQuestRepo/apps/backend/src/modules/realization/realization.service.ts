@@ -239,11 +239,37 @@ export class RealizationService {
     const validated = validateRealizationPayload(payload);
     const isRiskQuizType = validated.type === 'risk-quiz';
 
+    const nextStatus = resolveRealizationStatus(
+      validated.status,
+      validated.scheduledAt,
+      validated.durationMinutes,
+    );
+    // Only the transition INTO in-progress counts as "the organiser pressed
+    // start". Every other save of a running realization (a typo in the intro
+    // text, a swapped deck) must leave the stamp alone, or the tablets would
+    // re-run their countdown mid-game.
+    const isStartingNow =
+      nextStatus === 'in-progress' &&
+      fromPrismaRealizationStatus(current.status) !== 'in-progress';
+
     const currentScenario = current.scenarioId
       ? await this.scenarioService.findScenarioById(current.scenarioId)
       : null;
     const currentScenarioOwnedByThisRealization =
       !!currentScenario && currentScenario.realizationId === realizationId;
+
+    // The riskQuiz dropdown only lists templates, so a realization that already
+    // owns a cloned deck submits that clone's source template id. Resolve it
+    // back to the owned deck instead of letting the clone-on-save path below
+    // build a fresh copy over the top of the admin's edits.
+    const requestedRiskSchemeId = validated.riskSchemeId || null;
+    const riskSchemeIdToStore = isRiskQuizType
+      ? await this.riskQuizService.resolveSelectedSchemeId({
+          realizationId,
+          requestedSchemeId: requestedRiskSchemeId,
+          currentSchemeId: current.riskSchemeId ?? null,
+        })
+      : requestedRiskSchemeId;
 
     // scenarioInstanceIdToRemove tracks a realization-owned scenario instance
     // that's being replaced or dropped — it can only be deleted once
@@ -340,7 +366,7 @@ export class RealizationService {
         offerPdfUrl: validated.offerPdfUrl,
         offerPdfName: validated.offerPdfName,
         scenarioId: scenario?.id ?? null,
-        riskSchemeId: validated.riskSchemeId || null,
+        riskSchemeId: riskSchemeIdToStore,
         teamCount: validated.teamCount,
         requiredDevicesCount: calculateRequiredDevices(validated.teamCount),
         peopleCount: validated.peopleCount,
@@ -355,14 +381,9 @@ export class RealizationService {
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
         hideTaskList: validated.hideTaskList,
-        status: toPrismaRealizationStatus(
-          resolveRealizationStatus(
-            validated.status,
-            validated.scheduledAt,
-            validated.durationMinutes,
-          ),
-        ),
+        status: toPrismaRealizationStatus(nextStatus),
         scheduledAt: new Date(validated.scheduledAt),
+        ...(isStartingNow ? { startedAt: new Date() } : {}),
       },
     });
 
@@ -647,6 +668,16 @@ export class RealizationService {
         ? await this.scenarioService.findScenarioById(scenarioTemplateId)
         : scenario;
     const scenarioTemplateName = scenarioTemplate?.name;
+    // Same shape as scenarioTemplateId: the editor's dropdown speaks in
+    // template ids, so hand it the template this realization's deck came from.
+    const riskScheme = realization.riskSchemeId
+      ? await this.riskQuizService.findSchemeSummaryById(
+          realization.riskSchemeId,
+        )
+      : null;
+    const riskSchemeTemplateId = riskScheme
+      ? (riskScheme.sourceTemplateId ?? riskScheme.id)
+      : undefined;
     const stations =
       stationsFromSync ||
       (scenario
@@ -670,6 +701,7 @@ export class RealizationService {
             : false,
         scenarioTemplateId,
         scenarioTemplateName,
+        riskSchemeTemplateId,
         joinCode: publicJoinCode,
       },
       stationIds: stations.map((item) => item.id),

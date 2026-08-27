@@ -131,6 +131,24 @@ export class StationService {
     return station.kind === 'template';
   }
 
+  /**
+   * Stations that PUT /station may rewrite in place.
+   *
+   * Templates, plus a realization's Ryzykanci pool clones. Those clones carry a
+   * realizationId but no scenarioInstanceId (see cloneSchemeForRealization),
+   * and they are absent from the template library, so this route is the only
+   * way to reach their content — without them the deck editor's "Edytuj" saves
+   * would 404. Scenario instances stay excluded on purpose: they are rewritten
+   * through the realization's own save path, which also reorders and renumbers
+   * them.
+   */
+  isEditableStation(station: StationEntity) {
+    if (this.isTemplateStation(station)) {
+      return true;
+    }
+    return Boolean(station.realizationId) && !station.scenarioInstanceId;
+  }
+
   async addTemplateStation(
     station: Omit<
       StationEntity,

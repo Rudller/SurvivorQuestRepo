@@ -75,7 +75,7 @@ const WORDLE_STATION_TEXT: Record<UiLanguage, WordleStationText> = {
   polish: {
     checking: "Sprawdzanie...",
     revealing: "Odkrywanie...",
-    checkWord: "Sprawdź słowo",
+    checkWord: "Sprawdź",
   },
   english: WORDLE_STATION_TEXT_ENGLISH,
   ukrainian: {
@@ -455,8 +455,8 @@ export function WordleInteractionPanel({
           <View
             key={`${stationId}-wordle-kb-row-${rowIndex}`}
             className="flex-row justify-center"
-            style={{ columnGap: keyboardKeyGap }}
           >
+            <View className="flex-row" style={{ columnGap: keyboardKeyGap }}>
             {row.map((key) => {
               const colors = resolveWordleColors(keyStateByLetter.get(key));
               return (
@@ -488,26 +488,31 @@ export function WordleInteractionPanel({
                 </Pressable>
               );
             })}
+
+            {rowIndex === WORDLE_KEYBOARD_ROWS.length - 1 ? (
+              <Pressable
+                className="absolute items-center justify-center rounded-xl active:opacity-90"
+                style={{
+                  left: row.length * keyboardKeySize + row.length * keyboardKeyGap,
+                  width: keyboardKeySize * 1.75,
+                  height: keyboardKeyHeight,
+                  backgroundColor: hasSubmitAccent ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
+                  opacity: isInteractiveDisabled ? 0.45 : 1,
+                }}
+                onPress={handleSubmitPress}
+                disabled={isInteractiveDisabled}
+              >
+                <Text
+                  className="font-semibold"
+                  style={{ color: submitLabelColor, fontSize: layout.actionFontSize }}
+                >
+                  {isSubmitting ? text.checking : isRevealing ? text.revealing : text.checkWord}
+                </Text>
+              </Pressable>
+            ) : null}
+            </View>
           </View>
         ))}
-      </View>
-
-      <View className="mt-4 items-center">
-        <Pressable
-          className="items-center justify-center rounded-xl active:opacity-90"
-          style={{
-            width: "50%",
-            backgroundColor: hasSubmitAccent ? EXPEDITION_THEME.accent : EXPEDITION_THEME.panelStrong,
-            opacity: isInteractiveDisabled ? 0.45 : 1,
-            minHeight: layout.actionMinHeight,
-          }}
-          onPress={handleSubmitPress}
-          disabled={isInteractiveDisabled}
-        >
-          <Text className="font-semibold" style={{ color: submitLabelColor, fontSize: layout.actionFontSize }}>
-            {isSubmitting ? text.checking : isRevealing ? text.revealing : text.checkWord}
-          </Text>
-        </Pressable>
       </View>
     </View>
   );

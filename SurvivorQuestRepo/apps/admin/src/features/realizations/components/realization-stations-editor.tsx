@@ -217,6 +217,7 @@ export function toRealizationStationDraft(station: Station): RealizationStationD
             correctAnswerIndex: station.quiz.correctAnswerIndex,
             audioUrl: station.quiz.audioUrl ?? "",
             acceptedAnswers: station.quiz.acceptedAnswers,
+            caesarShift: station.quiz.caesarShift,
           }
       : {
           question:
@@ -2033,6 +2034,7 @@ export function RealizationStationsEditor({
                                     correctAnswerIndex: selectedStationCorrectAnswerIndex,
                                     audioUrl: selectedStationQuiz?.audioUrl,
                                     acceptedAnswers: selectedStationQuiz?.acceptedAnswers,
+                                    caesarShift: selectedStationQuiz?.caesarShift,
                                   },
                                 })
                               }

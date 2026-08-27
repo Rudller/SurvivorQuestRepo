@@ -11,7 +11,7 @@ import type {
 } from "../types/station";
 import { normalizeStationQuiz } from "../station.utils";
 
-type StationDto = {
+export type StationDto = {
   id: string;
   name: string;
   type?: StationType;
@@ -35,6 +35,7 @@ type StationDto = {
     correctAnswerIndex?: number;
     audioUrl?: string;
     acceptedAnswers?: string[];
+    caesarShift?: number;
   } | null;
   translations?: StationTranslations | null;
   latitude?: number | null;
@@ -145,7 +146,7 @@ function normalizeStationCategories(categories: string[] | null | undefined) {
   return normalized;
 }
 
-function normalizeStation(station: StationDto): Station {
+export function normalizeStation(station: StationDto): Station {
   const trimmedName = station.name?.trim() || "Untitled station";
   const safePoints =
     Number.isFinite(station.points) && station.points > 0 ? station.points : 1;
@@ -196,6 +197,7 @@ function normalizeStation(station: StationDto): Station {
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
             audioUrl: station.quiz.audioUrl,
             acceptedAnswers: station.quiz.acceptedAnswers,
+            caesarShift: station.quiz.caesarShift,
           }) ?? undefined)
         : undefined,
     translations: station.translations ?? undefined,
@@ -242,7 +244,10 @@ export const stationApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: (response: StationDto) => normalizeStation(response),
-      invalidatesTags: ["Station"],
+      // A Ryzykanci pool task is edited through this same endpoint, so the
+      // realization's deck has to refetch too — otherwise the deck editor keeps
+      // showing the pre-edit question until a full page reload.
+      invalidatesTags: ["Station", "RiskQuiz"],
     }),
     deleteStation: build.mutation<{ id: string }, DeleteStationPayload>({
       query: (body) => ({

@@ -101,6 +101,29 @@ const quizStation = {
   quizData: { question: 'Q1?', answers: ['a', 'b'], correctAnswerIndex: 1 },
 };
 
+// Admin-facing reads run the pool's station through mapStation(), which touches
+// every column, so those mocks need a whole row rather than the partial above.
+const quizStationRow = {
+  ...quizStation,
+  categories: [],
+  qrEntryCode: null,
+  qrScanCodes: [],
+  translations: null,
+  challengeDifficultyMode: 'admin',
+  challengeDifficulty: 'medium',
+  completionStopwatchEnabled: false,
+  allowConcurrentTeams: false,
+  fastestCompletionBonusPoints: 0,
+  color: '#f59e0b',
+  latitude: null,
+  longitude: null,
+  sourceTemplateId: null,
+  scenarioInstanceId: null,
+  realizationId: null,
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+};
+
 describe('RiskQuizService.scanCard', () => {
   it('draws a random station assignment that the team has not attempted yet', async () => {
     const { service, prisma } = createService();
@@ -446,7 +469,9 @@ describe('RiskQuizService.updateCategory', () => {
 });
 
 describe('RiskQuizService.cloneSchemeForRealization', () => {
-  function arrangeTemplateDeck(prisma: ReturnType<typeof createService>['prisma']) {
+  function arrangeTemplateDeck(
+    prisma: ReturnType<typeof createService>['prisma'],
+  ) {
     prisma.riskScheme.findUnique.mockResolvedValue({
       id: 'template-scheme',
       name: 'Standardowa',
@@ -521,7 +546,10 @@ describe('RiskQuizService.cloneSchemeForRealization', () => {
     await service.cloneSchemeForRealization('template-scheme', 'realization-1');
 
     expect(prisma.riskCard.updateMany).toHaveBeenCalledWith({
-      where: { realizationId: 'realization-1', categoryId: 'template-category' },
+      where: {
+        realizationId: 'realization-1',
+        categoryId: 'template-category',
+      },
       data: { categoryId: 'cloned-category' },
     });
     expect(prisma.riskAttempt.updateMany).toHaveBeenCalledWith({
@@ -621,6 +649,63 @@ describe('RiskQuizService library listings', () => {
   });
 });
 
+// A realization-owned deck's stations are absent from GET /station (that route
+// lists templates only), so this response is the admin editor's only source for
+// their content. It therefore has to ship the SAME shape GET /station does —
+// kebab-case type, parsed quiz — or the editor cannot open them.
+describe('RiskQuizService admin reads ship editable stations', () => {
+  it('maps the pool station of a realization deck like GET /station does', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.riskScheme.findUnique
+      .mockResolvedValueOnce({ id: 'scheme-1', realizationId: 'realization-1' })
+      .mockResolvedValueOnce({
+        id: 'scheme-1',
+        name: 'Talia',
+        schemeCategories: [
+          {
+            id: 'scheme-category-1',
+            categoryId: 'category-1',
+            order: 0,
+            category: {
+              id: 'category-1',
+              name: 'Kategoria',
+              poolStations: [
+                {
+                  id: 'pool-1',
+                  difficulty: 'EASY',
+                  stationId: quizStationRow.id,
+                  station: {
+                    ...quizStationRow,
+                    realizationId: 'realization-1',
+                    quizData: {
+                      question: 'Q1?',
+                      answers: ['a', 'b', 'c', 'd'],
+                      correctAnswerIndex: 1,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+    const scheme = await service.getRealizationScheme('realization-1');
+
+    const poolStation =
+      scheme!.schemeCategories[0].category.poolStations[0].station;
+    expect(poolStation.type).toBe('quiz');
+    expect(poolStation.quiz).toEqual(
+      expect.objectContaining({ question: 'Q1?' }),
+    );
+    expect(poolStation.kind).toBe('realization-instance');
+  });
+});
+
 describe('RiskQuizService.assignStationToPool', () => {
   it('assigns an unattached template station (no scenarioInstanceId/realizationId)', async () => {
     const { service, prisma } = createService();
@@ -630,7 +715,10 @@ describe('RiskQuizService.assignStationToPool', () => {
       realizationId: null,
     });
     prisma.riskCategory.findUnique.mockResolvedValue({ realizationId: null });
-    prisma.riskPoolStation.create.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskPoolStation.create.mockResolvedValue({
+      id: 'pool-1',
+      station: quizStationRow,
+    });
 
     await service.assignStationToPool({
       categoryId: 'category-1',
@@ -639,7 +727,11 @@ describe('RiskQuizService.assignStationToPool', () => {
     });
 
     expect(prisma.riskPoolStation.create).toHaveBeenCalledWith({
-      data: { categoryId: 'category-1', difficulty: 'EASY', stationId: quizStation.id },
+      data: {
+        categoryId: 'category-1',
+        difficulty: 'EASY',
+        stationId: quizStation.id,
+      },
       include: { station: true },
     });
   });
@@ -696,7 +788,10 @@ describe('RiskQuizService.assignStationToPool', () => {
     prisma.riskCategory.findUnique.mockResolvedValue({
       realizationId: 'realization-1',
     });
-    prisma.riskPoolStation.create.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskPoolStation.create.mockResolvedValue({
+      id: 'pool-1',
+      station: quizStationRow,
+    });
 
     await service.assignStationToPool({
       categoryId: 'category-1',
@@ -1739,5 +1834,109 @@ describe('RiskQuizService.cancelRemoteDraw', () => {
 
     expect(prisma.riskPendingDraw.delete).not.toHaveBeenCalled();
     expect(result).toEqual({ teamId: 'team-1', cancelled: false });
+  });
+});
+
+describe('RiskQuizService.resolveSelectedSchemeId', () => {
+  it('keeps the realization-owned clone when the request re-selects its source template', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'owned-clone',
+      realizationId: 'realization-1',
+      sourceTemplateId: 'template-scheme',
+    });
+
+    await expect(
+      service.resolveSelectedSchemeId({
+        realizationId: 'realization-1',
+        requestedSchemeId: 'template-scheme',
+        currentSchemeId: 'owned-clone',
+      }),
+    ).resolves.toBe('owned-clone');
+  });
+
+  it('keeps the realization-owned clone when the request already carries the clone id', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'owned-clone',
+      realizationId: 'realization-1',
+      sourceTemplateId: 'template-scheme',
+    });
+
+    await expect(
+      service.resolveSelectedSchemeId({
+        realizationId: 'realization-1',
+        requestedSchemeId: 'owned-clone',
+        currentSchemeId: 'owned-clone',
+      }),
+    ).resolves.toBe('owned-clone');
+  });
+
+  it('takes the requested template when it is a different deck than the one cloned', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'owned-clone',
+      realizationId: 'realization-1',
+      sourceTemplateId: 'template-scheme',
+    });
+
+    await expect(
+      service.resolveSelectedSchemeId({
+        realizationId: 'realization-1',
+        requestedSchemeId: 'other-template',
+        currentSchemeId: 'owned-clone',
+      }),
+    ).resolves.toBe('other-template');
+  });
+
+  it('takes the requested template when the realization has no deck yet', async () => {
+    const { service, prisma } = createService();
+
+    await expect(
+      service.resolveSelectedSchemeId({
+        realizationId: 'realization-1',
+        requestedSchemeId: 'template-scheme',
+        currentSchemeId: null,
+      }),
+    ).resolves.toBe('template-scheme');
+    expect(prisma.riskScheme.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('takes the requested template when the current deck is still a shared template', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'template-scheme',
+      realizationId: null,
+      sourceTemplateId: null,
+    });
+
+    await expect(
+      service.resolveSelectedSchemeId({
+        realizationId: 'realization-1',
+        requestedSchemeId: 'other-template',
+        currentSchemeId: 'template-scheme',
+      }),
+    ).resolves.toBe('other-template');
+  });
+});
+
+describe('RiskQuizService.findSchemeSummaryById', () => {
+  it('reads the deck without adopting it', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'owned-clone',
+      realizationId: 'realization-1',
+      sourceTemplateId: 'template-scheme',
+    });
+
+    await expect(service.findSchemeSummaryById('owned-clone')).resolves.toEqual(
+      {
+        id: 'owned-clone',
+        realizationId: 'realization-1',
+        sourceTemplateId: 'template-scheme',
+      },
+    );
+    expect(prisma.riskScheme.create).not.toHaveBeenCalled();
+    expect(prisma.realization.update).not.toHaveBeenCalled();
   });
 });

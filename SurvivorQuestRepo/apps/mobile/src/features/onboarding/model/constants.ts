@@ -14,9 +14,23 @@ export type ExpeditionThemePalette = {
   textMuted: string;
   textSubtle: string;
   danger: string;
+  // Overlay scrims, stored as bare "r, g, b" triplets because every call site
+  // picks its own opacity: `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)`.
+  // wash  = light-mode dimming over light panels
+  // deep  = dark-mode dimming behind full-screen overlays
+  // abyss = the darkest dimming, for overlays that must black out the screen
+  scrimWashRgb: string;
+  scrimDeepRgb: string;
+  scrimAbyssRgb: string;
 };
 
 export type ExpeditionThemeMode = "dark" | "light";
+
+// Which palette set a screen draws from. "expedition" is the green field-journal
+// look every regular realization uses; "risk" is the navy/gold card-table look
+// reserved for risk-quiz ("Ryzykanci") realizations. Both families carry a full
+// dark and light variant, so the user's theme toggle keeps working either way.
+export type ExpeditionThemeFamily = "expedition" | "risk";
 
 const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   background: "#0f1914",
@@ -32,6 +46,9 @@ const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   textMuted: "#bdcdbf",
   textSubtle: "#98ad9c",
   danger: "#ef6f6c",
+  scrimWashRgb: "17, 30, 23",
+  scrimDeepRgb: "15, 25, 20",
+  scrimAbyssRgb: "5, 10, 8",
 };
 
 const EXPEDITION_THEME_LIGHT: ExpeditionThemePalette = {
@@ -48,25 +65,88 @@ const EXPEDITION_THEME_LIGHT: ExpeditionThemePalette = {
   textMuted: "#4e6148",
   textSubtle: "#67795f",
   danger: "#ae5954",
+  scrimWashRgb: "17, 30, 23",
+  scrimDeepRgb: "15, 25, 20",
+  scrimAbyssRgb: "5, 10, 8",
 };
 
-const EXPEDITION_THEMES: Record<ExpeditionThemeMode, ExpeditionThemePalette> = {
-  dark: EXPEDITION_THEME_DARK,
-  light: EXPEDITION_THEME_LIGHT,
+const RISK_THEME_DARK: ExpeditionThemePalette = {
+  background: "#071017",
+  mapLine: "#1b2c38",
+  mapNode: "#2c4152",
+  panel: "rgba(13, 25, 35, 0.92)",
+  panelMuted: "rgba(9, 19, 27, 0.94)",
+  panelStrong: "rgba(20, 37, 50, 0.92)",
+  // Borders carry the gold too, dimmed enough that a screen full of panel edges
+  // reads as a card-table trim rather than a wall of accent.
+  border: "#8a6626",
+  accent: "#c89439",
+  accentStrong: "#dfab52",
+  textPrimary: "#f0f0f0",
+  textMuted: "#a9b7c1",
+  textSubtle: "#7d8d99",
+  danger: "#ef6f6c",
+  scrimWashRgb: "7, 16, 23",
+  scrimDeepRgb: "6, 14, 20",
+  scrimAbyssRgb: "3, 8, 12",
+};
+
+const RISK_THEME_LIGHT: ExpeditionThemePalette = {
+  background: "#e8ecef",
+  mapLine: "#9fadb8",
+  mapNode: "#7d8d99",
+  panel: "rgba(248, 250, 251, 0.96)",
+  panelMuted: "rgba(238, 242, 246, 0.98)",
+  panelStrong: "rgba(226, 232, 238, 0.98)",
+  border: "#bf9a52",
+  // The raw gold accent is unreadable on a light surface, so the light variant
+  // walks it down until it carries text-grade contrast against `background`.
+  accent: "#96691f",
+  accentStrong: "#7a5416",
+  textPrimary: "#071017",
+  textMuted: "#3c4c58",
+  textSubtle: "#5b6c78",
+  danger: "#ae5954",
+  scrimWashRgb: "7, 16, 23",
+  scrimDeepRgb: "6, 14, 20",
+  scrimAbyssRgb: "3, 8, 12",
+};
+
+const EXPEDITION_THEMES: Record<ExpeditionThemeFamily, Record<ExpeditionThemeMode, ExpeditionThemePalette>> = {
+  expedition: {
+    dark: EXPEDITION_THEME_DARK,
+    light: EXPEDITION_THEME_LIGHT,
+  },
+  risk: {
+    dark: RISK_THEME_DARK,
+    light: RISK_THEME_LIGHT,
+  },
 };
 
 let activeExpeditionThemeMode: ExpeditionThemeMode = "dark";
+let activeExpeditionThemeFamily: ExpeditionThemeFamily = "expedition";
 
-export function setExpeditionThemeMode(mode: ExpeditionThemeMode) {
+export function setExpeditionThemeMode(
+  mode: ExpeditionThemeMode,
+  family: ExpeditionThemeFamily = "expedition",
+) {
   activeExpeditionThemeMode = mode;
+  activeExpeditionThemeFamily = family;
 }
 
 export function getExpeditionThemeMode() {
   return activeExpeditionThemeMode;
 }
 
-export function getExpeditionThemePalette(mode: ExpeditionThemeMode = activeExpeditionThemeMode) {
-  return EXPEDITION_THEMES[mode];
+export function getExpeditionThemeFamily() {
+  return activeExpeditionThemeFamily;
+}
+
+export function getExpeditionThemePalette(
+  mode: ExpeditionThemeMode = activeExpeditionThemeMode,
+  family: ExpeditionThemeFamily = activeExpeditionThemeFamily,
+) {
+  return EXPEDITION_THEMES[family][mode];
 }
 
 function resolveThemeToken(token: keyof ExpeditionThemePalette) {
@@ -112,6 +192,15 @@ export const EXPEDITION_THEME: ExpeditionThemePalette = {
   },
   get danger() {
     return resolveThemeToken("danger");
+  },
+  get scrimWashRgb() {
+    return resolveThemeToken("scrimWashRgb");
+  },
+  get scrimDeepRgb() {
+    return resolveThemeToken("scrimDeepRgb");
+  },
+  get scrimAbyssRgb() {
+    return resolveThemeToken("scrimAbyssRgb");
   },
 };
 

@@ -49,7 +49,9 @@ const QR_HUNT_WATERMARK_ICON_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons
 // Matches the success color used by code-station-panel.tsx for its "correct code" feedback.
 const QR_HUNT_SCAN_SUCCESS_COLOR = "#34d399";
 // Neutral (not error, not success) — for "you already scanned this code" feedback.
-const QR_HUNT_SCAN_NEUTRAL_COLOR = "#f0c977";
+// Read through the theme rather than pinned to a hex, so it follows whichever
+// palette family the screen is running (expedition green vs risk navy/gold).
+const getQrHuntScanNeutralColor = () => EXPEDITION_THEME.accent;
 const WORDLE_REVEAL_CELL_DELAY_MS = 340;
 const WORDLE_REVEAL_FINISH_BUFFER_MS = 110;
 const TIMEOUT_POPUP_AUTO_CLOSE_SECONDS = 10;
@@ -2140,6 +2142,7 @@ export function StationPreviewOverlay({
     },
     mastermindMediaSectionProps: {
       stationId: station.stationId,
+      minimalChrome: isInlinePresentation,
       prompt: stationQuizPrompt,
       mastermindAttempts,
       mastermindAttemptsLeft,
@@ -2318,6 +2321,7 @@ export function StationPreviewOverlay({
       hangmanMisses,
       hangmanAttemptsLeft,
       guessedHangmanSet,
+      hideAttempts: isInlinePresentation,
       isGuessDisabled: hangmanIsGuessDisabled,
       isSubmittingHangmanGuess,
       onSubmitLetter: (letter) => {
@@ -2458,12 +2462,13 @@ export function StationPreviewOverlay({
     <Animated.View
       className={isInlinePresentation ? "flex-1" : "absolute inset-0 z-50"}
       style={[
+        isInlinePresentation ? { flex: 1, minHeight: 0 } : null,
         {
           backgroundColor: isInlinePresentation
             ? "transparent"
             : isLightTheme
-              ? "rgba(17, 30, 23, 0.34)"
-              : "rgba(15, 25, 20, 0.9)",
+              ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)`
+              : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.9)`,
         },
         overlayBackdropStyle,
       ]}
@@ -2472,14 +2477,20 @@ export function StationPreviewOverlay({
         className="flex-1"
         style={[
           {
-            paddingHorizontal: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
+            flex: 1,
+            minHeight: 0,
+            paddingHorizontal: isInlinePresentation
+              ? 0
+              : adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
             // In inline mode the host (Ryzykanci) already provides the gap
             // above this component via its own rowGap between siblings —
             // this panel's own top padding would stack on top of that and
             // make the gap after the timer visibly bigger than the gap
             // before it.
             paddingTop: isInlinePresentation ? 0 : adaptiveLayout.s(isTabletOverlay ? 36 : 20, 16, 44),
-            paddingBottom: adaptiveLayout.s(isTabletOverlay ? 20 : 12, 10, 28),
+            paddingBottom: isInlinePresentation
+              ? 0
+              : adaptiveLayout.s(isTabletOverlay ? 20 : 12, 10, 28),
           },
           overlayPanelStyle,
         ]}
@@ -2617,6 +2628,16 @@ export function StationPreviewOverlay({
                 // height. Let it size to its own content instead for those.
                 className={isInlinePresentation && isOpenQuizStation ? undefined : "flex-1"}
                 style={{
+                  // The media and description absorb all height left after the
+                  // fixed input/keyboard block in Ryzykanci.
+                  ...(isInlinePresentation && requiresCode
+                    ? {
+                        overflow: "hidden" as const,
+                        flexGrow: 1,
+                        flexBasis: 0,
+                        minHeight: 0,
+                      }
+                    : {}),
                   // Reserve space so station content never renders under the
                   // absolutely-positioned timer/points footer below (this
                   // used to be duplicated per-panel in code-station-panel.tsx
@@ -2657,7 +2678,7 @@ export function StationPreviewOverlay({
                 !requiresQrScan &&
                 !isAnagramStation &&
                 !(station.stationType === "quiz" && !hasRealStationImage) &&
-                !(station.stationType === "time" && !hasRealStationImage) &&
+                !(requiresCode && !hasRealStationImage) &&
                 !(isOpenQuizStation && isInlinePresentation && !hasRealStationImage) ? (
                   <StationMediaPanel
                     minimalChrome={isInlinePresentation}
@@ -2838,7 +2859,7 @@ export function StationPreviewOverlay({
                           columnGap: adaptiveLayout.s(6, 4, 8),
                           paddingHorizontal: adaptiveLayout.s(14, 10, 18),
                           paddingVertical: adaptiveLayout.s(7, 5, 9),
-                          backgroundColor: QR_HUNT_SCAN_NEUTRAL_COLOR,
+                          backgroundColor: getQrHuntScanNeutralColor(),
                         }}
                       >
                         <Text
@@ -2967,10 +2988,21 @@ export function StationPreviewOverlay({
                     // target during the first moments, which is what made the
                     // auto-scroll cycle look jumpy right from station start.
                     // A fixed maxHeight is stable from the very first layout pass.
-                    maxHeight: adaptiveLayout.s(isTabletOverlay ? 160 : 110, 80, 260),
+                    maxHeight:
+                      isInlinePresentation && !hasRealStationImage
+                        ? undefined
+                        : adaptiveLayout.s(isTabletOverlay ? 160 : 110, 80, 260),
+                    ...(isInlinePresentation && !hasRealStationImage
+                      ? { flexGrow: 1, minHeight: 0 }
+                      : {}),
                   }}
                 >
                   <AutoScrollingBox
+                    style={
+                      isInlinePresentation && !hasRealStationImage
+                        ? { flexGrow: 1 }
+                        : undefined
+                    }
                     autoScrollEnabled={false}
                     showsBottomFadeWhenScrollable
                     bottomFadeColor={EXPEDITION_THEME.panel}
@@ -3052,6 +3084,12 @@ export function StationPreviewOverlay({
                     isTabletOverlay={isTabletOverlay}
                     error={quizSubmitError}
                     errorPlacement="inside"
+                    showBorder={
+                      !(isInlinePresentation && (isWordleStation || isHangmanStation))
+                    }
+                    transparentBackground={
+                      isInlinePresentation && (isWordleStation || isHangmanStation)
+                    }
                   >
                     {renderedQuizStation}
                   </StationQuizTaskWrapper>

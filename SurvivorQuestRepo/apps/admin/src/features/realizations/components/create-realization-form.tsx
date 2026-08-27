@@ -11,6 +11,7 @@ import type {
   RealizationType,
 } from "../types/realization";
 import { buildRealizationExport, parseRealizationExportFile } from "../realization-export";
+import { RYZYKANCI_DEFAULT_INTRO_TEXT } from "../realization-default-texts";
 import { geocodeLocation } from "../realization-geocoding";
 import {
   formatRealizationLanguageSummary,
@@ -319,6 +320,23 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     }));
   }
 
+  // Ryzykanci have no separate rules field, so their whole briefing lives in
+  // the intro text — seed it rather than handing the operator an empty box.
+  // Only ever touches text that is empty or still the untouched default, so
+  // flipping the type around never eats something someone wrote.
+  function handleTypeChange(nextType: RealizationType) {
+    setSelectedType(nextType);
+
+    if (nextType === "risk-quiz" && !introText.trim()) {
+      setIntroText(RYZYKANCI_DEFAULT_INTRO_TEXT);
+      return;
+    }
+
+    if (nextType !== "risk-quiz" && introText.trim() === RYZYKANCI_DEFAULT_INTRO_TEXT.trim()) {
+      setIntroText("");
+    }
+  }
+
   async function handleAutoTranslateText() {
     if (isEditingBaseTextLanguage || textEditingLanguage === "other" || baseTextLanguage === "other") {
       return;
@@ -332,13 +350,17 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
       fields.push("introText");
       texts.push(introText);
     }
-    if (!currentTranslation?.gameRules?.trim() && gameRules.trim()) {
+    if (!isRiskQuizType && !currentTranslation?.gameRules?.trim() && gameRules.trim()) {
       fields.push("gameRules");
       texts.push(gameRules);
     }
 
     if (texts.length === 0) {
-      setAutoTranslateMessage("Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.");
+      setAutoTranslateMessage(
+        isRiskQuizType
+          ? "Tekst wstępu ma już tłumaczenie dla tego języka."
+          : "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
+      );
       return;
     }
 
@@ -380,11 +402,15 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const riskQuizTabHasError = submitAttempted && isRiskQuizType && !selectedRiskSchemeId;
   const tabs: TabItem[] = CREATE_FORM_TAB_ORDER.filter((id) => {
     if (id === "riskQuiz") return isRiskQuizType;
-    if (id === "scenario" || id === "stations" || id === "pointsQr") return !isRiskQuizType;
+    // Ryzykanci have no scenario and no stations, but they do have the intro
+    // text — and that text is their entire briefing, so the tab holding it has
+    // to stay reachable. It just drops the scenario picker and renames itself.
+    if (id === "stations" || id === "pointsQr") return !isRiskQuizType;
     return true;
   }).map((id) => ({
     id,
-    label: REALIZATION_FORM_TAB_LABELS[id],
+    label:
+      id === "scenario" && isRiskQuizType ? "Treści i oferta" : REALIZATION_FORM_TAB_LABELS[id],
     hasError:
       id === "basic"
         ? basicTabHasError
@@ -896,7 +922,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Typ realizacji</span>
                     <select
                       value={selectedType}
-                      onChange={(event) => setSelectedType(event.target.value as RealizationType)}
+                      onChange={(event) => handleTypeChange(event.target.value as RealizationType)}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     >
                       {realizationTypeOptions.map((option) => (
@@ -1346,7 +1372,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
             )}
 
             {activeTab === "scenario" && (
-              <FormSection title="Scenariusz i oferta">
+              <FormSection title={isRiskQuizType ? "Treści i oferta" : "Scenariusz i oferta"}>
+                {!isRiskQuizType && (
                 <label className="block space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Scenariusz (szablon)</span>
                   <select
@@ -1373,6 +1400,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </select>
                   {isScenarioInvalid ? <p className="text-xs text-red-300">Wybierz scenariusz.</p> : null}
                 </label>
+                )}
 
                 <div className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">Oferta PDF</span>
@@ -1469,18 +1497,28 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   label="Tekst wstępu"
                   value={effectiveIntroText}
                   onChange={updateEffectiveIntroText}
-                  placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
-                  rows={5}
+                  placeholder={
+                    isRiskQuizType
+                      ? "Treść widoczna na ekranie oczekiwania — tu wpisz też zasady gry."
+                      : "Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                  }
+                  rows={isRiskQuizType ? 10 : 5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
-                <StyledMarkdownEditor
-                  label="Zasady gry"
-                  value={effectiveGameRules}
-                  onChange={updateEffectiveGameRules}
-                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
-                  rows={8}
-                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-                />
+                {/* Ryzykanci carry their whole briefing in the intro text on the
+                    waiting screen, so they get no separate rules field — the mobile
+                    app skips the post-start rules popup for them too (see
+                    apps/mobile/src/features/onboarding/model/game-rules.ts). */}
+                {!isRiskQuizType && (
+                  <StyledMarkdownEditor
+                    label="Zasady gry"
+                    value={effectiveGameRules}
+                    onChange={updateEffectiveGameRules}
+                    placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                    rows={8}
+                    helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                  />
+                )}
               </FormSection>
             )}
 
@@ -1629,9 +1667,11 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p>
                     <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
                   </p>
-                  <p>
-                    <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
-                  </p>
+                  {!isRiskQuizType && (
+                    <p>
+                      <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
+                    </p>
+                  )}
                   <p>
                     <span className="text-zinc-500">Leaderboard w trakcie gry:</span> {showLeaderboardDuringGame ? "Tak" : "Nie"}
                   </p>

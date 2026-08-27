@@ -83,6 +83,7 @@ const OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest odpowiedzieć na pytanie, wpisując odpowiedź samodzielnie (bez podpowiedzi w postaci gotowych opcji).";
 const QUIZ_SECRET_FALLBACK_ANSWERS = ["A", "B", "C"] as const;
 const MATCHING_PAIR_DELIMITER = "->";
+const MATCHING_PAIR_SEPARATOR = ` ${MATCHING_PAIR_DELIMITER} `;
 
 export const imageModeOptions: { value: ImageInputMode; label: string }[] = [
   { value: "upload", label: "Upload" },
@@ -469,15 +470,28 @@ export type MatchingPairInput = {
   right: string;
 };
 
+// The pair editors round-trip through split/join on every keystroke, so both
+// helpers must be lossless while editing — trimming here would eat a space the
+// moment it is typed at the end of a side. Trimming happens once, on save, in
+// normalizeMatchingPairAnswers/normalizeStationQuiz.
 export function splitMatchingPairAnswer(value: string): MatchingPairInput {
-  const normalized = value.trim();
-  if (!normalized) {
-    return { left: "", right: "" };
+  const separatorIndex = value.indexOf(MATCHING_PAIR_SEPARATOR);
+  if (separatorIndex >= 0) {
+    return {
+      left: value.slice(0, separatorIndex),
+      right: value.slice(separatorIndex + MATCHING_PAIR_SEPARATOR.length),
+    };
   }
 
+  const normalized = value.trim();
+  if (!normalized) {
+    return { left: value, right: "" };
+  }
+
+  // Legacy/imported shapes: "a->b", "a = b", "a: b".
   const match = normalized.match(/^(.+?)\s*(?:->|=|:)\s*(.+)$/);
   if (!match) {
-    return { left: normalized, right: "" };
+    return { left: value, right: "" };
   }
 
   return {
@@ -487,24 +501,21 @@ export function splitMatchingPairAnswer(value: string): MatchingPairInput {
 }
 
 export function joinMatchingPairAnswer(left: string, right: string) {
-  const normalizedLeft = left.trim();
-  const normalizedRight = right.trim();
-  if (!normalizedLeft && !normalizedRight) {
-    return "";
+  if (!right) {
+    return left;
   }
-  if (!normalizedLeft || !normalizedRight) {
-    return normalizedLeft || normalizedRight;
-  }
-  return `${normalizedLeft} ${MATCHING_PAIR_DELIMITER} ${normalizedRight}`;
+  return `${left}${MATCHING_PAIR_SEPARATOR}${right}`;
 }
 
 function normalizeMatchingPairAnswers(answers: string[]) {
   return answers.map((answer) => {
     const pair = splitMatchingPairAnswer(answer);
-    if (!pair.left || !pair.right) {
+    const left = pair.left.trim();
+    const right = pair.right.trim();
+    if (!left || !right) {
       return "";
     }
-    return joinMatchingPairAnswer(pair.left, pair.right);
+    return joinMatchingPairAnswer(left, right);
   });
 }
 

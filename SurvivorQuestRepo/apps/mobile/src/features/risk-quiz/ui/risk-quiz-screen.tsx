@@ -30,9 +30,11 @@ import {
   type RiskTestMenuEntry,
 } from "../api/risk-quiz.api";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
+import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { RiskQuizDeckStack } from "../components/risk-quiz-deck-stack";
 import { RiskQuizBackground } from "../components/risk-quiz-background";
+import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 
 type RiskQuizScreenProps = {
@@ -176,7 +178,15 @@ export function RiskQuizScreen({
   const sessionToken = session.sessionToken;
   const isLightTheme = themeMode === "light";
 
-  const [showIntro, setShowIntro] = useState(true);
+  // Seeded from the session MobileApp handed over rather than a blanket true.
+  // This screen only mounts once MobileApp has stopped waiting, so a session
+  // that already knows the game is open must not flash its intro card while
+  // this screen's own first poll is in flight. Straight after the pre-game
+  // countdown that flash read as the briefing coming back, under a
+  // "Czekamy na rozpoczęcie gry..." line, one second after START.
+  const [showIntro, setShowIntro] = useState(() =>
+    shouldShowRiskQuizIntro(session.realization?.status),
+  );
   const [teamPoints, setTeamPoints] = useState(0);
   const [streak, setStreak] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
@@ -191,6 +201,9 @@ export function RiskQuizScreen({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [topPanelHeight, setTopPanelHeight] = useState(0);
   const [timerHeight, setTimerHeight] = useState(0);
+  // Height of the scrollable content area, measured so an inline station card
+  // can be capped to it (see the card wrapper below).
+  const [contentViewportHeight, setContentViewportHeight] = useState(0);
   const [remainingTaskSeconds, setRemainingTaskSeconds] = useState<number | null>(null);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerResult, setAnswerResult] = useState<RiskAnswerResult | null>(null);
@@ -211,10 +224,6 @@ export function RiskQuizScreen({
   // dismiss button. Also hydrates the top bar's live realization/team info
   // (logo, badge, points) for the main screen that follows.
   useEffect(() => {
-    if (!showIntro) {
-      return;
-    }
-
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -242,8 +251,11 @@ export function RiskQuizScreen({
           badgeImageUrl: state.team.badgeImageUrl,
         });
 
+        // Also the only place the top bar's live info is filled in, so it runs
+        // whether or not the intro card is up — a started session still needs
+        // one pass through here before the scan screen has a logo to show.
+        setShowIntro(shouldShowRiskQuizIntro(state.realization.status));
         if (state.realization.status === "in-progress") {
-          setShowIntro(false);
           return;
         }
       } catch (error) {
@@ -633,6 +645,7 @@ export function RiskQuizScreen({
       quizCorrectAnswerIndex: quiz?.correctAnswerIndex,
       quizAudioUrl: quiz?.audioUrl,
       quizAcceptedAnswers: quiz?.acceptedAnswers,
+      quizCaesarShift: quiz?.caesarShift,
       status: "todo",
       startedAt: new Date().toISOString(),
     };
@@ -704,10 +717,24 @@ export function RiskQuizScreen({
               text={session.realization?.introText?.trim() || ""}
               fallbackText={INTRO_FALLBACK_TEXT}
             />
-            <View className="mt-5 flex-row items-center gap-2">
-              <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
-              <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 14 }}>Czekamy na rozpoczęcie gry...</Text>
-            </View>
+            {/* The only way off this screen: it polls until the admin starts
+                the game, and a poll that can't reach the server at all is
+                swallowed and retried forever (a 401 self-resets, an
+                unreachable host doesn't). Without this hold the tablet is
+                stuck here — the test-menu gesture on the top panel only
+                exists on the main screen below. "exit" rather than "rejoin":
+                the usual cause is a moved server, and rejoining would just
+                retry the same dead address. */}
+            <HiddenResetOnHold
+              language={resolveUiLanguage(selectedLanguage)}
+              variant="exit"
+              onReset={onExitRealization}
+            >
+              <View className="mt-5 flex-row items-center gap-2">
+                <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+                <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 14 }}>Czekamy na rozpoczęcie gry...</Text>
+              </View>
+            </HiddenResetOnHold>
           </View>
         </View>
       </SafeAreaView>
@@ -795,6 +822,7 @@ export function RiskQuizScreen({
 
         <ScrollView
           ref={contentScrollViewRef}
+          onLayout={(event) => setContentViewportHeight(event.nativeEvent.layout.height)}
           style={{
             width: "100%",
             flex: 1,
@@ -881,8 +909,22 @@ export function RiskQuizScreen({
             </Animated.View>
           ) : activeDraw ? (
             <Animated.View
-              className="w-full flex-1"
               style={{
+                // Real style props, not `className`: nativewind's className
+                // never reaches Animated.View here, so a w-full/flex-1 class
+                // silently did nothing. Without them this wrapper sizes to its
+                // content under the scroll container's `alignItems: center` —
+                // the code keyboard's natural width spilled off both edges and
+                // its natural height ran under the bottom panel.
+                width: "100%",
+                flex: 1,
+                // Inside a ScrollView content grows freely, so flex alone never
+                // presses on the card — a tall card (photo + code keyboard)
+                // just overflowed under the bottom panel. Capping it at the
+                // measured viewport gives the card's own shrinkable parts real
+                // pressure, so they fit and the keyboard's last row ends level
+                // with the bottom panel instead of being cut off by it.
+                maxHeight: contentViewportHeight || undefined,
                 opacity: questionRevealAnimation,
                 transform: [
                   {
@@ -990,7 +1032,7 @@ export function RiskQuizScreen({
       >
         <Pressable
           className="flex-1 justify-center px-6"
-          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
+          style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)" }}
           onPress={() => setIsLanguagePickerOpen(false)}
         >
           <Pressable
@@ -1059,7 +1101,7 @@ export function RiskQuizScreen({
       >
         <Pressable
           className="flex-1 justify-center px-6"
-          style={{ backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)" }}
+          style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)" }}
           onPress={() => setIsTestMenuOpen(false)}
         >
           <Pressable

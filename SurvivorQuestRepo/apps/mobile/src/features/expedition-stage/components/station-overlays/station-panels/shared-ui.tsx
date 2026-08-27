@@ -97,6 +97,7 @@ type StationQuizTaskWrapperProps = {
   showBorder?: boolean;
   className?: string;
   footer?: ReactNode;
+  transparentBackground?: boolean;
   // Opt-in: makes every box in the chain (outer wrapper, bordered panel,
   // children padding box) flex-1, so `children` receives the wrapper's full
   // height as a definite size instead of hugging its own content. Needed by
@@ -115,6 +116,7 @@ export function StationQuizTaskWrapper({
   showBorder = true,
   className,
   footer,
+  transparentBackground = false,
   fillHeight = false,
 }: StationQuizTaskWrapperProps) {
   const adaptiveLayout = useAdaptiveLayout();
@@ -134,7 +136,9 @@ export function StationQuizTaskWrapper({
         className={`rounded-2xl${showBorder ? " border" : ""}${fillHeight ? " flex-1" : ""}`}
         style={{
           ...(showBorder ? { borderColor: EXPEDITION_THEME.border } : {}),
-          backgroundColor: EXPEDITION_THEME.panelMuted,
+          backgroundColor: transparentBackground
+            ? "transparent"
+            : EXPEDITION_THEME.panelMuted,
         }}
       >
         {!hidePrompt ? (

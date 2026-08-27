@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { AutoScrollingBox } from "./auto-scrolling-box";
 import { EXPEDITION_THEME } from "../../features/onboarding/model/constants";
 import { useAdaptiveLayout } from "../layout/use-adaptive-layout";
@@ -126,12 +126,25 @@ export function IntroTextPreview({ text, fallbackText }: IntroTextPreviewProps) 
   );
 }
 
-export function AutoScrollingIntroBox({ text, fallbackText }: IntroTextPreviewProps) {
+export function AutoScrollingIntroBox({
+  text,
+  fallbackText,
+  // Drops the card the text normally sits in — no border, no fill, no rounding —
+  // so it reads as bare text on the screen's own background. Used by the
+  // Ryzykanci waiting screen, which is built around the logo instead of panels.
+  chromeless = false,
+  style,
+}: IntroTextPreviewProps & { chromeless?: boolean; style?: StyleProp<ViewStyle> }) {
   return (
     <AutoScrollingBox
-      className="mt-2 rounded-2xl border"
-      contentContainerStyle={{ padding: 12 }}
-      style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+      className={chromeless ? "mt-2" : "mt-2 rounded-2xl border"}
+      contentContainerStyle={{ padding: chromeless ? 0 : 12 }}
+      style={[
+        chromeless
+          ? null
+          : { borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted },
+        style,
+      ]}
     >
       <IntroTextPreview text={text} fallbackText={fallbackText} />
     </AutoScrollingBox>

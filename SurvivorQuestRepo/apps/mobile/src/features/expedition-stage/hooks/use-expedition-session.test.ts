@@ -27,6 +27,7 @@ function createSessionState(): ExpeditionSessionState {
       id: "realization-1",
       companyName: "Test Company",
       contactPerson: "",
+      startsInMs: null,
       availableLanguages: [],
       instructors: [],
       status: "in-progress",

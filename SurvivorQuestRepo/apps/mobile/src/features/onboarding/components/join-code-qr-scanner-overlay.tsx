@@ -58,7 +58,7 @@ export function JoinCodeQrScannerOverlay({ visible, onClose, onDetected }: JoinC
   const isTabletLayout = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
-  const backdropColor = isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.65)";
+  const backdropColor = isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.65)";
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
   const [isMounted, setIsMounted] = useState(visible);

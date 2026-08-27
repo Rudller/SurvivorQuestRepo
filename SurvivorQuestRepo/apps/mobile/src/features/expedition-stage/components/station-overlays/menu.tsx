@@ -172,7 +172,7 @@ export function StationTestMenuOverlay({
   return (
     <View
       className="absolute inset-0 z-40 items-center justify-center"
-      style={{ paddingHorizontal: overlayPaddingHorizontal, backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.78)" }}
+      style={{ paddingHorizontal: overlayPaddingHorizontal, backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.78)` }}
     >
       <View
         className="w-full rounded-3xl border"

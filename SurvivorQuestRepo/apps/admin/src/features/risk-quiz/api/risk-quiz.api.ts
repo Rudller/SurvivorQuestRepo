@@ -1,11 +1,13 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
+import { normalizeStation, type StationDto } from "@/features/games/api/station.api";
 import type {
   RiskBoard,
   RiskCancelRemoteDrawResult,
   RiskCardWithCategory,
   RiskCategory,
   RiskDifficulty,
+  RiskPoolStation,
   RiskRemoteDrawResult,
   RiskScheme,
   RiskSchemeCategory,
@@ -17,6 +19,42 @@ import type {
 
 function adminPath(suffix: string) {
   return buildApiPath(`/mobile/risk-quiz/admin${suffix}`);
+}
+
+// Pool rows carry a full station, and it goes through the exact same
+// normalizer GET /station uses — the deck editor hands it straight to
+// EditStationModal, which expects a fully-defaulted Station.
+type RiskPoolStationDto = Omit<RiskPoolStation, "station"> & {
+  station: StationDto;
+};
+type RiskCategoryDto = Omit<RiskCategory, "poolStations"> & {
+  poolStations: RiskPoolStationDto[];
+};
+type RiskSchemeDto = Omit<RiskScheme, "schemeCategories"> & {
+  schemeCategories: (Omit<RiskSchemeCategory, "category"> & {
+    category: RiskCategoryDto;
+  })[];
+};
+
+function normalizePoolStation(poolStation: RiskPoolStationDto): RiskPoolStation {
+  return { ...poolStation, station: normalizeStation(poolStation.station) };
+}
+
+function normalizeCategory(category: RiskCategoryDto): RiskCategory {
+  return {
+    ...category,
+    poolStations: category.poolStations.map(normalizePoolStation),
+  };
+}
+
+function normalizeScheme(scheme: RiskSchemeDto): RiskScheme {
+  return {
+    ...scheme,
+    schemeCategories: scheme.schemeCategories.map((schemeCategory) => ({
+      ...schemeCategory,
+      category: normalizeCategory(schemeCategory.category),
+    })),
+  };
 }
 
 function teamTaskPath(
@@ -35,6 +73,8 @@ export const riskQuizApi = baseApi.injectEndpoints({
     // --- Categories (reusable task pools) ---
     getRiskCategories: build.query<RiskCategory[], void>({
       query: () => adminPath("/categories"),
+      transformResponse: (response: RiskCategoryDto[]) =>
+        response.map(normalizeCategory),
       providesTags: ["RiskQuiz"],
     }),
     createRiskCategory: build.mutation<RiskCategory, { name: string }>({
@@ -43,6 +83,7 @@ export const riskQuizApi = baseApi.injectEndpoints({
         method: "POST",
         body: { name },
       }),
+      transformResponse: normalizeCategory,
       invalidatesTags: ["RiskQuiz"],
     }),
     updateRiskCategory: build.mutation<RiskCategory, { categoryId: string; name: string }>({
@@ -71,6 +112,7 @@ export const riskQuizApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
+      transformResponse: normalizePoolStation,
       invalidatesTags: ["RiskQuiz"],
     }),
     removeRiskStationFromPool: build.mutation<{ success: boolean }, { poolStationId: string }>({
@@ -84,6 +126,8 @@ export const riskQuizApi = baseApi.injectEndpoints({
     // --- Schemes ("talie") — assemble existing categories ---
     getRiskSchemes: build.query<RiskScheme[], void>({
       query: () => adminPath("/schemes"),
+      transformResponse: (response: RiskSchemeDto[]) =>
+        response.map(normalizeScheme),
       providesTags: ["RiskQuiz"],
     }),
     // The realization's own deck (a clone). Fetching it also adopts the deck if
@@ -92,6 +136,7 @@ export const riskQuizApi = baseApi.injectEndpoints({
     getRealizationRiskScheme: build.query<RiskScheme, { realizationId: string }>({
       query: ({ realizationId }) =>
         adminPath(`/realizations/${realizationId}/scheme`),
+      transformResponse: normalizeScheme,
       providesTags: ["RiskQuiz"],
     }),
     createRiskScheme: build.mutation<RiskScheme, { name: string }>({
@@ -100,6 +145,7 @@ export const riskQuizApi = baseApi.injectEndpoints({
         method: "POST",
         body: { name },
       }),
+      transformResponse: normalizeScheme,
       invalidatesTags: ["RiskQuiz"],
     }),
     renameRiskScheme: build.mutation<RiskScheme, { schemeId: string; name: string }>({
@@ -126,6 +172,11 @@ export const riskQuizApi = baseApi.injectEndpoints({
         method: "POST",
         body: { categoryId },
       }),
+      transformResponse: (
+        response: Omit<RiskSchemeCategory, "category"> & {
+          category: RiskCategoryDto;
+        },
+      ) => ({ ...response, category: normalizeCategory(response.category) }),
       invalidatesTags: ["RiskQuiz"],
     }),
     removeCategoryFromScheme: build.mutation<{ success: boolean }, { schemeCategoryId: string }>({

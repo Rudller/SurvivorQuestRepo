@@ -227,6 +227,11 @@ model Realization {
   durationMinutes     Int                @default(120)
   status              RealizationStatus
   scheduledAt         DateTime
+  // Stamped every time the realization enters `in-progress`, i.e. when the
+  // organiser actually presses start — unlike `scheduledAt`, which is the
+  // planned slot. Drives the pre-game countdown the tablets show, so that
+  // every device counts down to the same instant.
+  startedAt           DateTime?
   locationRequired    Boolean            @default(true)
   showLeaderboard     Boolean            @default(true)
   showLeaderboardDuringGame Boolean      @default(true)

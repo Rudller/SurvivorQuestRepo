@@ -1,5 +1,6 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { AutoScrollingBox } from "../../../../../shared/ui/auto-scrolling-box";
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import type { ChallengeDifficulty } from "../puzzle-helpers";
@@ -13,6 +14,7 @@ export type MastermindAttempt = {
 
 type MastermindStationPanelProps = {
   stationId: string;
+  minimalChrome?: boolean;
   mastermindAttempts: MastermindAttempt[];
   mastermindAttemptsLeft: number;
   mastermindInput: string;
@@ -116,6 +118,7 @@ const MASTERMIND_STATION_TEXT: Record<UiLanguage, MastermindStationText> = {
 
 export function MastermindStationPanel({
   stationId,
+  minimalChrome = false,
   mastermindAttempts,
   mastermindAttemptsLeft,
   mastermindInput,
@@ -145,6 +148,30 @@ export function MastermindStationPanel({
     .slice(0, mastermindCodeLength);
   const guessSlots = Array.from({ length: mastermindCodeLength }, (_, index) => normalizedMastermindInput[index] ?? "");
   const canBackspace = !isSymbolDisabled && normalizedMastermindInput.length > 0;
+  const submitButton = (
+    <Pressable
+      className="items-center justify-center rounded-xl px-5 active:opacity-90"
+      style={{
+        backgroundColor: isActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
+        ...(minimalChrome
+          ? {
+              width: layout.isTablet ? 128 : 96,
+              height: layout.isTablet ? 52 : 34,
+            }
+          : { minHeight: layout.actionMinHeight }),
+      }}
+      onPress={onSubmitGuess}
+      disabled={isActionDisabled}
+    >
+      <Text
+        className="font-semibold"
+        style={{ color: actionLabelColor, fontSize: layout.actionFontSize }}
+        numberOfLines={1}
+      >
+        {isSubmittingMastermindGuess ? "..." : text.check}
+      </Text>
+    </Pressable>
+  );
 
   if (mastermindDifficultyMode === "player" && !selectedMastermindDifficulty) {
     const difficultyOptions: ChallengeDifficulty[] = ["easy", "medium", "hard"];
@@ -175,7 +202,10 @@ export function MastermindStationPanel({
   return (
     <View className="mt-3">
       <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
-        {text.codeInfo} {text.attempts}: {mastermindAttempts.length}/{mastermindMaxAttempts}
+        {text.codeInfo}
+        {!minimalChrome
+          ? ` ${text.attempts}: ${mastermindAttempts.length}/${mastermindMaxAttempts}`
+          : ""}
       </Text>
       <View className="mt-2 rounded-xl border px-3 py-2" style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}>
         <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
@@ -184,18 +214,24 @@ export function MastermindStationPanel({
         <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
           ◐ = {text.rulesMisplaced}
         </Text>
-        <Text style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
-          {mastermindDifficulty === "easy" ? text.easy : mastermindDifficulty === "hard" ? text.hard : text.medium}: {mastermindSymbols.join("")} • {mastermindCodeLength}
-        </Text>
+        {!minimalChrome ? (
+          <Text style={{ color: EXPEDITION_THEME.textSubtle, fontSize: layout.infoFontSize }}>
+            {mastermindDifficulty === "easy" ? text.easy : mastermindDifficulty === "hard" ? text.hard : text.medium}: {mastermindSymbols.join("")} • {mastermindCodeLength}
+          </Text>
+        ) : null}
       </View>
-      <View className="mt-1">
-        <AttemptsIndicator
-          label={text.remaining}
-          attemptsLeft={mastermindAttemptsLeft}
-          maxAttempts={mastermindMaxAttempts}
-        />
-      </View>
-      <View className="mt-2 flex-row justify-center gap-2">
+      {!minimalChrome ? (
+        <View className="mt-1">
+          <AttemptsIndicator
+            label={text.remaining}
+            attemptsLeft={mastermindAttemptsLeft}
+            maxAttempts={mastermindMaxAttempts}
+          />
+        </View>
+      ) : null}
+      <View
+        className={`mt-2 flex-row gap-2${minimalChrome ? " justify-start" : " justify-center"}`}
+      >
         {guessSlots.map((symbol, index) => (
           <View
             key={`${stationId}-mastermind-current-symbol-${index}`}
@@ -218,42 +254,33 @@ export function MastermindStationPanel({
             </Text>
           </View>
         ))}
+        {minimalChrome ? submitButton : null}
       </View>
-      <View className="mt-2 flex-row gap-2">
-        <TextInput
-          className="flex-1 rounded-xl border px-4"
-          style={{
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panelStrong,
-            color: EXPEDITION_THEME.textPrimary,
-            fontSize: layout.inputFontSize,
-            paddingVertical: layout.isTablet ? 12 : 8,
-          }}
-          placeholder={text.placeholder}
-          placeholderTextColor={EXPEDITION_THEME.textSubtle}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          showSoftInputOnFocus={false}
-          maxLength={mastermindCodeLength}
-          value={normalizedMastermindInput}
-          onChangeText={onChangeInput}
-          editable={isInputEditable}
-          onSubmitEditing={onSubmitGuess}
-        />
-        <Pressable
-          className="items-center justify-center rounded-xl px-5 active:opacity-90"
-          style={{
-            backgroundColor: isActionDisabled ? EXPEDITION_THEME.panelStrong : EXPEDITION_THEME.accent,
-            minHeight: layout.actionMinHeight,
-          }}
-          onPress={onSubmitGuess}
-          disabled={isActionDisabled}
-        >
-          <Text className="font-semibold" style={{ color: actionLabelColor, fontSize: layout.actionFontSize }}>
-            {isSubmittingMastermindGuess ? "..." : text.check}
-          </Text>
-        </Pressable>
-      </View>
+      {!minimalChrome ? (
+        <View className="mt-2 flex-row gap-2">
+          <TextInput
+            className="flex-1 rounded-xl border px-4"
+            style={{
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panelStrong,
+              color: EXPEDITION_THEME.textPrimary,
+              fontSize: layout.inputFontSize,
+              paddingVertical: layout.isTablet ? 12 : 8,
+            }}
+            placeholder={text.placeholder}
+            placeholderTextColor={EXPEDITION_THEME.textSubtle}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            showSoftInputOnFocus={false}
+            maxLength={mastermindCodeLength}
+            value={normalizedMastermindInput}
+            onChangeText={onChangeInput}
+            editable={isInputEditable}
+            onSubmitEditing={onSubmitGuess}
+          />
+          {submitButton}
+        </View>
+      ) : null}
       <View className="mt-2 flex-row flex-wrap gap-1.5">
         {mastermindSymbols.map((symbol) => (
           <Pressable
@@ -319,11 +346,16 @@ export function MastermindStationPanel({
 type MastermindAttemptsListProps = {
   stationId: string;
   mastermindAttempts: MastermindAttempt[];
+  scrollable?: boolean;
+  fillRemainingSpace?: boolean;
 };
 
-export function MastermindAttemptsList({ stationId, mastermindAttempts }: MastermindAttemptsListProps) {
-  const uiLanguage = useUiLanguage();
-  const text = MASTERMIND_STATION_TEXT[uiLanguage];
+export function MastermindAttemptsList({
+  stationId,
+  mastermindAttempts,
+  scrollable = false,
+  fillRemainingSpace = false,
+}: MastermindAttemptsListProps) {
   const layout = useStationPanelLayout();
   const attemptsNewestFirst = [...mastermindAttempts].reverse();
 
@@ -331,9 +363,7 @@ export function MastermindAttemptsList({ stationId, mastermindAttempts }: Master
     return null;
   }
 
-  return (
-    <View className="mt-2 gap-1.5">
-      {attemptsNewestFirst.map((attempt, index) => (
+  const attemptRows = attemptsNewestFirst.map((attempt, index) => (
         <View
           key={`${stationId}-mastermind-history-${index}-${attempt.guess}`}
           className="flex-row items-center justify-between rounded-xl border px-3 py-2"
@@ -366,13 +396,36 @@ export function MastermindAttemptsList({ stationId, mastermindAttempts }: Master
             </View>
           </View>
         </View>
-      ))}
+  ));
+
+  if (scrollable) {
+    return (
+      <AutoScrollingBox
+        className="mt-2"
+        style={
+          fillRemainingSpace
+            ? { flexGrow: 1, flexBasis: 0, minHeight: 0 }
+            : { maxHeight: layout.isTablet ? 180 : 112 }
+        }
+        contentContainerStyle={{ rowGap: 6, paddingBottom: 2 }}
+        autoScrollEnabled={false}
+        showsVerticalScrollIndicator={false}
+      >
+        {attemptRows}
+      </AutoScrollingBox>
+    );
+  }
+
+  return (
+    <View className="mt-2 gap-1.5">
+      {attemptRows}
     </View>
   );
 }
 
 type MastermindMediaSectionProps = {
   stationId: string;
+  minimalChrome?: boolean;
   prompt: string;
   mastermindAttempts: MastermindAttempt[];
   mastermindAttemptsLeft: number;
@@ -397,6 +450,7 @@ type MastermindMediaSectionProps = {
 
 export function MastermindMediaSection({
   stationId,
+  minimalChrome = false,
   prompt,
   mastermindAttempts,
   mastermindAttemptsLeft,
@@ -419,21 +473,26 @@ export function MastermindMediaSection({
   onSelectDifficulty,
 }: MastermindMediaSectionProps) {
   return (
-    <View className="px-2 py-2">
+    <View className={`${minimalChrome ? "flex-1 " : ""}px-2 py-2`}>
       <StationQuizTaskWrapper
         prompt={prompt}
         isTabletOverlay={isTabletOverlay}
         error={quizSubmitError}
         errorPlacement="outside"
-        footer={(
-          <MastermindAttemptsList
-            stationId={stationId}
-            mastermindAttempts={mastermindAttempts}
-          />
-        )}
+        showBorder={!minimalChrome}
+        transparentBackground={minimalChrome}
+        footer={
+          !minimalChrome ? (
+            <MastermindAttemptsList
+              stationId={stationId}
+              mastermindAttempts={mastermindAttempts}
+            />
+          ) : undefined
+        }
       >
         <MastermindStationPanel
           stationId={stationId}
+          minimalChrome={minimalChrome}
           mastermindAttempts={mastermindAttempts}
           mastermindAttemptsLeft={mastermindAttemptsLeft}
           mastermindInput={mastermindInput}
@@ -458,6 +517,14 @@ export function MastermindMediaSection({
           onSelectDifficulty={onSelectDifficulty}
         />
       </StationQuizTaskWrapper>
+      {minimalChrome ? (
+        <MastermindAttemptsList
+          stationId={stationId}
+          mastermindAttempts={mastermindAttempts}
+          scrollable
+          fillRemainingSpace
+        />
+      ) : null}
     </View>
   );
 }

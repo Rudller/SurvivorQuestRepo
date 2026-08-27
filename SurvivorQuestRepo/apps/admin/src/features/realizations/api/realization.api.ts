@@ -40,6 +40,8 @@ type StationDto = {
     answers?: string[];
     correctAnswerIndex?: number;
     audioUrl?: string;
+    acceptedAnswers?: string[];
+    caesarShift?: number;
   } | null;
   translations?: Partial<
     Record<
@@ -52,6 +54,7 @@ type StationDto = {
           answers?: string[];
           correctAnswerIndex?: number;
           audioUrl?: string;
+          acceptedAnswers?: string[];
         };
       }
     >
@@ -91,6 +94,7 @@ type RealizationDto = {
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;
+  riskSchemeTemplateId?: string;
   joinCode?: string;
   stationIds?: string[];
   scenarioStations?: StationDto[];
@@ -372,6 +376,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
     scenarioTemplateId: dto.scenarioTemplateId?.trim() || undefined,
     scenarioTemplateName: dto.scenarioTemplateName?.trim() || undefined,
     riskSchemeId: dto.riskSchemeId?.trim() || undefined,
+    riskSchemeTemplateId: dto.riskSchemeTemplateId?.trim() || undefined,
     joinCode: dto.joinCode?.trim() || "------",
     stationIds: dto.stationIds ?? scenarioStations.map((station) => station.id),
     scenarioStations,
@@ -517,6 +522,8 @@ function normalizeStation(station: StationDto): Station {
             answers: station.quiz.answers,
             correctAnswerIndex: Number(station.quiz.correctAnswerIndex),
             audioUrl: station.quiz.audioUrl,
+            acceptedAnswers: station.quiz.acceptedAnswers,
+            caesarShift: station.quiz.caesarShift,
           }) ?? undefined)
         : undefined,
     translations:
@@ -537,6 +544,7 @@ function normalizeStation(station: StationDto): Station {
                     answers: value.quiz.answers,
                     correctAnswerIndex: Number(value.quiz.correctAnswerIndex),
                     audioUrl: value.quiz.audioUrl,
+                    acceptedAnswers: value.quiz.acceptedAnswers,
                   }) ?? undefined)
                 : undefined;
 

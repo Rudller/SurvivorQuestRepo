@@ -147,7 +147,7 @@ export class StationController {
 
     const current = await this.stationService.findStationById(dto.id);
 
-    if (!current || !this.stationService.isTemplateStation(current)) {
+    if (!current || !this.stationService.isEditableStation(current)) {
       throw new NotFoundException('Station not found');
     }
 

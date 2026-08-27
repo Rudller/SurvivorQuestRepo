@@ -473,7 +473,7 @@ export function QuizPrestartOverlay({
       style={[
         {
           paddingHorizontal: horizontalInset,
-          backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(15, 25, 20, 0.88)",
+          backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.88)`,
         },
         backdropStyle,
       ]}

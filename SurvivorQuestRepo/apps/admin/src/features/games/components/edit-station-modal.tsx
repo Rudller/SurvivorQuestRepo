@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import type {
   ChallengeDifficulty,
@@ -527,7 +528,19 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
     editAudioFileName: editAudioFile?.name ?? null,
   });
 
-  return (
+  // Rendered into document.body, never inline. The Ryzykanci deck editor opens
+  // this drawer from inside the realization editor, which is itself one big
+  // <form> — nesting this drawer's own <form> inside it is invalid HTML, and it
+  // silently broke saving: clicking "Zapisz" fired no request at all and the
+  // browser navigated away instead. A portal keeps the drawer a sibling of that
+  // form, which is also what its `fixed` positioning already assumes.
+  // This drawer only ever mounts from a click, so document is always there in
+  // practice; the guard just keeps it safe if it is ever rendered on the server.
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <>
       <button
         type="button"
@@ -1648,6 +1661,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
         </div>
         </div>
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }

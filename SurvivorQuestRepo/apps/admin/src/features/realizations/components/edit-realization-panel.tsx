@@ -212,7 +212,11 @@ export function EditRealizationPanel({
     offerPdfUrl: realization.offerPdfUrl,
     offerPdfName: realization.offerPdfName,
     scenarioId: realization.scenarioTemplateId ?? realization.scenarioId,
-    riskSchemeId: realization.riskSchemeId ?? "",
+    // The deck dropdown lists templates only, so show the template this
+    // realization's own deck was cloned from — its clone id would match no
+    // option and render as "— wybierz talię —". Same trick as scenarioId above.
+    riskSchemeId:
+      realization.riskSchemeTemplateId ?? realization.riskSchemeId ?? "",
     teamCount: realization.teamCount,
     peopleCount: realization.peopleCount,
     durationMinutes: realization.durationMinutes,
@@ -379,6 +383,7 @@ export function EditRealizationPanel({
   if (!textEditableLanguages.includes(textEditingLanguage)) {
     setTextEditingLanguage(baseTextLanguage);
   }
+  const isRiskQuizType = editValues.type === "risk-quiz";
   const isEditingBaseTextLanguage = textEditingLanguage === baseTextLanguage;
   const isTextAutoTranslateDisabled =
     isAutoTranslating ||
@@ -445,14 +450,20 @@ export function EditRealizationPanel({
       fields.push("introText");
       texts.push(editValues.introText);
     }
-    if (!currentTranslation?.gameRules?.trim() && editValues.gameRules.trim()) {
+    if (
+      !isRiskQuizType &&
+      !currentTranslation?.gameRules?.trim() &&
+      editValues.gameRules.trim()
+    ) {
       fields.push("gameRules");
       texts.push(editValues.gameRules);
     }
 
     if (texts.length === 0) {
       setAutoTranslateMessage(
-        "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
+        isRiskQuizType
+          ? "Tekst wstępu ma już tłumaczenie dla tego języka."
+          : "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
       );
       return;
     }
@@ -502,19 +513,23 @@ export function EditRealizationPanel({
   const scenarioTabHasError = isScenarioInvalid;
   const stationsTabHasError =
     isScenarioStationsEmpty || (submitAttempted && hasInvalidScenarioStations);
-  const isRiskQuizType = editValues.type === "risk-quiz";
   const { data: riskSchemes, isLoading: isRiskSchemesLoading } =
     useGetRiskSchemesQuery(undefined, {
       skip: !isRiskQuizType,
     });
   const tabs: TabItem[] = REALIZATION_FORM_TAB_ORDER.filter((id) => {
     if (id === "riskQuiz") return isRiskQuizType;
-    if (id === "scenario" || id === "stations" || id === "pointsQr")
-      return !isRiskQuizType;
+    // Ryzykanci have no scenario and no stations, but they do have the intro
+    // text — and that text is their entire briefing, so the tab holding it has
+    // to stay reachable. It just drops the scenario picker and renames itself.
+    if (id === "stations" || id === "pointsQr") return !isRiskQuizType;
     return true;
   }).map((id) => ({
     id,
-    label: REALIZATION_FORM_TAB_LABELS[id],
+    label:
+      id === "scenario" && isRiskQuizType
+        ? "Treści i oferta"
+        : REALIZATION_FORM_TAB_LABELS[id],
     hasError:
       id === "basic"
         ? basicTabHasError
@@ -1736,7 +1751,10 @@ export function EditRealizationPanel({
             )}
 
             {activeTab === "scenario" && (
-              <FormSection title="Scenariusz i oferta">
+              <FormSection
+                title={isRiskQuizType ? "Treści i oferta" : "Scenariusz i oferta"}
+              >
+                {!isRiskQuizType && (
                 <label className="block space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">
                     Scenariusz
@@ -1766,6 +1784,7 @@ export function EditRealizationPanel({
                     <p className="text-xs text-red-300">Wybierz scenariusz.</p>
                   ) : null}
                 </label>
+                )}
 
                 <div className="space-y-1.5">
                   <span className="text-xs uppercase tracking-wider text-zinc-400">
@@ -1899,18 +1918,28 @@ export function EditRealizationPanel({
                   label="Tekst wstępu"
                   value={effectiveIntroText}
                   onChange={updateEffectiveIntroText}
-                  placeholder="Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
-                  rows={5}
+                  placeholder={
+                    isRiskQuizType
+                      ? "Treść widoczna na ekranie oczekiwania — tu wpisz też zasady gry."
+                      : "Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
+                  }
+                  rows={isRiskQuizType ? 10 : 5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
-                <StyledMarkdownEditor
-                  label="Zasady gry"
-                  value={effectiveGameRules}
-                  onChange={updateEffectiveGameRules}
-                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
-                  rows={8}
-                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-                />
+                {/* Ryzykanci carry their whole briefing in the intro text on the
+                    waiting screen, so they get no separate rules field — the mobile
+                    app skips the post-start rules popup for them too (see
+                    apps/mobile/src/features/onboarding/model/game-rules.ts). */}
+                {!isRiskQuizType && (
+                  <StyledMarkdownEditor
+                    label="Zasady gry"
+                    value={effectiveGameRules}
+                    onChange={updateEffectiveGameRules}
+                    placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                    rows={8}
+                    helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                  />
+                )}
               </FormSection>
             )}
 
@@ -2032,10 +2061,12 @@ export function EditRealizationPanel({
                     <span className="text-zinc-500">Tekst wstępu:</span>{" "}
                     {editValues.introText.trim() ? "Tak" : "Nie"}
                   </p>
-                  <p>
-                    <span className="text-zinc-500">Zasady gry:</span>{" "}
-                    {editValues.gameRules.trim() ? "Tak" : "Nie"}
-                  </p>
+                  {!isRiskQuizType && (
+                    <p>
+                      <span className="text-zinc-500">Zasady gry:</span>{" "}
+                      {editValues.gameRules.trim() ? "Tak" : "Nie"}
+                    </p>
+                  )}
                   <p>
                     <span className="text-zinc-500">
                       Leaderboard w trakcie gry:

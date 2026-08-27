@@ -5,8 +5,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
-  Modal,
+  Easing,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -15,10 +17,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from "react-native-svg";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import { RiskQuizScreen } from "../features/risk-quiz/ui/risk-quiz-screen";
+import { DealingSuitsIndicator } from "../features/risk-quiz/components/dealing-suits-indicator";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -27,11 +30,16 @@ import {
   type RealizationLanguageOption,
 } from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
+import { shouldShowGameRulesPopup } from "../features/onboarding/model/game-rules";
+import { applyLiveIntroText } from "../features/onboarding/model/waiting-session";
+import { resolveStartCountdown } from "../features/onboarding/model/start-countdown";
+import { StartCountdownPanel } from "../features/risk-quiz/components/start-countdown-panel";
 import {
   EXPEDITION_THEME,
   getExpeditionThemeMode,
   getExpeditionThemePalette,
   setExpeditionThemeMode,
+  type ExpeditionThemeFamily,
   type ExpeditionThemeMode,
 } from "../features/onboarding/model/constants";
 import { UiLanguageProvider, resolveUiLanguage, type UiLanguage } from "../features/i18n";
@@ -44,13 +52,26 @@ import {
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 import { AutoScrollingIntroBox, parseInlineRules, parseRulesBlocks } from "../shared/ui/intro-text-preview";
 import { LanguagePickerModal } from "../shared/ui/language-picker-modal";
+import { HiddenResetOnHold } from "../shared/ui/hidden-reset-on-hold";
+import { useReduceMotion } from "../shared/a11y/use-reduce-motion";
+
+const RYZYKANCI_LOGO = require("../../assets/ryzykanci-logo.png");
+// Intrinsic 1599x984 of that file — used to size the box the logo is drawn
+// into, since the <Image> itself is stretched to fill that box.
+const RYZYKANCI_LOGO_ASPECT_RATIO = 1599 / 984;
+const RYZYKANCI_GLOW_COLOR = "#f59e0b";
+// One half-breath. Slow enough to read as ambient rather than as a pulse
+// demanding attention — the screen it sits on is pure waiting.
+const RYZYKANCI_GLOW_BREATH_MS = 2800;
+// Matches the `px-6` the waiting column uses, so the halo bleeds back out to
+// the screen edges the logo itself no longer touches.
+const WAITING_CONTENT_PADDING = 24;
 
 const ONBOARDING_SESSION_STORAGE_KEY = "sq.mobile.onboarding-session.v1";
 const MOBILE_THEME_PREFERENCE_STORAGE_KEY = "sq.mobile.theme.preference.v1";
 const ADMIN_START_POLL_INTERVAL_MS = 3000;
 const ADMIN_START_POLL_TIMEOUT_MS = 8000;
 const ADMIN_START_POLL_ERROR_THRESHOLD = 2;
-const HIDDEN_RESET_HOLD_MS = 5000;
 const STALE_REALIZATION_AUTO_RESUME_GRACE_MS = 6 * 60 * 60 * 1000;
 
 type MobileThemePreference = ExpeditionThemeMode;
@@ -68,6 +89,64 @@ function HorizontalSafeArea({ children, className, style }: HorizontalSafeAreaPr
     <View className={className} style={[style, { paddingLeft: insets.left, paddingRight: insets.right }]}>
       {children}
     </View>
+  );
+}
+
+// Amber halo behind the Ryzykanci logo, breathing in and out. Drawn as an SVG
+// radial gradient rather than a shadow: `shadowColor` is iOS-only for a blurred
+// halo and Android's `elevation` can't be tinted, so a coloured soft falloff
+// has to be painted by hand.
+function BreathingLogoGlow({ boxHeight }: { boxHeight: number }) {
+  const breath = useRef(new Animated.Value(0)).current;
+  const isReduceMotionEnabled = useReduceMotion();
+
+  useEffect(() => {
+    if (isReduceMotionEnabled) {
+      // Park it mid-breath: the halo still reads as a deliberate glow rather
+      // than vanishing, it just stops pulsing.
+      breath.setValue(0.5);
+      return;
+    }
+
+    const halfBreath = (toValue: number) =>
+      Animated.timing(breath, {
+        toValue,
+        duration: RYZYKANCI_GLOW_BREATH_MS,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      });
+    const loop = Animated.loop(Animated.sequence([halfBreath(1), halfBreath(0)]));
+    loop.start();
+
+    return () => loop.stop();
+  }, [breath, isReduceMotionEnabled]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        // Bleeds past the logo box on every side so the gradient reaches zero
+        // off-frame instead of ending on a visible rectangle edge.
+        top: -boxHeight * 0.22,
+        bottom: -boxHeight * 0.22,
+        left: -WAITING_CONTENT_PADDING,
+        right: -WAITING_CONTENT_PADDING,
+        opacity: breath.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.95] }),
+        transform: [{ scale: breath.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.06] }) }],
+      }}
+    >
+      <Svg width="100%" height="100%">
+        <Defs>
+          <RadialGradient id="ryzykanciLogoGlow" cx="50%" cy="50%" rx="50%" ry="50%">
+            <Stop offset="0%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0.42} />
+            <Stop offset="45%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0.18} />
+            <Stop offset="100%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#ryzykanciLogoGlow)" />
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -97,10 +176,7 @@ const MOBILE_APP_TEXT: Record<
     mobileSessionReset: string;
     serverReconnect: string;
     retryNowAction: string;
-    hiddenResetTitle: string;
-    hiddenResetBody: string;
-    hiddenResetConfirmAction: string;
-    hiddenResetCancelAction: string;
+    countdownGo: string;
     themeLabel: string;
     themeLight: string;
     themeDark: string;
@@ -121,10 +197,7 @@ const MOBILE_APP_TEXT: Record<
     mobileSessionReset: "Sesja mobilna została zresetowana ({reason}).",
     serverReconnect: "Brak połączenia z serwerem. Ponawiam sprawdzenie startu...",
     retryNowAction: "Spróbuj ponownie",
-    hiddenResetTitle: "Wrócić do startu?",
-    hiddenResetBody: "Zresetuje to lokalną sesję i spróbuje ponownie dołączyć tym samym kodem.",
-    hiddenResetConfirmAction: "Wróć do startu",
-    hiddenResetCancelAction: "Anuluj",
+    countdownGo: "START",
     themeLabel: "Motyw",
     themeLight: "Jasny",
     themeDark: "Ciemny",
@@ -144,10 +217,7 @@ const MOBILE_APP_TEXT: Record<
     mobileSessionReset: "Mobile session was reset ({reason}).",
     serverReconnect: "No connection to the server. Retrying start check...",
     retryNowAction: "Try again",
-    hiddenResetTitle: "Back to start?",
-    hiddenResetBody: "This resets the local session and tries to rejoin with the same code.",
-    hiddenResetConfirmAction: "Back to start",
-    hiddenResetCancelAction: "Cancel",
+    countdownGo: "START",
     themeLabel: "Theme",
     themeLight: "Light",
     themeDark: "Dark",
@@ -167,10 +237,7 @@ const MOBILE_APP_TEXT: Record<
     mobileSessionReset: "Мобільну сесію скинуто ({reason}).",
     serverReconnect: "Немає з'єднання із сервером. Повторюємо перевірку старту...",
     retryNowAction: "Спробувати ще раз",
-    hiddenResetTitle: "Повернутися до старту?",
-    hiddenResetBody: "Це скине локальну сесію і спробує знову приєднатися тим самим кодом.",
-    hiddenResetConfirmAction: "Повернутися до старту",
-    hiddenResetCancelAction: "Скасувати",
+    countdownGo: "СТАРТ",
     themeLabel: "Тема",
     themeLight: "Світла",
     themeDark: "Темна",
@@ -190,10 +257,7 @@ const MOBILE_APP_TEXT: Record<
     mobileSessionReset: "Мобильная сессия была сброшена ({reason}).",
     serverReconnect: "Нет соединения с сервером. Повторяем проверку старта...",
     retryNowAction: "Попробовать снова",
-    hiddenResetTitle: "Вернуться к старту?",
-    hiddenResetBody: "Это сбросит локальную сессию и попробует снова присоединиться тем же кодом.",
-    hiddenResetConfirmAction: "Вернуться к старту",
-    hiddenResetCancelAction: "Отмена",
+    countdownGo: "СТАРТ",
     themeLabel: "Тема",
     themeLight: "Светлая",
     themeDark: "Тёмная",
@@ -301,7 +365,7 @@ function GameRulesPopup({ rulesText, onClose, language }: GameRulesScreenProps) 
     <View
       className="absolute inset-0 items-center justify-center"
       style={{
-        backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(5, 10, 8, 0.58)",
+        backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : `rgba(${EXPEDITION_THEME.scrimAbyssRgb}, 0.58)`,
         paddingHorizontal: adaptiveLayout.s(isTablet ? 28 : 24, 20, 34),
       }}
     >
@@ -401,88 +465,6 @@ function resolvePollErrorDetail(error: unknown): string {
   return `${message || "Unknown error"} • ${timeLabel}`;
 }
 
-function HiddenResetOnHold({
-  language,
-  onReset,
-  children,
-}: {
-  language: UiLanguage;
-  onReset: () => void;
-  children: ReactNode;
-}) {
-  const text = MOBILE_APP_TEXT[language];
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
-
-  const clearHoldTimer = () => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  };
-
-  useEffect(() => clearHoldTimer, []);
-
-  return (
-    <>
-      <Pressable
-        onPressIn={() => {
-          clearHoldTimer();
-          holdTimerRef.current = setTimeout(() => setIsOverlayOpen(true), HIDDEN_RESET_HOLD_MS);
-        }}
-        onPressOut={clearHoldTimer}
-      >
-        {children}
-      </Pressable>
-
-      <Modal
-        visible={isOverlayOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsOverlayOpen(false)}
-      >
-        <View
-          className="flex-1 items-center justify-center px-6"
-          style={{ backgroundColor: "rgba(5, 10, 8, 0.72)" }}
-        >
-          <View
-            className="w-full rounded-3xl border p-5"
-            style={{ maxWidth: 420, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panel }}
-          >
-            <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-              {text.hiddenResetTitle}
-            </Text>
-            <Text className="mt-2 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
-              {text.hiddenResetBody}
-            </Text>
-            <Pressable
-              className="mt-4 rounded-2xl border px-4 py-3 active:opacity-85"
-              style={{ borderColor: "rgba(248, 113, 113, 0.55)", backgroundColor: "rgba(127, 29, 29, 0.3)" }}
-              onPress={() => {
-                setIsOverlayOpen(false);
-                onReset();
-              }}
-            >
-              <Text className="text-center font-semibold" style={{ color: "#fca5a5" }}>
-                {text.hiddenResetConfirmAction}
-              </Text>
-            </Pressable>
-            <Pressable
-              className="mt-2 rounded-2xl border px-4 py-3 active:opacity-85"
-              style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-              onPress={() => setIsOverlayOpen(false)}
-            >
-              <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                {text.hiddenResetCancelAction}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    </>
-  );
-}
-
 export function MobileApp() {
   const [onboardingSession, setOnboardingSession] = useState<OnboardingSession | null>(null);
   const [isHydratingSession, setIsHydratingSession] = useState(true);
@@ -490,13 +472,30 @@ export function MobileApp() {
   const [waitingError, setWaitingError] = useState<string | null>(null);
   const [waitingErrorDetail, setWaitingErrorDetail] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  // The pre-game countdown, armed by the poll that first sees the game open.
+  // `remainingMs` is the server's figure and `anchorMs` is this device's clock
+  // when that figure arrived, so the count ticks locally without ever trusting
+  // the tablet's wall clock to agree with the server's. The session the poll
+  // built waits in a ref until the count runs out.
+  const [startCountdown, setStartCountdown] = useState<{
+    remainingMs: number;
+    anchorMs: number;
+  } | null>(null);
+  const [countdownElapsedMs, setCountdownElapsedMs] = useState(0);
+  const pendingStartSessionRef = useRef<OnboardingSession | null>(null);
   const [isWaitingLanguagePickerOpen, setIsWaitingLanguagePickerOpen] = useState(false);
   const consecutivePollFailuresRef = useRef(0);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
   const [themePreference, setThemePreference] = useState<MobileThemePreference>("dark");
   const activeThemeMode = themePreference;
-  setExpeditionThemeMode(activeThemeMode);
-  const activeThemePalette = getExpeditionThemePalette(activeThemeMode);
+  // Risk-quiz ("Ryzykanci") realizations run on their own navy/gold palette; every
+  // other realization keeps the green expedition one. The family is global state
+  // rather than a prop because station panels, the QR scanner and the top bar are
+  // shared between both screens and read colours straight off EXPEDITION_THEME.
+  const activeThemeFamily: ExpeditionThemeFamily =
+    onboardingSession?.realization?.type === "risk-quiz" ? "risk" : "expedition";
+  setExpeditionThemeMode(activeThemeMode, activeThemeFamily);
+  const activeThemePalette = getExpeditionThemePalette(activeThemeMode, activeThemeFamily);
   const uiLanguage = resolveUiLanguage(
     onboardingSession?.selectedLanguage ??
       onboardingSession?.realization?.selectedLanguage ??
@@ -692,6 +691,12 @@ export function MobileApp() {
       return;
     }
 
+    // The game is already open and the tablet is just counting it in — another
+    // poll can only tell us what we already know.
+    if (startCountdown) {
+      return;
+    }
+
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -751,10 +756,46 @@ export function MobileApp() {
                 }
               : null,
           };
-          setIsWaitingForAdminStart(false);
           setWaitingError(null);
+
+          // Ryzykanci hold on a countdown before the game opens. Everyone else
+          // goes straight in, as does a device that arrives after the count has
+          // already run out.
+          const countdownMs =
+            onboardingSession.realization?.type === "risk-quiz"
+              ? (nextState.realization.startsInMs ?? 0)
+              : 0;
+
+          if (countdownMs > 0) {
+            // Park the built session and stop polling: this effect is not
+            // rescheduled here, and the countdown's own timer takes over.
+            pendingStartSessionRef.current = nextSession;
+            setCountdownElapsedMs(0);
+            setStartCountdown({ remainingMs: countdownMs, anchorMs: Date.now() });
+            return;
+          }
+
+          setIsWaitingForAdminStart(false);
           setOnboardingSession(nextSession);
           await AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+          return;
+        }
+
+        // Still waiting — but the instructor may have rewritten the intro text
+        // since this device joined, and that text is the whole screen here.
+        // Writing the session restarts this effect, which polls again straight
+        // away; applyLiveIntroText answers null on an unchanged poll so that
+        // only ever happens on a real edit.
+        const refreshedSession = applyLiveIntroText(
+          onboardingSession,
+          nextState.realization.introText,
+        );
+        if (refreshedSession) {
+          setOnboardingSession(refreshedSession);
+          await AsyncStorage.setItem(
+            ONBOARDING_SESSION_STORAGE_KEY,
+            JSON.stringify(refreshedSession),
+          );
           return;
         }
 
@@ -808,9 +849,40 @@ export function MobileApp() {
     isWaitingForAdminStart,
     onboardingSession,
     retryNonce,
+    startCountdown,
     text.mobileSessionReset,
     text.serverReconnect,
   ]);
+
+  // Ticks the countdown and, when it finishes, releases the session the poll
+  // parked. Deliberately faster than once a second: the number itself only
+  // changes on the second, but START has to land within a frame or two of zero.
+  useEffect(() => {
+    if (!startCountdown) return;
+
+    const interval = setInterval(() => {
+      setCountdownElapsedMs(Date.now() - startCountdown.anchorMs);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [startCountdown]);
+
+  useEffect(() => {
+    if (!startCountdown) return;
+
+    const state = resolveStartCountdown(startCountdown.remainingMs, countdownElapsedMs);
+    if (state.phase !== "done") return;
+
+    const nextSession = pendingStartSessionRef.current;
+    pendingStartSessionRef.current = null;
+    setStartCountdown(null);
+    setIsWaitingForAdminStart(false);
+
+    if (nextSession) {
+      setOnboardingSession(nextSession);
+      void AsyncStorage.setItem(ONBOARDING_SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+    }
+  }, [startCountdown, countdownElapsedMs]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   if (isHydratingSession) {
@@ -853,6 +925,66 @@ export function MobileApp() {
           ];
     const hasMultipleWaitingLanguageOptions = waitingAvailableLanguageOptions.length > 1;
     const waitingLanguageFlag = getRealizationLanguageFlag(waitingSelectedLanguage);
+    const isRiskQuizWaiting = onboardingSession.realization?.type === "risk-quiz";
+    const waitingCountdownState = startCountdown
+      ? resolveStartCountdown(startCountdown.remainingMs, countdownElapsedMs)
+      : null;
+    // Window width minus the `px-6` padding on both sides. A safe-area inset
+    // would make the real box narrower still, which only adds letter-boxing —
+    // `contain` never crops, so an over-estimate here is harmless.
+    const waitingLogoHeight = Math.min(
+      (adaptiveLayout.width - 48) / RYZYKANCI_LOGO_ASPECT_RATIO,
+      adaptiveLayout.height * 0.33,
+    );
+    const waitingStatusRow = (
+      <HiddenResetOnHold
+        language={uiLanguage}
+        onReset={() => void resetToOnboardingWithMessage()}
+      >
+        <View className="mt-5 flex-row items-center gap-2">
+          {isRiskQuizWaiting ? (
+            <DealingSuitsIndicator
+              size={adaptiveLayout.s(isTabletLayout ? 18 : 14, 13, 24)}
+              cycleDurationMs={RYZYKANCI_GLOW_BREATH_MS}
+            />
+          ) : (
+            <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+          )}
+          <View className="flex-1">
+            <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: waitingFontSize }}>
+              {waitingError ?? text.waitForStart}
+            </Text>
+            {waitingError && waitingErrorDetail ? (
+              <Text className="mt-1" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: waitingDetailFontSize }}>
+                {waitingErrorDetail}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </HiddenResetOnHold>
+    );
+    const waitingRetryButton = waitingError ? (
+      <Pressable
+        className={
+          isRiskQuizWaiting
+            ? "mt-3 px-4 py-3 active:opacity-85"
+            : "mt-3 rounded-2xl border px-4 py-3 active:opacity-85"
+        }
+        style={
+          isRiskQuizWaiting
+            ? undefined
+            : { borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }
+        }
+        onPress={() => setRetryNonce((current) => current + 1)}
+      >
+        <Text
+          className="text-center text-sm font-semibold"
+          style={{ color: isRiskQuizWaiting ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.textPrimary }}
+        >
+          {text.retryNowAction}
+        </Text>
+      </Pressable>
+    ) : null;
 
     return (
       <SafeAreaProvider>
@@ -860,53 +992,78 @@ export function MobileApp() {
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
-          <View className="flex-1 items-center justify-center px-6">
+          {isRiskQuizWaiting ? (
+            // Ryzykanci get the logo as the header instead of a labelled card:
+            // no panel, no borders, content straight on the palette background.
             <View
-              className="w-full rounded-3xl border p-5"
-              style={{
-                borderColor: EXPEDITION_THEME.border,
-                backgroundColor: EXPEDITION_THEME.panel,
-                maxHeight: introPanelMaxHeight,
-              }}
+              className="flex-1 px-6"
+              style={{ paddingBottom: adaptiveLayout.s(isTabletLayout ? 28 : 18, 14, 36), minHeight: 0 }}
             >
-              <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong, fontSize: introLabelFontSize }}>
-                {text.introTextLabel}
-              </Text>
-              <AutoScrollingIntroBox
-                text={onboardingSession.realization?.introText?.trim() || ""}
-                fallbackText={text.introFallback}
-              />
-              <HiddenResetOnHold
-                language={uiLanguage}
-                onReset={() => void resetToOnboardingWithMessage()}
-              >
-                <View className="mt-5 flex-row items-center gap-2">
-                  <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
-                  <View className="flex-1">
-                    <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: waitingFontSize }}>
-                      {waitingError ?? text.waitForStart}
-                    </Text>
-                    {waitingError && waitingErrorDetail ? (
-                      <Text className="mt-1" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: waitingDetailFontSize }}>
-                        {waitingErrorDetail}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              </HiddenResetOnHold>
-              {waitingError ? (
-                <Pressable
-                  className="mt-3 rounded-2xl border px-4 py-3 active:opacity-85"
-                  style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
-                  onPress={() => setRetryNonce((current) => current + 1)}
-                >
-                  <Text className="text-center text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
-                    {text.retryNowAction}
-                  </Text>
-                </Pressable>
-              ) : null}
+              {/* Fixed box, `contain` inside it. `aspectRatio` on the <Image>
+                  itself cropped the logo on device, so the height is computed
+                  here instead: the box never exceeds the content width or a
+                  third of the screen (landscape would otherwise hand the logo
+                  the whole viewport), and `contain` letter-boxes within it. */}
+              <View style={{ width: "100%", height: waitingLogoHeight }}>
+                <BreathingLogoGlow boxHeight={waitingLogoHeight} />
+                <Image
+                  source={RYZYKANCI_LOGO}
+                  accessibilityRole="image"
+                  accessibilityLabel="Ryzykanci"
+                  resizeMode="contain"
+                  style={{ width: "100%", height: "100%" }}
+                />
+              </View>
+              {waitingCountdownState ? (
+                // The briefing has had its time; what matters now is the count.
+                // Logo and halo stay put, so the screen reads as the same one
+                // finally doing something rather than a new screen appearing.
+                <StartCountdownPanel
+                  state={waitingCountdownState}
+                  numberFontSize={adaptiveLayout.fs(isTabletLayout ? 168 : 104, 88, 240)}
+                  labelFontSize={adaptiveLayout.fs(isTabletLayout ? 72 : 46, 40, 104)}
+                  goLabel={text.countdownGo}
+                />
+              ) : (
+                <>
+                  <AutoScrollingIntroBox
+                    chromeless
+                    // Takes whatever height is left between the logo and the
+                    // status row, so the auto-scroll has something to scroll.
+                    // Spelled out rather than `flex: 1` because the box's own
+                    // base style sets flexGrow/flexShrink, and an explicit key
+                    // beats the shorthand.
+                    style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 }}
+                    text={onboardingSession.realization?.introText?.trim() || ""}
+                    fallbackText={text.introFallback}
+                  />
+                  {waitingStatusRow}
+                  {waitingRetryButton}
+                </>
+              )}
             </View>
-          </View>
+          ) : (
+            <View className="flex-1 items-center justify-center px-6">
+              <View
+                className="w-full rounded-3xl border p-5"
+                style={{
+                  borderColor: EXPEDITION_THEME.border,
+                  backgroundColor: EXPEDITION_THEME.panel,
+                  maxHeight: introPanelMaxHeight,
+                }}
+              >
+                <Text className="uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong, fontSize: introLabelFontSize }}>
+                  {text.introTextLabel}
+                </Text>
+                <AutoScrollingIntroBox
+                  text={onboardingSession.realization?.introText?.trim() || ""}
+                  fallbackText={text.introFallback}
+                />
+                {waitingStatusRow}
+                {waitingRetryButton}
+              </View>
+            </View>
+          )}
           {hasMultipleWaitingLanguageOptions ? (
             <Pressable
               className="absolute right-16 z-50 rounded-full p-2.5 active:opacity-90"
@@ -934,12 +1091,7 @@ export function MobileApp() {
     );
   }
 
-  const shouldShowRulesPopup = Boolean(
-    onboardingSession &&
-      !isWaitingForAdminStart &&
-      onboardingSession.showGameRulesAfterStart &&
-      onboardingSession.realization?.gameRules?.trim(),
-  );
+  const shouldShowRulesPopup = shouldShowGameRulesPopup(onboardingSession, isWaitingForAdminStart);
 
   return (
     <SafeAreaProvider>

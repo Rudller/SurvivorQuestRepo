@@ -82,7 +82,18 @@ export function toPrismaStationQuizData(quiz: StationQuiz | undefined) {
     ...(quiz.acceptedAnswers?.length
       ? { acceptedAnswers: quiz.acceptedAnswers }
       : {}),
+    ...(quiz.caesarShift !== undefined
+      ? { caesarShift: quiz.caesarShift }
+      : {}),
   } as Prisma.InputJsonValue;
+}
+
+function parseCaesarShift(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return undefined;
+  }
+
+  return value >= 1 && value <= 25 ? value : undefined;
 }
 
 function parseStationQuizData(
@@ -98,6 +109,7 @@ function parseStationQuizData(
   const correctAnswerIndex = payload.correctAnswerIndex;
   const audioUrl = payload.audioUrl;
   const acceptedAnswers = payload.acceptedAnswers;
+  const caesarShift = parseCaesarShift(payload.caesarShift);
 
   if (
     typeof question !== 'string' ||
@@ -147,6 +159,7 @@ function parseStationQuizData(
     ...(normalizedAcceptedAnswers?.length
       ? { acceptedAnswers: normalizedAcceptedAnswers }
       : {}),
+    ...(caesarShift !== undefined ? { caesarShift } : {}),
   };
 }
 

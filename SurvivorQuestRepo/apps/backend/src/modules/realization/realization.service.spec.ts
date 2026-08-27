@@ -271,7 +271,14 @@ describe('RealizationService.createRealization (risk-quiz)', () => {
       generateMissingCards: jest.fn().mockResolvedValue(undefined),
       // Risk-quiz realizations clone their deck on create/update, exactly like
       // non-risk ones clone their Scenario.
-      ensureRealizationOwnedScheme: jest.fn().mockResolvedValue('cloned-scheme'),
+      ensureRealizationOwnedScheme: jest
+        .fn()
+        .mockResolvedValue('cloned-scheme'),
+      resolveSelectedSchemeId: jest.fn(
+        ({ requestedSchemeId }: { requestedSchemeId: string | null }) =>
+          Promise.resolve(requestedSchemeId),
+      ),
+      findSchemeSummaryById: jest.fn().mockResolvedValue(null),
     };
 
     const service = new RealizationService(
@@ -358,7 +365,14 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
       generateMissingCards: jest.fn().mockResolvedValue(undefined),
       // Risk-quiz realizations clone their deck on create/update, exactly like
       // non-risk ones clone their Scenario.
-      ensureRealizationOwnedScheme: jest.fn().mockResolvedValue('cloned-scheme'),
+      ensureRealizationOwnedScheme: jest
+        .fn()
+        .mockResolvedValue('cloned-scheme'),
+      resolveSelectedSchemeId: jest.fn(
+        ({ requestedSchemeId }: { requestedSchemeId: string | null }) =>
+          Promise.resolve(requestedSchemeId),
+      ),
+      findSchemeSummaryById: jest.fn().mockResolvedValue(null),
     };
 
     const service = new RealizationService(
@@ -384,6 +398,95 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
     id: 'realization-1',
     ...baseRiskQuizPayload,
   };
+
+  // The tablets count down to `startedAt`, so the stamp has to land exactly
+  // once — on the save that actually starts the game, never on a later edit of
+  // a running realization (which would restart every device's countdown
+  // mid-game).
+  describe('startedAt stamp', () => {
+    // resolveRealizationStatus forces anything long past its slot to 'done',
+    // so a realization being started has to be scheduled around now — the
+    // shared fixture's June date would never reach 'in-progress' at all.
+    const scheduledAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    function updateWithStatus(
+      row: Record<string, unknown>,
+      status: 'planned' | 'in-progress' | 'done',
+    ) {
+      const helper = createService({
+        id: 'realization-1',
+        companyName: 'Firma testowa',
+        scenarioId: null,
+        scheduledAt,
+        durationMinutes: 120,
+        joinCode: 'JOIN01',
+        startedAt: null,
+        ...row,
+      });
+
+      return {
+        ...helper,
+        run: () =>
+          helper.service.updateRealization({
+            ...updatePayload,
+            scheduledAt,
+            status,
+          }),
+        updateData: () => {
+          const [[{ data }]] = helper.prisma.realization.update.mock.calls as [
+            [{ data: Record<string, unknown> }],
+          ];
+          return data;
+        },
+      };
+    }
+
+    it('stamps the start when a planned realization begins', async () => {
+      const helper = updateWithStatus({ status: 'PLANNED' }, 'in-progress');
+
+      await helper.run();
+
+      expect(helper.updateData().startedAt).toBeInstanceOf(Date);
+    });
+
+    it('leaves the stamp alone when a running realization is edited', async () => {
+      const helper = updateWithStatus(
+        {
+          status: 'IN_PROGRESS',
+          startedAt: new Date('2026-06-01T10:00:00.000Z'),
+        },
+        'in-progress',
+      );
+
+      await helper.run();
+
+      expect(helper.updateData()).not.toHaveProperty('startedAt');
+    });
+
+    it.each(['planned', 'done'] as const)(
+      'does not stamp a save into %s',
+      async (status) => {
+        const helper = updateWithStatus({ status: 'PLANNED' }, status);
+
+        await helper.run();
+
+        expect(helper.updateData()).not.toHaveProperty('startedAt');
+      },
+    );
+
+    // Restarting a finished realization is a fresh start for the teams, so it
+    // gets a fresh countdown rather than the old one's stamp.
+    it('re-stamps when a finished realization is started again', async () => {
+      const helper = updateWithStatus(
+        { status: 'DONE', startedAt: new Date('2026-06-01T10:00:00.000Z') },
+        'in-progress',
+      );
+
+      await helper.run();
+
+      expect(helper.updateData().startedAt).toBeInstanceOf(Date);
+    });
+  });
 
   it('stays scenario-less when already risk-quiz and already has no scenario', async () => {
     const { service, prisma, scenarioService } = createService({
@@ -463,5 +566,60 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
     ];
     expect(updateData.scenarioId).toBeNull();
     expect(result?.scenarioId).toBeNull();
+  });
+
+  it('stores the deck id resolved by the risk-quiz service, not the raw payload id', async () => {
+    const { service, prisma, riskQuizService } = createService({
+      id: 'realization-1',
+      companyName: 'Firma testowa',
+      scenarioId: null,
+      riskSchemeId: 'owned-clone',
+      scheduledAt: '2026-06-01T10:00:00.000Z',
+      durationMinutes: 120,
+      status: 'PLANNED',
+      joinCode: 'JOIN01',
+    });
+    // The editor sends the template id the deck was cloned from; the deck the
+    // realization already owns must survive that.
+    riskQuizService.resolveSelectedSchemeId.mockResolvedValue('owned-clone');
+
+    await service.updateRealization({
+      ...updatePayload,
+      riskSchemeId: 'scheme-1',
+    });
+
+    expect(riskQuizService.resolveSelectedSchemeId).toHaveBeenCalledWith({
+      realizationId: 'realization-1',
+      requestedSchemeId: 'scheme-1',
+      currentSchemeId: 'owned-clone',
+    });
+    const [[{ data: updateData }]] = prisma.realization.update.mock.calls as [
+      [{ data: Record<string, unknown> }],
+    ];
+    expect(updateData.riskSchemeId).toBe('owned-clone');
+  });
+
+  it("exposes the deck's source template id on the entity", async () => {
+    const { service, riskQuizService } = createService({
+      id: 'realization-1',
+      companyName: 'Firma testowa',
+      scenarioId: null,
+      riskSchemeId: 'owned-clone',
+      scheduledAt: '2026-06-01T10:00:00.000Z',
+      durationMinutes: 120,
+      status: 'PLANNED',
+      joinCode: 'JOIN01',
+    });
+    riskQuizService.resolveSelectedSchemeId.mockResolvedValue('owned-clone');
+    riskQuizService.findSchemeSummaryById.mockResolvedValue({
+      id: 'owned-clone',
+      realizationId: 'realization-1',
+      sourceTemplateId: 'template-scheme',
+    });
+
+    const result = await service.updateRealization(updatePayload);
+
+    expect(result?.riskSchemeId).toBe('owned-clone');
+    expect(result?.riskSchemeTemplateId).toBe('template-scheme');
   });
 });

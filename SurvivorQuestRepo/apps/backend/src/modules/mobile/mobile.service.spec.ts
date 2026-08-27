@@ -2224,3 +2224,62 @@ describe('MobileService resolveEffectiveTaskStatus', () => {
     expect(result).toBe('in-progress');
   });
 });
+
+// The organiser's "Uruchom" button lands here, not on RealizationService's
+// form save — and the tablets' pre-game countdown is measured from the stamp
+// this path writes. It was missed once already: the method had a local
+// `startedAt` that only reached the event log, so every device skipped the
+// countdown and dropped straight into the game.
+describe('MobileService admin start', () => {
+  function createService() {
+    const prisma = {
+      realization: { update: jest.fn().mockResolvedValue(undefined) },
+      eventLog: { create: jest.fn().mockResolvedValue(undefined) },
+    };
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma };
+  }
+
+  function stubRealization(service: MobileService, status: string) {
+    jest
+      .spyOn(service as never, 'resolveMobileAdminRealizationOrThrow')
+      .mockResolvedValue({
+        id: 'realization-1',
+        status,
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+      });
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('stamps startedAt so the tablets have something to count down from', async () => {
+    const { service, prisma } = createService();
+    stubRealization(service, 'planned');
+
+    await service.startMobileAdminRealization('realization-1');
+
+    const [[{ data }]] = prisma.realization.update.mock.calls as [
+      [{ data: Record<string, unknown> }],
+    ];
+    expect(data.startedAt).toBeInstanceOf(Date);
+    expect(data.status).toBe('IN_PROGRESS');
+  });
+
+  // Pressing start twice must not restart a countdown for teams already playing.
+  it('touches nothing when the realization is already running', async () => {
+    const { service, prisma } = createService();
+    stubRealization(service, 'in-progress');
+
+    await service.startMobileAdminRealization('realization-1');
+
+    expect(prisma.realization.update).not.toHaveBeenCalled();
+  });
+});

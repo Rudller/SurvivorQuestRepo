@@ -62,6 +62,7 @@ export type RealizationEntity = {
   scenarioTemplateId?: string;
   scenarioTemplateName?: string;
   riskSchemeId?: string;
+  riskSchemeTemplateId?: string;
   stationIds: string[];
   scenarioStations: StationEntity[];
   joinCode: string;
@@ -80,6 +81,9 @@ export type RealizationEntity = {
   hideTaskList: boolean;
   status: RealizationStatus;
   scheduledAt: string;
+  // When the organiser actually pressed start, as opposed to the planned slot
+  // in `scheduledAt`. Null until they do.
+  startedAt: string | null;
   createdAt: string;
   updatedAt: string;
   logs: RealizationLog[];

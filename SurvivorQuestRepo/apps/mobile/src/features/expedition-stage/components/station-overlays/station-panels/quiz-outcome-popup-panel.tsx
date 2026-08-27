@@ -73,7 +73,7 @@ export function QuizOutcomePopupPanel({
       style={{
         zIndex: 80,
         paddingHorizontal: horizontalInset,
-        backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.3)" : "rgba(15, 25, 20, 0.6)",
+        backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.3)` : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.6)`,
       }}
     >
       <View

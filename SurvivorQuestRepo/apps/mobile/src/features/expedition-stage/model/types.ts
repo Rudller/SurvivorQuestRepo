@@ -61,6 +61,13 @@ export type ExpeditionSessionState = {
     positionsCount?: number;
     instructors: string[];
     status: "planned" | "in-progress" | "done";
+    /**
+     * Milliseconds the tablet should still count down before the game opens,
+     * measured on the server's clock so every device lands on zero together.
+     * Null when no countdown applies — not started, already past it, or a
+     * realization from before the server recorded a start time.
+     */
+    startsInMs: number | null;
     locationRequired: boolean;
     showLeaderboard: boolean;
     showLeaderboardDuringGame: boolean;
@@ -261,6 +268,8 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       introText: session.realization?.introText,
       gameRules: session.realization?.gameRules,
       contactPerson: "",
+      // Offline fallback state: nothing is counting down, the game just is.
+      startsInMs: null,
       contactPhone: undefined,
       contactEmail: undefined,
       logoUrl: undefined,

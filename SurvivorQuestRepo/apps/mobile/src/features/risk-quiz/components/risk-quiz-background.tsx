@@ -1,6 +1,7 @@
 import { View } from "react-native";
-import Svg, { Circle, Defs, G, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, G, RadialGradient, Rect, Stop } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
+import { CardSuitShape, type CardSuit } from "./card-suits";
 
 type RiskQuizBackgroundProps = {
   isLightTheme: boolean;
@@ -12,46 +13,10 @@ type RiskQuizBackgroundProps = {
 const VIEWBOX_WIDTH = 400;
 const VIEWBOX_HEIGHT = 800;
 
-type Suit = "spade" | "heart" | "diamond" | "club";
-
-// Every suit shape is drawn in its own 24x24 box (same convention as the
-// icon components elsewhere in this app) and recentered with a -12,-12
-// translate before the per-mark transform below, so scale/rotate/position
-// all pivot around the shape's visual center.
-function SuitShape({ suit }: { suit: Suit }) {
-  if (suit === "diamond") {
-    return <Path d="M12,2 L21,12 L12,22 L3,12 Z" />;
-  }
-
-  if (suit === "heart") {
-    return (
-      <Path d="M12,21 C12,21 3,14.5 3,8.5 C3,5.5 5.5,3 8.5,3 C10,3 11.3,3.8 12,5 C12.7,3.8 14,3 15.5,3 C18.5,3 21,5.5 21,8.5 C21,14.5 12,21 12,21 Z" />
-    );
-  }
-
-  if (suit === "spade") {
-    return (
-      <G>
-        <Path d="M12,3 C12,3 3,9.5 3,15.5 C3,18.5 5.5,21 8.5,21 C10,21 11.3,20.2 12,19 C12.7,20.2 14,21 15.5,21 C18.5,21 21,18.5 21,15.5 C21,9.5 12,3 12,3 Z" />
-        <Path d="M10.5,20 L13.5,20 L14.2,23.5 L9.8,23.5 Z" />
-      </G>
-    );
-  }
-
-  return (
-    <G>
-      <Circle cx={12} cy={8.3} r={4.3} />
-      <Circle cx={7.7} cy={13.3} r={4.3} />
-      <Circle cx={16.3} cy={13.3} r={4.3} />
-      <Path d="M10.3,14.5 L13.7,14.5 L14.4,22 L9.6,22 Z" />
-    </G>
-  );
-}
-
 // Scattered card-suit watermarks — position (percent of the viewbox), suit,
 // size, and rotation. Kept sparse and very low-opacity so the scan screen's
 // real content stays the clear focal point.
-const SUIT_MARKS: { x: number; y: number; suit: Suit; size: number; rotation: number }[] = [
+const SUIT_MARKS: { x: number; y: number; suit: CardSuit; size: number; rotation: number }[] = [
   { x: 8, y: 10, suit: "spade", size: 58, rotation: -18 },
   { x: 86, y: 6, suit: "diamond", size: 42, rotation: 12 },
   { x: 92, y: 34, suit: "club", size: 52, rotation: 22 },
@@ -65,7 +30,9 @@ const SUIT_MARKS: { x: number; y: number; suit: Suit; size: number; rotation: nu
 export function RiskQuizBackground({ isLightTheme }: RiskQuizBackgroundProps) {
   const glyphColor = isLightTheme ? EXPEDITION_THEME.border : EXPEDITION_THEME.textPrimary;
   const glyphOpacity = isLightTheme ? 0.1 : 0.06;
-  const vignetteColor = isLightTheme ? "#5c4a1f" : "#000000";
+  // Light mode dims the edges with the theme family's own wash tone so the
+  // vignette never tints the screen a different colour than the palette.
+  const vignetteColor = isLightTheme ? `rgb(${EXPEDITION_THEME.scrimWashRgb})` : "#000000";
 
   return (
     <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
@@ -100,7 +67,7 @@ export function RiskQuizBackground({ isLightTheme }: RiskQuizBackgroundProps) {
               fill={glyphColor}
               fillOpacity={glyphOpacity}
             >
-              <SuitShape suit={mark.suit} />
+              <CardSuitShape suit={mark.suit} />
             </G>
           );
         })}

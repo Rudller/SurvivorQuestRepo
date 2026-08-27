@@ -296,3 +296,43 @@ describe('StationService.updateScenarioStationInstance', () => {
     );
   });
 });
+
+// PUT /station is the only route that can rewrite a Ryzykanci pool task: a
+// realization's deck clones live outside the template library, so refusing them
+// here left the deck editor's "Edytuj" saving into a 404.
+describe('StationService.isEditableStation', () => {
+  const station = {
+    id: 'station-1',
+    kind: 'template' as const,
+    scenarioInstanceId: undefined,
+    realizationId: undefined,
+  };
+
+  it('accepts a template station', () => {
+    const { service } = createService();
+    expect(service.isEditableStation(station as never)).toBe(true);
+  });
+
+  it("accepts a realization's risk-pool clone (no scenarioInstanceId)", () => {
+    const { service } = createService();
+    expect(
+      service.isEditableStation({
+        ...station,
+        kind: 'realization-instance',
+        realizationId: 'realization-1',
+      } as never),
+    ).toBe(true);
+  });
+
+  it('still refuses a scenario instance, which the realization save path owns', () => {
+    const { service } = createService();
+    expect(
+      service.isEditableStation({
+        ...station,
+        kind: 'realization-instance',
+        realizationId: 'realization-1',
+        scenarioInstanceId: 'scenario-instance-1',
+      } as never),
+    ).toBe(false);
+  });
+});

@@ -178,7 +178,7 @@ export function ExpeditionStageOverlayLayer({
         <Pressable
           className="flex-1 items-center justify-center"
           style={{
-            backgroundColor: isLightTheme ? "rgba(17, 30, 23, 0.34)" : "rgba(0, 0, 0, 0.45)",
+            backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)",
             paddingHorizontal: adaptiveLayout.s(isTabletLayout ? 36 : 24, 20, 44),
           }}
           onPress={() => overlayFlow.setTimedCloseConfirmStation(null)}
