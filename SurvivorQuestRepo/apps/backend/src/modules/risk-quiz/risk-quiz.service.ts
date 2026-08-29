@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
 import { getOpaqueTokenCandidates } from '../../shared/lib/opaque-token';
 import {
+  isCodeProtectedStationType,
   parseCompletionCode,
   resolveCompletionCodeInputMode,
 } from '../mobile/domain/mobile-station.helpers';
@@ -21,10 +22,6 @@ import {
   fromPrismaStationType,
   mapStation,
 } from '../station/mappers/station.mapper';
-import {
-  isCodeProtectedStationType,
-  parseCompletionCode,
-} from '../mobile/domain/mobile-station.helpers';
 import {
   buildRiskCardCode,
   RISK_CARDS_PER_POOL,
