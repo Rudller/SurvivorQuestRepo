@@ -48,6 +48,17 @@ function optionalFiniteNumber(payload: Payload, key: string) {
   return value;
 }
 
+function optionalString(payload: Payload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new BadRequestException('Invalid payload');
+  }
+  return value;
+}
+
 function optionalBoolean(payload: Payload, key: string) {
   const value = payload[key];
   if (typeof value === 'undefined' || value === null) {
@@ -96,6 +107,7 @@ export class RiskQuizController {
       stationId: requireString(payload, 'stationId'),
       selectedIndex: optionalFiniteNumber(payload, 'selectedIndex'),
       completed: optionalBoolean(payload, 'completed'),
+      completionCode: optionalString(payload, 'completionCode'),
     });
   }
 

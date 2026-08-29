@@ -22,8 +22,13 @@ import {
   mapStation,
 } from '../station/mappers/station.mapper';
 import {
+  isCodeProtectedStationType,
+  parseCompletionCode,
+} from '../mobile/domain/mobile-station.helpers';
+import {
   buildRiskCardCode,
   RISK_CARDS_PER_POOL,
+  RISK_EXCLUDED_STATION_TYPES,
   RISK_DIFFICULTY_ORDER,
   RISK_DIFFICULTY_POINTS,
   RISK_STREAK_MULTIPLIER_CAP,
@@ -622,6 +627,7 @@ export class RiskQuizService {
     stationId: string;
     selectedIndex?: number;
     completed?: boolean;
+    completionCode?: string;
   }) {
     const { team, realization } = await this.requireTeamSession(
       input.sessionToken,
@@ -659,6 +665,29 @@ export class RiskQuizService {
     });
     if (existingAttempt) {
       throw new BadRequestException('Station already attempted');
+    }
+
+    // "Na czas"/"na punkty" cards are only solved by typing the code the
+    // organizer hands out at the spot, exactly like the same station types in a
+    // normal realization (see MobileService.completeTask). Without this the
+    // card was claimed by whatever the player typed — the mobile client has no
+    // way to check a code itself. Only a claimed success is checked: giving up
+    // or running out of time reports completed=false and carries no code.
+    // The message is matched verbatim by the mobile code panel
+    // (isInvalidCompletionCodeErrorMessage), which shakes the input and lets
+    // the player try again instead of burning the card.
+    // fromPrismaStationType, not station.type: the helper speaks the mobile
+    // client's kebab-case ('time'/'points'), and the raw enum would never match
+    // — the same trap ANSWER_INDEX_STATION_TYPES above was written to avoid.
+    if (
+      isCodeProtectedStationType(fromPrismaStationType(station.type)) &&
+      input.completed === true
+    ) {
+      const expectedCode = parseCompletionCode(station.completionCode);
+      const inputCode = parseCompletionCode(input.completionCode);
+      if (!expectedCode || !inputCode || expectedCode !== inputCode) {
+        throw new BadRequestException('Invalid completion code');
+      }
     }
 
     const { isCorrect, correctIndex } = this.resolveOutcome(station, input);
@@ -1020,6 +1049,12 @@ export class RiskQuizService {
     if (station.scenarioInstanceId !== null) {
       throw new BadRequestException(
         'Stanowisko należące do scenariusza nie może trafić do puli Ryzykantów.',
+      );
+    }
+
+    if (RISK_EXCLUDED_STATION_TYPES.has(station.type)) {
+      throw new BadRequestException(
+        'Ten typ zadania nie jest dostępny w Ryzykantach.',
       );
     }
 

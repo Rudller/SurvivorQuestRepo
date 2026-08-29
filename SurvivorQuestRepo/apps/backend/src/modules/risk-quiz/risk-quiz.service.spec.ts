@@ -737,6 +737,29 @@ describe('RiskQuizService.assignStationToPool', () => {
     });
   });
 
+  it.each(['MINI_SUDOKU', 'MASTERMIND', 'BOGGLE', 'MEMORY', 'SIMON', 'QR_HUNT'])(
+    'rejects %s, a type Ryzykanci does not carry',
+    async (type) => {
+      const { service, prisma } = createService();
+      prisma.station.findUnique.mockResolvedValue({
+        ...quizStation,
+        type,
+        scenarioInstanceId: null,
+        realizationId: null,
+      });
+      prisma.riskCategory.findUnique.mockResolvedValue({ realizationId: null });
+
+      await expect(
+        service.assignStationToPool({
+          categoryId: 'category-1',
+          difficulty: 'EASY' as never,
+          stationId: quizStation.id,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.riskPoolStation.create).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects a station already cloned into a scenario', async () => {
     const { service, prisma } = createService();
     prisma.station.findUnique.mockResolvedValue({
@@ -965,6 +988,77 @@ describe('RiskQuizService.submitAnswer', () => {
     expect(result.streak).toBe(0);
     expect(result.multiplier).toBe(1);
     expect(result.pointsDelta).toBe(-5);
+  });
+
+  it('accepts a code-protected card only with the right completion code', async () => {
+    const { service, prisma } = createService();
+    const codeStation = {
+      ...quizStation,
+      id: 'station-code',
+      type: 'TIME',
+      completionCode: 'abc-123',
+      quizData: null,
+    };
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.station.findUnique.mockResolvedValue(codeStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+    prisma.team.update.mockResolvedValue({ ...team, points: 10 });
+
+    await expect(
+      service.submitAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-code',
+        completed: true,
+        completionCode: 'nope',
+      }),
+    ).rejects.toThrow('Invalid completion code');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+    expect(prisma.team.update).not.toHaveBeenCalled();
+
+    const result = await service.submitAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-code',
+      completed: true,
+      completionCode: ' ABC-123 ',
+    });
+
+    expect(result.isCorrect).toBe(true);
+    expect(result.pointsDelta).toBe(10);
+  });
+
+  it('takes a given-up code-protected card without asking for the code', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue({
+      ...card,
+      difficulty: 'MEDIUM',
+    });
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      id: 'station-code',
+      type: 'POINTS',
+      completionCode: 'abc-123',
+      quizData: null,
+    });
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+    prisma.team.update.mockResolvedValue({ ...team, points: -10 });
+
+    const result = await service.submitAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-code',
+      completed: false,
+    });
+
+    expect(result.isCorrect).toBe(false);
+    expect(result.pointsDelta).toBe(-10);
   });
 
   it('rejects a second attempt at the same station by the same team', async () => {

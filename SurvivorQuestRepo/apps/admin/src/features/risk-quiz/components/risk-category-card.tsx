@@ -10,7 +10,7 @@ import { useGetStationsQuery } from "@/features/games/api/station.api";
 import { getStationTypeLabel } from "@/features/games/station.utils";
 import { CreateStationForm } from "@/features/games/components/create-station-form";
 import { EditStationModal } from "@/features/games/components/edit-station-modal";
-import type { Station } from "@/features/games/types/station";
+import { isStationTypeAllowedInRiskDeck, type Station } from "@/features/games/types/station";
 
 export function StationAssignmentForm({
   categoryId,
@@ -46,11 +46,13 @@ export function StationAssignmentForm({
         className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
       >
         <option value="">{isLoadingStations ? "Ładowanie stanowisk..." : "— wybierz istniejące stanowisko —"}</option>
-        {(stations ?? []).map((station) => (
-          <option key={station.id} value={station.id}>
-            {station.name} ({getStationTypeLabel(station.type)})
-          </option>
-        ))}
+        {(stations ?? [])
+          .filter((station) => isStationTypeAllowedInRiskDeck(station.type))
+          .map((station) => (
+            <option key={station.id} value={station.id}>
+              {station.name} ({getStationTypeLabel(station.type)})
+            </option>
+          ))}
       </select>
       {error ? <p className="text-xs text-red-300">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
@@ -100,6 +102,14 @@ export function PoolStationRow({ poolStation }: { poolStation: RiskCategory["poo
       <div>
         <p className="text-sm text-zinc-100">{poolStation.station.name}</p>
         <p className="text-xs text-zinc-500">{getStationTypeLabel(poolStation.station.type)}</p>
+        {/* Assignments made before this type was excluded stay in the deck and
+            keep being drawn — the guard only stops new ones — so say it out
+            loud here instead of letting a team pull an unplayable card. */}
+        {isStationTypeAllowedInRiskDeck(poolStation.station.type) ? null : (
+          <p className="mt-1 text-[11px] text-amber-300">
+            Typ niedostępny w Ryzykantach — usuń z puli.
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 gap-2">
         <button

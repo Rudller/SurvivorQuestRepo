@@ -1,4 +1,4 @@
-import { RiskDifficulty } from '@prisma/client';
+import { RiskDifficulty, StationType } from '@prisma/client';
 
 export const RISK_DIFFICULTY_ORDER: RiskDifficulty[] = [
   RiskDifficulty.EASY,
@@ -54,3 +54,20 @@ export const RISK_CARDS_PER_POOL = 10;
 // the streak to 0 and are never scaled (the penalty stays flat).
 export const RISK_STREAK_MULTIPLIER_STEP = 0.25;
 export const RISK_STREAK_MULTIPLIER_CAP = 2;
+
+// Station types a Ryzykanci deck never carries. The whole game runs at tables in
+// a single conference room: a card is drawn, solved against a countdown and
+// handed back within a minute or two. That rules out the long-sitting puzzles (a
+// whole sudoku grid, a full mastermind ladder, a boggle sweep) and the slow,
+// quiet ones (memory's flip cycle, simon's audio sequence) — and QR_HUNT, which
+// sends a team walking between stickers spread around a venue nobody leaves
+// here (it also has no working wiring on the Ryzykanci screen).
+// The admin pickers already hide these; this is the guard behind that.
+export const RISK_EXCLUDED_STATION_TYPES = new Set<StationType>([
+  StationType.MINI_SUDOKU,
+  StationType.MASTERMIND,
+  StationType.BOGGLE,
+  StationType.MEMORY,
+  StationType.SIMON,
+  StationType.QR_HUNT,
+]);

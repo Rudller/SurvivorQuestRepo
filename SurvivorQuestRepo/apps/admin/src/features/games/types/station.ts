@@ -105,3 +105,27 @@ export type Station = {
 // because a template station can also be the source of scenario clones, where
 // qrEntryCode is a real physical sticker.
 export type StationFormVariant = "regular" | "risk";
+
+// Types that never go into a Ryzykanci deck. The whole game runs at tables in a
+// single conference room: a card is drawn, solved against a countdown and handed
+// back within a minute or two. That rules out the long-sitting puzzles (a whole
+// sudoku grid, a full mastermind ladder, a boggle sweep) and the slow, quiet
+// ones (memory's flip cycle, simon's audio sequence) — and qr-hunt, which sends
+// a team walking between stickers spread around a venue nobody leaves here (it
+// also has no working wiring on the Ryzykanci screen).
+export const RISK_EXCLUDED_STATION_TYPES: StationType[] = [
+  "mini-sudoku",
+  "mastermind",
+  "boggle",
+  "memory",
+  "simon",
+  "qr-hunt",
+];
+
+export function isStationTypeAllowedInRiskDeck(type: StationType) {
+  return !RISK_EXCLUDED_STATION_TYPES.includes(type);
+}
+
+export const riskStationTypeOptions = stationTypeOptions.filter((option) =>
+  isStationTypeAllowedInRiskDeck(option.value),
+);
