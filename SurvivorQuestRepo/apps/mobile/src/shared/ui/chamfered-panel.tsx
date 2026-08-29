@@ -241,6 +241,64 @@ export function ChamferedPanel({
   );
 }
 
+// The chamfer drawn *over* content instead of behind it. `ChamferedPanel` can
+// only clip a still image (SVG clip path), so anything live — a camera preview,
+// a video — has to stay a plain rectangle underneath. This paints the four
+// corner triangles back in over it and strokes the outline on top, which reads
+// the same as a clipped panel while letting the content run edge to edge.
+export function ChamferedContentFrame({
+  cut,
+  borderColor,
+  borderWidth,
+  // Painted in this order in the corners: the screen colour the frame sits on,
+  // then the (semi-transparent) panel colour over it — the same stack the
+  // surrounding panels produce, and opaque enough to hide the content beneath.
+  baseColor,
+  surfaceColor,
+  style,
+  children,
+}: {
+  cut: number;
+  borderColor: string;
+  borderWidth: number;
+  baseColor: string;
+  surfaceColor: string;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+}) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const cornerMaskPath =
+    size.width > 0 && size.height > 0
+      ? `M 0 0 H ${size.width} V ${size.height} H 0 Z ${buildChamferedPath(size.width, size.height, cut, 0)}`
+      : "";
+
+  return (
+    <View
+      style={[{ position: "relative", overflow: "hidden" }, style]}
+      onLayout={(event: LayoutChangeEvent) => {
+        const { width, height } = event.nativeEvent.layout;
+        setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+      }}
+    >
+      {children}
+      {cornerMaskPath ? (
+        <View style={{ position: "absolute", top: 0, left: 0 }} pointerEvents="none">
+          <Svg width={size.width} height={size.height}>
+            <Path d={cornerMaskPath} fill={baseColor} fillRule="evenodd" />
+            <Path d={cornerMaskPath} fill={surfaceColor} fillRule="evenodd" />
+            <Path
+              d={buildChamferedPath(size.width, size.height, cut, borderWidth / 2)}
+              fill="none"
+              stroke={borderColor}
+              strokeWidth={borderWidth}
+            />
+          </Svg>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export type PanelCornerStyle = "rounded" | "chamfered";
 
 // One surface of the panel, drawn either rounded (plain View border radius) or

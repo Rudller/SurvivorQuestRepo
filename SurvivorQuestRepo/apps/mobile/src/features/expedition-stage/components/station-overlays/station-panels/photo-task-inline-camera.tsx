@@ -34,6 +34,10 @@ type PhotoTaskInlineCameraProps = {
   cameraAccessDescription: string;
   enableCameraLabel: string;
   switchCameraLabel: string;
+  // Ryzykanci opens this viewfinder automatically and has its own "close the
+  // card" control, so the in-frame close button would only bounce the player
+  // back to a step that no longer exists there.
+  showCloseButton?: boolean;
   onCancel: () => void;
   onConfirm: (uri: string) => void;
 };
@@ -45,6 +49,7 @@ export function PhotoTaskInlineCamera({
   cameraAccessDescription,
   enableCameraLabel,
   switchCameraLabel,
+  showCloseButton = true,
   onCancel,
   onConfirm,
 }: PhotoTaskInlineCameraProps) {
@@ -118,25 +123,37 @@ export function PhotoTaskInlineCamera({
             {enableCameraLabel}
           </Text>
         </Pressable>
-        <Pressable
-          className="absolute right-2 top-2 items-center justify-center rounded-full active:opacity-90"
-          style={{ width: closeButtonSize, height: closeButtonSize, backgroundColor: "rgba(0, 0, 0, 0.45)" }}
-          onPress={onCancel}
-          hitSlop={8}
-          accessibilityRole="button"
-        >
-          <SvgUri uri={CLOSE_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
-        </Pressable>
+        {showCloseButton ? (
+          <Pressable
+            className="absolute right-2 top-2 items-center justify-center rounded-full active:opacity-90"
+            style={{ width: closeButtonSize, height: closeButtonSize, backgroundColor: "rgba(0, 0, 0, 0.45)" }}
+            onPress={onCancel}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <SvgUri uri={CLOSE_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
+          </Pressable>
+        ) : null}
       </View>
     );
   }
 
   return (
-    <View className="flex-1">
+    // Real style props rather than `flex-1`/`w-full` classes: this box has to
+    // fill the frame around it on every platform, and the preview has to fill
+    // this box — a dropped class shows up as a camera floating in a part-empty
+    // frame, which is exactly what it looked like before.
+    <View style={{ flex: 1, width: "100%" }}>
       {localPreviewUri ? (
-        <Image source={{ uri: localPreviewUri }} style={{ flex: 1 }} resizeMode="cover" />
+        <Image source={{ uri: localPreviewUri }} style={{ flex: 1, width: "100%" }} resizeMode="cover" />
       ) : (
-        <CameraView ref={cameraRef} style={{ flex: 1 }} active facing={facing} mirror={facing === "front"} />
+        <CameraView
+          ref={cameraRef}
+          style={{ flex: 1, width: "100%" }}
+          active
+          facing={facing}
+          mirror={facing === "front"}
+        />
       )}
 
       {isUploading ? (
@@ -145,16 +162,18 @@ export function PhotoTaskInlineCamera({
         </View>
       ) : null}
 
-      <Pressable
-        className="absolute right-2 top-2 items-center justify-center rounded-full active:opacity-90"
-        style={{ width: closeButtonSize, height: closeButtonSize, backgroundColor: "rgba(0, 0, 0, 0.45)" }}
-        onPress={onCancel}
-        disabled={isUploading}
-        hitSlop={8}
-        accessibilityRole="button"
-      >
-        <SvgUri uri={CLOSE_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
-      </Pressable>
+      {showCloseButton ? (
+        <Pressable
+          className="absolute right-2 top-2 items-center justify-center rounded-full active:opacity-90"
+          style={{ width: closeButtonSize, height: closeButtonSize, backgroundColor: "rgba(0, 0, 0, 0.45)" }}
+          onPress={onCancel}
+          disabled={isUploading}
+          hitSlop={8}
+          accessibilityRole="button"
+        >
+          <SvgUri uri={CLOSE_ICON_SVG_URI} width={closeIconSize} height={closeIconSize} color="#ffffff" stroke="#ffffff" fill="none" />
+        </Pressable>
+      ) : null}
 
       {!localPreviewUri ? (
         <Pressable

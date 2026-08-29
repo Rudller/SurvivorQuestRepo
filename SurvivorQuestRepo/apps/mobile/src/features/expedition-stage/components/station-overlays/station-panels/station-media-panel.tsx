@@ -5,6 +5,7 @@ import { SvgUri } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { MOBILE_UX_TOKENS } from "../../../../../shared/ui/ux-tokens";
+import { ChamferedContentFrame } from "../../../../../shared/ui/chamfered-panel";
 import {
   QUIZ_BRAIN_ICON_URI,
   TEXT_PUZZLE_MAX_ATTEMPTS,
@@ -23,6 +24,32 @@ const AUDIO_PAUSE_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-pause.svg";
 const CAMERA_ICON_SVG_URI =
   "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/camera.svg";
+
+// Ryzykanci frames the photo the same way the screen's top bar is framed:
+// corners cut at 45 degrees, same cut length, same heavy outline. The frame is
+// drawn over the viewfinder rather than around it, so the camera fills the box
+// edge to edge instead of sitting inset inside the outline.
+function PhotoTaskFrame({ chamfered, children }: { chamfered: boolean; children: ReactNode }) {
+  const adaptiveLayout = useAdaptiveLayout();
+  const isTabletLayout = adaptiveLayout.isTablet;
+
+  if (!chamfered) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ChamferedContentFrame
+      cut={adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 32)}
+      borderColor={EXPEDITION_THEME.border}
+      borderWidth={adaptiveLayout.s(isTabletLayout ? 3 : 2, 2, 4)}
+      baseColor={EXPEDITION_THEME.background}
+      surfaceColor={EXPEDITION_THEME.panel}
+      style={{ flex: 1 }}
+    >
+      {children}
+    </ChamferedContentFrame>
+  );
+}
 
 type StationMediaPanelProps = {
   minimalChrome?: boolean;
@@ -210,9 +237,18 @@ export function StationMediaPanel({
                 // so it just needs to flex-fill whatever height is left after
                 // the description, not claim a fixed guessed height.
                 ? { flex: 1, minHeight: Math.max(120, Math.round(viewportHeight * 0.16)) }
-                : isPhotoTaskStation && minimalChrome
-                  ? { height: Math.max(150, Math.round(viewportHeight * 0.2)) }
-                  : { height: stationMediaHeight }),
+                : { height: stationMediaHeight }),
+        // Ryzykanci runs the flex branch above (photo tasks pass requiresCode),
+        // where the viewfinder would otherwise take every pixel left in the
+        // card — or collapse to nothing under a long text. The task
+        // description below it is the whole task, so bound the camera on both
+        // sides and let the description keep the rest.
+        ...(isPhotoTaskStation && minimalChrome
+          ? {
+              minHeight: Math.max(140, Math.round(viewportHeight * 0.18)),
+              maxHeight: Math.max(180, Math.round(viewportHeight * 0.42)),
+            }
+          : {}),
         borderColor: minimalChrome ? "transparent" : EXPEDITION_THEME.border,
         backgroundColor: minimalChrome ? "transparent" : EXPEDITION_THEME.panelMuted,
       }}
@@ -325,76 +361,32 @@ export function StationMediaPanel({
           </View>
         </View>
       ) : isPhotoTaskStation && photoTaskCapture ? (
-        photoTaskCapture.isCaptureActive ? (
-          <PhotoTaskInlineCamera
-            isUploading={photoTaskCapture.isUploading}
-            uploadError={photoTaskCapture.uploadError}
-            cameraAccessTitle={photoTaskCapture.cameraAccessTitle}
-            cameraAccessDescription={photoTaskCapture.cameraAccessDescription}
-            enableCameraLabel={photoTaskCapture.enableCameraLabel}
-            switchCameraLabel={photoTaskCapture.switchCameraLabel}
-            onCancel={photoTaskCapture.onCancelCapture}
-            onConfirm={photoTaskCapture.onConfirmCapture}
-          />
-        ) : (
-        <View className="flex-1 items-center justify-center">
-          {photoTaskCapture.previewUri ? (
-            <Image
-              source={{ uri: photoTaskCapture.previewUri }}
-              style={{ width: "100%", height: "100%" }}
-              resizeMode="cover"
+        <PhotoTaskFrame chamfered={minimalChrome}>
+          {photoTaskCapture.isCaptureActive ? (
+            <PhotoTaskInlineCamera
+              showCloseButton={!minimalChrome}
+              isUploading={photoTaskCapture.isUploading}
+              uploadError={photoTaskCapture.uploadError}
+              cameraAccessTitle={photoTaskCapture.cameraAccessTitle}
+              cameraAccessDescription={photoTaskCapture.cameraAccessDescription}
+              enableCameraLabel={photoTaskCapture.enableCameraLabel}
+              switchCameraLabel={photoTaskCapture.switchCameraLabel}
+              onCancel={photoTaskCapture.onCancelCapture}
+              onConfirm={photoTaskCapture.onConfirmCapture}
             />
-          ) : null}
-          {photoTaskCapture.canCapture ? (
-            photoTaskCapture.previewUri ? (
-              <Pressable
-                className="absolute bottom-2 right-2 items-center justify-center rounded-full border-4 active:opacity-90"
-                style={{
-                  width: photoTaskButtonSize,
-                  height: photoTaskButtonSize,
-                  minWidth: MOBILE_UX_TOKENS.minTouchTarget,
-                  minHeight: MOBILE_UX_TOKENS.minTouchTarget,
-                  borderColor: EXPEDITION_THEME.accent,
-                  backgroundColor: EXPEDITION_THEME.panelStrong,
-                }}
-                onPress={photoTaskCapture.onOpenCamera}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={photoTaskCapture.retakePhotoLabel}
-              >
-                <SvgUri
-                  uri={CAMERA_ICON_SVG_URI}
-                  width={photoTaskIconSize}
-                  height={photoTaskIconSize}
-                  color={EXPEDITION_THEME.accent}
-                  fill={EXPEDITION_THEME.accent}
-                  stroke={EXPEDITION_THEME.accent}
+          ) : (
+            <View className="flex-1 items-center justify-center">
+              {photoTaskCapture.previewUri ? (
+                <Image
+                  source={{ uri: photoTaskCapture.previewUri }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
                 />
-              </Pressable>
-            ) : (
-              <View className="items-center" style={{ rowGap: adaptiveLayout.s(8, 6, 12) }}>
-                <View
-                  style={{
-                    width: photoTaskButtonSize,
-                    height: photoTaskButtonSize,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Animated.View
-                    pointerEvents="none"
-                    className="absolute rounded-full border-2"
-                    style={[
-                      {
-                        width: photoTaskButtonSize,
-                        height: photoTaskButtonSize,
-                        borderColor: EXPEDITION_THEME.accent,
-                      },
-                      photoTaskPulseRingStyle,
-                    ]}
-                  />
+              ) : null}
+              {photoTaskCapture.canCapture ? (
+                photoTaskCapture.previewUri ? (
                   <Pressable
-                    className="items-center justify-center rounded-full border-4 active:opacity-90"
+                    className="absolute bottom-2 right-2 items-center justify-center rounded-full border-4 active:opacity-90"
                     style={{
                       width: photoTaskButtonSize,
                       height: photoTaskButtonSize,
@@ -406,7 +398,7 @@ export function StationMediaPanel({
                     onPress={photoTaskCapture.onOpenCamera}
                     hitSlop={8}
                     accessibilityRole="button"
-                    accessibilityLabel={photoTaskCapture.takePhotoLabel}
+                    accessibilityLabel={photoTaskCapture.retakePhotoLabel}
                   >
                     <SvgUri
                       uri={CAMERA_ICON_SVG_URI}
@@ -417,18 +409,65 @@ export function StationMediaPanel({
                       stroke={EXPEDITION_THEME.accent}
                     />
                   </Pressable>
-                </View>
-                <Text
-                  className="text-center font-semibold"
-                  style={{ color: EXPEDITION_THEME.accent, fontSize: photoTaskLabelFontSize }}
-                >
-                  {photoTaskCapture.takePhotoLabel}
-                </Text>
-              </View>
-            )
-          ) : null}
-        </View>
-        )
+                ) : (
+                  <View className="items-center" style={{ rowGap: adaptiveLayout.s(8, 6, 12) }}>
+                    <View
+                      style={{
+                        width: photoTaskButtonSize,
+                        height: photoTaskButtonSize,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Animated.View
+                        pointerEvents="none"
+                        className="absolute rounded-full border-2"
+                        style={[
+                          {
+                            width: photoTaskButtonSize,
+                            height: photoTaskButtonSize,
+                            borderColor: EXPEDITION_THEME.accent,
+                          },
+                          photoTaskPulseRingStyle,
+                        ]}
+                      />
+                      <Pressable
+                        className="items-center justify-center rounded-full border-4 active:opacity-90"
+                        style={{
+                          width: photoTaskButtonSize,
+                          height: photoTaskButtonSize,
+                          minWidth: MOBILE_UX_TOKENS.minTouchTarget,
+                          minHeight: MOBILE_UX_TOKENS.minTouchTarget,
+                          borderColor: EXPEDITION_THEME.accent,
+                          backgroundColor: EXPEDITION_THEME.panelStrong,
+                        }}
+                        onPress={photoTaskCapture.onOpenCamera}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={photoTaskCapture.takePhotoLabel}
+                      >
+                        <SvgUri
+                          uri={CAMERA_ICON_SVG_URI}
+                          width={photoTaskIconSize}
+                          height={photoTaskIconSize}
+                          color={EXPEDITION_THEME.accent}
+                          fill={EXPEDITION_THEME.accent}
+                          stroke={EXPEDITION_THEME.accent}
+                        />
+                      </Pressable>
+                    </View>
+                    <Text
+                      className="text-center font-semibold"
+                      style={{ color: EXPEDITION_THEME.accent, fontSize: photoTaskLabelFontSize }}
+                    >
+                      {photoTaskCapture.takePhotoLabel}
+                    </Text>
+                  </View>
+                )
+              ) : null}
+            </View>
+          )}
+        </PhotoTaskFrame>
       ) : renderedStationMedia ? (
         renderedStationMedia
       ) : shouldShowQuizFallbackGraphic ? (

@@ -79,14 +79,26 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
   },
 };
 
+type PhotoTaskCaptureOptions = {
+  // Ryzykanci opens the camera the moment the card is drawn: there the whole
+  // card is the task, so the extra "take a photo" tap before the viewfinder
+  // was pure friction. The full-screen station overlay keeps the two steps.
+  autoOpenCapture?: boolean;
+};
+
 export function usePhotoTaskCapture(
   station: StationTestViewModel | null,
   onSubmitPhotoTask?: (stationId: string, fileUri: string) => Promise<string | null>,
   onSubmitSuccess?: () => void,
+  options?: PhotoTaskCaptureOptions,
 ) {
   const uiLanguage = useUiLanguage();
   const text = PHOTO_TASK_TEXT[uiLanguage];
-  const [isCaptureActive, setIsCaptureActive] = useState(false);
+  const isApproved = station?.status === "done";
+  const isRejected = station?.status === "failed";
+  const canCapture = !isApproved && !isRejected;
+  const shouldAutoOpenCapture = Boolean(options?.autoOpenCapture) && canCapture;
+  const [isCaptureActive, setIsCaptureActive] = useState(shouldAutoOpenCapture);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasSubmittedThisVisit, setHasSubmittedThisVisit] = useState(false);
@@ -99,17 +111,14 @@ export function usePhotoTaskCapture(
     }
 
     previousStationIdRef.current = station?.stationId;
-    setIsCaptureActive(false);
+    setIsCaptureActive(shouldAutoOpenCapture);
     setIsUploading(false);
     setUploadError(null);
     setHasSubmittedThisVisit(false);
     setPreviewUri(null);
-  }, [station?.stationId]);
+  }, [station?.stationId, shouldAutoOpenCapture]);
 
   const hasPendingSubmission = station?.status === "in-progress" || hasSubmittedThisVisit;
-  const isApproved = station?.status === "done";
-  const isRejected = station?.status === "failed";
-  const canCapture = !isApproved && !isRejected;
 
   async function handleConfirmedCapture(uri: string) {
     setPreviewUri(uri);

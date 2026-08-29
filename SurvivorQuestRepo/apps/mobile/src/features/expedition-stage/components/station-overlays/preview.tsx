@@ -1548,9 +1548,15 @@ export function StationPreviewOverlay({
     });
   }, [wordleAttempts.length, wordleDisplayLengthForTracking, wordleRevealedCellCounts.length]);
 
-  const photoTaskCapture = usePhotoTaskCapture(displayedStation, onSubmitPhotoTask, () => {
-    showQuizOutcomePopup("pending", text.pendingReviewPopupMessage);
-  });
+  const photoTaskCapture = usePhotoTaskCapture(
+    displayedStation,
+    onSubmitPhotoTask,
+    () => {
+      showQuizOutcomePopup("pending", text.pendingReviewPopupMessage);
+    },
+    // Ryzykanci (inline): the viewfinder is live as soon as the card opens.
+    { autoOpenCapture: isInlinePresentation },
+  );
   const qrHuntScan = useQrHuntScan(displayedStation, onSubmitQrScan);
 
   if (!isOverlayMounted || !displayedStation) {
@@ -2769,18 +2775,49 @@ export function StationPreviewOverlay({
               {requiresPhotoUpload ? (
                 <View
                   className="items-center"
-                  style={{ marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16), rowGap: adaptiveLayout.s(6, 4, 10) }}
+                  style={{
+                    marginTop: adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
+                    rowGap: adaptiveLayout.s(6, 4, 10),
+                    // Ryzykanci: the camera above is capped, so whatever is
+                    // left of the card belongs to the task text — take it, and
+                    // scroll inside instead of pushing past the card's edge.
+                    ...(isInlinePresentation
+                      ? {
+                          flexGrow: 1,
+                          flexShrink: 1,
+                          flexBasis: 0,
+                          minHeight: 0,
+                          width: "100%" as const,
+                          justifyContent: "center" as const,
+                        }
+                      : {}),
+                  }}
                 >
-                  <Text
-                    className="text-center"
-                    style={{
-                      color: EXPEDITION_THEME.textPrimary,
-                      fontSize: stationPanelLayout.descriptionFontSize,
-                      lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 28),
-                    }}
-                  >
-                    {stationQuizPrompt}
-                  </Text>
+                  {isInlinePresentation ? (
+                    <AutoScrollingBox className="w-full" style={{ flexShrink: 1, minHeight: 0 }}>
+                      <Text
+                        className="text-center"
+                        style={{
+                          color: EXPEDITION_THEME.textPrimary,
+                          fontSize: stationPanelLayout.promptFontSize,
+                          lineHeight: adaptiveLayout.s(isTabletOverlay ? 28 : 20, 18, 32),
+                        }}
+                      >
+                        {stationQuizPrompt}
+                      </Text>
+                    </AutoScrollingBox>
+                  ) : (
+                    <Text
+                      className="text-center"
+                      style={{
+                        color: EXPEDITION_THEME.textPrimary,
+                        fontSize: stationPanelLayout.descriptionFontSize,
+                        lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 28),
+                      }}
+                    >
+                      {stationQuizPrompt}
+                    </Text>
+                  )}
                   <PhotoTaskStatusText
                     text={photoTaskCapture.text}
                     isApproved={photoTaskCapture.isApproved}
@@ -3219,6 +3256,8 @@ export function StationPreviewOverlay({
         popup={quizOutcomePopup}
         timeoutSecondsLeft={timeoutPopupSecondsLeft}
         isLightTheme={isLightTheme}
+        // Ryzykanci: dressed like that screen's bottom bar.
+        cornerStyle={isInlinePresentation ? "chamfered" : "rounded"}
         onClose={closeQuizOutcomePopup}
         text={{
           outcomePassed: text.outcomePassed,
