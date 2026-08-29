@@ -1013,36 +1013,36 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
               </label>
             ) : null}
 
-{isRiskVariant ? null : (
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
-              <div className="flex gap-2">
-                <input
-                  value={qrEntryCode}
-                  onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
-                  list={`qr-entry-code-suggestions-${station.id}`}
-                  placeholder="Brak kodu"
-                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-                <datalist id={`qr-entry-code-suggestions-${station.id}`}>
-                  {qrEntryCodeSuggestions.map((code) => (
-                    <option key={code} value={code} />
-                  ))}
-                </datalist>
-                <button
-                  type="button"
-                  onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
-                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-                >
-                  Wygeneruj
-                </button>
-              </div>
-              <p className="text-xs text-zinc-500">
-                Ten kod trafia do QR na naklejce i jest kopiowany do każdej realizacji z tego szablonu. Wyczyszczenie
-                pola nie usuwa obecnego kodu — zmień je tylko, gdy naprawdę chcesz przypisać inny kod.
-              </p>
-            </label>
-)}
+            {isRiskVariant ? null : (
+              <label className="space-y-1.5">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+                <div className="flex gap-2">
+                  <input
+                    value={qrEntryCode}
+                    onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
+                    list={`qr-entry-code-suggestions-${station.id}`}
+                    placeholder="Brak kodu"
+                    className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                  <datalist id={`qr-entry-code-suggestions-${station.id}`}>
+                    {qrEntryCodeSuggestions.map((code) => (
+                      <option key={code} value={code} />
+                    ))}
+                  </datalist>
+                  <button
+                    type="button"
+                    onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                  >
+                    Wygeneruj
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Ten kod trafia do QR na naklejce i jest kopiowany do każdej realizacji z tego szablonu. Wyczyszczenie
+                  pola nie usuwa obecnego kodu — zmień je tylko, gdy naprawdę chcesz przypisać inny kod.
+                </p>
+              </label>
+            )}
 
             {editValues.type === "qr-hunt" ? (
               <label className="space-y-1.5">
@@ -1204,7 +1204,7 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
             </label>
 
             {isQuizStationType(editValues.type) ? (
-            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+              <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
                 {editValues.type === "audio-quiz" ? (
                   <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
@@ -1552,74 +1552,74 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
               </p>
             </div>
 
-{isRiskVariant ? null : (
-            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
-                {hasCoordinates && (
-                  <button
-                    type="button"
-                    onClick={() => setEditValues((prev) => ({ ...prev, latitude: undefined, longitude: undefined }))}
-                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-                  >
-                    Wyczyść współrzędne
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-zinc-500">
-                To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
-                realizacji.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min={-90}
-                    max={90}
-                    value={hasLatitude ? editValues.latitude : ""}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({
-                        ...prev,
-                        latitude: event.target.value === "" ? undefined : Number(event.target.value),
-                      }))
-                    }
-                    placeholder="np. 52.22970"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                </label>
+            {isRiskVariant ? null : (
+              <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
+                  {hasCoordinates && (
+                    <button
+                      type="button"
+                      onClick={() => setEditValues((prev) => ({ ...prev, latitude: undefined, longitude: undefined }))}
+                      className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                    >
+                      Wyczyść współrzędne
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-500">
+                  To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
+                  realizacji.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-90}
+                      max={90}
+                      value={hasLatitude ? editValues.latitude : ""}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          latitude: event.target.value === "" ? undefined : Number(event.target.value),
+                        }))
+                      }
+                      placeholder="np. 52.22970"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
 
-                <label className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min={-180}
-                    max={180}
-                    value={hasLongitude ? editValues.longitude : ""}
-                    onChange={(event) =>
-                      setEditValues((prev) => ({
-                        ...prev,
-                        longitude: event.target.value === "" ? undefined : Number(event.target.value),
-                      }))
-                    }
-                    placeholder="np. 21.01220"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                  />
-                </label>
-              </div>
+                  <label className="space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-180}
+                      max={180}
+                      value={hasLongitude ? editValues.longitude : ""}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          longitude: event.target.value === "" ? undefined : Number(event.target.value),
+                        }))
+                      }
+                      placeholder="np. 21.01220"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                    />
+                  </label>
+                </div>
 
-              <RealizationLocationPickerMap
-                latitude={editValues.latitude}
-                longitude={editValues.longitude}
-                onPick={({ latitude, longitude }) => {
-                  setEditValues((prev) => ({ ...prev, latitude, longitude }));
-                }}
-              />
-              <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
-            </div>
-)}
+                <RealizationLocationPickerMap
+                  latitude={editValues.latitude}
+                  longitude={editValues.longitude}
+                  onPick={({ latitude, longitude }) => {
+                    setEditValues((prev) => ({ ...prev, latitude, longitude }));
+                  }}
+                />
+                <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
+              </div>
+            )}
 
             {editFormError && <p className="text-sm text-red-300">{editFormError}</p>}
           </form>

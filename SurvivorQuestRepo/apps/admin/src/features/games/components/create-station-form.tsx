@@ -990,36 +990,36 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
               </label>
             ) : null}
 
-{isRiskVariant ? null : (
-          <label className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
-            <div className="flex gap-2">
-              <input
-                value={qrEntryCode}
-                onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
-                list="qr-entry-code-suggestions"
-                placeholder="Zostaw puste, aby wygenerować automatycznie"
-                className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-              <datalist id="qr-entry-code-suggestions">
-                {qrEntryCodeSuggestions.map((code) => (
-                  <option key={code} value={code} />
-                ))}
-              </datalist>
-              <button
-                type="button"
-                onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
-                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-              >
-                Wygeneruj
-              </button>
-            </div>
-            <p className="text-xs text-zinc-500">
-              Zostaw puste, aby system wygenerował nowy losowy kod. Wybierz z podpowiedzi istniejący kod, aby ta sama
-              naklejka QR pasowała też do tego stanowiska.
-            </p>
-          </label>
-)}
+          {isRiskVariant ? null : (
+            <label className="space-y-1.5">
+              <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
+              <div className="flex gap-2">
+                <input
+                  value={qrEntryCode}
+                  onChange={(event) => setQrEntryCode(event.target.value.toUpperCase())}
+                  list="qr-entry-code-suggestions"
+                  placeholder="Zostaw puste, aby wygenerować automatycznie"
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                />
+                <datalist id="qr-entry-code-suggestions">
+                  {qrEntryCodeSuggestions.map((code) => (
+                    <option key={code} value={code} />
+                  ))}
+                </datalist>
+                <button
+                  type="button"
+                  onClick={() => setQrEntryCode(generateSampleCompletionCode(8, "letters"))}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+                >
+                  Wygeneruj
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Zostaw puste, aby system wygenerował nowy losowy kod. Wybierz z podpowiedzi istniejący kod, aby ta sama
+                naklejka QR pasowała też do tego stanowiska.
+              </p>
+            </label>
+          )}
 
           {type === "qr-hunt" ? (
             <label className="space-y-1.5">
@@ -1568,74 +1568,74 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
             </p>
           </div>
 
-{isRiskVariant ? null : (
-          <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
-              {hasCoordinates && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLatitude(undefined);
-                    setLongitude(undefined);
-                  }}
-                  className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
-                >
-                  Wyczyść współrzędne
-                </button>
-              )}
+          {isRiskVariant ? null : (
+            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
+                {hasCoordinates && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLatitude(undefined);
+                      setLongitude(undefined);
+                    }}
+                    className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+                  >
+                    Wyczyść współrzędne
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-500">
+                To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
+                realizacji.
+              </p>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min={-90}
+                    max={90}
+                    value={hasLatitude ? latitude : ""}
+                    onChange={(event) => {
+                      setLatitude(event.target.value === "" ? undefined : Number(event.target.value));
+                    }}
+                    placeholder="np. 52.22970"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min={-180}
+                    max={180}
+                    value={hasLongitude ? longitude : ""}
+                    onChange={(event) => {
+                      setLongitude(event.target.value === "" ? undefined : Number(event.target.value));
+                    }}
+                    placeholder="np. 21.01220"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
+              </div>
+
+              <RealizationLocationPickerMap
+                latitude={latitude}
+                longitude={longitude}
+                onPick={({ latitude: pickedLatitude, longitude: pickedLongitude }) => {
+                  setLatitude(pickedLatitude);
+                  setLongitude(pickedLongitude);
+                }}
+              />
+              <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
             </div>
-
-            <p className="text-xs text-zinc-500">
-              To współrzędne domyślne dla szablonu stanowiska. Docelowe koordynaty w aplikacji mobilnej pochodzą z instancji
-              realizacji.
-            </p>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Szerokość geograficzna</span>
-                <input
-                  type="number"
-                  step="any"
-                  min={-90}
-                  max={90}
-                  value={hasLatitude ? latitude : ""}
-                  onChange={(event) => {
-                    setLatitude(event.target.value === "" ? undefined : Number(event.target.value));
-                  }}
-                  placeholder="np. 52.22970"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs uppercase tracking-wider text-zinc-400">Długość geograficzna</span>
-                <input
-                  type="number"
-                  step="any"
-                  min={-180}
-                  max={180}
-                  value={hasLongitude ? longitude : ""}
-                  onChange={(event) => {
-                    setLongitude(event.target.value === "" ? undefined : Number(event.target.value));
-                  }}
-                  placeholder="np. 21.01220"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-                />
-              </label>
-            </div>
-
-            <RealizationLocationPickerMap
-              latitude={latitude}
-              longitude={longitude}
-              onPick={({ latitude: pickedLatitude, longitude: pickedLongitude }) => {
-                setLatitude(pickedLatitude);
-                setLongitude(pickedLongitude);
-              }}
-            />
-            <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
-          </div>
-)}
+          )}
         </div>
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}
