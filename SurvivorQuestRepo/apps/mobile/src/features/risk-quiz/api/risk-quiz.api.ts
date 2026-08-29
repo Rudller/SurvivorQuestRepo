@@ -95,6 +95,9 @@ export async function postRiskQuizAnswer(
     stationId: string;
     selectedIndex?: number;
     completed?: boolean;
+    // "Na czas"/"na punkty" cards: the code the organizer hands out at the
+    // spot. Verified server-side, same as in a normal realization.
+    completionCode?: string;
   },
 ) {
   return requestMobileApi<RiskAnswerResult>(apiBaseUrl, "/mobile/risk-quiz/answer", {

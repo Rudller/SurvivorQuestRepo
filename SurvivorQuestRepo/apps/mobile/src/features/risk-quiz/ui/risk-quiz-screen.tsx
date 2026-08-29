@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Rect, SvgUri } from "react-native-svg";
@@ -7,6 +7,7 @@ import type { OnboardingSession, RealizationLanguage, RealizationLanguageOption 
 import { getRealizationLanguageFlag, getRealizationLanguageLabel } from "../../onboarding/model/types";
 import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 import { resolveUiLanguage } from "../../i18n";
+import { isInvalidCompletionCodeErrorMessage } from "../../expedition-stage/components/station-overlays/puzzle-helpers";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
 import {
@@ -66,8 +67,22 @@ type LiveTeamInfo = {
   badgeImageUrl: string | null;
 };
 
+// Both directions of the deck-view <-> card swap run the same two halves: the
+// outgoing side fades and slides away, then the incoming side fades and slides
+// in. Keeping one constant for both is what makes them feel symmetrical — the
+// card used to fade in over 380ms while the deck view vanished instantly, and
+// closing did the reverse, so the way back always read as the slower half.
+const SCREEN_TRANSITION_HALF_MS = 190;
+const SCREEN_TRANSITION_SLIDE_PX = 28;
+
 const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
 const ANSWER_INDEX_TYPES = new Set(["quiz", "audio-quiz"]);
+// Card types solved by typing the organizer's completion code.
+const COMPLETION_CODE_TYPES = new Set(["time", "points"]);
+
+function isCompletionCodeCardType(stationType: string) {
+  return COMPLETION_CODE_TYPES.has(stationType);
+}
 const AUDIO_PLAY_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-play.svg";
 const AUDIO_PAUSE_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-pause.svg";
 // Decorative static waveform — purely visual, not driven by real audio data.
@@ -166,6 +181,15 @@ const TEST_MENU_TRIGGER_HOLD_MS = 5000;
 // to re-derive where the in-flow content actually starts.
 const SCREEN_EDGE_PADDING = 12;
 const SCREEN_ROW_GAP = 10;
+// The card countdown's box is a fixed size rather than a measured one. It used
+// to be measured with onLayout and fed back into the content area's marginTop,
+// which meant a freshly opened card laid itself out two or three more times
+// after it was already on screen (mount -> timer mounts -> timer measured ->
+// margin applied -> content area re-measured), and the card visibly jumped
+// mid-reveal. `lineHeight` pins the digits to exactly this height, so the
+// reserved space and the real space always agree on the first frame.
+const TASK_TIMER_FONT_SIZE = 72;
+const TASK_TIMER_BLOCK_HEIGHT = 86;
 
 export function RiskQuizScreen({
   session,
@@ -201,7 +225,6 @@ export function RiskQuizScreen({
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [topPanelHeight, setTopPanelHeight] = useState(0);
-  const [timerHeight, setTimerHeight] = useState(0);
   // Height of the scrollable content area, measured so an inline station card
   // can be capped to it (see the card wrapper below).
   const [contentViewportHeight, setContentViewportHeight] = useState(0);
@@ -215,8 +238,18 @@ export function RiskQuizScreen({
   const [testMenuError, setTestMenuError] = useState<string | null>(null);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const questionRevealAnimation = useRef(new Animated.Value(0)).current;
+  // The deck view's own half of that transition: 1 while the scan screen is
+  // the visible screen, 0 while a card has taken it over.
+  const deckIdleRevealAnimation = useRef(new Animated.Value(1)).current;
   const timerShakeAnimation = useRef(new Animated.Value(0)).current;
   const autoDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Card whose outcome already went to the backend. A ref, not state: station
+  // panels report a solved task through two callbacks in a row (onCompleteTask,
+  // then onQuizPassed) and both are bound to submitOutcome here, so the second
+  // call arrives after the first has finished and still sees the pre-submit
+  // render's `isSubmittingAnswer`. One attempt per card is also what the
+  // backend enforces — the second POST came back "Station already attempted".
+  const submittedCardIdRef = useRef<string | null>(null);
   const contentScrollViewRef = useRef<ScrollView>(null);
 
   // Mirrors the normal realization's "waiting for admin start" poll: while the
@@ -306,6 +339,43 @@ export function RiskQuizScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showIntro]);
 
+  // Entry half of the deck-view -> card transition: fade the scan screen out
+  // first, then mount the card, which plays its own fade-in from the effect
+  // below. Both card sources (a scanned QR, an admin-pushed draw) go through
+  // here so the swap looks the same however the card arrived.
+  const openDrawnCard = useCallback(
+    (draw: ActiveDraw) => {
+      Animated.timing(deckIdleRevealAnimation, {
+        toValue: 0,
+        duration: SCREEN_TRANSITION_HALF_MS,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) {
+          return;
+        }
+        // Seeded here, in the same commit as the card, rather than left to
+        // the countdown effect below: that effect only runs after the card has
+        // already been painted, so the content area's timer margin appeared a
+        // frame late and shoved the freshly revealed card downward.
+        const timeLimitSeconds = draw.station.timeLimitSeconds ?? 0;
+        setRemainingTaskSeconds(timeLimitSeconds > 0 ? timeLimitSeconds : null);
+        // Hidden before the card is mounted, not in the reveal effect below:
+        // effects run after the first paint, so a card drawn while the reveal
+        // value still sat at 1 (drawing a card straight from the test menu
+        // while another one is open) flashed at full opacity for a frame
+        // before snapping back to 0 to start its fade.
+        questionRevealAnimation.setValue(0);
+        // Cleared per draw rather than relying on the card id alone: after an
+        // admin reset the same card can legitimately be scanned again.
+        submittedCardIdRef.current = null;
+        setActiveDraw(draw);
+        setExhaustedNotice(null);
+        setAnswerResult(null);
+      });
+    },
+    [deckIdleRevealAnimation, questionRevealAnimation],
+  );
+
   // Remote "Uruchom na tablecie" support. Keep consuming commands while a
   // card is open as well: repeated admin clicks are then harmless instead of
   // becoming a queued card that unexpectedly opens after the current one.
@@ -327,15 +397,13 @@ export function RiskQuizScreen({
         if (cancelled || !result.draw || activeDraw) {
           return;
         }
-        setActiveDraw({
+        openDrawnCard({
           exhausted: false,
           cardId: result.draw.cardId,
           categoryName: result.draw.categoryName,
           difficulty: result.draw.difficulty,
           station: result.draw.station,
         });
-        setExhaustedNotice(null);
-        setAnswerResult(null);
       } catch (error) {
         if (cancelled) {
           return;
@@ -355,7 +423,7 @@ export function RiskQuizScreen({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [showIntro, activeDraw, isTestMenuOpen, isScannerVisible, apiBaseUrl, sessionToken, onSessionInvalid]);
+  }, [showIntro, activeDraw, isTestMenuOpen, isScannerVisible, apiBaseUrl, sessionToken, onSessionInvalid, openDrawnCard]);
 
   useEffect(() => {
     return () => {
@@ -400,7 +468,7 @@ export function RiskQuizScreen({
     questionRevealAnimation.setValue(0);
     Animated.timing(questionRevealAnimation, {
       toValue: 1,
-      duration: 380,
+      duration: SCREEN_TRANSITION_HALF_MS,
       useNativeDriver: true,
     }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -464,14 +532,21 @@ export function RiskQuizScreen({
     }
     Animated.timing(questionRevealAnimation, {
       toValue: 0,
-      duration: 320,
+      duration: SCREEN_TRANSITION_HALF_MS,
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished) {
-        setActiveDraw(null);
-        setAnswerResult(null);
-        setExhaustedNotice(null);
+      if (!finished) {
+        return;
       }
+      setActiveDraw(null);
+      setAnswerResult(null);
+      setExhaustedNotice(null);
+      deckIdleRevealAnimation.setValue(0);
+      Animated.timing(deckIdleRevealAnimation, {
+        toValue: 1,
+        duration: SCREEN_TRANSITION_HALF_MS,
+        useNativeDriver: true,
+      }).start();
     });
   }
 
@@ -573,9 +648,7 @@ export function RiskQuizScreen({
         setExhaustedNotice({ categoryName: result.categoryName });
         setActiveDraw(null);
       } else {
-        setActiveDraw(result);
-        setExhaustedNotice(null);
-        setAnswerResult(null);
+        openDrawnCard(result);
       }
     } catch (error) {
       if (getMobileApiErrorStatusCode(error) === 401) {
@@ -589,14 +662,22 @@ export function RiskQuizScreen({
     }
   }
 
-  async function submitOutcome(input: { selectedIndex?: number; completed?: boolean }) {
-    if (!activeDraw || isSubmittingAnswer) return;
+  async function submitOutcome(input: {
+    selectedIndex?: number;
+    completed?: boolean;
+    completionCode?: string;
+  }): Promise<string | null> {
+    if (!activeDraw || isSubmittingAnswer || submittedCardIdRef.current === activeDraw.cardId) {
+      return null;
+    }
+    const cardId = activeDraw.cardId;
+    submittedCardIdRef.current = cardId;
     setIsSubmittingAnswer(true);
     setErrorMessage(null);
     try {
       const result = await postRiskQuizAnswer(apiBaseUrl, {
         sessionToken,
-        cardId: activeDraw.cardId,
+        cardId,
         stationId: activeDraw.station.id,
         ...input,
       });
@@ -605,12 +686,24 @@ export function RiskQuizScreen({
       setStreak(result.streak);
       setMultiplier(result.multiplier);
       void refreshDeckStatus();
+      return null;
     } catch (error) {
+      // Freed again so a failed send (a dropped connection mid-answer) can be
+      // retried; the backend still rejects a genuine second attempt.
+      submittedCardIdRef.current = null;
       if (getMobileApiErrorStatusCode(error) === 401) {
         onSessionInvalid();
-        return;
+        return null;
       }
-      setErrorMessage(error instanceof Error ? error.message : "Nie udało się wysłać wyniku.");
+      const message = error instanceof Error ? error.message : "Nie udało się wysłać wyniku.";
+      // A mistyped completion code is the code panel's business — it shakes the
+      // input and lets the player retype. Putting it in the screen-level error
+      // line as well would leave a raw "Invalid completion code" sitting under
+      // the card after a simple typo.
+      if (!isInvalidCompletionCodeErrorMessage(message)) {
+        setErrorMessage(message);
+      }
+      return message;
     } finally {
       setIsSubmittingAnswer(false);
     }
@@ -621,9 +714,10 @@ export function RiskQuizScreen({
   // scored server-side as a plain "completed = correct" self-report (see
   // resolveOutcome() in risk-quiz.service.ts), same as the "Ukończone" /
   // "Poddaję się" buttons this replaces for those types.
-  async function completeCurrentCard(completed: boolean): Promise<string | null> {
-    await submitOutcome({ completed });
-    return null;
+  // The station panels treat a non-null return as "the send failed" and skip
+  // their success state, so hand them the real error instead of always null.
+  async function completeCurrentCard(completed: boolean, completionCode?: string): Promise<string | null> {
+    return submitOutcome({ completed, completionCode });
   }
 
   function buildStationPreviewViewModel(draw: ActiveDraw): StationTestViewModel {
@@ -774,8 +868,8 @@ export function RiskQuizScreen({
           <Animated.View
             className="items-center"
             pointerEvents="none"
-            onLayout={(event) => setTimerHeight(event.nativeEvent.layout.height)}
             style={{
+              height: TASK_TIMER_BLOCK_HEIGHT,
               // Floated above the content instead of sitting in the column:
               // the timer must stay visible at all times (including while the
               // keyboard is up), but it must not eat any of the vertical room
@@ -792,7 +886,7 @@ export function RiskQuizScreen({
                 {
                   translateY: questionRevealAnimation.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [28, 0],
+                    outputRange: [SCREEN_TRANSITION_SLIDE_PX, 0],
                   }),
                 },
                 {
@@ -813,7 +907,9 @@ export function RiskQuizScreen({
             <Text
               style={{
                 color: remainingTaskSeconds <= 10 ? "#ef4444" : EXPEDITION_THEME.accentStrong,
-                fontSize: 72,
+                fontSize: TASK_TIMER_FONT_SIZE,
+                lineHeight: TASK_TIMER_BLOCK_HEIGHT,
+                includeFontPadding: false,
                 fontWeight: "900",
               }}
             >
@@ -832,7 +928,7 @@ export function RiskQuizScreen({
             // in the roomy (no keyboard) state. While typing, space is scarce
             // and the content is bottom-aligned anyway, so it can slide under
             // the timer instead of being pushed off-screen.
-            marginTop: remainingTaskSeconds !== null && keyboardHeight === 0 ? timerHeight : 0,
+            marginTop: remainingTaskSeconds !== null && keyboardHeight === 0 ? TASK_TIMER_BLOCK_HEIGHT : 0,
           }}
           contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
           keyboardShouldPersistTaps="handled"
@@ -848,7 +944,7 @@ export function RiskQuizScreen({
                   {
                     translateY: questionRevealAnimation.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [28, 0],
+                      outputRange: [SCREEN_TRANSITION_SLIDE_PX, 0],
                     }),
                   },
                 ],
@@ -932,7 +1028,7 @@ export function RiskQuizScreen({
                   {
                     translateY: questionRevealAnimation.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [28, 0],
+                      outputRange: [SCREEN_TRANSITION_SLIDE_PX, 0],
                     }),
                   },
                 ],
@@ -944,7 +1040,16 @@ export function RiskQuizScreen({
                 station={buildStationPreviewViewModel(activeDraw)}
                 onClose={dismissActiveCard}
                 onRequestClose={dismissActiveCard}
-                onCompleteTask={async () => completeCurrentCard(true)}
+                // The second argument is the typed completion code for
+                // "na czas"/"na punkty" stations and a plain type marker
+                // ("QUIZ", "WORDLE", ...) for every other panel — only the
+                // former may travel to the backend as a code to verify.
+                onCompleteTask={async (_stationId, completionCode) =>
+                  completeCurrentCard(
+                    true,
+                    isCompletionCodeCardType(activeDraw.station.type) ? completionCode : undefined,
+                  )
+                }
                 onSubmitPhotoTask={async () => completeCurrentCard(true)}
                 onQuizFailed={() => void completeCurrentCard(false)}
                 onQuizPassed={() => void completeCurrentCard(true)}
@@ -971,7 +1076,7 @@ export function RiskQuizScreen({
                   {
                     translateY: questionRevealAnimation.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [28, 0],
+                      outputRange: [SCREEN_TRANSITION_SLIDE_PX, 0],
                     }),
                   },
                 ],
@@ -993,10 +1098,29 @@ export function RiskQuizScreen({
         {keyboardHeight === 0 ? (
           <View className="w-full items-center" style={{ rowGap: 14 }}>
             {activeDraw ? null : (
-              <>
+              // Mirror image of the card's own reveal: same fade, same slide,
+              // same half-duration, just running on the deck view instead.
+              // Real style props, not `className` — nativewind classes never
+              // reach an Animated.View here.
+              <Animated.View
+                style={{
+                  width: "100%",
+                  alignItems: "center",
+                  rowGap: 14,
+                  opacity: deckIdleRevealAnimation,
+                  transform: [
+                    {
+                      translateY: deckIdleRevealAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [SCREEN_TRANSITION_SLIDE_PX, 0],
+                      }),
+                    },
+                  ],
+                }}
+              >
                 <RiskQuizRemainingCards remainingCards={deckStatus?.remainingCards ?? null} />
                 <RiskQuizHowToPlay />
-              </>
+              </Animated.View>
             )}
             <View className="w-full max-w-[560px]">
               <RiskQuizBottomPanel
