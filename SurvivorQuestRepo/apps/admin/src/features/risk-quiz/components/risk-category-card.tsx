@@ -73,6 +73,7 @@ export function StationAssignmentForm({
 
       {isCreatingNewStation ? (
         <CreateStationForm
+          variant="risk"
           onClose={() => setIsCreatingNewStation(false)}
           onCreated={(station: Station) => {
             setIsCreatingNewStation(false);
@@ -119,7 +120,7 @@ export function PoolStationRow({ poolStation }: { poolStation: RiskCategory["poo
       </div>
 
       {isEditing ? (
-        <EditStationModal station={fullStation} onClose={() => setIsEditing(false)} />
+        <EditStationModal station={fullStation} variant="risk" onClose={() => setIsEditing(false)} />
       ) : null}
     </div>
   );

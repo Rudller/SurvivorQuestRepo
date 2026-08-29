@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import JSZip from "jszip";
 import QRCode from "qrcode";
 import {
   useGetCurrentRealizationPointsQrCodesQuery,
@@ -15,6 +14,7 @@ import {
   buildStationQrHuntCodeFileName,
 } from "@/shared/lib/station-qr-file-name";
 import { addCaptionToQrImageDataUrl } from "@/shared/lib/qr-image-caption";
+import { downloadQrImagesAsZip } from "@/shared/lib/qr-zip";
 import {
   QrImageLightbox,
   type QrImageLightboxImage,
@@ -431,70 +431,35 @@ export function CurrentRealizationStationQrPanel({
     setIsDownloadingZip(true);
 
     try {
-      const zip = new JSZip();
-      const usedFileNameCounts = new Map<string, number>();
-
-      const addQrImageToZip = (baseFileName: string, qrImage: string) => {
-        const fileNameCount = (usedFileNameCounts.get(baseFileName) ?? 0) + 1;
-        usedFileNameCounts.set(baseFileName, fileNameCount);
-        const fileName =
-          fileNameCount > 1
-            ? baseFileName.replace(/\.png$/i, ` (${fileNameCount}).png`)
-            : baseFileName;
-        const base64MarkerIndex = qrImage.indexOf("base64,");
-        if (base64MarkerIndex < 0) {
-          return;
-        }
-        zip.file(
-          fileName,
-          qrImage.slice(base64MarkerIndex + "base64,".length),
-          { base64: true },
-        );
-      };
-
-      downloadableEntries.forEach(({ entry, qrImage }) => {
-        addQrImageToZip(
-          buildStationQrFileName(realization.companyName, entry.stationName),
-          qrImage,
-        );
-      });
-
-      downloadableHuntEntries.forEach(({ entry, code, qrImage }) => {
-        addQrImageToZip(
-          buildStationQrHuntCodeFileName(
-            realization.companyName,
-            entry.stationName,
-            code,
-          ),
-          qrImage,
-        );
-      });
-
-      downloadablePointsEntries.forEach(({ entry, qrImage }) => {
-        addQrImageToZip(
-          buildPointsQrCodeFileName(
-            realization.companyName,
-            entry.label,
-            entry.code,
-          ),
-          qrImage,
-        );
-      });
-
-      riskCardDownloadEntries.forEach(({ fileName, qrImage }) => {
-        addQrImageToZip(fileName, qrImage);
-      });
-
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const zipUrl = window.URL.createObjectURL(zipBlob);
-      const anchor = document.createElement("a");
-      anchor.href = zipUrl;
-      anchor.download = buildStationQrArchiveFileName(realization.companyName);
-      anchor.click();
-
-      window.setTimeout(() => {
-        window.URL.revokeObjectURL(zipUrl);
-      }, 1000);
+      await downloadQrImagesAsZip(
+        [
+          ...downloadableEntries.map(({ entry, qrImage }) => ({
+            fileName: buildStationQrFileName(
+              realization.companyName,
+              entry.stationName,
+            ),
+            qrImage,
+          })),
+          ...downloadableHuntEntries.map(({ entry, code, qrImage }) => ({
+            fileName: buildStationQrHuntCodeFileName(
+              realization.companyName,
+              entry.stationName,
+              code,
+            ),
+            qrImage,
+          })),
+          ...downloadablePointsEntries.map(({ entry, qrImage }) => ({
+            fileName: buildPointsQrCodeFileName(
+              realization.companyName,
+              entry.label,
+              entry.code,
+            ),
+            qrImage,
+          })),
+          ...riskCardDownloadEntries,
+        ],
+        buildStationQrArchiveFileName(realization.companyName),
+      );
     } catch {
       setCopyError("Nie udało się przygotować paczki ZIP.");
     } finally {

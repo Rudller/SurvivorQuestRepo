@@ -5,6 +5,7 @@ import type {
   RiskBoard,
   RiskCancelRemoteDrawResult,
   RiskCardWithCategory,
+  RiskSchemeCardCode,
   RiskCategory,
   RiskDifficulty,
   RiskPoolStation,
@@ -187,6 +188,16 @@ export const riskQuizApi = baseApi.injectEndpoints({
       invalidatesTags: ["RiskQuiz"],
     }),
 
+    // --- Card codes for a deck in the library (no realization involved) ---
+    // Derived server-side from the deck's categories, so the printable sheet
+    // exists before any realization does and matches what the realization's
+    // generated cards will carry.
+    getRiskSchemeCardCodes: build.query<RiskSchemeCardCode[], { schemeId: string }>({
+      query: ({ schemeId }) =>
+        adminPath(`/schemes/${encodeURIComponent(schemeId)}/card-codes`),
+      providesTags: ["RiskQuiz"],
+    }),
+
     // --- Cards + board (per realization) ---
     getRiskCards: build.query<RiskCardWithCategory[], { realizationId: string }>({
       query: ({ realizationId }) =>
@@ -303,6 +314,7 @@ export const {
   useDeleteRiskSchemeMutation,
   useAssignCategoryToSchemeMutation,
   useRemoveCategoryFromSchemeMutation,
+  useGetRiskSchemeCardCodesQuery,
   useGetRiskCardsQuery,
   useGenerateRiskCardsMutation,
   useGetRiskBoardQuery,

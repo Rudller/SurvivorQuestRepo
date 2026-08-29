@@ -14,6 +14,7 @@ import {
 import { CategoryListRow } from "./risk-category-card";
 import { EditCategoryModal } from "./edit-category-modal";
 import type { RiskCategory, RiskScheme } from "../types/risk-quiz";
+import { RiskSchemeQrPanel } from "./risk-scheme-qr-panel";
 import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
 
 type SchemeCardProps = {
@@ -30,12 +31,9 @@ export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: Schem
   const [deleteScheme, { isLoading: isDeleting }] = useDeleteRiskSchemeMutation();
   const [assignCategory, { isLoading: isAssigning }] = useAssignCategoryToSchemeMutation();
   const [removeCategory] = useRemoveCategoryFromSchemeMutation();
-  const [createCategory, { isLoading: isCreatingCategory }] = useCreateRiskCategoryMutation();
   const [name, setName] = useState(scheme.name);
+  const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
   const [categoryToAdd, setCategoryToAdd] = useState("");
-  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [createCategoryError, setCreateCategoryError] = useState<string | null>(null);
 
   const assignedCategoryIds = new Set(scheme.schemeCategories.map((item) => item.categoryId));
   const availableCategories = (allCategories ?? []).filter((category) => !assignedCategoryIds.has(category.id));
@@ -44,19 +42,6 @@ export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: Schem
     if (!categoryToAdd) return;
     await assignCategory({ schemeId: scheme.id, categoryId: categoryToAdd }).unwrap();
     setCategoryToAdd("");
-  }
-
-  async function handleCreateAndAssignCategory() {
-    setCreateCategoryError(null);
-    if (!newCategoryName.trim()) return;
-    try {
-      const created = await createCategory({ name: newCategoryName.trim() }).unwrap();
-      await assignCategory({ schemeId: scheme.id, categoryId: created.id }).unwrap();
-      setNewCategoryName("");
-      setIsCreatingNewCategory(false);
-    } catch {
-      setCreateCategoryError("Nie udało się utworzyć kategorii (nazwa może być już zajęta).");
-    }
   }
 
   return (
@@ -143,46 +128,27 @@ export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: Schem
         </button>
       </div>
 
-      {isCreatingNewCategory ? (
-        <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <input
-            value={newCategoryName}
-            onChange={(event) => setNewCategoryName(event.target.value)}
-            placeholder="Nazwa kategorii, np. Historia"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-          />
-          {createCategoryError ? <p className="text-xs text-red-300">{createCategoryError}</p> : null}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void handleCreateAndAssignCategory()}
-              disabled={isCreatingCategory || isAssigning || !newCategoryName.trim()}
-              className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
-            >
-              {isCreatingCategory || isAssigning ? "Tworzenie..." : "Utwórz i przypisz"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsCreatingNewCategory(false);
-                setNewCategoryName("");
-                setCreateCategoryError(null);
-              }}
-              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
-            >
-              Anuluj
-            </button>
-          </div>
-        </div>
-      ) : (
+      {/* The panel mounts only while open: a deck with a few categories is
+          already dozens of QR images, and generating them on every library
+          render would be wasted work when you are just editing categories. */}
+      <div className="border-t border-zinc-800 pt-3">
         <button
           type="button"
-          onClick={() => setIsCreatingNewCategory(true)}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500"
+          onClick={() => setIsQrPanelOpen(true)}
+          disabled={scheme.schemeCategories.length === 0}
+          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 disabled:opacity-50"
         >
-          + Utwórz nową kategorię
+          Kody QR do druku
         </button>
-      )}
+      </div>
+
+      {isQrPanelOpen ? (
+        <RiskSchemeQrPanel
+          schemeId={scheme.id}
+          schemeName={scheme.name}
+          onClose={() => setIsQrPanelOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import type {
   StationType,
 } from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import type { StationFormVariant } from "../types/station";
 import { useIsDirty } from "../../../shared/lib/use-is-dirty";
 import {
   getRealizationLanguageFlag,
@@ -71,6 +72,7 @@ import {
 interface EditStationModalProps {
   station: Station;
   onClose: () => void;
+  variant?: StationFormVariant;
 }
 
 const DEFAULT_STATION_DESCRIPTION = "Opis stanowiska będzie dostępny po rozpoczęciu zadania.";
@@ -162,7 +164,8 @@ function normalizeCategories(categories: string[]) {
   return normalized;
 }
 
-export function EditStationModal({ station, onClose }: EditStationModalProps) {
+export function EditStationModal({ station, onClose, variant = "regular" }: EditStationModalProps) {
+  const isRiskVariant = variant === "risk";
   const [updateStation, { isLoading: isUpdating }] = useUpdateStationMutation();
   const [deleteStation, { isLoading: isDeleting }] = useDeleteStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
@@ -1010,6 +1013,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </label>
             ) : null}
 
+{isRiskVariant ? null : (
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
               <div className="flex gap-2">
@@ -1038,6 +1042,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
                 pola nie usuwa obecnego kodu — zmień je tylko, gdy naprawdę chcesz przypisać inny kod.
               </p>
             </label>
+)}
 
             {editValues.type === "qr-hunt" ? (
               <label className="space-y-1.5">
@@ -1199,7 +1204,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
             </label>
 
             {isQuizStationType(editValues.type) ? (
-              <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+            <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">{quizLikeCopy.sectionTitle}</h3>
                 {editValues.type === "audio-quiz" ? (
                   <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-3">
@@ -1547,6 +1552,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               </p>
             </div>
 
+{isRiskVariant ? null : (
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
@@ -1613,6 +1619,7 @@ export function EditStationModal({ station, onClose }: EditStationModalProps) {
               />
               <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
             </div>
+)}
 
             {editFormError && <p className="text-sm text-red-300">{editFormError}</p>}
           </form>

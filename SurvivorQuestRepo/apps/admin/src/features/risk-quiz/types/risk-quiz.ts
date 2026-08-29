@@ -46,6 +46,18 @@ export type RiskScheme = {
   schemeCategories: RiskSchemeCategory[];
 };
 
+// A printable code for a deck in the LIBRARY. Unlike RiskCard this has no DB
+// row behind it — the backend derives it from (category slug, difficulty,
+// index), the same formula the realization's real cards use, so a sticker
+// printed from the library keeps working in every realization built from
+// this deck.
+export type RiskSchemeCardCode = {
+  categoryId: string;
+  categoryName: string;
+  difficulty: RiskDifficulty;
+  code: string;
+};
+
 export type RiskCardWithCategory = RiskCard & {
   category: { id: string; name: string };
 };

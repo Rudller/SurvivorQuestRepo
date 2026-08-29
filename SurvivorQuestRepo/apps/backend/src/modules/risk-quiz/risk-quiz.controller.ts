@@ -259,6 +259,15 @@ export class RiskQuizController {
 
   // --- Admin: cards + board ---
 
+  // Printable codes for a deck in the library, before any realization exists.
+  // Derived from the deck's categories, so nothing is written.
+  @Get('admin/schemes/:schemeId/card-codes')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listSchemeCardCodes(@Param('schemeId') schemeId: string) {
+    return this.riskQuizService.listSchemeCardCodes(schemeId);
+  }
+
   @Get('admin/realizations/:realizationId/cards')
   @AdminOrInstructor()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)

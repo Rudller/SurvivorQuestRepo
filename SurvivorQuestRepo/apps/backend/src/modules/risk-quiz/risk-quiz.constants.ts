@@ -21,6 +21,29 @@ export const RISK_DIFFICULTY_SLUG: Record<RiskDifficulty, string> = {
   HARD: 'trudne',
 };
 
+// Marks a printed Ryzykanci card apart from a normal station's qrEntryCode
+// sticker. Nothing in scanCard() needs it — codes are only ever matched inside
+// one realization's Ryzykanci deck — but the two kinds of stickers get printed
+// and sorted by hand, and the prefix is what tells the piles apart.
+export const RISK_CARD_CODE_PREFIX = 'RYZYKANCI';
+
+/**
+ * The one place the printed card code format is defined. Codes are
+ * deterministic from (category slug, difficulty, index) so the same physical
+ * sticker stays valid across every realization reusing that category — which
+ * also lets the scheme library render them without any RiskCard row existing.
+ *
+ * Always uppercase: scanCard() uppercases whatever it scans before matching,
+ * so a stored lowercase code could never match.
+ */
+export function buildRiskCardCode(
+  categorySlug: string,
+  difficulty: RiskDifficulty,
+  index: number,
+): string {
+  return `${RISK_CARD_CODE_PREFIX}-${categorySlug}-${RISK_DIFFICULTY_SLUG[difficulty]}-${index}`.toUpperCase();
+}
+
 // Duplicate physical QR cards generated per (category, difficulty) pool, so
 // several teams can draw from the same pool in parallel.
 export const RISK_CARDS_PER_POOL = 10;

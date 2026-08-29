@@ -13,6 +13,7 @@ import type {
   StationType,
 } from "../types/station";
 import { stationTypeOptions } from "../types/station";
+import type { StationFormVariant } from "../types/station";
 import { useIsDirty } from "../../../shared/lib/use-is-dirty";
 import {
   getRealizationLanguageFlag,
@@ -72,6 +73,7 @@ import {
 type CreateStationFormProps = {
   onClose: () => void;
   onCreated?: (station: Station) => void;
+  variant?: StationFormVariant;
 };
 
 const supportedStationTranslationLanguages: RealizationLanguage[] = [
@@ -161,7 +163,8 @@ function normalizeCategories(categories: string[]) {
   return normalized;
 }
 
-export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps) {
+export function CreateStationForm({ onClose, onCreated, variant = "regular" }: CreateStationFormProps) {
+  const isRiskVariant = variant === "risk";
   const [createStation, { isLoading: isCreating }] = useCreateStationMutation();
   const [uploadStationImage, { isLoading: isUploadingImage }] = useUploadStationImageMutation();
   const [uploadStationAudio, { isLoading: isUploadingAudio }] = useUploadStationAudioMutation();
@@ -987,6 +990,7 @@ export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps
               </label>
             ) : null}
 
+{isRiskVariant ? null : (
           <label className="space-y-1.5">
             <span className="text-xs uppercase tracking-wider text-zinc-400">Kod QR wejścia</span>
             <div className="flex gap-2">
@@ -1015,6 +1019,7 @@ export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps
               naklejka QR pasowała też do tego stanowiska.
             </p>
           </label>
+)}
 
           {type === "qr-hunt" ? (
             <label className="space-y-1.5">
@@ -1563,6 +1568,7 @@ export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps
             </p>
           </div>
 
+{isRiskVariant ? null : (
           <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Współrzędne szablonu (domyślne)</span>
@@ -1629,6 +1635,7 @@ export function CreateStationForm({ onClose, onCreated }: CreateStationFormProps
             />
             <p className="text-xs text-zinc-500">Kliknij punkt na mapie, aby automatycznie uzupełnić szerokość i długość geograficzną.</p>
           </div>
+)}
         </div>
 
         {formError && <p className="text-sm text-red-300">{formError}</p>}

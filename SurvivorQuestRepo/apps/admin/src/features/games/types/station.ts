@@ -96,3 +96,12 @@ export type Station = {
   createdAt: string;
   updatedAt: string;
 };
+
+// Which flavour of the station form to render.
+//
+// "risk" hides the fields a Ryzykanci station can never use: it is drawn from a
+// deck rather than scanned at a location, so its entry QR code and coordinates
+// are dead weight in the form. It only HIDES them — stored values stay intact,
+// because a template station can also be the source of scenario clones, where
+// qrEntryCode is a real physical sticker.
+export type StationFormVariant = "regular" | "risk";

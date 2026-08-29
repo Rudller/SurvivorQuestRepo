@@ -22,10 +22,10 @@ import {
   mapStation,
 } from '../station/mappers/station.mapper';
 import {
+  buildRiskCardCode,
   RISK_CARDS_PER_POOL,
   RISK_DIFFICULTY_ORDER,
   RISK_DIFFICULTY_POINTS,
-  RISK_DIFFICULTY_SLUG,
   RISK_STREAK_MULTIPLIER_CAP,
   RISK_STREAK_MULTIPLIER_STEP,
 } from './risk-quiz.constants';
@@ -1124,14 +1124,9 @@ export class RiskQuizService {
             )
             .map((card) => card.code),
         );
-        const difficultySlug = RISK_DIFFICULTY_SLUG[difficulty];
 
         for (let index = 1; index <= RISK_CARDS_PER_POOL; index += 1) {
-          // scanCard() uppercases whatever it scans before matching against
-          // this column (defensive against scan/typing case variance) — the
-          // stored code must be uppercase too, or it can never match.
-          const code =
-            `${categorySlug}-${difficultySlug}-${index}`.toUpperCase();
+          const code = buildRiskCardCode(categorySlug, difficulty, index);
           if (existingCodes.has(code)) continue;
 
           await this.prisma.riskCard.create({
@@ -1142,6 +1137,54 @@ export class RiskQuizService {
     }
 
     return this.listCards(realizationId);
+  }
+
+  /**
+   * Printable card codes for a deck in the library, derived rather than read:
+   * a template scheme owns no RiskCard rows (those are per realization), but
+   * codes are deterministic from (category slug, difficulty, index), so the
+   * stickers can be printed once from the library and stay valid in every
+   * realization built from this deck.
+   *
+   * Shares buildRiskCardCode() with generateMissingCards() on purpose — two
+   * copies of the format would drift and silently invalidate printed sheets.
+   */
+  async listSchemeCardCodes(schemeId: string) {
+    const scheme = await this.prisma.riskScheme.findUnique({
+      where: { id: schemeId },
+    });
+    if (!scheme) {
+      throw new NotFoundException('Scheme not found');
+    }
+
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId },
+      include: { category: true },
+      orderBy: { order: 'asc' },
+    });
+
+    const codes: {
+      categoryId: string;
+      categoryName: string;
+      difficulty: RiskDifficulty;
+      code: string;
+    }[] = [];
+
+    for (const { category } of schemeCategories) {
+      const categorySlug = await this.ensureCategoryCodeSlug(category);
+      for (const difficulty of RISK_DIFFICULTY_ORDER) {
+        for (let index = 1; index <= RISK_CARDS_PER_POOL; index += 1) {
+          codes.push({
+            categoryId: category.id,
+            categoryName: category.name,
+            difficulty,
+            code: buildRiskCardCode(categorySlug, difficulty, index),
+          });
+        }
+      }
+    }
+
+    return codes;
   }
 
   async getBoard(realizationId: string) {

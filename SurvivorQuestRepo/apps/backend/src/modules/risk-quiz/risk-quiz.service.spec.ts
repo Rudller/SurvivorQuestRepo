@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { RiskQuizService } from './risk-quiz.service';
+import { RISK_CARDS_PER_POOL } from './risk-quiz.constants';
 
 function createService() {
   const prisma = {
@@ -330,7 +331,7 @@ describe('RiskQuizService.generateMissingCards', () => {
     for (const code of createdCodes) {
       expect(code).toBe(code.toUpperCase());
     }
-    expect(createdCodes).toContain('HISTORIA-LATWE-1');
+    expect(createdCodes).toContain('RYZYKANCI-HISTORIA-LATWE-1');
     // codeSlug was already set — no lazy backfill should have been triggered.
     expect(prisma.riskCategory.update).not.toHaveBeenCalled();
   });
@@ -365,7 +366,7 @@ describe('RiskQuizService.generateMissingCards', () => {
     const createdCodes = prisma.riskCard.create.mock.calls.map(
       ([args]: [{ data: { code: string } }]) => args.data.code,
     );
-    expect(createdCodes).toContain('HISTORIA-LATWE-1');
+    expect(createdCodes).toContain('RYZYKANCI-HISTORIA-LATWE-1');
   });
 });
 
@@ -1938,5 +1939,75 @@ describe('RiskQuizService.findSchemeSummaryById', () => {
     );
     expect(prisma.riskScheme.create).not.toHaveBeenCalled();
     expect(prisma.realization.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RiskQuizService.listSchemeCardCodes', () => {
+  it('returns every pool code of a template deck without creating card rows', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'scheme-1',
+      name: 'Talia A',
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      {
+        categoryId: 'category-1',
+        order: 0,
+        category: { id: 'category-1', name: 'Historia', codeSlug: 'historia' },
+      },
+    ]);
+
+    const codes = await service.listSchemeCardCodes('scheme-1');
+
+    // A library deck owns no RiskCard rows — the codes are derived, not stored.
+    expect(prisma.riskCard.create).not.toHaveBeenCalled();
+    expect(codes).toHaveLength(3 * RISK_CARDS_PER_POOL);
+    expect(codes[0]).toEqual({
+      categoryId: 'category-1',
+      categoryName: 'Historia',
+      difficulty: 'EASY',
+      code: 'RYZYKANCI-HISTORIA-LATWE-1',
+    });
+    expect(codes.map((entry) => entry.code)).toContain(
+      'RYZYKANCI-HISTORIA-TRUDNE-10',
+    );
+  });
+
+  it('backfills a missing codeSlug, so the library preview matches what generateMissingCards will later store', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue({
+      id: 'scheme-1',
+      name: 'Talia A',
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      {
+        categoryId: 'category-1',
+        order: 0,
+        category: { id: 'category-1', name: 'Historia', codeSlug: null },
+      },
+    ]);
+    prisma.riskCategory.update.mockResolvedValue({
+      id: 'category-1',
+      codeSlug: 'historia',
+    });
+
+    const codes = await service.listSchemeCardCodes('scheme-1');
+
+    expect(prisma.riskCategory.update).toHaveBeenCalledWith({
+      where: { id: 'category-1' },
+      data: { codeSlug: 'historia' },
+    });
+    expect(codes.map((entry) => entry.code)).toContain(
+      'RYZYKANCI-HISTORIA-LATWE-1',
+    );
+  });
+
+  it('rejects an unknown scheme', async () => {
+    const { service, prisma } = createService();
+    prisma.riskScheme.findUnique.mockResolvedValue(null);
+
+    await expect(service.listSchemeCardCodes('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
