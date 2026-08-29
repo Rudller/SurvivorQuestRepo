@@ -4,12 +4,16 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { PanelSurface, type PanelCornerStyle } from "../../../shared/ui/chamfered-panel";
 
 type QrScannerOverlayProps = {
   visible: boolean;
   isResolving: boolean;
   onClose: () => void;
   onDetected: (rawValue: string) => void;
+  // Ryzykanci scan cards rather than stations, and its screens are chamfered.
+  scanTarget?: "station" | "card";
+  cornerStyle?: PanelCornerStyle;
 };
 
 const QR_SCANNER_OVERLAY_TEXT: Record<
@@ -22,6 +26,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     enableCamera: string;
     verifyingCode: string;
     tabletHintTitle: string;
+    cardHintTitle: string;
     tabletHintBody: string;
   }
 > = {
@@ -33,6 +38,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     enableCamera: "Włącz kamerę",
     verifyingCode: "Weryfikuję kod...",
     tabletHintTitle: "Skanowanie stanowiska",
+    cardHintTitle: "Zeskanuj kartę",
     tabletHintBody: "Trzymaj tablet stabilnie i ustaw kod QR w środku ramki. Po rozpoznaniu stanowisko otworzy się automatycznie.",
   },
   english: {
@@ -43,6 +49,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     enableCamera: "Enable camera",
     verifyingCode: "Verifying code...",
     tabletHintTitle: "Station scanning",
+    cardHintTitle: "Scan a card",
     tabletHintBody: "Hold the tablet steady and place the QR code in the center of the frame. The station opens automatically after detection.",
   },
   ukrainian: {
@@ -53,6 +60,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     enableCamera: "Увімкнути камеру",
     verifyingCode: "Перевіряю код...",
     tabletHintTitle: "Сканування станції",
+    cardHintTitle: "Скануйте картку",
     tabletHintBody: "Тримайте планшет стабільно та розмістіть QR-код у центрі рамки. Після розпізнавання станція відкриється автоматично.",
   },
   russian: {
@@ -63,11 +71,19 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     enableCamera: "Включить камеру",
     verifyingCode: "Проверяю код...",
     tabletHintTitle: "Сканирование станции",
+    cardHintTitle: "Отсканируйте карту",
     tabletHintBody: "Держите планшет ровно и поместите QR-код в центр рамки. После распознавания станция откроется автоматически.",
   },
 };
 
-export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: QrScannerOverlayProps) {
+export function QrScannerOverlay({
+  visible,
+  isResolving,
+  onClose,
+  onDetected,
+  scanTarget = "station",
+  cornerStyle = "rounded",
+}: QrScannerOverlayProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
   const text = QR_SCANNER_OVERLAY_TEXT[uiLanguage];
@@ -164,6 +180,8 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
   const cornerBorderWidth = adaptiveLayout.s(isTabletLayout ? 5 : 3, 3, 6);
   const contentGap = adaptiveLayout.s(isTabletLayout ? 22 : 14, 12, 28);
   const closeSize = adaptiveLayout.hit(isTabletLayout ? 54 : 42);
+  const isChamfered = cornerStyle === "chamfered";
+  const panelBorderWidth = isChamfered ? adaptiveLayout.s(isTabletLayout ? 3 : 2, 2, 4) : 1;
 
   return (
     <Animated.View
@@ -171,15 +189,17 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
       style={[{ backgroundColor: backdropColor }, backdropStyle]}
     >
       <Animated.View className="absolute inset-0 items-center justify-center" style={[{ paddingHorizontal: horizontalInset }, panelStyle]}>
-        <View
-          className="w-full border"
-          style={{
-            maxWidth: panelMaxWidth,
-            borderRadius: panelRadius,
-            padding: panelPadding,
-            borderColor: EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panel,
-          }}
+        <PanelSurface
+          cornerStyle={cornerStyle}
+          radius={panelRadius}
+          borderColor={EXPEDITION_THEME.border}
+          borderWidth={panelBorderWidth}
+          backgroundColor={EXPEDITION_THEME.panel}
+          texture={isChamfered ? "cross-hatch" : undefined}
+          textureColor={EXPEDITION_THEME.accent}
+          textureOpacity={0.08}
+          textureScale={1.3}
+          style={{ width: "100%", maxWidth: panelMaxWidth, padding: panelPadding }}
         >
           <View className="flex-row items-start justify-between" style={{ columnGap: contentGap }}>
             <View className="flex-1">
@@ -187,7 +207,7 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
                 {text.title}
               </Text>
               <Text className="mt-1 font-extrabold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: titleFontSize }}>
-                {text.tabletHintTitle}
+                {scanTarget === "card" ? text.cardHintTitle : text.tabletHintTitle}
               </Text>
               <Text className="mt-1" style={{ color: EXPEDITION_THEME.textMuted, fontSize: subtitleFontSize }}>
                 {text.subtitle}
@@ -282,7 +302,7 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
                       { top: 0, right: 0, borderTopWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderTopRightRadius: cornerRadius },
                       { bottom: 0, left: 0, borderBottomWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderBottomLeftRadius: cornerRadius },
                       { bottom: 0, right: 0, borderBottomWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderBottomRightRadius: cornerRadius },
-                    ].map((cornerStyle, index) => (
+                    ].map((cornerFrameStyle, index) => (
                       <View
                         key={index}
                         style={{
@@ -290,7 +310,7 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
                           width: cornerSize,
                           height: cornerSize,
                           borderColor: EXPEDITION_THEME.accent,
-                          ...cornerStyle,
+                          ...cornerFrameStyle,
                         }}
                       />
                     ))}
@@ -310,7 +330,7 @@ export function QrScannerOverlay({ visible, isResolving, onClose, onDetected }: 
 
             </View>
           )}
-        </View>
+        </PanelSurface>
       </Animated.View>
     </Animated.View>
   );
@@ -424,7 +444,7 @@ export function InlineQrScanner({ isResolving, onClose, onDetected }: InlineQrSc
                 { top: 0, right: 0, borderTopWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderTopRightRadius: cornerRadius },
                 { bottom: 0, left: 0, borderBottomWidth: cornerBorderWidth, borderLeftWidth: cornerBorderWidth, borderBottomLeftRadius: cornerRadius },
                 { bottom: 0, right: 0, borderBottomWidth: cornerBorderWidth, borderRightWidth: cornerBorderWidth, borderBottomRightRadius: cornerRadius },
-              ].map((cornerStyle, index) => (
+              ].map((cornerFrameStyle, index) => (
                 <View
                   key={index}
                   style={{
@@ -432,7 +452,7 @@ export function InlineQrScanner({ isResolving, onClose, onDetected }: InlineQrSc
                     width: cornerSize,
                     height: cornerSize,
                     borderColor: EXPEDITION_THEME.accent,
-                    ...cornerStyle,
+                    ...cornerFrameStyle,
                   }}
                 />
               ))}

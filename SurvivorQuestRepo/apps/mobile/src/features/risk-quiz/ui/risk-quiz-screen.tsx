@@ -32,7 +32,8 @@ import {
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
-import { RiskQuizDeckStack } from "../components/risk-quiz-deck-stack";
+import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
+import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
 import { RiskQuizBackground } from "../components/risk-quiz-background";
 import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
@@ -765,6 +766,7 @@ export function RiskQuizScreen({
             onOpenLanguagePicker={handleLanguageButtonPress}
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
+            cornerStyle="chamfered"
           />
         </Pressable>
 
@@ -950,24 +952,14 @@ export function RiskQuizScreen({
                 timedStationPointsDecayEnabled={false}
               />
             </Animated.View>
-          ) : (
-            <View style={{ alignItems: "center", rowGap: 16 }}>
-              <RiskQuizDeckStack
-                deckCount={deckStatus?.categoryCount ?? 1}
-                remainingCards={deckStatus?.remainingCards ?? null}
-              />
-              {exhaustedNotice ? (
-                <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 15, textAlign: "center" }}>
-                  Brak nowych zadań w puli „{exhaustedNotice.categoryName}” na tym poziomie trudności. Zeskanuj inną
-                  kartę.
-                </Text>
-              ) : (
-                <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 15, textAlign: "center" }}>
-                  Zeskanuj kartę, aby wylosować zadanie.
-                </Text>
-              )}
+          ) : exhaustedNotice ? (
+            <View style={{ width: "100%", alignItems: "center" }}>
+              <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 15, textAlign: "center" }}>
+                Brak nowych zadań w puli „{exhaustedNotice.categoryName}” na tym poziomie trudności. Zeskanuj inną
+                kartę.
+              </Text>
             </View>
-          )}
+          ) : null}
 
           {activeDraw && isAudioQuizType ? (
             <Animated.View
@@ -999,7 +991,13 @@ export function RiskQuizScreen({
         </ScrollView>
 
         {keyboardHeight === 0 ? (
-          <View className="w-full items-center">
+          <View className="w-full items-center" style={{ rowGap: 14 }}>
+            {activeDraw ? null : (
+              <>
+                <RiskQuizRemainingCards remainingCards={deckStatus?.remainingCards ?? null} />
+                <RiskQuizHowToPlay />
+              </>
+            )}
             <View className="w-full max-w-[560px]">
               <RiskQuizBottomPanel
                 remainingLabel={countdown.remainingLabel}
@@ -1022,6 +1020,8 @@ export function RiskQuizScreen({
         isResolving={isResolvingScan}
         onClose={() => setIsScannerVisible(false)}
         onDetected={(value) => void handleDetected(value)}
+        scanTarget="card"
+        cornerStyle="chamfered"
       />
 
       <Modal

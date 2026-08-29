@@ -4,6 +4,7 @@ import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { useCountUpValue } from "../../../shared/ui/use-count-up-value";
+import { PanelSurface, type PanelCornerStyle } from "../../../shared/ui/chamfered-panel";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -20,6 +21,10 @@ type TopRealizationPanelProps = {
   onOpenLanguagePicker?: () => void;
   themeMode: ExpeditionThemeMode;
   onToggleTheme: () => void;
+  // "chamfered" cuts every surface's corners at 45 degrees instead of rounding
+  // them -- the Ryzykanci screen's look, matching its bottom panel. The regular
+  // expedition stage keeps the rounded default.
+  cornerStyle?: PanelCornerStyle;
 };
 
 const TOP_REALIZATION_PANEL_TEXT: Record<
@@ -113,6 +118,7 @@ export function TopRealizationPanel({
   onOpenLanguagePicker,
   themeMode,
   onToggleTheme,
+  cornerStyle = "rounded",
 }: TopRealizationPanelProps) {
   const uiLanguage = useUiLanguage();
   const adaptiveLayout = useAdaptiveLayout();
@@ -140,30 +146,40 @@ export function TopRealizationPanel({
   const teamMetaFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
   const pointsLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
   const pointsFontSize = adaptiveLayout.fs(isTabletLayout ? 24 : 15, 14, 28);
+  // The chamfered look leans on its outlines, so they carry more weight than
+  // the hairline border the rounded variant uses.
+  const panelBorderWidth =
+    cornerStyle === "chamfered" ? adaptiveLayout.s(isTabletLayout ? 3 : 2, 2, 4) : 1;
 
   return (
-    <View
-      style={{
-        borderRadius: panelRadius,
-        borderWidth: 1,
-        padding: panelPadding,
-        borderColor: EXPEDITION_THEME.border,
-        backgroundColor: EXPEDITION_THEME.panel,
-      }}
+    <PanelSurface
+      cornerStyle={cornerStyle}
+      radius={panelRadius}
+      borderColor={EXPEDITION_THEME.border}
+      borderWidth={panelBorderWidth}
+      backgroundColor={EXPEDITION_THEME.panel}
+      texture="cross-hatch"
+      textureColor={EXPEDITION_THEME.accent}
+      textureOpacity={0.08}
+      textureScale={1.3}
+      style={{ padding: panelPadding }}
     >
       <View style={{ height: contentHeight, flexDirection: "row", alignItems: "stretch", columnGap: contentGap }}>
-        <View
-          className="self-stretch items-center justify-center overflow-hidden border"
-          style={{ width: logoWidth, borderRadius: logoRadius, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+        <PanelSurface
+          cornerStyle={cornerStyle}
+          radius={logoRadius}
+          borderColor={EXPEDITION_THEME.border}
+          borderWidth={panelBorderWidth}
+          backgroundColor={EXPEDITION_THEME.panelMuted}
+          imageUri={logoUrl}
+          style={{ width: logoWidth, alignSelf: "stretch", alignItems: "center", justifyContent: "center" }}
         >
-          {logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-          ) : (
+          {logoUrl ? null : (
             <Text className="font-semibold uppercase tracking-wide" style={{ color: EXPEDITION_THEME.textSubtle, fontSize: companyFontSize }}>
               {text.logo}
             </Text>
           )}
-        </View>
+        </PanelSurface>
 
         <View className="flex-1">
           <View style={{ height: "50%", paddingLeft: adaptiveLayout.s(isTabletLayout ? 10 : 8, 6, 12) }}>
@@ -195,15 +211,17 @@ export function TopRealizationPanel({
               </View>
             </View>
           </View>
-          <View
-            className="justify-center border"
+          <PanelSurface
+            cornerStyle={cornerStyle}
+            radius={teamCardRadius}
+            borderColor={EXPEDITION_THEME.border}
+            borderWidth={panelBorderWidth}
+            backgroundColor={teamColorHex}
             style={{
               height: "50%",
-              borderRadius: teamCardRadius,
+              justifyContent: "center",
               paddingHorizontal: teamCardPaddingHorizontal,
               paddingVertical: teamCardPaddingVertical,
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: teamColorHex,
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", columnGap: contentGap }}>
@@ -241,9 +259,9 @@ export function TopRealizationPanel({
                 </Text>
               </View>
             </View>
-          </View>
+          </PanelSurface>
         </View>
       </View>
-    </View>
+    </PanelSurface>
   );
 }

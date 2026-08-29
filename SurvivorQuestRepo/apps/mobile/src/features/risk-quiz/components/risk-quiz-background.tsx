@@ -2,6 +2,7 @@ import { View } from "react-native";
 import Svg, { Defs, G, RadialGradient, Rect, Stop } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { CardSuitShape, type CardSuit } from "./card-suits";
+import { RiskQuizFallingCards } from "./risk-quiz-falling-cards";
 
 type RiskQuizBackgroundProps = {
   isLightTheme: boolean;
@@ -74,6 +75,8 @@ export function RiskQuizBackground({ isLightTheme }: RiskQuizBackgroundProps) {
 
         <Rect x={0} y={0} width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="url(#riskQuizVignette)" />
       </Svg>
+
+      <RiskQuizFallingCards isLightTheme={isLightTheme} />
     </View>
   );
 }
