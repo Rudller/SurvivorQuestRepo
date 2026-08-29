@@ -1,14 +1,14 @@
 import { Text, View } from "react-native";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
-import { CardBackIcon, QrScannerIcon, StopwatchIcon } from "./risk-quiz-icons";
+import { AnswerBubbleIcon, CardBackIcon, QrScannerIcon } from "./risk-quiz-icons";
 
 // The three beats of one card. Labels are split into two lines by hand so the
 // columns stay the same height whatever the screen width.
 const ROUND_STEPS = [
-  { Icon: CardBackIcon, firstLine: "Znajdź", secondLine: "kartę" },
+  { Icon: CardBackIcon, firstLine: "Wybierz", secondLine: "kartę" },
   { Icon: QrScannerIcon, firstLine: "Zeskanuj", secondLine: "kod QR" },
-  { Icon: StopwatchIcon, firstLine: "Zdąż", secondLine: "w czasie" },
+  { Icon: AnswerBubbleIcon, firstLine: "Odpowiedz", secondLine: "na pytanie" },
 ] as const;
 
 export function RiskQuizHowToPlay() {

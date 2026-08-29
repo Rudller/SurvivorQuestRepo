@@ -28,6 +28,30 @@ export function CardBackIcon({ size, color }: IconProps) {
   );
 }
 
+// Third beat of the round: the card asks something and the team answers. The
+// bubble carries the question mark rather than a clock, since the countdown is
+// already spelled out by the timer above the card itself.
+export function AnswerBubbleIcon({ size, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M5 3.5H19A2.5 2.5 0 0 1 21.5 6V14A2.5 2.5 0 0 1 19 16.5H12.5L8 20.5V16.5H5A2.5 2.5 0 0 1 2.5 14V6A2.5 2.5 0 0 1 5 3.5Z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9.8 8.4a2.2 2.2 0 1 1 2.4 2.8v0.7"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12.2} cy={13.7} r={1} fill={color} />
+    </Svg>
+  );
+}
+
 export function StopwatchIcon({ size, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
