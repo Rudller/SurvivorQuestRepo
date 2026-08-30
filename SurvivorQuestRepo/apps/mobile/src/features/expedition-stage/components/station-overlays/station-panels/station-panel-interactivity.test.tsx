@@ -330,7 +330,7 @@ describe("station panel interactivity — fresh attempt state", () => {
         hangmanMisses={[]}
         hangmanAttemptsLeft={model.hangmanAttemptsLeft}
         guessedHangmanSet={model.guessedHangmanSet}
-        hideAttempts
+        compactAttempts
         isGuessDisabled={model.hangmanIsGuessDisabled}
         isSubmittingHangmanGuess={false}
         onSubmitLetter={onSubmitLetter}

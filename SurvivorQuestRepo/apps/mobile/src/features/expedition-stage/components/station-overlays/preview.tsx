@@ -2120,6 +2120,13 @@ export function StationPreviewOverlay({
     ],
   } as const;
   const stationQuizPrompt = resolveStationQuizPrompt({ station, wordleLength, uiLanguage });
+  // Ryzykanci: these tasks are their own visual object (the wordle grid, the
+  // hangman word, the anagram tiles), so the wrapper's rounded border and
+  // muted fill only draw a second box around a box. They sit straight on the
+  // card instead.
+  const isChromelessInlineTask =
+    isInlinePresentation &&
+    (isWordleStation || isHangmanStation || isAnagramStation || isCaesarStation);
   const stationMediaRendererByType = buildStationMediaRendererByType({
     wordleMediaBoardProps: {
       stationId: station.stationId,
@@ -2327,7 +2334,7 @@ export function StationPreviewOverlay({
       hangmanMisses,
       hangmanAttemptsLeft,
       guessedHangmanSet,
-      hideAttempts: isInlinePresentation,
+      compactAttempts: isInlinePresentation,
       isGuessDisabled: hangmanIsGuessDisabled,
       isSubmittingHangmanGuess,
       onSubmitLetter: (letter) => {
@@ -2616,6 +2623,13 @@ export function StationPreviewOverlay({
                 // and the keyboard instead of leaving the content pinned to
                 // the top of the freed space.
                 ...(compactMedia ? { justifyContent: "flex-end" as const } : {}),
+                // The anagram is a single small object (a row of letter tiles
+                // over a one-line description), so with the keyboard down it
+                // would otherwise hang from the top edge of a tall card with
+                // all the empty space below it. Centre the column instead.
+                ...(isInlinePresentation && isAnagramStation && !compactMedia
+                  ? { justifyContent: "center" as const }
+                  : {}),
                 // Inline presentation shares screen space with a host's own
                 // chrome (top bar, timer, bottom panel) instead of owning the
                 // full screen like the overlay does, so content that doesn't
@@ -2632,7 +2646,9 @@ export function StationPreviewOverlay({
                 // content (question/input) that follows as a sibling below,
                 // for types whose media box has a fixed (not flex-filled)
                 // height. Let it size to its own content instead for those.
-                className={isInlinePresentation && isOpenQuizStation ? undefined : "flex-1"}
+                className={
+                  isInlinePresentation && (isOpenQuizStation || isAnagramStation) ? undefined : "flex-1"
+                }
                 style={{
                   // The media and description absorb all height left after the
                   // fixed input/keyboard block in Ryzykanci.
@@ -3121,12 +3137,8 @@ export function StationPreviewOverlay({
                     isTabletOverlay={isTabletOverlay}
                     error={quizSubmitError}
                     errorPlacement="inside"
-                    showBorder={
-                      !(isInlinePresentation && (isWordleStation || isHangmanStation))
-                    }
-                    transparentBackground={
-                      isInlinePresentation && (isWordleStation || isHangmanStation)
-                    }
+                    showBorder={!isChromelessInlineTask}
+                    transparentBackground={isChromelessInlineTask}
                   >
                     {renderedQuizStation}
                   </StationQuizTaskWrapper>

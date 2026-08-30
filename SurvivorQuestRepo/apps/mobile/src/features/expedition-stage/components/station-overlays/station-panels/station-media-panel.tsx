@@ -249,6 +249,21 @@ export function StationMediaPanel({
               maxHeight: Math.max(180, Math.round(viewportHeight * 0.42)),
             }
           : {}),
+        // Ryzykanci: the ciphertext box gives way instead of holding a fixed
+        // height, so the input and keyboard below — which do not shrink — keep
+        // their natural size and end level with the bottom panel. With the
+        // fixed height the last keyboard row ran under it and got clipped.
+        // The cipher text itself is already fitted to its box
+        // (adjustsFontSizeToFit), so it survives being squeezed.
+        ...(isCaesarStation && minimalChrome
+          ? {
+              height: undefined,
+              flexGrow: 1,
+              flexBasis: 0,
+              flexShrink: 1,
+              minHeight: Math.max(90, Math.round(viewportHeight * 0.12)),
+            }
+          : {}),
         borderColor: minimalChrome ? "transparent" : EXPEDITION_THEME.border,
         backgroundColor: minimalChrome ? "transparent" : EXPEDITION_THEME.panelMuted,
       }}

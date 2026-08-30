@@ -10,7 +10,11 @@ type HangmanStationPanelProps = {
   hangmanMisses: string[];
   hangmanAttemptsLeft: number;
   guessedHangmanSet: Set<string>;
-  hideAttempts?: boolean;
+  // Ryzykanci keeps the dots but drops the "Próby" caption above them and
+  // moves the row down to sit right on top of the keyboard — the card has no
+  // room for a labelled block, and seven misses with negative points is not
+  // something to leave the player guessing about.
+  compactAttempts?: boolean;
   isGuessDisabled: boolean;
   isSubmittingHangmanGuess: boolean;
   onSubmitLetter: (letter: string) => void;
@@ -54,7 +58,7 @@ export function HangmanStationPanel({
   hangmanMisses,
   hangmanAttemptsLeft,
   guessedHangmanSet,
-  hideAttempts = false,
+  compactAttempts = false,
   isGuessDisabled,
   isSubmittingHangmanGuess,
   onSubmitLetter,
@@ -72,33 +76,37 @@ export function HangmanStationPanel({
   const attemptsDotSize = layout.isTablet ? 16 : 11;
   const attemptsDotGap = layout.isTablet ? 12 : 8;
 
+  const attemptsDots = (
+    <View className="mt-1 flex-row justify-center" style={{ columnGap: attemptsDotGap }}>
+      {Array.from({ length: safeMaxAttempts }).map((_, index) => {
+        const isActive = index < safeAttemptsLeft;
+        const activeColor = EXPEDITION_THEME.accentStrong;
+        return (
+          <View
+            key={`${stationId}-hangman-attempt-${index}`}
+            className="rounded-full border"
+            style={{
+              width: attemptsDotSize,
+              height: attemptsDotSize,
+              borderColor: isActive ? activeColor : EXPEDITION_THEME.border,
+              backgroundColor: isActive ? activeColor : "transparent",
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+
   return (
     <View className="mt-3">
-      {!hideAttempts ? (
+      {compactAttempts ? null : (
         <>
           <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: layout.infoFontSize }}>
             {text.attempts}
           </Text>
-          <View className="mt-1 flex-row justify-center" style={{ columnGap: attemptsDotGap }}>
-            {Array.from({ length: safeMaxAttempts }).map((_, index) => {
-              const isActive = index < safeAttemptsLeft;
-              const activeColor = EXPEDITION_THEME.accentStrong;
-              return (
-                <View
-                  key={`${stationId}-hangman-attempt-${index}`}
-                  className="rounded-full border"
-                  style={{
-                    width: attemptsDotSize,
-                    height: attemptsDotSize,
-                    borderColor: isActive ? activeColor : EXPEDITION_THEME.border,
-                    backgroundColor: isActive ? activeColor : "transparent",
-                  }}
-                />
-              );
-            })}
-          </View>
+          {attemptsDots}
         </>
-      ) : null}
+      )}
       {/*
         Fixed minHeight regardless of whether there are any misses yet, so
         the keyboard below doesn't jump up when the first wrong letter
@@ -111,6 +119,8 @@ export function HangmanStationPanel({
           </Text>
         ) : null}
       </View>
+
+      {compactAttempts ? attemptsDots : null}
 
       <View style={{ rowGap: keyboardGap, marginVertical: keyboardVerticalMargin }}>
         {HANGMAN_KEYBOARD_ROWS.map((row, rowIndex) => (
