@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -138,6 +139,38 @@ export class RiskQuizController {
       cardId: requireString(payload, 'cardId'),
       stationId: requireString(payload, 'stationId'),
       file: file!,
+    });
+  }
+
+  @Post('reviewed-answer')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async submitReviewedAnswer(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.submitReviewedAnswer({
+      sessionToken: requireString(payload, 'sessionToken'),
+      cardId: requireString(payload, 'cardId'),
+      stationId: requireString(payload, 'stationId'),
+      answerText: requireString(payload, 'answerText'),
+    });
+  }
+
+  @Post('chat')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async listChatMessages(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.listChatMessages({
+      sessionToken: requireString(payload, 'sessionToken'),
+      afterId: optionalString(payload, 'afterId'),
+    });
+  }
+
+  @Post('chat/send')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async sendChatMessage(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.postTeamChatMessage({
+      sessionToken: requireString(payload, 'sessionToken'),
+      content: requireString(payload, 'content'),
     });
   }
 
@@ -315,6 +348,33 @@ export class RiskQuizController {
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
   async listCards(@Param('realizationId') realizationId: string) {
     return this.riskQuizService.listCards(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/chat')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listChatMessagesForAdmin(
+    @Param('realizationId') realizationId: string,
+    @Query('afterId') afterId?: string,
+  ) {
+    return this.riskQuizService.listChatMessagesForAdmin({
+      realizationId,
+      afterId: afterId?.trim() || undefined,
+    });
+  }
+
+  @Post('admin/realizations/:realizationId/chat')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async sendChatMessageAsGameMaster(
+    @Param('realizationId') realizationId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.postGameMasterChatMessage({
+      realizationId,
+      content: requireString(payload, 'content'),
+    });
   }
 
   @Post('admin/realizations/:realizationId/cards/generate')

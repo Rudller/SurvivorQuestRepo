@@ -21,11 +21,15 @@ import {
   postRiskQuizPhotoTask,
 } from "../../expedition-stage/api/mobile-session.api";
 import {
+  fetchRiskQuizChat,
   fetchRiskQuizDeckStatus,
   fetchRiskQuizPendingDraw,
   fetchRiskQuizTestMenu,
   postRiskQuizAnswer,
+  postRiskQuizChatMessage,
+  postRiskQuizReviewedAnswer,
   postRiskQuizScan,
+  type RiskChatMessage,
   type RiskAnswerResult,
   type RiskDeckStatus,
   type RiskScanResult,
@@ -37,6 +41,7 @@ import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
+import { RiskQuizChatDock } from "../components/risk-quiz-chat-dock";
 import { RiskQuizBackground } from "../components/risk-quiz-background";
 import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
@@ -78,6 +83,9 @@ const SCREEN_TRANSITION_HALF_MS = 190;
 const SCREEN_TRANSITION_SLIDE_PX = 28;
 
 const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
+// Types the backend scores against quizData.correctAnswerIndex — the card sends
+// the picked index rather than a self-reported pass/fail. Mirrors
+// ANSWER_INDEX_STATION_TYPES in risk-quiz.service.ts.
 const ANSWER_INDEX_TYPES = new Set(["quiz", "audio-quiz"]);
 // Card types solved by typing the organizer's completion code.
 const COMPLETION_CODE_TYPES = new Set(["time", "points"]);
@@ -164,6 +172,9 @@ const STATION_TYPE_LABELS: Record<StationTestType, string> = {
   "photo-task": "Zadanie fotograficzne",
   "qr-hunt": "Skanowanie kodów QR",
   "open-quiz": "Quiz – pytanie otwarte",
+  "reviewed-answer": "Odpowiedź opisowa",
+  "true-false": "Prawda czy fałsz",
+  "fill-blank": "Uzupełnij lukę",
 };
 // Keep in sync with RISK_QUIZ_INTRO_TEXT_PLACEHOLDER in
 // apps/admin/src/features/realizations/realization.utils.ts — shown to
@@ -175,6 +186,10 @@ const START_POLL_INTERVAL_MS = 3000;
 // the admin panel) while idle on the scan screen — see the polling effect
 // below.
 const IDLE_POLL_INTERVAL_MS = 4000;
+// The chat has its own interval on purpose: the idle poll above is gated off
+// during the intro and while the scanner is open, and a room that goes quiet
+// exactly when somebody is scanning is worse than a slightly slower one.
+const CHAT_POLL_INTERVAL_MS = 5000;
 // Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
 // same hold-the-team-banner gesture as normal gameplay's station test menu.
 const TEST_MENU_TRIGGER_HOLD_MS = 5000;
@@ -233,6 +248,21 @@ export function RiskQuizScreen({
   const [liveTeam, setLiveTeam] = useState<LiveTeamInfo | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [chatMessages, setChatMessages] = useState<RiskChatMessage[]>([]);
+  const [chatEnabled, setChatEnabled] = useState(false);
+  const [chatCanPost, setChatCanPost] = useState(false);
+  const [chatTeamId, setChatTeamId] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  // Id of the newest message the team has actually seen. Everything after it in
+  // chatMessages is what the unread badge counts.
+  const [lastReadChatId, setLastReadChatId] = useState<string | null>(null);
+  // The poll reads the newest id without re-subscribing every time a message
+  // lands, which an effect dependency on chatMessages would force.
+  const chatMessagesRef = useRef<RiskChatMessage[]>([]);
+  chatMessagesRef.current = chatMessages;
   const [isResolvingScan, setIsResolvingScan] = useState(false);
   const [exhaustedNotice, setExhaustedNotice] = useState<{ categoryName: string } | null>(null);
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
@@ -805,6 +835,154 @@ export function RiskQuizScreen({
     }
   }
 
+  // The room polls on its own interval, unaffected by whether a card is open or
+  // the scanner is up. Only new messages come back — `afterId` is the newest id
+  // already held — so a long game does not re-download its own history.
+  useEffect(() => {
+    if (showIntro) {
+      return;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const pollChat = async () => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const newestId = chatMessagesRef.current.at(-1)?.id;
+        const result = await fetchRiskQuizChat(apiBaseUrl, {
+          sessionToken,
+          afterId: newestId,
+        });
+        if (cancelled) {
+          return;
+        }
+        setChatEnabled(result.enabled);
+        setChatCanPost(result.canPost);
+        setChatTeamId(result.currentTeamId);
+        if (result.messages.length > 0) {
+          setChatMessages((previous) =>
+            newestId ? [...previous, ...result.messages] : result.messages,
+          );
+        }
+      } catch (error) {
+        if (getMobileApiErrorStatusCode(error) === 401) {
+          onSessionInvalid();
+        }
+        // Anything else is silent — the next tick retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollChat();
+    const interval = setInterval(() => void pollChat(), CHAT_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [apiBaseUrl, sessionToken, showIntro, onSessionInvalid]);
+
+  // Expanding the dock marks everything currently in it as read. The collapsed
+  // strip only previews the newest line, so it does not count as having read
+  // the backlog behind it.
+  useEffect(() => {
+    if (!isChatExpanded) {
+      return;
+    }
+    setLastReadChatId(chatMessages.at(-1)?.id ?? null);
+  }, [isChatExpanded, chatMessages]);
+
+  // Drawing a card collapses the room: the dock is hidden for the duration of
+  // the task, and leaving it expanded would spring it back open on close.
+  useEffect(() => {
+    if (activeDraw) {
+      setIsChatExpanded(false);
+    }
+  }, [activeDraw]);
+
+  // Everything after the last message the team saw. Recomputed from the list
+  // rather than tracked as a counter, so it cannot drift out of step with it.
+  const unreadChatCount = (() => {
+    if (!lastReadChatId) {
+      return chatMessages.length;
+    }
+    const lastReadIndex = chatMessages.findIndex((item) => item.id === lastReadChatId);
+    return lastReadIndex < 0 ? chatMessages.length : chatMessages.length - lastReadIndex - 1;
+  })();
+
+  async function sendChatMessage() {
+    const content = chatDraft.trim();
+    if (!content || isSendingChat || !chatCanPost) {
+      return;
+    }
+
+    setChatError(null);
+    setIsSendingChat(true);
+    try {
+      const message = await postRiskQuizChatMessage(apiBaseUrl, {
+        sessionToken,
+        content,
+      });
+      setChatDraft("");
+      // Show it straight away rather than waiting up to 5s for the next poll.
+      // The poll asks for messages after the newest id, so it will not arrive
+      // a second time — which is exactly why the response has to be stored as
+      // sent, colour included. Blanking those fields here left every message a
+      // team wrote about itself permanently uncoloured.
+      setChatMessages((previous) =>
+        previous.some((item) => item.id === message.id)
+          ? previous
+          : [...previous, message],
+      );
+    } catch (error) {
+      if (getMobileApiErrorStatusCode(error) === 401) {
+        onSessionInvalid();
+        return;
+      }
+      setChatError(
+        error instanceof Error ? error.message : "Nie udało się wysłać wiadomości.",
+      );
+    } finally {
+      setIsSendingChat(false);
+    }
+  }
+
+  // Text twin of submitPhotoTask above: the answer goes to the Game Master and
+  // the card stays open showing "waiting for approval", with the attempt created
+  // server-side without a verdict so the station can't be drawn again.
+  async function submitReviewedAnswer(stationId: string, answerText: string): Promise<string | null> {
+    if (!activeDraw || submittedCardIdRef.current === activeDraw.cardId) {
+      return null;
+    }
+    const cardId = activeDraw.cardId;
+    submittedCardIdRef.current = cardId;
+    setErrorMessage(null);
+    try {
+      await postRiskQuizReviewedAnswer(apiBaseUrl, {
+        sessionToken,
+        cardId,
+        stationId,
+        answerText,
+      });
+      void refreshDeckStatus();
+      return null;
+    } catch (error) {
+      submittedCardIdRef.current = null;
+      if (getMobileApiErrorStatusCode(error) === 401) {
+        onSessionInvalid();
+        return null;
+      }
+      const message = error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.";
+      setErrorMessage(message);
+      return message;
+    }
+  }
+
   // The station panels treat a non-null return as "the send failed" and skip
   // their success state, so hand them the real error instead of always null.
   async function completeCurrentCard(completed: boolean, completionCode?: string): Promise<string | null> {
@@ -1142,6 +1320,9 @@ export function RiskQuizScreen({
                   )
                 }
                 onSubmitPhotoTask={(stationId, fileUri) => submitPhotoTask(stationId, fileUri)}
+                onSubmitReviewedAnswer={(stationId, answerText) =>
+                  submitReviewedAnswer(stationId, answerText)
+                }
                 onQuizFailed={() => void completeCurrentCard(false)}
                 onQuizPassed={() => void completeCurrentCard(true)}
                 onTimeExpired={() => void completeCurrentCard(false)}
@@ -1186,9 +1367,12 @@ export function RiskQuizScreen({
           ) : null}
         </ScrollView>
 
-        {keyboardHeight === 0 ? (
-          <View className="w-full items-center" style={{ rowGap: 14 }}>
-            {activeDraw ? null : (
+        {/* The keyboard gate used to wrap this whole column, which meant raising
+            the keyboard unmounted the chat dock mid-message. It now sits on the
+            two children that genuinely have to yield room, so the dock survives
+            typing and simply expands into the space they free up. */}
+        <View className="w-full items-center" style={{ rowGap: 14 }}>
+          {keyboardHeight === 0 && !activeDraw ? (
               // Mirror image of the card's own reveal: same fade, same slide,
               // same half-duration, just running on the deck view instead.
               // Real style props, not `className` — nativewind classes never
@@ -1212,7 +1396,32 @@ export function RiskQuizScreen({
                 <RiskQuizRemainingCards remainingCards={deckStatus?.remainingCards ?? null} />
                 <RiskQuizHowToPlay />
               </Animated.View>
-            )}
+            ) : null}
+          {/* Hidden while a card is open: the task gets the screen to itself.
+              The poll keeps running underneath, so whatever arrived meanwhile
+              is waiting on the strip — with an unread count — once the card is
+              closed. */}
+          {chatEnabled && !activeDraw ? (
+            <RiskQuizChatDock
+              messages={chatMessages}
+              draft={chatDraft}
+              canPost={chatCanPost}
+              isSending={isSendingChat}
+              errorMessage={chatError}
+              currentTeamId={chatTeamId}
+              isExpanded={isChatExpanded}
+              unreadCount={unreadChatCount}
+              keyboardHeight={keyboardHeight}
+              onToggleExpanded={() => setIsChatExpanded((previous) => !previous)}
+              onChangeDraft={(value) => {
+                setChatDraft(value);
+                setChatError(null);
+              }}
+              onSend={() => void sendChatMessage()}
+            />
+          ) : null}
+
+          {keyboardHeight === 0 ? (
             <View className="w-full max-w-[560px]">
               <RiskQuizBottomPanel
                 remainingLabel={countdown.remainingLabel}
@@ -1225,8 +1434,8 @@ export function RiskQuizScreen({
                 onCloseCard={dismissActiveCard}
               />
             </View>
-          </View>
-        ) : null}
+          ) : null}
+        </View>
       </View>
 
 

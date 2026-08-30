@@ -5,6 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  Prisma,
+  RiskChatAuthorKind,
   RiskDifficulty,
   RiskPoolStation as PrismaRiskPoolStationRow,
   Station as PrismaStationRow,
@@ -28,7 +30,12 @@ import {
   RISK_CARDS_PER_POOL,
   RISK_EXCLUDED_STATION_TYPES,
   RISK_DIFFICULTY_ORDER,
+  RISK_CHAT_HISTORY_LIMIT,
+  RISK_CHAT_MESSAGE_MAX_LENGTH,
+  RISK_CHAT_SYSTEM_EVENTS,
   RISK_DIFFICULTY_POINTS,
+  RISK_REVIEWED_ANSWER_MAX_LENGTH,
+  resolveRiskTeamDisplayName,
   RISK_STREAK_MULTIPLIER_CAP,
   RISK_STREAK_MULTIPLIER_STEP,
 } from './risk-quiz.constants';
@@ -398,6 +405,18 @@ export class RiskQuizService {
     );
 
     if (available.length === 0) {
+      // The one system message that comes from a real moment in the code rather
+      // than being derived on read — this is the instant we learn the pool ran
+      // dry for this team.
+      await this.announceDeckExhausted({
+        realizationId: realization.id,
+        teamId: team.id,
+        teamName: resolveRiskTeamDisplayName(team),
+        categoryId: card.categoryId,
+        categoryName: card.category.name,
+        difficulty: card.difficulty,
+      });
+
       return {
         exhausted: true as const,
         categoryName: card.category.name,
@@ -525,12 +544,23 @@ export class RiskQuizService {
     };
   }
 
-  // Every photo card this team has sent, with its verdict (null while the Game
-  // Master has not decided). The scan screen polls this to announce a decision
-  // that happened on somebody else's screen.
+  // Every card this team has sent for review — a photo or a free-text answer —
+  // with its verdict (null while the Game Master has not decided). The scan
+  // screen polls this to announce a decision that happened on somebody else's
+  // screen.
   private async listTeamPhotoReviews(teamId: string) {
     const attempts = await this.prisma.riskAttempt.findMany({
-      where: { teamId, station: { type: PrismaStationType.PHOTO_TASK } },
+      where: {
+        teamId,
+        station: {
+          type: {
+            in: [
+              PrismaStationType.PHOTO_TASK,
+              PrismaStationType.REVIEWED_ANSWER,
+            ],
+          },
+        },
+      },
       select: {
         stationId: true,
         isCorrect: true,
@@ -611,6 +641,14 @@ export class RiskQuizService {
     const completionCodeLength =
       parseCompletionCode(station.completionCode)?.length ?? 0;
 
+    // A reviewed-answer card keeps its answer key in quizData.answers[0] for the
+    // Game Master's review panel. That key must never reach the tablet, and the
+    // generic branch below would ship it: it forwards `answers` wholesale. The
+    // question alone is all this card type renders, so send exactly that — and
+    // note the generic branch also gates on Array.isArray(answers), which would
+    // otherwise drop the question too on a card saved without a key.
+    const isReviewedAnswer = station.type === PrismaStationType.REVIEWED_ANSWER;
+
     return {
       id: station.id,
       type: fromPrismaStationType(station.type),
@@ -631,8 +669,11 @@ export class RiskQuizService {
       // the same way normal (non-risk-quiz) stations already do. Quiz/audio-
       // quiz correctness is still verified server-side in submitAnswer() via
       // resolveOutcome() below, so this doesn't change how those are scored.
-      quiz:
-        quiz && Array.isArray(quiz.answers)
+      quiz: isReviewedAnswer
+        ? quiz?.question
+          ? { question: quiz.question }
+          : undefined
+        : quiz && Array.isArray(quiz.answers)
           ? {
               question: quiz.question,
               answers: quiz.answers,
@@ -724,6 +765,71 @@ export class RiskQuizService {
     return {
       status: 'pending' as const,
       photoUrl: uploaded.url,
+      pendingPointsDelta: frozenAward,
+      teamPoints: team.points,
+    };
+  }
+
+  // The free-text twin of submitPhotoTask above: same "send it and wait for the
+  // Game Master" lifecycle, same frozen award, only the payload differs. The
+  // answer lives on the attempt itself rather than in storage, so there is no
+  // second row to keep in step.
+  async submitReviewedAnswer(input: {
+    sessionToken: string;
+    cardId: string;
+    stationId: string;
+    answerText: string;
+  }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+    const { card, station } = await this.requireCardStationPair(
+      realization.id,
+      input.cardId,
+      input.stationId,
+    );
+
+    if (fromPrismaStationType(station.type) !== 'reviewed-answer') {
+      throw new BadRequestException(
+        'This station does not accept written answers',
+      );
+    }
+
+    const answerText = input.answerText.trim();
+    if (!answerText) {
+      throw new BadRequestException('Answer is empty');
+    }
+    if (answerText.length > RISK_REVIEWED_ANSWER_MAX_LENGTH) {
+      throw new BadRequestException('Answer is too long');
+    }
+
+    const existingAttempt = await this.prisma.riskAttempt.findFirst({
+      where: { teamId: team.id, stationId: station.id },
+    });
+    if (existingAttempt) {
+      throw new BadRequestException('Station already attempted');
+    }
+
+    const streak = (await this.getCurrentStreak(team.id)) + 1;
+    const frozenAward = Math.round(
+      RISK_DIFFICULTY_POINTS[card.difficulty].correct *
+        this.resolveStreakMultiplier(streak),
+    );
+
+    await this.prisma.riskAttempt.create({
+      data: {
+        realizationId: realization.id,
+        teamId: team.id,
+        cardId: card.id,
+        stationId: station.id,
+        isCorrect: null,
+        answerText,
+        pointsDelta: frozenAward,
+      },
+    });
+
+    return {
+      status: 'pending' as const,
       pendingPointsDelta: frozenAward,
       teamPoints: team.points,
     };
@@ -937,6 +1043,320 @@ export class RiskQuizService {
       throw new BadRequestException('Missing completion outcome');
     }
     return { isCorrect: input.completed };
+  }
+
+  // --- Chat: one shared room per realization ---
+
+  /**
+   * Everything the room holds since `afterId` (or the tail of the history on a
+   * cold open), with the system messages brought up to date first.
+   *
+   * Deriving the system messages here rather than at each point where the game
+   * state changes is deliberate: team points move in five different places and
+   * "the game ended" is not written down anywhere at all — it is computed from
+   * the clock. One derivation on read cannot drift out of step with them.
+   */
+  async listChatMessages(input: { sessionToken: string; afterId?: string }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+    return this.readRoom(realization, input.afterId, team.id);
+  }
+
+  async listChatMessagesForAdmin(input: {
+    realizationId: string;
+    afterId?: string;
+  }) {
+    const realization = await this.requireRealizationOrThrow(
+      input.realizationId,
+    );
+    return this.readRoom(realization, input.afterId, null);
+  }
+
+  async postTeamChatMessage(input: { sessionToken: string; content: string }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+
+    if (!realization.riskChatEnabled) {
+      throw new BadRequestException('Chat is disabled for this realization');
+    }
+    if (!realization.riskChatTeamsCanPost) {
+      throw new BadRequestException('Teams cannot post in this chat');
+    }
+
+    return this.createMessage({
+      realizationId: realization.id,
+      authorKind: RiskChatAuthorKind.TEAM,
+      teamId: team.id,
+      authorName: resolveRiskTeamDisplayName(team),
+      content: this.requireChatContent(input.content),
+    });
+  }
+
+  async postGameMasterChatMessage(input: {
+    realizationId: string;
+    content: string;
+  }) {
+    const realization = await this.requireRealizationOrThrow(
+      input.realizationId,
+    );
+    // The Game Master posts even with team posting turned off — that switch is
+    // exactly how an announcements-only channel is set up.
+    if (!realization.riskChatEnabled) {
+      throw new BadRequestException('Chat is disabled for this realization');
+    }
+
+    return this.createMessage({
+      realizationId: realization.id,
+      authorKind: RiskChatAuthorKind.GAME_MASTER,
+      teamId: null,
+      authorName: 'Mistrz Gry',
+      content: this.requireChatContent(input.content),
+    });
+  }
+
+  private async readRoom(
+    realization: { id: string; riskChatEnabled: boolean; riskChatTeamsCanPost: boolean },
+    afterId: string | undefined,
+    // Who is reading, so the tablet can tell its own lines apart without having
+    // to know its team id from anywhere else — the mobile session does not
+    // carry one. Null for the admin panel.
+    currentTeamId: string | null,
+  ) {
+    if (!realization.riskChatEnabled) {
+      return {
+        enabled: false as const,
+        canPost: false,
+        currentTeamId,
+        messages: [],
+      };
+    }
+
+    await this.syncSystemMessages(realization.id);
+
+    const after = afterId
+      ? await this.prisma.riskChatMessage.findUnique({
+          where: { id: afterId },
+          select: { createdAt: true },
+        })
+      : null;
+
+    // Ordered oldest-first when returned, but the cold-open tail has to be taken
+    // from the newest end — hence the descending fetch and the reverse below.
+    const rows = after
+      ? await this.prisma.riskChatMessage.findMany({
+          where: {
+            realizationId: realization.id,
+            createdAt: { gt: after.createdAt },
+          },
+          orderBy: { createdAt: 'asc' },
+          include: { team: { select: { color: true, badgeImageUrl: true } } },
+        })
+      : (
+          await this.prisma.riskChatMessage.findMany({
+            where: { realizationId: realization.id },
+            orderBy: { createdAt: 'desc' },
+            take: RISK_CHAT_HISTORY_LIMIT,
+            include: { team: { select: { color: true, badgeImageUrl: true } } },
+          })
+        ).reverse();
+
+    return {
+      enabled: true as const,
+      canPost: realization.riskChatTeamsCanPost,
+      currentTeamId,
+      messages: rows.map((row) => ({
+        id: row.id,
+        authorKind: row.authorKind,
+        teamId: row.teamId,
+        authorName: row.authorName,
+        content: row.content,
+        systemEvent: row.systemEvent,
+        teamColor: row.team?.color ?? null,
+        teamBadgeImageUrl: row.team?.badgeImageUrl ?? null,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  private requireChatContent(value: string) {
+    const content = value.trim();
+    if (!content) {
+      throw new BadRequestException('Message is empty');
+    }
+    if (content.length > RISK_CHAT_MESSAGE_MAX_LENGTH) {
+      throw new BadRequestException('Message is too long');
+    }
+    return content;
+  }
+
+  private async createMessage(data: {
+    realizationId: string;
+    authorKind: RiskChatAuthorKind;
+    teamId: string | null;
+    authorName: string;
+    content: string;
+    systemEvent?: string;
+    dedupeKey?: string;
+  }) {
+    // Same shape readRoom returns, colour included. The sender renders its own
+    // message from this response rather than waiting for the next poll — and
+    // that poll only asks for messages *newer* than the one it already holds,
+    // so anything missing here would never be filled in later.
+    const row = await this.prisma.riskChatMessage.create({
+      data,
+      include: { team: { select: { color: true, badgeImageUrl: true } } },
+    });
+    return {
+      id: row.id,
+      authorKind: row.authorKind,
+      teamId: row.teamId,
+      authorName: row.authorName,
+      content: row.content,
+      systemEvent: row.systemEvent,
+      teamColor: row.team?.color ?? null,
+      teamBadgeImageUrl: row.team?.badgeImageUrl ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Writes a system message unless the room already holds one with the same
+   * dedupe key.
+   *
+   * Every tablet polling the room re-derives the same events at the same time,
+   * so this races with itself by design. The unique index on
+   * (realizationId, dedupeKey) is what settles it: the loser of the race gets a
+   * P2002 and we swallow it, which is cheaper and more reliable than locking.
+   */
+  private async announceSystemMessage(input: {
+    realizationId: string;
+    teamId: string | null;
+    systemEvent: string;
+    dedupeKey: string;
+    content: string;
+  }) {
+    try {
+      await this.prisma.riskChatMessage.create({
+        data: {
+          realizationId: input.realizationId,
+          authorKind: RiskChatAuthorKind.SYSTEM,
+          teamId: input.teamId,
+          authorName: 'System',
+          content: input.content,
+          systemEvent: input.systemEvent,
+          dedupeKey: input.dedupeKey,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  // Public so scanCard can announce an exhausted pool, which is the one event
+  // that IS a real moment in the code rather than something derived on read.
+  async announceDeckExhausted(input: {
+    realizationId: string;
+    teamId: string;
+    teamName: string;
+    categoryId: string;
+    categoryName: string;
+    difficulty: RiskDifficulty;
+  }) {
+    await this.announceSystemMessage({
+      realizationId: input.realizationId,
+      teamId: input.teamId,
+      systemEvent: RISK_CHAT_SYSTEM_EVENTS.deckExhausted,
+      dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.deckExhausted}:${input.teamId}:${input.categoryId}:${input.difficulty}`,
+      content: `${input.teamName} wyczerpała karty w kategorii „${input.categoryName}”.`,
+    });
+  }
+
+  private async syncSystemMessages(realizationId: string) {
+    const realization = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        durationMinutes: true,
+      },
+    });
+    if (!realization) {
+      return;
+    }
+
+    if (realization.startedAt) {
+      await this.announceSystemMessage({
+        realizationId,
+        teamId: null,
+        systemEvent: RISK_CHAT_SYSTEM_EVENTS.gameStart,
+        dedupeKey: RISK_CHAT_SYSTEM_EVENTS.gameStart,
+        content: 'Gra rozpoczęta. Powodzenia!',
+      });
+    }
+
+    const hasEnded =
+      realization.status === 'DONE' ||
+      (realization.startedAt !== null &&
+        realization.startedAt.getTime() +
+          realization.durationMinutes * 60_000 <=
+          Date.now());
+    if (hasEnded) {
+      await this.announceSystemMessage({
+        realizationId,
+        teamId: null,
+        systemEvent: RISK_CHAT_SYSTEM_EVENTS.gameEnd,
+        dedupeKey: RISK_CHAT_SYSTEM_EVENTS.gameEnd,
+        content: 'Koniec gry. Dziękujemy za grę!',
+      });
+    }
+
+    // Only while the game is actually running: announcing a leader before the
+    // start or after the finish is noise.
+    if (!realization.startedAt || hasEnded) {
+      return;
+    }
+
+    // Same ordering the leaderboard uses elsewhere (points desc, then slot).
+    const leader = await this.prisma.team.findFirst({
+      where: { realizationId },
+      orderBy: [{ points: 'desc' }, { slotNumber: 'asc' }],
+      select: { id: true, name: true, slotNumber: true, points: true },
+    });
+    if (!leader || leader.points <= 0) {
+      return;
+    }
+
+    const lastLeadChange = await this.prisma.riskChatMessage.findFirst({
+      where: {
+        realizationId,
+        systemEvent: RISK_CHAT_SYSTEM_EVENTS.leadChange,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { teamId: true },
+    });
+    if (lastLeadChange?.teamId === leader.id) {
+      return;
+    }
+
+    const leaderName = resolveRiskTeamDisplayName(leader);
+    await this.announceSystemMessage({
+      realizationId,
+      teamId: leader.id,
+      systemEvent: RISK_CHAT_SYSTEM_EVENTS.leadChange,
+      // Scored into the key so the same team retaking the lead later announces
+      // again, while a repeated poll at the same score stays silent.
+      dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.leadChange}:${leader.id}:${leader.points}`,
+      content: `${leaderName} wychodzi na prowadzenie (${leader.points} pkt).`,
+    });
   }
 
   // --- Admin: categories (reusable task pools), schemes (decks), cards, board ---
@@ -1698,14 +2118,15 @@ export class RiskQuizService {
       where: { teamId, stationId },
     });
 
-    // Approving a photo card pays what the team locked in when it sent the
-    // photo (difficulty points times the streak multiplier of that moment),
-    // not the flat rate an out-of-band admin override uses — otherwise the
-    // award would depend on how long the Game Master took to look at it.
-    const isPendingPhotoDecision =
+    // Approving a card the team sent for review — a photo or a written answer —
+    // pays what it locked in at that moment (difficulty points times the streak
+    // multiplier back then), not the flat rate an out-of-band admin override
+    // uses. Otherwise the award would depend on how long the Game Master took
+    // to look at it.
+    const isPendingReviewDecision =
       existingAttempt !== null && existingAttempt.isCorrect === null;
     const pointsDelta = isCorrect
-      ? isPendingPhotoDecision
+      ? isPendingReviewDecision
         ? existingAttempt.pointsDelta
         : RISK_DIFFICULTY_POINTS[poolStation.difficulty].correct
       : RISK_DIFFICULTY_POINTS[poolStation.difficulty].incorrect;

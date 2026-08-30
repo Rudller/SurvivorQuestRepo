@@ -3192,6 +3192,15 @@ export class MobileService {
       ]),
     );
     const teamById = new Map(teams.map((team) => [team.id, team]));
+    // Raw pool-station rows, kept apart from stationById below because they are
+    // the only source of quizData here — a reviewed-answer card's question and
+    // answer key both come out of it.
+    const riskStationById = new Map(
+      riskPoolStations.map((poolStation) => [
+        poolStation.stationId,
+        poolStation.station,
+      ]),
+    );
     const stationById = new Map<
       string,
       { id: string; name: string; description: string }
@@ -3225,22 +3234,26 @@ export class MobileService {
     // feed the same review list.
     const pendingRiskAttempts = await this.prisma.riskAttempt.findMany({
       where: { realizationId: realization.id, isCorrect: null },
-      select: { teamId: true, stationId: true },
+      select: {
+        teamId: true,
+        stationId: true,
+        answerText: true,
+        createdAt: true,
+      },
     });
     const pendingRiskKeys = new Set(
       pendingRiskAttempts.map((attempt) => `${attempt.teamId}:${attempt.stationId}`),
     );
 
-    const pending = Array.from(latestPhotoByKey.values()).filter((photo) => {
-      const key = `${photo.teamId}:${photo.stationId}`;
-      if (pendingRiskKeys.has(key)) {
-        return true;
-      }
-      const progress = progressByKey.get(key);
-      return progress?.status === TaskStatus.IN_PROGRESS;
-    });
-
-    return pending
+    const photoReviewItems = Array.from(latestPhotoByKey.values())
+      .filter((photo) => {
+        const key = `${photo.teamId}:${photo.stationId}`;
+        if (pendingRiskKeys.has(key)) {
+          return true;
+        }
+        const progress = progressByKey.get(key);
+        return progress?.status === TaskStatus.IN_PROGRESS;
+      })
       .map((photo) => {
         const team = teamById.get(photo.teamId);
         const station = stationById.get(photo.stationId as string);
@@ -3249,17 +3262,64 @@ export class MobileService {
         }
 
         return {
+          kind: 'photo' as const,
           teamId: team.id,
           teamName: team.name || `Drużyna ${team.slotNumber}`,
           stationId: station.id,
           stationName: station.name,
           stationDescription: station.description,
           photoUrl: photo.url,
+          question: '',
+          answerText: '',
+          answerKeys: [] as string[],
           submittedAt: photo.createdAt.toISOString(),
         };
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
-      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    // Reviewed-answer cards are the second thing that waits for a verdict, and
+    // they have no TeamPhoto row to hang off — the team's text lives on the
+    // attempt itself. They join the same queue so the Game Master works one
+    // list instead of two.
+    const textReviewItems = pendingRiskAttempts
+      .map((attempt) => {
+        if (!attempt.answerText) {
+          return null;
+        }
+
+        const team = teamById.get(attempt.teamId);
+        const poolStation = riskStationById.get(attempt.stationId);
+        if (!team || !poolStation) {
+          return null;
+        }
+
+        const quiz = poolStation.quizData as {
+          question?: string;
+          acceptedAnswers?: string[];
+        } | null;
+
+        return {
+          kind: 'text' as const,
+          teamId: team.id,
+          teamName: team.name || `Drużyna ${team.slotNumber}`,
+          stationId: poolStation.id,
+          stationName: poolStation.name,
+          stationDescription: poolStation.description,
+          photoUrl: '',
+          question: quiz?.question ?? '',
+          answerText: attempt.answerText,
+          // acceptedAnswers is where a reviewed-answer station keeps the points
+          // the Game Master ticks off while reading (see ensureStationQuiz).
+          // Optional: plenty of these questions have no single right wording.
+          answerKeys: quiz?.acceptedAnswers ?? [],
+          submittedAt: attempt.createdAt.toISOString(),
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return [...photoReviewItems, ...textReviewItems].sort((a, b) =>
+      a.submittedAt.localeCompare(b.submittedAt),
+    );
   }
 
   private async resolveMobileAdminRealizationOrThrow(realizationId: string) {

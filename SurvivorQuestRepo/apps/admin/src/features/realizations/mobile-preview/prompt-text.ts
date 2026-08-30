@@ -111,6 +111,10 @@ export function resolveStationPreviewPrompt(
       return trimmedQuestion || text.audioQuizFallback;
     case "open-quiz":
       return trimmedQuestion || text.classicQuizFallback;
+    case "reviewed-answer":
+    case "true-false":
+    case "fill-blank":
+      return trimmedQuestion || text.classicQuizFallback;
     case "wordle":
       return text.wordleFallback(wordleLength);
     case "hangman":

@@ -50,7 +50,8 @@ type PuzzleSubmitLockScope =
   | "boggle"
   | "mini-sudoku"
   | "matching"
-  | "open-quiz";
+  | "open-quiz"
+  | "true-false";
 
 const activePuzzleSubmitLocks = new Set<string>();
 
@@ -2075,6 +2076,101 @@ export function handleMiniSudokuChangeCellController({
   });
   setMiniSudokuResult(null);
   setQuizSubmitError(null);
+}
+
+type SubmitTrueFalseControllerArgs = {
+  isTrueFalseStation: boolean;
+  isInteractiveLocked: boolean;
+  isSubmittingTrueFalse: boolean;
+  trueFalseAllAnswered: boolean;
+  trueFalseIsCorrect: boolean;
+  stationId: string;
+  startedAt: string | null;
+  onCompleteTask?: CompleteTaskHandler;
+  onQuizFailed?: (stationId: string, reason?: string) => void;
+  onQuizPassed?: (stationId: string) => void;
+  showQuizOutcomePopup: ShowQuizOutcomePopup;
+  setQuizSubmitError: NullableStringStateSetter;
+  setTrueFalseResult: NullableStringStateSetter;
+  setIsSubmittingTrueFalse: Dispatch<SetStateAction<boolean>>;
+  onSubmitError: SubmitErrorHandler;
+  text: {
+    trueFalseSolved: string;
+    trueFalseSolvedPopup: string;
+    trueFalseFailed: string;
+    trueFalseFailedPopup: string;
+  };
+};
+
+// All-or-nothing: the team marks four statements and gets one verdict. There is
+// no retry ladder like the text puzzles have — a wrong set ends the card, the
+// same way a wrong quiz option does.
+export async function submitTrueFalseController({
+  isTrueFalseStation,
+  isInteractiveLocked,
+  isSubmittingTrueFalse,
+  trueFalseAllAnswered,
+  trueFalseIsCorrect,
+  stationId,
+  startedAt,
+  onCompleteTask,
+  onQuizFailed,
+  onQuizPassed,
+  showQuizOutcomePopup,
+  setQuizSubmitError,
+  setTrueFalseResult,
+  setIsSubmittingTrueFalse,
+  onSubmitError,
+  text,
+}: SubmitTrueFalseControllerArgs) {
+  if (
+    !isTrueFalseStation ||
+    isInteractiveLocked ||
+    isSubmittingTrueFalse ||
+    !trueFalseAllAnswered
+  ) {
+    return;
+  }
+
+  setQuizSubmitError(null);
+
+  if (!trueFalseIsCorrect) {
+    setTrueFalseResult(text.trueFalseFailed);
+    onQuizFailed?.(stationId, "quiz_incorrect_answer");
+    showQuizOutcomePopup("failed", text.trueFalseFailedPopup);
+    return;
+  }
+
+  if (!onCompleteTask) {
+    setTrueFalseResult(text.trueFalseSolved);
+    onQuizPassed?.(stationId);
+    showQuizOutcomePopup("success", text.trueFalseSolvedPopup);
+    return;
+  }
+
+  const submitLockKey = tryAcquirePuzzleSubmitLock("true-false", stationId);
+  if (!submitLockKey) {
+    return;
+  }
+
+  setIsSubmittingTrueFalse(true);
+  let error: string | null;
+  try {
+    error = await onCompleteTask(stationId, "QUIZ", startedAt ?? undefined);
+  } finally {
+    setIsSubmittingTrueFalse(false);
+    releasePuzzleSubmitLock(submitLockKey);
+  }
+
+  if (error) {
+    setQuizSubmitError(error);
+    onSubmitError(error);
+    return;
+  }
+
+  setTrueFalseResult(text.trueFalseSolved);
+  onQuizPassed?.(stationId);
+  showQuizOutcomePopup("success", text.trueFalseSolvedPopup);
 }
 
 type SubmitMatchingPairControllerArgs = {

@@ -38,6 +38,16 @@ enum StationType {
   PHOTO_TASK
   QR_HUNT
   OPEN_QUIZ
+  REVIEWED_ANSWER
+  TRUE_FALSE
+  FILL_BLANK
+  // Orphaned: odd-one-out and picture-quiz shipped briefly, then turned out to
+  // be pure aliases of QUIZ — same quizData, same server-side check, same mobile
+  // panel — so they were dropped from the app. PostgreSQL cannot remove a value
+  // from an enum without recreating the type, so these two stay here unmapped.
+  // Nothing produces or reads them; do not reuse the names for something else.
+  ODD_ONE_OUT
+  PICTURE_QUIZ
 }
 
 enum TeamPhotoKind {
@@ -240,6 +250,10 @@ model Realization {
   teamStationNumberingEnabled Boolean    @default(true)
   timedStationPointsDecayEnabled Boolean @default(false)
   hideTaskList        Boolean            @default(false)
+  // Ryzykanci chat room. Disabled entirely, or kept as an announcements-only
+  // channel by letting the Game Master post while teams can only read.
+  riskChatEnabled     Boolean            @default(true)
+  riskChatTeamsCanPost Boolean           @default(true)
   joinCode            String             @unique
   riskSchemeId        String?
   createdAt           DateTime           @default(now())
@@ -259,6 +273,7 @@ model Realization {
   pointsQrCodes       PointsQrCode[]
   riskCards           RiskCard[]
   riskAttempts        RiskAttempt[]
+  riskChatMessages    RiskChatMessage[]
 }
 
 model Team {
@@ -287,6 +302,7 @@ model Team {
   stationScans       TeamStationScan[]
   pointsQrClaims     PointsQrCodeClaim[]
   riskAttempts       RiskAttempt[]
+  riskChatMessages   RiskChatMessage[]
   riskPendingDraw    RiskPendingDraw?
   pendingStationLaunch PendingStationLaunch?
 
@@ -517,6 +533,10 @@ model RiskAttempt {
   // difficulty points times the streak multiplier the team had when it sent
   // the photo — and is applied to the team only once the decision lands.
   isCorrect     Boolean?
+  // Free-text answer a team typed on a REVIEWED_ANSWER card, kept so the Game
+  // Master has something to read when the verdict is made. Null for every other
+  // card type — a photo card stores its proof in TeamPhoto instead.
+  answerText    String?
   pointsDelta   Int
   createdAt     DateTime       @default(now())
   realization   Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)
@@ -569,4 +589,40 @@ model ChatMessage {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+}
+
+enum RiskChatAuthorKind {
+  TEAM
+  GAME_MASTER
+  SYSTEM
+}
+
+// One shared chat room per Ryzykanci realization: every team, the Game Master,
+// and the server itself write into the same thread.
+model RiskChatMessage {
+  id            String             @id @default(uuid())
+  realizationId String
+  authorKind    RiskChatAuthorKind
+  // Author for a TEAM message, subject for a SYSTEM one ("team X takes the
+  // lead"), null for the Game Master. SetNull so removing a team leaves the
+  // history readable rather than deleting it.
+  teamId        String?
+  // Snapshot of the team name as it was when the message was sent — a renamed
+  // or deleted team must not rewrite what the room already said.
+  authorName    String
+  content       String
+  // null for anything a human wrote. Otherwise the event code behind a system
+  // message, kept separate from `content` so the wording can later move to the
+  // client for translation without a migration.
+  systemEvent   String?
+  // Idempotency key for system messages, null for human ones. Several tablets
+  // poll at once and each poll re-derives the same events, so the unique index
+  // below is what makes "insert and swallow the conflict" safe — no locking.
+  dedupeKey     String?
+  createdAt     DateTime           @default(now())
+  realization   Realization        @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team          Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@unique([realizationId, dedupeKey])
+  @@index([realizationId, createdAt])
 }

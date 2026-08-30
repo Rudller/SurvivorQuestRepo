@@ -26,6 +26,7 @@ import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
 import { useStationCompletionStopwatch } from "./station-panels/use-station-completion-stopwatch";
+import { submitTrueFalseController } from "./station-panels/station-controllers";
 import { createStationPreviewActions } from "./station-panels/use-station-preview-actions";
 import { useStationOverlayReset } from "./station-panels/use-station-overlay-reset";
 import { buildStationPreviewModel } from "./station-panels/use-station-preview-model";
@@ -98,8 +99,13 @@ function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: Stati
   if (station.stationType === "rebus") {
     return text.rebusSolvedPopup;
   }
-  if (station.stationType === "open-quiz") {
+  // fill-blank runs the open-quiz flow end to end, so it reports with the same
+  // wording.
+  if (station.stationType === "open-quiz" || station.stationType === "fill-blank") {
     return text.openQuizSolvedPopup;
+  }
+  if (station.stationType === "true-false") {
+    return text.trueFalseSolvedPopup;
   }
   if (station.stationType === "boggle") {
     return text.boggleSolvedPopup;
@@ -141,8 +147,11 @@ function resolveFailureOutcomeMessage(station: StationTestViewModel, text: Stati
   if (station.stationType === "rebus") {
     return text.rebusFailedPopup;
   }
-  if (station.stationType === "open-quiz") {
+  if (station.stationType === "open-quiz" || station.stationType === "fill-blank") {
     return text.openQuizFailedPopup;
+  }
+  if (station.stationType === "true-false") {
+    return text.trueFalseFailedPopup;
   }
   if (station.stationType === "boggle") {
     return text.boggleFailedPopup;
@@ -271,6 +280,10 @@ type StationPreviewText = {
   matchingNoAttempts: string;
   matchingFailedPopup: string;
   matchingWrongPair: string;
+  trueFalseSolved: string;
+  trueFalseSolvedPopup: string;
+  trueFalseFailed: string;
+  trueFalseFailedPopup: string;
   outcomePassed: string;
   outcomeTimedOut: string;
   outcomeFailed: string;
@@ -408,6 +421,10 @@ const STATION_PREVIEW_TEXT_ENGLISH: StationPreviewText = {
   matchingNoAttempts: "No attempts left.",
   matchingFailedPopup: "Too many incorrect matches.",
   matchingWrongPair: "This is not a correct pair.",
+  trueFalseSolved: "Great! Every statement is marked correctly.",
+  trueFalseSolvedPopup: "True/false task completed.",
+  trueFalseFailed: "At least one statement is marked wrong.",
+  trueFalseFailedPopup: "Not every statement was marked correctly.",
   outcomePassed: "Passed",
   outcomeTimedOut: "Time expired",
   outcomeFailed: "Failed",
@@ -547,6 +564,10 @@ const STATION_PREVIEW_TEXT_UKRAINIAN: StationPreviewText = {
   matchingNoAttempts: "Спроб не залишилося.",
   matchingFailedPopup: "Забагато неправильних поєднань.",
   matchingWrongPair: "Це неправильна пара.",
+  trueFalseSolved: "Чудово! Усі твердження позначено правильно.",
+  trueFalseSolvedPopup: "Завдання «правда чи хиба» виконано.",
+  trueFalseFailed: "Принаймні одне твердження позначено неправильно.",
+  trueFalseFailedPopup: "Не всі твердження позначено правильно.",
   outcomePassed: "Зараховано",
   outcomeTimedOut: "Час вичерпано",
   outcomeFailed: "Не зараховано",
@@ -687,6 +708,10 @@ const STATION_PREVIEW_TEXT_RUSSIAN: StationPreviewText = {
   matchingNoAttempts: "Попыток не осталось.",
   matchingFailedPopup: "Слишком много неправильных сопоставлений.",
   matchingWrongPair: "Это неправильная пара.",
+  trueFalseSolved: "Отлично! Все утверждения отмечены верно.",
+  trueFalseSolvedPopup: "Задание «правда или ложь» завершено.",
+  trueFalseFailed: "Хотя бы одно утверждение отмечено неверно.",
+  trueFalseFailedPopup: "Не все утверждения отмечены верно.",
   outcomePassed: "Зачтено",
   outcomeTimedOut: "Время истекло",
   outcomeFailed: "Не зачтено",
@@ -828,6 +853,10 @@ const STATION_PREVIEW_TEXT: Record<UiLanguage, StationPreviewText> = {
     matchingNoAttempts: "Brak prób.",
     matchingFailedPopup: "Za dużo błędnych połączeń.",
     matchingWrongPair: "To nie jest poprawna para.",
+    trueFalseSolved: "Brawo! Wszystkie zdania oznaczone poprawnie.",
+    trueFalseSolvedPopup: "Zadanie Prawda/Fałsz ukończone.",
+    trueFalseFailed: "Co najmniej jedno zdanie jest oznaczone błędnie.",
+    trueFalseFailedPopup: "Nie wszystkie zdania zostały oznaczone poprawnie.",
     outcomePassed: "Zaliczono",
     outcomeTimedOut: "Czas minął",
     outcomeFailed: "Nie zaliczono",
@@ -861,6 +890,7 @@ export function StationPreviewOverlay({
   onRequestClose,
   onCompleteTask,
   onSubmitPhotoTask,
+  onSubmitReviewedAnswer,
   onSubmitQrScan,
   onQuizFailed,
   onQuizPassed,
@@ -940,6 +970,16 @@ export function StationPreviewOverlay({
   const [openQuizInput, setOpenQuizInput] = useState("");
   const [openQuizAttempts, setOpenQuizAttempts] = useState(0);
   const [openQuizResult, setOpenQuizResult] = useState<string | null>(null);
+  // Parallel to the station's statements; null until the team marks one.
+  const [trueFalseSelections, setTrueFalseSelections] = useState<(boolean | null)[]>([]);
+  const [trueFalseResult, setTrueFalseResult] = useState<string | null>(null);
+  const [isSubmittingTrueFalse, setIsSubmittingTrueFalse] = useState(false);
+  const [reviewedAnswerInput, setReviewedAnswerInput] = useState("");
+  const [isSubmittingReviewedAnswer, setIsSubmittingReviewedAnswer] = useState(false);
+  // Terminal once true: a reviewed-answer card cannot be retried, so the panel
+  // swaps to "waiting for the Game Master" and stays there for this visit.
+  const [hasSubmittedReviewedAnswer, setHasSubmittedReviewedAnswer] = useState(false);
+  const [reviewedAnswerError, setReviewedAnswerError] = useState<string | null>(null);
   const [boggleInput, setBoggleInput] = useState("");
   const [boggleSelectedCellPath, setBoggleSelectedCellPath] = useState<number[]>([]);
   const [boggleAttempts, setBoggleAttempts] = useState(0);
@@ -1334,6 +1374,11 @@ export function StationPreviewOverlay({
     setOpenQuizInput,
     setOpenQuizAttempts,
     setOpenQuizResult,
+    setTrueFalseSelections,
+    setTrueFalseResult,
+    setReviewedAnswerInput,
+    setHasSubmittedReviewedAnswer,
+    setReviewedAnswerError,
     setBoggleInput,
     setBoggleSelectedCellPath,
     setBoggleAttempts,
@@ -1497,6 +1542,8 @@ export function StationPreviewOverlay({
       matching: isSubmittingMatching,
       strongPassword: false,
       openQuiz: isSubmittingOpenQuiz,
+      reviewedAnswer: isSubmittingReviewedAnswer || hasSubmittedReviewedAnswer,
+      trueFalse: isSubmittingTrueFalse,
     },
     onQuizFailed,
     onTimeExpired,
@@ -1701,6 +1748,11 @@ export function StationPreviewOverlay({
     miniSudokuIsActionDisabled,
     hangmanIsGuessDisabled,
     matchingIsInteractiveLocked,
+    isTrueFalseStation,
+    trueFalseStatements,
+    trueFalseAllAnswered,
+    trueFalseIsCorrect,
+    trueFalseIsActionDisabled,
     timerTextColor,
     timerPulseStyle,
   } = buildStationPreviewModel({
@@ -1740,6 +1792,8 @@ export function StationPreviewOverlay({
     miniSudokuResult,
     matchingConnections,
     matchingAttempts,
+    trueFalseSelections,
+    isSubmittingTrueFalse,
     remainingTimeSeconds,
     elapsedTimeSeconds,
     finalTenSecondsProgress,
@@ -2273,6 +2327,80 @@ export function StationPreviewOverlay({
       setQuizSubmitError(null);
     },
   };
+  // Sends the team's written answer to the Game Master. Unlike every other quiz
+  // panel this reports no verdict: the card just becomes "waiting", and the
+  // decision arrives later through whatever polls the host screen.
+  function handleSelectTrueFalse(index: number, isTrue: boolean) {
+    if (isInteractiveLocked || isSubmittingTrueFalse) {
+      return;
+    }
+
+    setTrueFalseResult(null);
+    setTrueFalseSelections((previous) => {
+      const next = [...previous];
+      // The array starts empty and grows to the statement count as marks land,
+      // so fill any gap rather than assuming an index already exists.
+      while (next.length <= index) {
+        next.push(null);
+      }
+      next[index] = isTrue;
+      return next;
+    });
+  }
+
+  async function handleSubmitTrueFalse() {
+    await submitTrueFalseController({
+      isTrueFalseStation,
+      isInteractiveLocked,
+      isSubmittingTrueFalse,
+      trueFalseAllAnswered,
+      trueFalseIsCorrect,
+      stationId: station.stationId,
+      startedAt: station.startedAt ?? null,
+      onCompleteTask,
+      onQuizFailed,
+      onQuizPassed,
+      showQuizOutcomePopup,
+      setQuizSubmitError,
+      setTrueFalseResult,
+      setIsSubmittingTrueFalse,
+      onSubmitError: setQuizSubmitError,
+      text: {
+        trueFalseSolved: text.trueFalseSolved,
+        trueFalseSolvedPopup: text.trueFalseSolvedPopup,
+        trueFalseFailed: text.trueFalseFailed,
+        trueFalseFailedPopup: text.trueFalseFailedPopup,
+      },
+    });
+  }
+
+  async function handleSubmitReviewedAnswer() {
+    const answerText = reviewedAnswerInput.trim();
+    if (!answerText || isSubmittingReviewedAnswer || hasSubmittedReviewedAnswer) {
+      return;
+    }
+
+    // No handler means the host cannot store the answer anywhere (only the
+    // Ryzykanci screen wires one up). Bail rather than flipping the panel to
+    // "waiting for the Game Master" over a send that never happened.
+    if (!onSubmitReviewedAnswer) {
+      return;
+    }
+
+    setReviewedAnswerError(null);
+    setIsSubmittingReviewedAnswer(true);
+    try {
+      const error = await onSubmitReviewedAnswer(station.stationId, answerText);
+      if (error) {
+        setReviewedAnswerError(error);
+        return;
+      }
+      setHasSubmittedReviewedAnswer(true);
+    } finally {
+      setIsSubmittingReviewedAnswer(false);
+    }
+  }
+
   const quizStationRendererByType = buildQuizStationRendererByType({
     quizAudioPanelSharedProps: {
       station,
@@ -2448,6 +2576,32 @@ export function StationPreviewOverlay({
       },
       onSubmit: () => {
         void submitOpenQuiz();
+      },
+    },
+    trueFalseStationPanelProps: {
+      statements: trueFalseStatements,
+      selections: trueFalseSelections,
+      result: trueFalseResult,
+      isActionDisabled: trueFalseIsActionDisabled,
+      isInteractiveLocked,
+      isSubmitting: isSubmittingTrueFalse,
+      onSelect: handleSelectTrueFalse,
+      onSubmit: () => {
+        void handleSubmitTrueFalse();
+      },
+    },
+    reviewedAnswerStationPanelProps: {
+      input: reviewedAnswerInput,
+      isActionDisabled: isInteractiveLocked,
+      isSubmitting: isSubmittingReviewedAnswer,
+      hasSubmitted: hasSubmittedReviewedAnswer,
+      submitError: reviewedAnswerError,
+      onChangeInput: (value: string) => {
+        setReviewedAnswerInput(value);
+        setReviewedAnswerError(null);
+      },
+      onSubmit: () => {
+        void handleSubmitReviewedAnswer();
       },
     },
     strongPasswordStationPanelProps: {

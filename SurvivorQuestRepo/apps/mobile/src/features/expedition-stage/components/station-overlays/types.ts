@@ -19,7 +19,10 @@ export type StationTestType =
   | "strong-password"
   | "photo-task"
   | "qr-hunt"
-  | "open-quiz";
+  | "open-quiz"
+  | "reviewed-answer"
+  | "true-false"
+  | "fill-blank";
 
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 
@@ -74,6 +77,10 @@ export type StationPreviewOverlayProps = {
   onRequestClose?: () => void;
   onCompleteTask?: (stationId: string, completionCode: string, startedAt?: string, challengeDifficulty?: string) => Promise<string | null>;
   onSubmitPhotoTask?: (stationId: string, fileUri: string) => Promise<string | null>;
+  // Free-text answer sent for the Game Master to judge (reviewed-answer cards).
+  // Resolves to an error message on failure, null on success — same contract as
+  // onSubmitPhotoTask, which this mirrors.
+  onSubmitReviewedAnswer?: (stationId: string, answerText: string) => Promise<string | null>;
   onSubmitQrScan?: (stationId: string, code: string) => Promise<string | null>;
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onQuizPassed?: (stationId: string) => void;

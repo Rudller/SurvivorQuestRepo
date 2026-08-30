@@ -13,10 +13,12 @@ const SCHEME_NAME = 'TEST — Wszystkie stanowiska';
 const MEMORY_SYSTEM_STATION_PROMPT = 'Znajdź wszystkie pary ikon w maksymalnie 6 pomyłkach.';
 const MATCHING_SYSTEM_STATION_PROMPT =
   'Twoim zadaniem jest poprawnie dopasować elementy z lewej i prawej strony zgodnie z poleceniem.';
+const TRUE_FALSE_SYSTEM_STATION_PROMPT =
+  'Oznaczcie każde zdanie jako prawdziwe lub fałszywe.';
 
 // Excluded on purpose: strong-password, mini-sudoku, qr-hunt and rebus don't
-// make sense as risk-quiz cards — the risk-quiz mobile screen only renders a
-// real interactive panel for quiz/audio-quiz types (see ANSWER_INDEX_TYPES in
+// make sense as risk-quiz cards — the risk-quiz mobile screen scores
+// quiz/audio-quiz server-side (see ANSWER_INDEX_TYPES in
 // apps/mobile/src/features/risk-quiz/ui/risk-quiz-screen.tsx); every other
 // type falls back to a plain description + "Ukończone/Poddaję się" self-report,
 // which doesn't work for these (rebus needs an image we don't have here, and
@@ -182,6 +184,51 @@ const STATION_DEFS: StationDef[] = [
     categoryName: 'TEST — Zadanie fotograficzne',
     stationName: 'TEST — Zadanie fotograficzne',
     description: 'Zrób dowolne zdjęcie, aby zaliczyć to testowe zadanie.',
+  },
+  {
+    prismaType: StationType.REVIEWED_ANSWER,
+    categoryName: 'TEST — Odpowiedź opisowa',
+    stationName: 'TEST — Odpowiedź opisowa',
+    description:
+      'Wpiszcie dowolną odpowiedź — trafi do Mistrza Gry, który zdecyduje w panelu bieżącej realizacji.',
+    quizData: {
+      question: 'Opiszcie własnymi słowami, na czym polega ta gra.',
+      answers: ['Opiszcie własnymi słowami, na czym polega ta gra.', 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      // Key points the Game Master ticks off while reading; never sent to the
+      // tablet (see toRiskStationPayload in risk-quiz.service.ts).
+      acceptedAnswers: ['drużyny losują karty', 'za poprawne odpowiedzi są punkty'],
+    },
+  },
+  {
+    prismaType: StationType.TRUE_FALSE,
+    categoryName: 'TEST — Prawda czy fałsz',
+    stationName: 'TEST — Prawda czy fałsz',
+    description: 'Testowe zadanie prawda/fałsz — liczy się komplet czterech trafień.',
+    quizData: {
+      question: TRUE_FALSE_SYSTEM_STATION_PROMPT,
+      // "statement :: T|F" — the verdict rides beside the statement so the
+      // auto-translator can rewrite the wording without touching the flag.
+      answers: [
+        'SurvivorQuest to gra terenowa. :: T',
+        'Talia testowa ma jedną kartę. :: F',
+        'Drużyny skanują kody QR. :: T',
+        'Mistrz Gry gra razem z drużynami. :: F',
+      ],
+      correctAnswerIndex: 0,
+    },
+  },
+  {
+    prismaType: StationType.FILL_BLANK,
+    categoryName: 'TEST — Uzupełnij lukę',
+    stationName: 'TEST — Uzupełnij lukę',
+    description: 'Testowe zadanie z luką do uzupełnienia.',
+    quizData: {
+      question: 'Ta gra nazywa się ___ i jest grą terenową.',
+      answers: ['SurvivorQuest', 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      acceptedAnswers: ['Survivor Quest'],
+    },
   },
 ];
 

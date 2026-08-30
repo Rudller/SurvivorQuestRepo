@@ -273,6 +273,8 @@ export type Realization = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -336,6 +338,8 @@ export type RealizationExportRealizationData = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
 };

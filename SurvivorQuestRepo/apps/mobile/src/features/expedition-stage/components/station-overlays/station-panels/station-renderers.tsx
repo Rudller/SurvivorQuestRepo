@@ -12,7 +12,9 @@ import { MiniSudokuMediaSection } from "./mini-sudoku-station-panel";
 import { OpenQuizStationPanel } from "./open-quiz-station-panel";
 import { QuizAudioPanel } from "./quiz-audio-station-panel";
 import { RebusStationPanel } from "./rebus-station-panel";
+import { ReviewedAnswerStationPanel } from "./reviewed-answer-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
+import { TrueFalseStationPanel } from "./true-false-station-panel";
 import { StrongPasswordStationPanel } from "./strong-password-station-panel";
 import { WordleInteractionPanel, WordleMediaBoard } from "./wordle-station-panel";
 import type { StationTestType } from "../types";
@@ -63,6 +65,8 @@ type BuildQuizStationRendererByTypeArgs = {
   rebusStationPanelProps: ComponentProps<typeof RebusStationPanel>;
   strongPasswordStationPanelProps: ComponentProps<typeof StrongPasswordStationPanel>;
   openQuizStationPanelProps: ComponentProps<typeof OpenQuizStationPanel>;
+  reviewedAnswerStationPanelProps: ComponentProps<typeof ReviewedAnswerStationPanel>;
+  trueFalseStationPanelProps: ComponentProps<typeof TrueFalseStationPanel>;
 };
 
 export function buildQuizStationRendererByType({
@@ -75,6 +79,8 @@ export function buildQuizStationRendererByType({
   rebusStationPanelProps,
   strongPasswordStationPanelProps,
   openQuizStationPanelProps,
+  reviewedAnswerStationPanelProps,
+  trueFalseStationPanelProps,
 }: BuildQuizStationRendererByTypeArgs): StationRendererByType {
   return {
     quiz: () => <QuizAudioPanel {...quizAudioPanelSharedProps} isAudioQuizStation={false} />,
@@ -87,5 +93,9 @@ export function buildQuizStationRendererByType({
     rebus: () => <RebusStationPanel {...rebusStationPanelProps} />,
     "strong-password": () => <StrongPasswordStationPanel {...strongPasswordStationPanelProps} />,
     "open-quiz": () => <OpenQuizStationPanel {...openQuizStationPanelProps} />,
+    "reviewed-answer": () => <ReviewedAnswerStationPanel {...reviewedAnswerStationPanelProps} />,
+    // fill-blank is an open question whose prompt happens to contain a gap.
+    "fill-blank": () => <OpenQuizStationPanel {...openQuizStationPanelProps} />,
+    "true-false": () => <TrueFalseStationPanel {...trueFalseStationPanelProps} />,
   };
 }

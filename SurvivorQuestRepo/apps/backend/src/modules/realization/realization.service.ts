@@ -166,6 +166,8 @@ export class RealizationService {
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
         hideTaskList: validated.hideTaskList,
+        riskChatEnabled: validated.riskChatEnabled,
+        riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -381,6 +383,8 @@ export class RealizationService {
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
         hideTaskList: validated.hideTaskList,
+        riskChatEnabled: validated.riskChatEnabled,
+        riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
         status: toPrismaRealizationStatus(nextStatus),
         scheduledAt: new Date(validated.scheduledAt),
         ...(isStartingNow ? { startedAt: new Date() } : {}),

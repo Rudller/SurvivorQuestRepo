@@ -136,7 +136,10 @@ export type ExpeditionStationType =
   | "strong-password"
   | "photo-task"
   | "qr-hunt"
-  | "open-quiz";
+  | "open-quiz"
+  | "reviewed-answer"
+  | "true-false"
+  | "fill-blank";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";

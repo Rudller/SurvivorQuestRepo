@@ -121,7 +121,14 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
   if (station.stationType === "audio-quiz") {
     return station.quizQuestion?.trim() || text.audioQuizFallback;
   }
-  if (station.stationType === "open-quiz") {
+  // These all carry an admin-authored (or fixed) question in quizQuestion, so
+  // they share the classic quiz fallback rather than dropping to the matching
+  // one at the end of this chain.
+  if (
+    station.stationType === "open-quiz" ||
+    station.stationType === "fill-blank" ||
+    station.stationType === "true-false"
+  ) {
     return station.quizQuestion?.trim() || text.classicQuizFallback;
   }
   if (station.stationType === "wordle") {

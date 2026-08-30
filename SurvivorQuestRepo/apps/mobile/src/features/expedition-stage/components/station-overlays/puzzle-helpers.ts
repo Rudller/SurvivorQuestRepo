@@ -658,6 +658,46 @@ export function resolveMiniSudokuPuzzle(
   return { given, solution };
 }
 
+export type TrueFalseStatement = {
+  statement: string;
+  isTrue: boolean;
+};
+
+// Mirrors TRUE_FALSE_DELIMITER in the backend's station.rules.ts. Each answer
+// slot holds one statement plus its verdict, kept apart by the delimiter so the
+// auto-translator can rewrite the statement without touching the flag.
+const TRUE_FALSE_DELIMITER = "::";
+
+export function resolveTrueFalseStatements(
+  station: StationPuzzleViewModel,
+): TrueFalseStatement[] {
+  return (station.quizAnswers ?? [])
+    .map((entry) => {
+      const trimmed = entry.trim();
+      // Last occurrence, so a statement containing the delimiter still parses —
+      // only the trailing flag is structural.
+      const markerIndex = trimmed.lastIndexOf(TRUE_FALSE_DELIMITER);
+      if (markerIndex < 0) {
+        return null;
+      }
+
+      const flag = trimmed
+        .slice(markerIndex + TRUE_FALSE_DELIMITER.length)
+        .trim();
+      if (flag !== "T" && flag !== "F") {
+        return null;
+      }
+
+      const statement = trimmed.slice(0, markerIndex).trim();
+      if (!statement) {
+        return null;
+      }
+
+      return { statement, isTrue: flag === "T" };
+    })
+    .filter((entry): entry is TrueFalseStatement => entry !== null);
+}
+
 export function resolveMatchingPairs(
   station: StationPuzzleViewModel,
   uiLanguage: UiLanguage = "polish",

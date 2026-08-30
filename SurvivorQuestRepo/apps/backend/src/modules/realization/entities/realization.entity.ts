@@ -79,6 +79,8 @@ export type RealizationEntity = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   // When the organiser actually pressed start, as opposed to the planned slot
@@ -153,6 +155,8 @@ export type ValidatedRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

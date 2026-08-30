@@ -229,6 +229,8 @@ export function EditRealizationPanel({
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList ?? false,
+    riskChatEnabled: realization.riskChatEnabled ?? true,
+    riskChatTeamsCanPost: realization.riskChatTeamsCanPost ?? true,
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
@@ -888,6 +890,8 @@ export function EditRealizationPanel({
                 timedStationPointsDecayEnabled:
                   editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
+                riskChatEnabled: editValues.riskChatEnabled,
+                riskChatTeamsCanPost: editValues.riskChatTeamsCanPost,
                 status: editValues.status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations
@@ -1648,6 +1652,37 @@ export function EditRealizationPanel({
                       className="h-4 w-4 accent-amber-400"
                     />
                     Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={editValues.riskChatEnabled}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          riskChatEnabled: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Czat w Ryzykantach
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={editValues.riskChatTeamsCanPost}
+                      disabled={!editValues.riskChatEnabled}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          riskChatTeamsCanPost: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Drużyny mogą pisać — odznacz, by zostawić sam kanał ogłoszeń
                   </label>
                 </FormSection>
 

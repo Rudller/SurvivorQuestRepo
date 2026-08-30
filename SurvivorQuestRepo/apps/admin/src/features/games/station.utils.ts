@@ -35,6 +35,9 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   "photo-task": "#84cc16",
   "qr-hunt": "#0891b2",
   "open-quiz": "#eab308",
+  "reviewed-answer": "#d946ef",
+  "true-false": "#2dd4bf",
+  "fill-blank": "#fb7185",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -81,6 +84,14 @@ const QR_HUNT_DEFAULT_STATION_DESCRIPTION =
   "Np. „Kody znajdziesz przy wejściach do budynków na trasie”. To pole jest wskazówką, gdzie szukać kodów QR.";
 const OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION =
   "Twoim zadaniem jest odpowiedzieć na pytanie, wpisując odpowiedź samodzielnie (bez podpowiedzi w postaci gotowych opcji).";
+export const TRUE_FALSE_SYSTEM_STATION_PROMPT =
+  "Oznaczcie każde zdanie jako prawdziwe lub fałszywe.";
+const TRUE_FALSE_DEFAULT_STATION_DESCRIPTION =
+  "Przy każdym zdaniu zdecydujcie, czy jest prawdziwe, czy fałszywe. Liczy się komplet — jedna pomyłka przekreśla całe zadanie.";
+const FILL_BLANK_DEFAULT_STATION_DESCRIPTION =
+  "Uzupełnijcie brakujące słowo w zdaniu. Wielkość liter i polskie znaki diakrytyczne nie mają znaczenia.";
+const REVIEWED_ANSWER_DEFAULT_STATION_DESCRIPTION =
+  "Odpowiedzcie na pytanie własnymi słowami. Odpowiedź trafi do Mistrza Gry, który zdecyduje, czy ją zaliczyć.";
 const QUIZ_SECRET_FALLBACK_ANSWERS = ["A", "B", "C"] as const;
 const MATCHING_PAIR_DELIMITER = "->";
 const MATCHING_PAIR_SEPARATOR = ` ${MATCHING_PAIR_DELIMITER} `;
@@ -142,6 +153,15 @@ export function resolveDefaultStationDescription(stationType: StationType) {
   if (stationType === "open-quiz") {
     return OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION;
   }
+  if (stationType === "reviewed-answer") {
+    return REVIEWED_ANSWER_DEFAULT_STATION_DESCRIPTION;
+  }
+  if (stationType === "true-false") {
+    return TRUE_FALSE_DEFAULT_STATION_DESCRIPTION;
+  }
+  if (stationType === "fill-blank") {
+    return FILL_BLANK_DEFAULT_STATION_DESCRIPTION;
+  }
 
   return DEFAULT_STATION_DESCRIPTION;
 }
@@ -163,7 +183,10 @@ export function isKnownDefaultStationDescription(value: string) {
     normalized === MATCHING_DEFAULT_STATION_DESCRIPTION ||
     normalized === PHOTO_TASK_DEFAULT_STATION_DESCRIPTION ||
     normalized === QR_HUNT_DEFAULT_STATION_DESCRIPTION ||
-    normalized === OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION
+    normalized === OPEN_QUIZ_DEFAULT_STATION_DESCRIPTION ||
+    normalized === REVIEWED_ANSWER_DEFAULT_STATION_DESCRIPTION ||
+    normalized === TRUE_FALSE_DEFAULT_STATION_DESCRIPTION ||
+    normalized === FILL_BLANK_DEFAULT_STATION_DESCRIPTION
   );
 }
 
@@ -259,12 +282,32 @@ export function isQuizStationType(stationType: StationType) {
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
     stationType === "strong-password" ||
-    stationType === "open-quiz"
+    stationType === "open-quiz" ||
+    stationType === "reviewed-answer" ||
+    stationType === "true-false" ||
+    stationType === "fill-blank"
   );
 }
 
+// fill-blank shares open-quiz's storage and its single typed-answer form: one
+// correct word plus optional accepted variants. Only the card differs.
 export function isOpenQuizStationType(stationType: StationType) {
-  return stationType === "open-quiz";
+  return stationType === "open-quiz" || stationType === "fill-blank";
+}
+
+export function isFillBlankStationType(stationType: StationType) {
+  return stationType === "fill-blank";
+}
+
+export function isTrueFalseStationType(stationType: StationType) {
+  return stationType === "true-false";
+}
+
+// An open question judged by the Game Master rather than by string comparison.
+// The quiz row keeps the question plus an optional list of key points the
+// reviewer ticks off; nothing is ever matched against the team's text.
+export function isReviewedAnswerStationType(stationType: StationType) {
+  return stationType === "reviewed-answer";
 }
 
 export function isWordPuzzleStationType(stationType: StationType) {
@@ -308,7 +351,10 @@ export function isImageSupportedStationType(stationType: StationType) {
 }
 
 export function hasVisibleQuizQuestionField(stationType: StationType) {
-  return stationType !== "mini-sudoku";
+  // true-false carries a fixed instruction rather than an authored question —
+  // the admin only writes the statements, so showing an editable question box
+  // would just invite a second, contradictory prompt.
+  return stationType !== "mini-sudoku" && stationType !== "true-false";
 }
 
 export function getQuizLikeStationCopy(stationType: StationType) {
@@ -419,6 +465,33 @@ export function getQuizLikeStationCopy(stationType: StationType) {
         answersHint: "Uzupełnij 4 pary w formacie lewa -> prawa.",
         validationMessage: "Dopasowywanie wymaga placeholdera technicznego i 4 pełnych par.",
       };
+    case "true-false":
+      return {
+        sectionTitle: "Prawda czy fałsz",
+        questionLabel: "Treść techniczna (Prawda/Fałsz)",
+        questionPlaceholder: TRUE_FALSE_SYSTEM_STATION_PROMPT,
+        answersHint:
+          "Wpiszcie 4 zdania i przy każdym zaznaczcie, czy jest prawdziwe. Drużyna musi trafić wszystkie cztery — jedna pomyłka przekreśla zadanie.",
+        validationMessage: "Prawda/Fałsz wymaga 4 pełnych zdań.",
+      };
+    case "fill-blank":
+      return {
+        sectionTitle: "Uzupełnij lukę",
+        questionLabel: "Zdanie z luką",
+        questionPlaceholder: "Np. Chrzest Polski miał miejsce w roku ___.",
+        answersHint:
+          "Zaznaczcie lukę trzema podkreślnikami (___) w treści zdania. Podajcie brakujące słowo — wielkość liter i polskie znaki nie mają znaczenia — a niżej ewentualne dodatkowe warianty.",
+        validationMessage: "Uzupełnij lukę wymaga zdania i brakującego słowa.",
+      };
+    case "reviewed-answer":
+      return {
+        sectionTitle: "Pytanie do oceny Mistrza Gry",
+        questionLabel: "Pytanie",
+        questionPlaceholder: "Wpisz pytanie otwarte, np. „Wymieńcie trzy przyczyny…”",
+        answersHint:
+          "Odpowiedzi nikt nie sprawdza automatycznie — drużyna wpisuje ją na tablecie, a Ty decydujesz w panelu bieżącej realizacji. Klucz odpowiedzi jest opcjonalny i widzi go wyłącznie Mistrz Gry.",
+        validationMessage: "Pytanie do oceny Mistrza Gry wymaga treści pytania.",
+      };
     case "open-quiz":
       return {
         sectionTitle: "Pytanie otwarte",
@@ -505,6 +578,53 @@ export function joinMatchingPairAnswer(left: string, right: string) {
     return left;
   }
   return `${left}${MATCHING_PAIR_SEPARATOR}${right}`;
+}
+
+// Mirrors TRUE_FALSE_DELIMITER in the backend's station.rules.ts: the verdict
+// travels beside the statement inside one answer slot, so the auto-translator
+// can rewrite the statement without ever touching the flag.
+const TRUE_FALSE_DELIMITER = "::";
+const TRUE_FALSE_SEPARATOR = ` ${TRUE_FALSE_DELIMITER} `;
+
+// Shared by the create form and the edit modal so the toggle looks the same in
+// both. Written out as whole class strings rather than composed at runtime —
+// Tailwind scans source text and never sees a value a template literal builds.
+export const TRUE_FALSE_TOGGLE_IDLE_CLASS =
+  "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition border-zinc-700 bg-zinc-950 text-zinc-400 hover:bg-zinc-900";
+export const TRUE_FALSE_TOGGLE_ACTIVE_TRUE_CLASS =
+  "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition border-emerald-400/50 bg-emerald-500/15 text-emerald-200";
+export const TRUE_FALSE_TOGGLE_ACTIVE_FALSE_CLASS =
+  "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition border-rose-400/50 bg-rose-500/15 text-rose-200";
+
+export function splitTrueFalseAnswer(value: string) {
+  const trimmed = value.trim();
+  // Last occurrence, so a statement containing the delimiter still parses —
+  // only the trailing flag is structural.
+  const markerIndex = trimmed.lastIndexOf(TRUE_FALSE_DELIMITER);
+  if (markerIndex < 0) {
+    return { statement: trimmed, isTrue: false };
+  }
+
+  const flag = trimmed.slice(markerIndex + TRUE_FALSE_DELIMITER.length).trim();
+  if (flag !== "T" && flag !== "F") {
+    return { statement: trimmed, isTrue: false };
+  }
+
+  return { statement: trimmed.slice(0, markerIndex).trim(), isTrue: flag === "T" };
+}
+
+export function joinTrueFalseAnswer(statement: string, isTrue: boolean) {
+  return `${statement.trim()}${TRUE_FALSE_SEPARATOR}${isTrue ? "T" : "F"}`;
+}
+
+function normalizeTrueFalseAnswers(answers: string[]) {
+  return answers.map((answer) => {
+    const { statement, isTrue } = splitTrueFalseAnswer(answer);
+    if (!statement) {
+      return "";
+    }
+    return joinTrueFalseAnswer(statement, isTrue);
+  });
 }
 
 function normalizeMatchingPairAnswers(answers: string[]) {
@@ -621,11 +741,35 @@ export function normalizeStationQuizForType(stationType: StationType, input: Sta
     });
   }
 
+  // The question doubles as the technical secret, exactly like a word puzzle:
+  // normalizeStationQuiz rejects empty answers, and this type genuinely has no
+  // answer to put there. The reviewer's key points ride along in
+  // acceptedAnswers, which normalizeStationQuiz passes through untouched.
+  if (isReviewedAnswerStationType(stationType)) {
+    const nextQuestion = input.question.trim();
+    return normalizeStationQuiz({
+      ...input,
+      question: nextQuestion,
+      answers: [nextQuestion, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
   if (isOpenQuizStationType(stationType)) {
     const correctAnswer = (input.answers[0] ?? "").trim();
     return normalizeStationQuiz({
       ...input,
       answers: [correctAnswer, ...QUIZ_SECRET_FALLBACK_ANSWERS],
+      correctAnswerIndex: 0,
+    });
+  }
+
+  if (isTrueFalseStationType(stationType)) {
+    const nextQuestion = input.question.trim() || TRUE_FALSE_SYSTEM_STATION_PROMPT;
+    return normalizeStationQuiz({
+      ...input,
+      question: nextQuestion,
+      answers: normalizeTrueFalseAnswers(input.answers),
       correctAnswerIndex: 0,
     });
   }

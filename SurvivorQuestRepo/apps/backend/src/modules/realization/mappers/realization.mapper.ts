@@ -255,6 +255,8 @@ export function buildRealizationEntity(input: {
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
     hideTaskList: boolean;
+    riskChatEnabled: boolean;
+    riskChatTeamsCanPost: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     startedAt: Date | null;
@@ -313,6 +315,8 @@ export function buildRealizationEntity(input: {
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList,
+    riskChatEnabled: realization.riskChatEnabled,
+    riskChatTeamsCanPost: realization.riskChatTeamsCanPost,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),

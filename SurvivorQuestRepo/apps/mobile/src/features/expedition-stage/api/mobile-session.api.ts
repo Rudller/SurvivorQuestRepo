@@ -237,7 +237,10 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "strong-password" ||
     value === "photo-task" ||
     value === "qr-hunt" ||
-    value === "open-quiz"
+    value === "open-quiz" ||
+    value === "reviewed-answer" ||
+    value === "true-false" ||
+    value === "fill-blank"
   ) {
     return value;
   }

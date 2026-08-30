@@ -40,9 +40,6 @@ export function CurrentRealizationPhotoReviewsPanel({
   const [completeRiskCard, { isLoading: isCompletingRiskCard }] = useCompleteRiskCardMutation();
   const [failRiskCard, { isLoading: isFailingRiskCard }] = useFailRiskCardMutation();
   const [actionError, setActionError] = useState<string | null>(null);
-  // The reviewed row simply vanishes from the list, which on its own reads as
-  // "nothing happened" — say what was decided and what it cost or paid.
-  const [lastDecision, setLastDecision] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     teamId: string;
     stationId: string;
@@ -60,12 +57,11 @@ export function CurrentRealizationPhotoReviewsPanel({
     stationId: string,
     action: "approve" | "reject",
   ) {
-    if (action === "reject" && !window.confirm("Odrzucić to zdjęcie? Zadanie zostanie trwale niezaliczone, bez możliwości ponownej próby.")) {
+    if (action === "reject" && !window.confirm("Odrzucić to zgłoszenie? Zadanie zostanie trwale niezaliczone, bez możliwości ponownej próby.")) {
       return;
     }
 
     setActionError(null);
-    setLastDecision(null);
     setPendingAction({ teamId, stationId, action });
     try {
       const basePayload = { realizationId: selectedRealizationId, teamId, stationId };
@@ -75,27 +71,21 @@ export function CurrentRealizationPhotoReviewsPanel({
           throw new Error("Brak realizacji");
         }
         const riskPayload = { realizationId, teamId, stationId };
-        const result =
-          action === "approve"
-            ? await completeRiskCard(riskPayload).unwrap()
-            : await failRiskCard(riskPayload).unwrap();
-        setLastDecision(
-          `${action === "approve" ? "Zatwierdzono" : "Odrzucono"} zdjęcie — ${
-            result.pointsAwarded >= 0 ? "+" : ""
-          }${result.pointsAwarded} pkt, drużyna ma ${result.teamPoints} pkt.`,
-        );
+        if (action === "approve") {
+          await completeRiskCard(riskPayload).unwrap();
+        } else {
+          await failRiskCard(riskPayload).unwrap();
+        }
       } else if (action === "approve") {
         await completeTask(basePayload).unwrap();
-        setLastDecision("Zatwierdzono zdjęcie — zadanie zaliczone.");
       } else {
         await failTask({ ...basePayload, reason: "photo_rejected_by_admin" }).unwrap();
-        setLastDecision("Odrzucono zdjęcie — zadanie niezaliczone.");
       }
     } catch (error) {
       // Show what actually failed: the blanket message hid a missing
       // realization id here for a whole test round.
       setActionError(
-        resolveApiErrorMessage(error) ?? "Nie udało się zapisać decyzji dotyczącej zdjęcia.",
+        resolveApiErrorMessage(error) ?? "Nie udało się zapisać decyzji dotyczącej zgłoszenia.",
       );
     } finally {
       setPendingAction(null);
@@ -103,32 +93,16 @@ export function CurrentRealizationPhotoReviewsPanel({
   }
 
   if (!reviews || reviews.length === 0) {
-    // The list empties out the moment the last photo is decided, so the panel
-    // sticks around just long enough to show what happened.
-    if (!lastDecision) {
-      return null;
-    }
-
-    return (
-      <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4 text-sm text-emerald-100">
-        {lastDecision}
-      </div>
-    );
+    return null;
   }
 
   return (
     <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-100">
-          Zdjęcia czekające na akceptację ({reviews.length})
+          Zgłoszenia czekające na akceptację ({reviews.length})
         </h2>
       </div>
-
-      {lastDecision ? (
-        <div className="mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-2 text-xs text-emerald-100">
-          {lastDecision}
-        </div>
-      ) : null}
 
       {actionError ? (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">
@@ -146,14 +120,37 @@ export function CurrentRealizationPhotoReviewsPanel({
               key={`${review.teamId}-${review.stationId}`}
               className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={review.photoUrl}
-                alt={review.stationName}
-                className="h-32 w-full rounded-md border border-zinc-700 object-cover"
-              />
+              {review.kind === "text" ? (
+                <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900/60 p-2">
+                  {review.question ? (
+                    <p className="text-xs font-medium text-amber-200/90">{review.question}</p>
+                  ) : null}
+                  <p className="whitespace-pre-wrap break-words text-xs text-zinc-100">
+                    {review.answerText}
+                  </p>
+                  {review.answerKeys.length > 0 ? (
+                    <div className="border-t border-zinc-800 pt-2">
+                      <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-500">
+                        Klucz odpowiedzi
+                      </p>
+                      <ul className="list-inside list-disc space-y-0.5 text-[11px] text-zinc-400">
+                        {review.answerKeys.map((key) => (
+                          <li key={key}>{key}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={review.photoUrl}
+                  alt={review.stationName}
+                  className="h-32 w-full rounded-md border border-zinc-700 object-cover"
+                />
+              )}
               <p className="text-xs font-medium text-zinc-100">{review.stationName}</p>
-              {review.stationDescription ? (
+              {review.kind === "photo" && review.stationDescription ? (
                 <p className="text-xs italic text-amber-200/80">{review.stationDescription}</p>
               ) : null}
               <p className="text-xs text-zinc-400">{review.teamName}</p>
@@ -162,7 +159,7 @@ export function CurrentRealizationPhotoReviewsPanel({
                   type="button"
                   disabled={isMutating}
                   onClick={() => void handleAction(review.teamId, review.stationId, "approve")}
-                  aria-label="Zatwierdź zdjęcie"
+                  aria-label="Zatwierdź zgłoszenie"
                   className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2 py-1.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   {isPendingForRow && pendingAction?.action === "approve" ? "..." : "✓"}
@@ -171,7 +168,7 @@ export function CurrentRealizationPhotoReviewsPanel({
                   type="button"
                   disabled={isMutating}
                   onClick={() => void handleAction(review.teamId, review.stationId, "reject")}
-                  aria-label="Odrzuć zdjęcie"
+                  aria-label="Odrzuć zgłoszenie"
                   className="flex-1 rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   {isPendingForRow && pendingAction?.action === "reject" ? "..." : "✗"}

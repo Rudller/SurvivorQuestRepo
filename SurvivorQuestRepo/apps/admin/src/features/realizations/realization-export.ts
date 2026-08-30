@@ -33,6 +33,8 @@ const realizationExportDataSchema = z.object({
   teamStationNumberingEnabled: z.boolean(),
   timedStationPointsDecayEnabled: z.boolean(),
   hideTaskList: z.boolean(),
+  riskChatEnabled: z.boolean(),
+  riskChatTeamsCanPost: z.boolean(),
   status: z.enum(["planned", "in-progress", "done"]),
   scheduledAt: z.string(),
 });
@@ -112,6 +114,8 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
       timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
       hideTaskList: realization.hideTaskList,
+      riskChatEnabled: realization.riskChatEnabled,
+      riskChatTeamsCanPost: realization.riskChatTeamsCanPost,
       status: realization.status,
       scheduledAt: realization.scheduledAt,
     },

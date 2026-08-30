@@ -12,7 +12,7 @@ import type {
   StationTranslations,
   StationType,
 } from "../types/station";
-import { riskStationTypeOptions, stationTypeOptions } from "../types/station";
+import { regularStationTypeGroups, riskStationTypeGroups, stationTypeHints } from "../types/station";
 import type { StationFormVariant } from "../types/station";
 import { useIsDirty } from "../../../shared/lib/use-is-dirty";
 import {
@@ -38,7 +38,15 @@ import {
   isQuizStationType,
   isWordPuzzleStationType,
   isImageSupportedStationType,
+  isFillBlankStationType,
   isOpenQuizStationType,
+  isReviewedAnswerStationType,
+  isTrueFalseStationType,
+  joinTrueFalseAnswer,
+  splitTrueFalseAnswer,
+  TRUE_FALSE_TOGGLE_ACTIVE_FALSE_CLASS,
+  TRUE_FALSE_TOGGLE_ACTIVE_TRUE_CLASS,
+  TRUE_FALSE_TOGGLE_IDLE_CLASS,
   isValidCompletionCodeForMode,
   parseAcceptedAnswersInput,
   parseQrScanCodesInput,
@@ -59,6 +67,7 @@ import {
   MEMORY_SYSTEM_STATION_PROMPT,
   MINI_SUDOKU_SYSTEM_STATION_PROMPT,
   MATCHING_SYSTEM_STATION_PROMPT,
+  TRUE_FALSE_SYSTEM_STATION_PROMPT,
   STRONG_PASSWORD_SYSTEM_STATION_PROMPT,
   generateSimonSequence,
   normalizeSimonSequenceInput,
@@ -335,7 +344,10 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
       | { kind: "question" }
       | { kind: "answer"; answerIndex: number }
       | { kind: "matchingLeft"; pairIndex: number }
-      | { kind: "matchingRight"; pairIndex: number };
+      | { kind: "matchingRight"; pairIndex: number }
+      // Only the statement half travels to the translator — its true/false flag
+      // is structural and would come back as a translated word.
+      | { kind: "trueFalseStatement"; statementIndex: number };
 
     const pendingFields: PendingField[] = [];
     const texts: string[] = [];
@@ -372,6 +384,13 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
         quizAnswers.forEach((answer, answerIndex) => {
           if (answer.trim()) {
             queue({ kind: "answer", answerIndex }, answer);
+          }
+        });
+      } else if (isTrueFalseStationType(type)) {
+        quizAnswers.forEach((answer, statementIndex) => {
+          const { statement } = splitTrueFalseAnswer(answer);
+          if (statement) {
+            queue({ kind: "trueFalseStatement", statementIndex }, statement);
           }
         });
       } else if (isOpenQuizStationType(type)) {
@@ -419,6 +438,7 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
     const answers = createEmptyQuizAnswers();
     const matchingLeft = new Map<number, string>();
     const matchingRight = new Map<number, string>();
+    const trueFalseStatements = new Map<number, string>();
 
     pendingFields.forEach((field, position) => {
       const translated = translatedTexts[position]?.trim();
@@ -438,6 +458,8 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
         matchingLeft.set(field.pairIndex, translated);
       } else if (field.kind === "matchingRight") {
         matchingRight.set(field.pairIndex, translated);
+      } else if (field.kind === "trueFalseStatement") {
+        trueFalseStatements.set(field.statementIndex, translated);
       }
     });
 
@@ -449,7 +471,14 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
             const right = matchingRight.get(pairIndex) ?? originalPair.right;
             return joinMatchingPairAnswer(left, right);
           })
-        : answers;
+        : isTrueFalseStationType(type)
+          ? quizAnswers.map((originalAnswer, statementIndex) => {
+              const original = splitTrueFalseAnswer(originalAnswer);
+              const statement = trueFalseStatements.get(statementIndex) ?? original.statement;
+              // The flag is carried over untouched — only the wording is new.
+              return joinTrueFalseAnswer(statement, original.isTrue);
+            })
+          : answers;
 
       const translatedQuiz = normalizeStationQuizForType(type, {
         question: translatedQuestion,
@@ -571,9 +600,10 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                      answers: quizAnswers,
                      correctAnswerIndex: quizCorrectAnswerIndex,
                      audioUrl: type === "audio-quiz" ? quizAudioUrl : undefined,
-                     acceptedAnswers: isOpenQuizStationType(type)
-                       ? parseAcceptedAnswersInput(openQuizAcceptedAnswersInput)
-                       : undefined,
+                     acceptedAnswers:
+                       isOpenQuizStationType(type) || isReviewedAnswerStationType(type)
+                         ? parseAcceptedAnswersInput(openQuizAcceptedAnswersInput)
+                         : undefined,
                      caesarShift: type === "caesar-cipher" ? parseCaesarShiftInput(caesarShiftInput) : undefined,
                    })
                  : null;
@@ -825,7 +855,7 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                 if (nextType !== "qr-hunt") {
                   setQrScanCodesInput("");
                 }
-                if (nextType !== "open-quiz") {
+                if (nextType !== "open-quiz" && nextType !== "reviewed-answer") {
                   setOpenQuizAcceptedAnswersInput("");
                 }
                 if (nextType === "memory" && !quizQuestion.trim()) {
@@ -836,6 +866,12 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                 }
                 if (nextType === "matching" && !quizQuestion.trim()) {
                   setQuizQuestion(MATCHING_SYSTEM_STATION_PROMPT);
+                }
+                // This one has no visible question field, so seed the fixed
+                // instruction here — otherwise the quiz payload has no question
+                // and validation rejects the station.
+                if (nextType === "true-false" && !quizQuestion.trim()) {
+                  setQuizQuestion(TRUE_FALSE_SYSTEM_STATION_PROMPT);
                 }
                 if (nextType === "strong-password" && !quizQuestion.trim()) {
                   setQuizQuestion(STRONG_PASSWORD_SYSTEM_STATION_PROMPT);
@@ -848,12 +884,17 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
               }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
             >
-              {(isRiskVariant ? riskStationTypeOptions : stationTypeOptions).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
+              {(isRiskVariant ? riskStationTypeGroups : regularStationTypeGroups).map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            <p className="text-xs text-zinc-500">{stationTypeHints[type]}</p>
           </label>
 
           {supportsChallengeDifficulty(type) ? (
@@ -1353,7 +1394,11 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                 </label>
               ) : null}
 
-              {!isWordPuzzleStationType(type) && !isMatchingStationType(type) && !isOpenQuizStationType(type) ? (
+              {!isWordPuzzleStationType(type) &&
+              !isMatchingStationType(type) &&
+              !isOpenQuizStationType(type) &&
+              !isReviewedAnswerStationType(type) &&
+              !isTrueFalseStationType(type) ? (
                 <div className="space-y-2">
                   {activeQuizAnswers.map((answer, index) => (
                     <label key={index} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
@@ -1383,13 +1428,19 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
               {isOpenQuizStationType(type) ? (
                 <div className="space-y-3">
                   <label className="space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      {isFillBlankStationType(type) ? "Brakujące słowo" : "Poprawna odpowiedź"}
+                    </span>
                     <input
                       value={activeQuizAnswers[0] ?? ""}
                       onChange={(event) =>
                         setActiveQuizField({ answers: [event.target.value, ...activeQuizAnswers.slice(1)] })
                       }
-                      placeholder="Wpisz poprawną odpowiedź"
+                      placeholder={
+                        isFillBlankStationType(type)
+                          ? "Wpisz słowo, które wypełnia lukę"
+                          : "Wpisz poprawną odpowiedź"
+                      }
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
                   </label>
@@ -1406,6 +1457,61 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                     />
                   </label>
                 </div>
+              ) : null}
+              {isTrueFalseStationType(type) ? (
+                <div className="space-y-2">
+                  {activeQuizAnswers.map((answer, index) => {
+                    const { statement, isTrue } = splitTrueFalseAnswer(answer);
+                    const setStatement = (nextStatement: string, nextIsTrue: boolean) =>
+                      setActiveQuizField({
+                        answers: activeQuizAnswers.map((item, answerIndex) =>
+                          answerIndex === index ? joinTrueFalseAnswer(nextStatement, nextIsTrue) : item,
+                        ),
+                      });
+
+                    return (
+                      <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2">
+                        <p className="mb-2 text-[11px] uppercase tracking-wide text-zinc-500">Zdanie {index + 1}</p>
+                        <input
+                          value={statement}
+                          onChange={(event) => setStatement(event.target.value, isTrue)}
+                          placeholder="Treść zdania"
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                        />
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStatement(statement, true)}
+                            className={isTrue ? TRUE_FALSE_TOGGLE_ACTIVE_TRUE_CLASS : TRUE_FALSE_TOGGLE_IDLE_CLASS}
+                          >
+                            Prawda
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStatement(statement, false)}
+                            className={isTrue ? TRUE_FALSE_TOGGLE_IDLE_CLASS : TRUE_FALSE_TOGGLE_ACTIVE_FALSE_CLASS}
+                          >
+                            Fałsz
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {isReviewedAnswerStationType(type) ? (
+                <label className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Klucz odpowiedzi dla Mistrza Gry (opcjonalnie)
+                  </span>
+                  <textarea
+                    rows={3}
+                    value={activeQuizAcceptedAnswersText}
+                    onChange={(event) => setActiveQuizAcceptedAnswersText(event.target.value)}
+                    placeholder={"Jeden punkt na linię, np.\nrozbicie dzielnicowe\nnajazdy krzyżackie\nbrak następcy tronu"}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
+                  />
+                </label>
               ) : null}
               {isMatchingStationType(type) ? (
                 <div className="space-y-2">

@@ -343,13 +343,21 @@ function normalizePointsQrCodesResponse(raw: unknown): PointsQrCodesResponse {
   };
 }
 
+// One item in the Game Master's review queue. Two card types land here: a photo
+// task (kind "photo", carries photoUrl) and a reviewed-answer card (kind
+// "text", carries the question, what the team wrote and the optional key points
+// the admin wrote for themselves). Both are decided with the same two buttons.
 export type PendingPhotoReview = {
+  kind: "photo" | "text";
   teamId: string;
   teamName: string;
   stationId: string;
   stationName: string;
   stationDescription: string;
   photoUrl: string;
+  question: string;
+  answerText: string;
+  answerKeys: string[];
   submittedAt: string;
 };
 
@@ -357,6 +365,9 @@ function normalizePendingPhotoReviews(raw: unknown): PendingPhotoReview[] {
   return asArray(raw).map((value) => {
     const item = asRecord(value);
     return {
+      // Older backends only ever sent photo reviews and carry no discriminator,
+      // so an unrecognised value falls back to "photo".
+      kind: asString(item.kind) === "text" ? "text" : "photo",
       teamId: asString(item.teamId ?? item.team_id),
       teamName: asString(item.teamName ?? item.team_name),
       stationId: asString(item.stationId ?? item.station_id),
@@ -365,6 +376,11 @@ function normalizePendingPhotoReviews(raw: unknown): PendingPhotoReview[] {
         item.stationDescription ?? item.station_description,
       ),
       photoUrl: asString(item.photoUrl ?? item.photo_url),
+      question: asString(item.question),
+      answerText: asString(item.answerText ?? item.answer_text),
+      answerKeys: asArray(item.answerKeys ?? item.answer_keys)
+        .map((key) => asString(key))
+        .filter(Boolean),
       submittedAt: asString(item.submittedAt ?? item.submitted_at),
     };
   });

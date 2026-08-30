@@ -148,6 +148,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [timedStationPointsDecayEnabled, setTimedStationPointsDecayEnabled] = useState(false);
   const [hideTaskList, setHideTaskList] = useState(false);
+  const [riskChatEnabled, setRiskChatEnabled] = useState(true);
+  const [riskChatTeamsCanPost, setRiskChatTeamsCanPost] = useState(true);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
@@ -527,6 +529,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setTeamStationNumberingEnabled(data.realization.teamStationNumberingEnabled);
     setTimedStationPointsDecayEnabled(data.realization.timedStationPointsDecayEnabled);
     setHideTaskList(data.realization.hideTaskList);
+    setRiskChatEnabled(data.realization.riskChatEnabled);
+    setRiskChatTeamsCanPost(data.realization.riskChatTeamsCanPost);
     setStatus(data.realization.status);
     setScheduledAt(toDateTimeLocalValue(data.realization.scheduledAt));
     setScenarioStations(data.scenarioStations);
@@ -640,6 +644,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     teamStationNumberingEnabled,
     timedStationPointsDecayEnabled,
     hideTaskList,
+    riskChatEnabled,
+    riskChatTeamsCanPost,
     status,
     scheduledAt,
     scenarioStations,
@@ -784,6 +790,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled,
                 hideTaskList,
+                riskChatEnabled,
+                riskChatTeamsCanPost,
                 status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -1294,6 +1302,27 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       className="h-4 w-4 accent-amber-400"
                     />
                     Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={riskChatEnabled}
+                      onChange={(event) => setRiskChatEnabled(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Czat w Ryzykantach
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={riskChatTeamsCanPost}
+                      disabled={!riskChatEnabled}
+                      onChange={(event) => setRiskChatTeamsCanPost(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Drużyny mogą pisać — odznacz, by zostawić sam kanał ogłoszeń
                   </label>
                 </FormSection>
 

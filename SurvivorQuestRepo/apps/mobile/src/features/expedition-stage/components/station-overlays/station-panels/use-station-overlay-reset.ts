@@ -56,6 +56,11 @@ type UseStationOverlayResetArgs = {
   setOpenQuizInput: Dispatch<SetStateAction<string>>;
   setOpenQuizAttempts: Dispatch<SetStateAction<number>>;
   setOpenQuizResult: Dispatch<SetStateAction<string | null>>;
+  setTrueFalseSelections: Dispatch<SetStateAction<(boolean | null)[]>>;
+  setTrueFalseResult: Dispatch<SetStateAction<string | null>>;
+  setReviewedAnswerInput: Dispatch<SetStateAction<string>>;
+  setHasSubmittedReviewedAnswer: Dispatch<SetStateAction<boolean>>;
+  setReviewedAnswerError: Dispatch<SetStateAction<string | null>>;
   setBoggleInput: Dispatch<SetStateAction<string>>;
   setBoggleSelectedCellPath: Dispatch<SetStateAction<number[]>>;
   setBoggleAttempts: Dispatch<SetStateAction<number>>;
@@ -139,6 +144,11 @@ export function useStationOverlayReset({
   setOpenQuizInput,
   setOpenQuizAttempts,
   setOpenQuizResult,
+  setTrueFalseSelections,
+  setTrueFalseResult,
+  setReviewedAnswerInput,
+  setHasSubmittedReviewedAnswer,
+  setReviewedAnswerError,
   setBoggleInput,
   setBoggleSelectedCellPath,
   setBoggleAttempts,
@@ -215,6 +225,11 @@ export function useStationOverlayReset({
     setOpenQuizInput("");
     setOpenQuizAttempts(0);
     setOpenQuizResult(null);
+    setTrueFalseSelections([]);
+    setTrueFalseResult(null);
+    setReviewedAnswerInput("");
+    setHasSubmittedReviewedAnswer(false);
+    setReviewedAnswerError(null);
     setBoggleInput("");
     setBoggleSelectedCellPath([]);
     setBoggleAttempts(0);

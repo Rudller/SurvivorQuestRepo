@@ -118,6 +118,74 @@ export async function postRiskQuizAnswer(
   });
 }
 
+// The free-text twin of postRiskQuizPhotoTask: plain JSON, and it reports no
+// verdict — the card stays open as "waiting for the Game Master" until the
+// decision shows up in the deck status poll.
+export async function postRiskQuizReviewedAnswer(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; cardId: string; stationId: string; answerText: string },
+) {
+  return requestMobileApi<{
+    status: "pending";
+    pendingPointsDelta: number;
+    teamPoints: number;
+  }>(apiBaseUrl, "/mobile/risk-quiz/reviewed-answer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type RiskChatAuthorKind = "TEAM" | "GAME_MASTER" | "SYSTEM";
+
+export type RiskChatMessage = {
+  id: string;
+  authorKind: RiskChatAuthorKind;
+  teamId: string | null;
+  authorName: string;
+  content: string;
+  // Event code for server-written messages, null for anything a human said.
+  systemEvent: string | null;
+  teamColor: string | null;
+  teamBadgeImageUrl: string | null;
+  createdAt: string;
+};
+
+export type RiskChatState = {
+  enabled: boolean;
+  canPost: boolean;
+  // The reading team's own id, handed back by the server — the mobile session
+  // never carries one, and it is what tells own lines from everyone else's.
+  currentTeamId: string | null;
+  messages: RiskChatMessage[];
+};
+
+// Poll the room. `afterId` asks for everything newer than the message the
+// tablet already holds; omitting it returns the tail of the history, which is
+// what a freshly opened screen wants.
+export async function fetchRiskQuizChat(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; afterId?: string },
+) {
+  return requestMobileApi<RiskChatState>(apiBaseUrl, "/mobile/risk-quiz/chat", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function postRiskQuizChatMessage(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; content: string },
+) {
+  return requestMobileApi<RiskChatMessage>(
+    apiBaseUrl,
+    "/mobile/risk-quiz/chat/send",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export type RiskPendingDraw = {
   cardId: string;
   categoryName: string;

@@ -18,7 +18,10 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
     stationType === "strong-password" ||
-    stationType === "open-quiz"
+    stationType === "open-quiz" ||
+    stationType === "reviewed-answer" ||
+    stationType === "true-false" ||
+    stationType === "fill-blank"
   );
 }
 
@@ -41,6 +44,11 @@ type UseStationTimeoutOutcomeArgs = {
     matching: boolean;
     strongPassword?: boolean;
     openQuiz?: boolean;
+    // Stays true once the answer is with the Game Master, not just while the
+    // request is in flight: the card is decided elsewhere from that moment on,
+    // so a countdown running out afterwards must not fail it.
+    reviewedAnswer?: boolean;
+    trueFalse?: boolean;
   };
   onQuizFailed?: (stationId: string, reason?: string) => void;
   onTimeExpired?: (stationId: string) => void;
@@ -148,7 +156,14 @@ export function useStationTimeoutOutcome({
     const isMiniSudokuPending = station.stationType === "mini-sudoku" && pendingByType.miniSudoku;
     const isMatchingPending = station.stationType === "matching" && pendingByType.matching;
     const isStrongPasswordPending = station.stationType === "strong-password" && pendingByType.strongPassword;
-    const isOpenQuizPending = station.stationType === "open-quiz" && pendingByType.openQuiz;
+    // fill-blank shares the open-quiz submit flag, so it shares the pending gate.
+    const isOpenQuizPending =
+      (station.stationType === "open-quiz" || station.stationType === "fill-blank") &&
+      pendingByType.openQuiz;
+    const isReviewedAnswerPending =
+      station.stationType === "reviewed-answer" && pendingByType.reviewedAnswer;
+    const isTrueFalsePending =
+      station.stationType === "true-false" && pendingByType.trueFalse;
     if (
       isQuizAnswerPending ||
       isWordlePending ||
@@ -164,6 +179,8 @@ export function useStationTimeoutOutcome({
       isMatchingPending ||
       isStrongPasswordPending ||
       isOpenQuizPending ||
+      isReviewedAnswerPending ||
+      isTrueFalsePending ||
       timeoutPopupShownRef.current
     ) {
       return;

@@ -44,6 +44,9 @@ export function toPrismaStationType(type: StationType) {
   if (type === 'photo-task') return PrismaStationType.PHOTO_TASK;
   if (type === 'qr-hunt') return PrismaStationType.QR_HUNT;
   if (type === 'open-quiz') return PrismaStationType.OPEN_QUIZ;
+  if (type === 'reviewed-answer') return PrismaStationType.REVIEWED_ANSWER;
+  if (type === 'true-false') return PrismaStationType.TRUE_FALSE;
+  if (type === 'fill-blank') return PrismaStationType.FILL_BLANK;
   return PrismaStationType.MATCHING;
 }
 
@@ -66,6 +69,9 @@ export function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.PHOTO_TASK) return 'photo-task';
   if (type === PrismaStationType.QR_HUNT) return 'qr-hunt';
   if (type === PrismaStationType.OPEN_QUIZ) return 'open-quiz';
+  if (type === PrismaStationType.REVIEWED_ANSWER) return 'reviewed-answer';
+  if (type === PrismaStationType.TRUE_FALSE) return 'true-false';
+  if (type === PrismaStationType.FILL_BLANK) return 'fill-blank';
   return 'matching';
 }
 

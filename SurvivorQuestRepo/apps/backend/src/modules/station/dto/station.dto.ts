@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { normalizeTrueFalseAnswer as normalizeTrueFalseAnswerRule } from '../domain/station.rules';
 import type {
   StationDraftInput,
   StationEntity,
@@ -32,6 +33,9 @@ const STATION_TYPES: StationType[] = [
   'photo-task',
   'qr-hunt',
   'open-quiz',
+  'reviewed-answer',
+  'true-false',
+  'fill-blank',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =
@@ -57,12 +61,49 @@ function isQuizDataStationType(type: StationType) {
     type === 'mini-sudoku' ||
     type === 'matching' ||
     type === 'strong-password' ||
-    type === 'open-quiz'
+    type === 'open-quiz' ||
+    type === 'reviewed-answer' ||
+    type === 'true-false' ||
+    type === 'fill-blank'
   );
 }
 
+// fill-blank stores and checks exactly like an open question: one typed answer
+// plus optional accepted variants. Only the card's presentation differs.
 function isOpenQuizStationType(type: StationType) {
-  return type === 'open-quiz';
+  return type === 'open-quiz' || type === 'fill-blank';
+}
+
+function isReviewedAnswerStationType(type: StationType) {
+  return type === 'reviewed-answer';
+}
+
+// Trimmed, de-duplicated, order-preserving list of the reviewer's key points.
+function collectAnswerKeys(value: unknown): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) {
+      continue;
+    }
+
+    seen.add(trimmed.toLowerCase());
+    keys.push(trimmed);
+  }
+
+  return keys;
 }
 
 function isWordPuzzleStationType(type: StationType) {
@@ -84,6 +125,14 @@ function isWordPuzzleStationType(type: StationType) {
 function isMatchingStationType(type: StationType) {
   return type === 'matching';
 }
+
+function isTrueFalseStationType(type: StationType) {
+  return type === 'true-false';
+}
+
+// Re-exported from station.rules so this module keeps the same self-contained
+// shape as normalizeMatchingAnswer beside it.
+const normalizeTrueFalseAnswer = normalizeTrueFalseAnswerRule;
 
 function normalizeMatchingAnswer(value: string) {
   const normalized = value.trim();
@@ -342,6 +391,23 @@ function ensureStationQuiz(
     };
   }
 
+  // Nothing here is ever compared to what a team types — the Game Master judges
+  // that. acceptedAnswers carries the (optional) key points they tick off while
+  // reading, and answers mirrors the word-puzzle shape purely so the row keeps
+  // parsing: parseStationQuizData drops a quiz whose answers contain an empty
+  // string, which would take the question down with it on a card saved with no
+  // key at all.
+  if (isReviewedAnswerStationType(type)) {
+    const answerKeys = collectAnswerKeys(quiz.acceptedAnswers);
+
+    return {
+      question,
+      answers: [question, 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      ...(answerKeys.length > 0 ? { acceptedAnswers: answerKeys } : {}),
+    };
+  }
+
   if (isOpenQuizStationType(type)) {
     const correctAnswer = ensureTrimmedString(
       Array.isArray(quiz.answers) ? quiz.answers[0] : undefined,
@@ -392,7 +458,9 @@ function ensureStationQuiz(
   const answers = quiz.answers.map((answer) => ensureTrimmedString(answer));
   const normalizedAnswers = isMatchingStationType(type)
     ? answers.map((answer) => normalizeMatchingAnswer(answer))
-    : answers;
+    : isTrueFalseStationType(type)
+      ? answers.map((answer) => normalizeTrueFalseAnswer(answer))
+      : answers;
   const correctAnswerIndex = Math.round(Number(quiz.correctAnswerIndex));
   const audioUrl =
     typeof quiz.audioUrl === 'string' && quiz.audioUrl.trim()
@@ -416,7 +484,13 @@ function ensureStationQuiz(
       normalizedAnswers[2],
       normalizedAnswers[3],
     ],
-    correctAnswerIndex: isMatchingStationType(type) ? 0 : correctAnswerIndex,
+    // matching and true-false spread their answer across all four slots, so
+    // there is no single "correct" index to keep — pin it rather than storing
+    // whatever the form happened to send.
+    correctAnswerIndex:
+      isMatchingStationType(type) || isTrueFalseStationType(type)
+        ? 0
+        : correctAnswerIndex,
     audioUrl,
   };
 }

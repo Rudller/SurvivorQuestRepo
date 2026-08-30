@@ -102,6 +102,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeQrHunt: string;
     stationTypeQuiz: string;
     stationTypeOpenQuiz: string;
+    stationTypeTrueFalse: string;
+    stationTypeFillBlank: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
     openScannerFailed: string;
@@ -152,6 +154,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeQrHunt: "Skanowanie QR",
     stationTypeQuiz: "Quiz",
     stationTypeOpenQuiz: "Pytanie otwarte",
+    stationTypeTrueFalse: "Prawda czy fałsz",
+    stationTypeFillBlank: "Uzupełnij lukę",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
     openScannerFailed: "Nie udało się otworzyć skanera.",
@@ -201,6 +205,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeQrHunt: "QR scan hunt",
     stationTypeQuiz: "Quiz",
     stationTypeOpenQuiz: "Open question",
+    stationTypeTrueFalse: "True or false",
+    stationTypeFillBlank: "Fill the gap",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
     openScannerFailed: "Failed to open scanner.",
@@ -250,6 +256,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeQrHunt: "Пошук QR-кодів",
     stationTypeQuiz: "Вікторина",
     stationTypeOpenQuiz: "Відкрите питання",
+    stationTypeTrueFalse: "Правда чи хиба",
+    stationTypeFillBlank: "Заповніть пропуск",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
     openScannerFailed: "Не вдалося відкрити сканер.",
@@ -299,6 +307,8 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeQrHunt: "Поиск QR-кодов",
     stationTypeQuiz: "Викторина",
     stationTypeOpenQuiz: "Открытый вопрос",
+    stationTypeTrueFalse: "Правда или ложь",
+    stationTypeFillBlank: "Заполните пропуск",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
     openScannerFailed: "Не удалось открыть сканер.",
@@ -522,6 +532,17 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
     return { icon: PIN_ICON_SVGS.quiz, color: "#eab308" };
   }
 
+  // No dedicated pin art for the quiz variants — they reuse the quiz icon and
+  // are told apart by colour, matching STATION_TYPE_COLORS in the admin.
+  if (stationType === "true-false") {
+    return { icon: PIN_ICON_SVGS.quiz, color: "#2dd4bf" };
+  }
+
+  if (stationType === "fill-blank") {
+    return { icon: PIN_ICON_SVGS.quiz, color: "#fb7185" };
+  }
+
+
   return stationType === "quiz"
     ? { icon: PIN_ICON_SVGS.quiz, color: "#f59e0b" }
     : DEFAULT_STATION_PIN_CUSTOMIZATION;
@@ -608,6 +629,8 @@ function resolveStationTypeLabel(
     | "stationTypeQrHunt"
     | "stationTypeQuiz"
     | "stationTypeOpenQuiz"
+    | "stationTypeTrueFalse"
+    | "stationTypeFillBlank"
   >,
 ) {
   if (stationType === "time") {
@@ -682,6 +705,15 @@ function resolveStationTypeLabel(
     return text.stationTypeOpenQuiz;
   }
 
+  if (stationType === "true-false") {
+    return text.stationTypeTrueFalse;
+  }
+
+  if (stationType === "fill-blank") {
+    return text.stationTypeFillBlank;
+  }
+
+
   return text.stationTypeQuiz;
 }
 
@@ -701,7 +733,12 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
     stationType === "strong-password" ||
-    stationType === "open-quiz"
+    stationType === "open-quiz" ||
+    stationType === "true-false" ||
+    stationType === "fill-blank"
+    // reviewed-answer is deliberately absent: its verdict lives on RiskAttempt,
+    // which only a Ryzykanci deck has, so it is hidden from regular station
+    // pickers (REGULAR_EXCLUDED_STATION_TYPES on the admin side) too.
   );
 }
 

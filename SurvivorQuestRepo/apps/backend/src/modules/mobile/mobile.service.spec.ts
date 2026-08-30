@@ -2283,3 +2283,156 @@ describe('MobileService admin start', () => {
     expect(prisma.realization.update).not.toHaveBeenCalled();
   });
 });
+
+// The Game Master's review queue is fed by two different shapes: a photo task
+// (a TeamPhoto row) and a reviewed-answer card (the text lives on the
+// RiskAttempt itself, with no photo anywhere). Both have to come out of this one
+// call, because the admin panel polls exactly one list.
+describe('MobileService.listPendingPhotoReviews', () => {
+  const reviewedAnswerStation = {
+    id: 'station-reviewed',
+    name: 'Przyczyny rozbicia',
+    description: 'Odpowiedzcie własnymi słowami.',
+    quizData: {
+      question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
+      answers: ['Wymieńcie trzy przyczyny rozbicia dzielnicowego.', 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      acceptedAnswers: ['testament Krzywoustego', 'brak pryncypatu'],
+    },
+  };
+  const photoStation = {
+    id: 'station-photo',
+    name: 'Zdjęcie drużyny',
+    description: 'Zróbcie zdjęcie.',
+    quizData: null,
+  };
+
+  function createService() {
+    const prisma = {
+      teamPhoto: { findMany: jest.fn().mockResolvedValue([]) },
+      teamTaskProgress: { findMany: jest.fn().mockResolvedValue([]) },
+      team: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'team-1', name: 'Wilki', slotNumber: 1 },
+        ]),
+      },
+      riskPoolStation: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { stationId: reviewedAnswerStation.id, station: reviewedAnswerStation },
+            { stationId: photoStation.id, station: photoStation },
+          ]),
+      },
+      riskAttempt: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const stationService = { findStationsByIds: jest.fn().mockResolvedValue([]) };
+
+    const service = new MobileService(
+      prisma as never,
+      {} as never,
+      stationService as never,
+      {} as never,
+    );
+    jest
+      .spyOn(service as never, 'resolveMobileAdminRealizationOrThrow')
+      .mockResolvedValue({ id: 'realization-1', stationIds: [] } as never);
+
+    return { service, prisma };
+  }
+
+  it('lists a reviewed-answer card with the question and the answer key', async () => {
+    const { service, prisma } = createService();
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      {
+        teamId: 'team-1',
+        stationId: reviewedAnswerStation.id,
+        answerText: 'Testament Krzywoustego i brak pryncypatu.',
+        createdAt: new Date('2026-08-30T10:00:00.000Z'),
+      },
+    ]);
+
+    const reviews = await service.listPendingPhotoReviews('realization-1');
+
+    expect(reviews).toEqual([
+      {
+        kind: 'text',
+        teamId: 'team-1',
+        teamName: 'Wilki',
+        stationId: reviewedAnswerStation.id,
+        stationName: 'Przyczyny rozbicia',
+        stationDescription: 'Odpowiedzcie własnymi słowami.',
+        photoUrl: '',
+        question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
+        answerText: 'Testament Krzywoustego i brak pryncypatu.',
+        answerKeys: ['testament Krzywoustego', 'brak pryncypatu'],
+        submittedAt: '2026-08-30T10:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('does not invent a text item for an undecided photo card', async () => {
+    const { service, prisma } = createService();
+    // A photo card's attempt is undecided too, but its proof is a TeamPhoto row
+    // and answerText stays null — it must not surface as an empty text review.
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      {
+        teamId: 'team-1',
+        stationId: photoStation.id,
+        answerText: null,
+        createdAt: new Date('2026-08-30T10:00:00.000Z'),
+      },
+    ]);
+    prisma.teamPhoto.findMany.mockResolvedValue([
+      {
+        teamId: 'team-1',
+        stationId: photoStation.id,
+        url: 'https://cdn/photo.jpg',
+        createdAt: new Date('2026-08-30T10:05:00.000Z'),
+      },
+    ]);
+
+    const reviews = await service.listPendingPhotoReviews('realization-1');
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toEqual(
+      expect.objectContaining({
+        kind: 'photo',
+        stationId: photoStation.id,
+        photoUrl: 'https://cdn/photo.jpg',
+        answerText: '',
+        answerKeys: [],
+      }),
+    );
+  });
+
+  it('orders the queue oldest first across both kinds', async () => {
+    const { service, prisma } = createService();
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      {
+        teamId: 'team-1',
+        stationId: reviewedAnswerStation.id,
+        answerText: 'Odpowiedź tekstowa',
+        createdAt: new Date('2026-08-30T09:00:00.000Z'),
+      },
+      {
+        teamId: 'team-1',
+        stationId: photoStation.id,
+        answerText: null,
+        createdAt: new Date('2026-08-30T11:00:00.000Z'),
+      },
+    ]);
+    prisma.teamPhoto.findMany.mockResolvedValue([
+      {
+        teamId: 'team-1',
+        stationId: photoStation.id,
+        url: 'https://cdn/photo.jpg',
+        createdAt: new Date('2026-08-30T11:00:00.000Z'),
+      },
+    ]);
+
+    const reviews = await service.listPendingPhotoReviews('realization-1');
+
+    expect(reviews.map((review) => review.kind)).toEqual(['text', 'photo']);
+  });
+});

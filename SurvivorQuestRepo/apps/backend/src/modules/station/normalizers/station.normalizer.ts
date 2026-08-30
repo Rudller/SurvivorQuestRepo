@@ -8,7 +8,11 @@ import {
   QUIZ_ANSWER_COUNT,
   isCompletionCodeRequiredStationType,
   isMatchingStationType,
+  isFillBlankStationType,
   isOpenQuizStationType,
+  isReviewedAnswerStationType,
+  isTrueFalseStationType,
+  normalizeTrueFalseAnswer,
   isQuizDataStationType,
   isWordPuzzleStationType,
   normalizeMatchingAnswer,
@@ -127,7 +131,35 @@ function normalizeStationQuiz(
     };
   }
 
-  if (isOpenQuizStationType(stationType)) {
+  // acceptedAnswers holds the reviewer's optional key points; nothing here is
+  // ever compared to a team's text. answers mirrors the word-puzzle shape so
+  // parseStationQuizData keeps the row (it drops a quiz with empty answers).
+  if (isReviewedAnswerStationType(stationType)) {
+    if (typeof question !== 'string' || !question) {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const seenAnswerKeys = new Set<string>();
+    const answerKeys: string[] = [];
+    for (const rawKey of quiz.acceptedAnswers ?? []) {
+      const trimmed = rawKey?.trim();
+      if (!trimmed || seenAnswerKeys.has(trimmed.toLowerCase())) {
+        continue;
+      }
+
+      seenAnswerKeys.add(trimmed.toLowerCase());
+      answerKeys.push(trimmed);
+    }
+
+    return {
+      question,
+      answers: [question, 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      ...(answerKeys.length > 0 ? { acceptedAnswers: answerKeys } : {}),
+    };
+  }
+
+  if (isOpenQuizStationType(stationType) || isFillBlankStationType(stationType)) {
     const correctAnswer = quiz.answers?.[0]?.trim();
     if (
       typeof question !== 'string' ||
@@ -166,7 +198,9 @@ function normalizeStationQuiz(
   const answers = quiz.answers?.map((answer) => answer.trim());
   const normalizedAnswers = isMatchingStationType(stationType)
     ? answers?.map((answer) => normalizeMatchingAnswer(answer))
-    : answers;
+    : isTrueFalseStationType(stationType)
+      ? answers?.map((answer) => normalizeTrueFalseAnswer(answer))
+      : answers;
   const correctAnswerIndex = Math.round(quiz.correctAnswerIndex);
   const audioUrl =
     typeof quiz.audioUrl === 'string' && quiz.audioUrl.trim()
@@ -194,9 +228,12 @@ function normalizeStationQuiz(
       normalizedAnswers[2],
       normalizedAnswers[3],
     ],
-    correctAnswerIndex: isMatchingStationType(stationType)
-      ? 0
-      : correctAnswerIndex,
+    // matching and true-false spread their answer across all four slots, so
+    // there is no single "correct" index to preserve.
+    correctAnswerIndex:
+      isMatchingStationType(stationType) || isTrueFalseStationType(stationType)
+        ? 0
+        : correctAnswerIndex,
     audioUrl,
   };
 }

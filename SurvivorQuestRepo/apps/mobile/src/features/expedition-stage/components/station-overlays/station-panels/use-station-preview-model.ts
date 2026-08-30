@@ -24,6 +24,7 @@ import {
   resolveCaesarShift,
   resolveCorrectAnswerText,
   resolveMatchingPairs,
+  resolveTrueFalseStatements,
   resolveMastermindConfig,
   resolveMastermindSecret,
   resolveMiniSudokuPuzzle,
@@ -54,7 +55,10 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "mini-sudoku" ||
     stationType === "matching" ||
     stationType === "strong-password" ||
-    stationType === "open-quiz"
+    stationType === "open-quiz" ||
+    stationType === "reviewed-answer" ||
+    stationType === "true-false" ||
+    stationType === "fill-blank"
   );
 }
 
@@ -156,6 +160,8 @@ export type UseStationPreviewModelArgs = {
   miniSudokuValues: string[];
   miniSudokuResult: string | null;
   matchingConnections: Record<string, string>;
+  // One entry per statement; null until the team marks that statement.
+  trueFalseSelections: (boolean | null)[];
   matchingAttempts: number;
   remainingTimeSeconds: number | null;
   elapsedTimeSeconds: number | null;
@@ -174,6 +180,7 @@ export type UseStationPreviewModelArgs = {
   isSubmittingBoggle: boolean;
   isSubmittingMiniSudoku: boolean;
   isSubmittingMatching: boolean;
+  isSubmittingTrueFalse: boolean;
   isSubmittingCode: boolean;
   isCodeInputSuccess: boolean;
   isAudioLoading: boolean;
@@ -220,6 +227,7 @@ export function buildStationPreviewModel({
   miniSudokuValues,
   miniSudokuResult,
   matchingConnections,
+  trueFalseSelections,
   matchingAttempts,
   remainingTimeSeconds,
   elapsedTimeSeconds,
@@ -238,6 +246,7 @@ export function buildStationPreviewModel({
   isSubmittingBoggle,
   isSubmittingMiniSudoku,
   isSubmittingMatching,
+  isSubmittingTrueFalse,
   isSubmittingCode,
   isCodeInputSuccess,
   isAudioLoading,
@@ -246,6 +255,7 @@ export function buildStationPreviewModel({
   text,
 }: UseStationPreviewModelArgs) {
   const isClassicQuizStation = station.stationType === "quiz";
+  const isTrueFalseStation = station.stationType === "true-false";
   const isAudioQuizStation = station.stationType === "audio-quiz";
   const isWordleStation = station.stationType === "wordle";
   const isHangmanStation = station.stationType === "hangman";
@@ -255,7 +265,11 @@ export function buildStationPreviewModel({
   const isMemoryStation = station.stationType === "memory";
   const isSimonStation = station.stationType === "simon";
   const isRebusStation = station.stationType === "rebus";
-  const isOpenQuizStation = station.stationType === "open-quiz";
+  // fill-blank is an open question with a gap drawn in the prompt: identical
+  // storage, identical checking, so it rides the open-quiz path wholesale.
+  const isOpenQuizStation =
+    station.stationType === "open-quiz" || station.stationType === "fill-blank";
+  const isFillBlankStation = station.stationType === "fill-blank";
   const isBoggleStation = station.stationType === "boggle";
   const isMiniSudokuStation = station.stationType === "mini-sudoku";
   const isMatchingStation = station.stationType === "matching";
@@ -507,6 +521,22 @@ export function buildStationPreviewModel({
         )
       : [];
   const miniSudokuHasConflicts = miniSudokuConflictIndexes.length > 0;
+  const trueFalseStatements = isTrueFalseStation
+    ? resolveTrueFalseStatements(station)
+    : [];
+  // All-or-nothing, so the submit button only unlocks once every statement has
+  // been marked — there is no partial credit to give.
+  const trueFalseAllAnswered =
+    trueFalseStatements.length > 0 &&
+    trueFalseStatements.every(
+      (_statement, index) => trueFalseSelections[index] !== null && trueFalseSelections[index] !== undefined,
+    );
+  const trueFalseIsCorrect =
+    trueFalseAllAnswered &&
+    trueFalseStatements.every(
+      (statement, index) => trueFalseSelections[index] === statement.isTrue,
+    );
+
   const matchingPairs = isMatchingStation ? resolveMatchingPairs(station, uiLanguage) : [];
   const matchingAllRightOptions = isMatchingStation
     ? shuffleDeterministic(
@@ -615,6 +645,8 @@ export function buildStationPreviewModel({
   const rebusIsActionDisabled = isInteractiveLocked || isSubmittingRebus || rebusAttemptsLeft <= 0;
   const boggleIsActionDisabled = isInteractiveLocked || isSubmittingBoggle || boggleAttemptsLeft <= 0;
   const miniSudokuIsActionDisabled = isInteractiveLocked || isSubmittingMiniSudoku;
+  const trueFalseIsActionDisabled =
+    isInteractiveLocked || isSubmittingTrueFalse || !trueFalseAllAnswered;
   const hangmanIsGuessDisabled =
     station.status === "done" ||
     station.status === "failed" ||
@@ -627,6 +659,12 @@ export function buildStationPreviewModel({
 
   return {
     isClassicQuizStation,
+    isTrueFalseStation,
+    isFillBlankStation,
+    trueFalseStatements,
+    trueFalseAllAnswered,
+    trueFalseIsCorrect,
+    trueFalseIsActionDisabled,
     isAudioQuizStation,
     isWordleStation,
     isHangmanStation,

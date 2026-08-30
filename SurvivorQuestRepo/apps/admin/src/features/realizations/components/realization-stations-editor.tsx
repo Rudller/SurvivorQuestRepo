@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { stationTypeOptions, type Station } from "@/features/games/types/station";
+import { regularStationTypeGroups, stationTypeOptions, type Station } from "@/features/games/types/station";
 import { useGetStationsQuery, useUploadStationImageMutation } from "@/features/games/api/station.api";
 import { filterStationCatalogItems, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
 import {
@@ -1480,10 +1480,14 @@ export function RealizationStationsEditor({
                         }}
                         className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                       >
-                        {stationTypeOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
+                        {regularStationTypeGroups.map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.options.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </select>
                     </label>

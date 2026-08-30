@@ -18,6 +18,27 @@ import type {
   RiskTeamStatusResponse,
 } from "../types/risk-quiz";
 
+export type RiskChatAuthorKind = "TEAM" | "GAME_MASTER" | "SYSTEM";
+
+export type RiskChatMessage = {
+  id: string;
+  authorKind: RiskChatAuthorKind;
+  teamId: string | null;
+  authorName: string;
+  content: string;
+  systemEvent: string | null;
+  teamColor: string | null;
+  teamBadgeImageUrl: string | null;
+  createdAt: string;
+};
+
+export type RiskChatState = {
+  enabled: boolean;
+  canPost: boolean;
+  currentTeamId: string | null;
+  messages: RiskChatMessage[];
+};
+
 function adminPath(suffix: string) {
   return buildApiPath(`/mobile/risk-quiz/admin${suffix}`);
 }
@@ -198,6 +219,22 @@ export const riskQuizApi = baseApi.injectEndpoints({
       providesTags: ["RiskQuiz"],
     }),
 
+    // --- Chat (one shared room per realization) ---
+    getRiskChat: build.query<RiskChatState, { realizationId: string }>({
+      query: ({ realizationId }) =>
+        adminPath(`/realizations/${encodeURIComponent(realizationId)}/chat`),
+    }),
+    sendRiskChatMessage: build.mutation<
+      RiskChatMessage,
+      { realizationId: string; content: string }
+    >({
+      query: ({ realizationId, content }) => ({
+        url: adminPath(`/realizations/${encodeURIComponent(realizationId)}/chat`),
+        method: "POST",
+        body: { content },
+      }),
+    }),
+
     // --- Cards + board (per realization) ---
     getRiskCards: build.query<RiskCardWithCategory[], { realizationId: string }>({
       query: ({ realizationId }) =>
@@ -317,6 +354,8 @@ export const {
   useAssignCategoryToSchemeMutation,
   useRemoveCategoryFromSchemeMutation,
   useGetRiskSchemeCardCodesQuery,
+  useGetRiskChatQuery,
+  useSendRiskChatMessageMutation,
   useGetRiskCardsQuery,
   useGenerateRiskCardsMutation,
   useGetRiskBoardQuery,

@@ -10,7 +10,7 @@ import { formatRemainingTimeLabel, resolvePuzzleSecret } from "./puzzle-helpers"
 import { resolveStationPreviewPrompt } from "./prompt-text";
 import { PREVIEW_LAYOUT } from "./layout-tokens";
 import { toPuzzleView } from "./types";
-import { OpenQuizPreview, QuizPreview } from "./panels/quiz-preview";
+import { OpenQuizPreview, QuizPreview, ReviewedAnswerPreview, TrueFalsePreview } from "./panels/quiz-preview";
 import { CodePreview } from "./panels/code-preview";
 import { WordlePreview } from "./panels/wordle-preview";
 import { HangmanPreview } from "./panels/hangman-preview";
@@ -42,6 +42,9 @@ const PROMPT_TYPES = new Set<StationType>([
   "quiz",
   "audio-quiz",
   "open-quiz",
+  "reviewed-answer",
+  "true-false",
+  "fill-blank",
   "wordle",
   "hangman",
   "anagram",
@@ -201,6 +204,13 @@ function renderPreviewBody(type: StationType, props: StationPreviewProps) {
     case "audio-quiz":
       return <QuizPreview {...props} isAudioQuiz />;
     case "open-quiz":
+      return <OpenQuizPreview {...props} />;
+    case "reviewed-answer":
+      return <ReviewedAnswerPreview {...props} />;
+    case "true-false":
+      return <TrueFalsePreview {...props} />;
+    // fill-blank is an open question whose prompt carries the gap.
+    case "fill-blank":
       return <OpenQuizPreview {...props} />;
     case "wordle":
       return <WordlePreview {...props} />;

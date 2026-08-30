@@ -1,6 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { RiskQuizService } from './risk-quiz.service';
-import { RISK_CARDS_PER_POOL } from './risk-quiz.constants';
+import { Prisma } from '@prisma/client';
+import {
+  RISK_CARDS_PER_POOL,
+  RISK_CHAT_MESSAGE_MAX_LENGTH,
+  RISK_REVIEWED_ANSWER_MAX_LENGTH,
+} from './risk-quiz.constants';
 
 function createService() {
   const prisma = {
@@ -50,6 +55,12 @@ function createService() {
     },
     station: { findUnique: jest.fn() },
     teamPhoto: { create: jest.fn() },
+    riskChatMessage: {
+      create: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     riskAttempt: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
@@ -63,6 +74,7 @@ function createService() {
       update: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
@@ -269,6 +281,12 @@ describe('RiskQuizService.getDeckStatus', () => {
           station: { name: 'TEST — Zadanie fotograficzne' },
         },
         {
+          stationId: 'station-reviewed',
+          isCorrect: false,
+          pointsDelta: -10,
+          station: { name: 'Odpowiedź opisowa' },
+        },
+        {
           stationId: 'station-photo-2',
           isCorrect: null,
           pointsDelta: 20,
@@ -290,6 +308,14 @@ describe('RiskQuizService.getDeckStatus', () => {
           stationName: 'TEST — Zadanie fotograficzne',
           isCorrect: true,
           pointsDelta: 30,
+        },
+        // Reviewed-answer cards ride the same list — it is what tells a tablet
+        // about a verdict made on the Game Master's screen.
+        {
+          stationId: 'station-reviewed',
+          stationName: 'Odpowiedź opisowa',
+          isCorrect: false,
+          pointsDelta: -10,
         },
         {
           stationId: 'station-photo-2',
@@ -787,7 +813,16 @@ describe('RiskQuizService.assignStationToPool', () => {
     });
   });
 
-  it.each(['MINI_SUDOKU', 'MASTERMIND', 'BOGGLE', 'MEMORY', 'SIMON', 'QR_HUNT'])(
+  it.each([
+    'MINI_SUDOKU',
+    'MASTERMIND',
+    'BOGGLE',
+    'MEMORY',
+    'SIMON',
+    'QR_HUNT',
+    'REBUS',
+    'STRONG_PASSWORD',
+  ])(
     'rejects %s, a type Ryzykanci does not carry',
     async (type) => {
       const { service, prisma } = createService();
@@ -1231,6 +1266,346 @@ describe('RiskQuizService.submitPhotoTask', () => {
     });
 
     expect(result.streak).toBe(3);
+  });
+});
+
+describe('RiskQuizService chat', () => {
+  const chatRealization = {
+    ...realization,
+    status: 'IN_PROGRESS',
+    // Relative to now on purpose: a fixed date would quietly turn into a
+    // finished game once the wall clock passed it, and "the game ended" short-
+    // circuits the leader logic these tests are about.
+    startedAt: new Date(Date.now() - 10 * 60 * 1000),
+    durationMinutes: 120,
+    riskChatEnabled: true,
+    riskChatTeamsCanPost: true,
+  };
+
+  function arrangeChat(
+    prisma: ReturnType<typeof createService>['prisma'],
+    overrides: Partial<typeof chatRealization> = {},
+  ) {
+    const current = { ...chatRealization, ...overrides };
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: current,
+    });
+    prisma.realization.findUnique.mockResolvedValue(current);
+    return current;
+  }
+
+  it('refuses a team message when teams are limited to reading', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma, { riskChatTeamsCanPost: false });
+
+    await expect(
+      service.postTeamChatMessage({ sessionToken: 'token', content: 'Cześć' }),
+    ).rejects.toThrow('Teams cannot post in this chat');
+    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('still lets the Game Master post into an announcements-only room', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma, { riskChatTeamsCanPost: false });
+    prisma.riskChatMessage.create.mockResolvedValue({
+      id: 'msg-1',
+      authorKind: 'GAME_MASTER',
+      teamId: null,
+      authorName: 'Mistrz Gry',
+      content: 'Za pięć minut przerwa.',
+      systemEvent: null,
+      createdAt: new Date('2026-08-30T10:05:00.000Z'),
+    });
+
+    const result = await service.postGameMasterChatMessage({
+      realizationId: realization.id,
+      content: '  Za pięć minut przerwa.  ',
+    });
+
+    expect(result.authorName).toBe('Mistrz Gry');
+    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          authorKind: 'GAME_MASTER',
+          content: 'Za pięć minut przerwa.',
+        }),
+      }),
+    );
+  });
+
+  it('hands the sender its own team colour back', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma);
+    prisma.riskChatMessage.create.mockResolvedValue({
+      id: 'msg-2',
+      authorKind: 'TEAM',
+      teamId: team.id,
+      authorName: 'Wilki',
+      content: 'Cześć',
+      systemEvent: null,
+      createdAt: new Date('2026-08-30T10:06:00.000Z'),
+      team: { color: 'amber', badgeImageUrl: null },
+    });
+
+    const result = await service.postTeamChatMessage({
+      sessionToken: 'token',
+      content: 'Cześć',
+    });
+
+    // The tablet renders its own message straight from this response and the
+    // poll never re-fetches it, so a colour missing here would never arrive.
+    expect(result.teamColor).toBe('amber');
+  });
+
+  it('refuses an empty or over-long message', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma);
+
+    await expect(
+      service.postTeamChatMessage({ sessionToken: 'token', content: '   ' }),
+    ).rejects.toThrow('Message is empty');
+    await expect(
+      service.postTeamChatMessage({
+        sessionToken: 'token',
+        content: 'x'.repeat(RISK_CHAT_MESSAGE_MAX_LENGTH + 1),
+      }),
+    ).rejects.toThrow('Message is too long');
+    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('reports the room as disabled without touching the history', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma, { riskChatEnabled: false });
+
+    const result = await service.listChatMessages({ sessionToken: 'token' });
+
+    expect(result).toEqual({
+      enabled: false,
+      canPost: false,
+      currentTeamId: team.id,
+      messages: [],
+    });
+    expect(prisma.riskChatMessage.findMany).not.toHaveBeenCalled();
+  });
+
+  it('announces the leader once and stays quiet while it does not change', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma);
+    prisma.team.findFirst.mockResolvedValue({
+      id: 'team-2',
+      name: 'Wilki',
+      slotNumber: 2,
+      points: 40,
+    });
+    // No lead-change on record yet, so the first read announces...
+    prisma.riskChatMessage.findFirst.mockResolvedValueOnce(null);
+    // ...and the second read sees the same team already holding the lead.
+    prisma.riskChatMessage.findFirst.mockResolvedValueOnce({ teamId: 'team-2' });
+
+    await service.listChatMessages({ sessionToken: 'token' });
+    await service.listChatMessages({ sessionToken: 'token' });
+
+    const leadCalls = prisma.riskChatMessage.create.mock.calls.filter(
+      (call) => call[0].data.systemEvent === 'lead-change',
+    );
+    expect(leadCalls).toHaveLength(1);
+    expect(leadCalls[0][0].data).toEqual(
+      expect.objectContaining({
+        teamId: 'team-2',
+        dedupeKey: 'lead-change:team-2:40',
+        content: 'Wilki wychodzi na prowadzenie (40 pkt).',
+      }),
+    );
+  });
+
+  it('never announces a leader who has not scored yet', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma);
+    prisma.team.findFirst.mockResolvedValue({
+      id: 'team-1',
+      name: 'Lisy',
+      slotNumber: 1,
+      points: 0,
+    });
+
+    await service.listChatMessages({ sessionToken: 'token' });
+
+    const leadCalls = prisma.riskChatMessage.create.mock.calls.filter(
+      (call) => call[0].data.systemEvent === 'lead-change',
+    );
+    expect(leadCalls).toHaveLength(0);
+  });
+
+  it('swallows the unique violation two tablets racing on the same event cause', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma);
+    prisma.team.findFirst.mockResolvedValue(null);
+    // The other tablet won the race and already inserted game-start.
+    const conflict = new Prisma.PrismaClientKnownRequestError('duplicate', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    prisma.riskChatMessage.create.mockRejectedValue(conflict);
+
+    await expect(
+      service.listChatMessages({ sessionToken: 'token' }),
+    ).resolves.toEqual(
+      expect.objectContaining({ enabled: true, canPost: true }),
+    );
+  });
+
+  it('announces the end of the game once the clock has run out', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma, {
+      startedAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      durationMinutes: 60,
+    });
+    prisma.team.findFirst.mockResolvedValue(null);
+
+    await service.listChatMessages({ sessionToken: 'token' });
+
+    const events = prisma.riskChatMessage.create.mock.calls.map(
+      (call) => call[0].data.systemEvent,
+    );
+    expect(events).toContain('game-end');
+    // A finished game has no leader to crown any more.
+    expect(events).not.toContain('lead-change');
+  });
+});
+
+describe('RiskQuizService.submitReviewedAnswer', () => {
+  const reviewedAnswerStation = {
+    ...quizStation,
+    id: 'station-reviewed',
+    type: 'REVIEWED_ANSWER',
+    quizData: {
+      question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
+      answers: ['Wymieńcie trzy przyczyny rozbicia dzielnicowego.', 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      acceptedAnswers: ['testament Krzywoustego', 'brak zasady pryncypatu'],
+    },
+  };
+
+  function arrangeReviewedAnswerSubmission(
+    prisma: ReturnType<typeof createService>['prisma'],
+  ) {
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue({ ...card, difficulty: 'MEDIUM' });
+    prisma.station.findUnique.mockResolvedValue(reviewedAnswerStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+  }
+
+  it('stores the text and an undecided attempt without paying the team yet', async () => {
+    const { service, prisma } = createService();
+    arrangeReviewedAnswerSubmission(prisma);
+    // Two correct answers so far: the frozen award must carry that streak.
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      { isCorrect: true },
+      { isCorrect: true },
+    ]);
+
+    const result = await service.submitReviewedAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-reviewed',
+      answerText: '  Testament Krzywoustego i brak pryncypatu.  ',
+    });
+
+    expect(result.status).toBe('pending');
+    // MEDIUM pays 20, streak of 3 multiplies by 1.5.
+    expect(result.pendingPointsDelta).toBe(30);
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          isCorrect: null,
+          pointsDelta: 30,
+          answerText: 'Testament Krzywoustego i brak pryncypatu.',
+        }),
+      }),
+    );
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a station that does not take a written answer', async () => {
+    const { service, prisma } = createService();
+    arrangeReviewedAnswerSubmission(prisma);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+
+    await expect(
+      service.submitReviewedAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-1',
+        answerText: 'cokolwiek',
+      }),
+    ).rejects.toThrow('This station does not accept written answers');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a blank answer', async () => {
+    const { service, prisma } = createService();
+    arrangeReviewedAnswerSubmission(prisma);
+
+    await expect(
+      service.submitReviewedAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-reviewed',
+        answerText: '   ',
+      }),
+    ).rejects.toThrow('Answer is empty');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an answer past the length ceiling', async () => {
+    const { service, prisma } = createService();
+    arrangeReviewedAnswerSubmission(prisma);
+
+    await expect(
+      service.submitReviewedAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-reviewed',
+        answerText: 'x'.repeat(RISK_REVIEWED_ANSWER_MAX_LENGTH + 1),
+      }),
+    ).rejects.toThrow('Answer is too long');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a second answer for a station already attempted', async () => {
+    const { service, prisma } = createService();
+    arrangeReviewedAnswerSubmission(prisma);
+    prisma.riskAttempt.findFirst.mockResolvedValue({ id: 'existing' });
+
+    await expect(
+      service.submitReviewedAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-reviewed',
+        answerText: 'Druga próba',
+      }),
+    ).rejects.toThrow('Station already attempted');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('never sends the answer key to the tablet', () => {
+    const { service } = createService();
+
+    const payload = (
+      service as unknown as {
+        toRiskStationPayload: (station: typeof reviewedAnswerStation) => {
+          quiz?: { question?: string; answers?: string[]; acceptedAnswers?: string[] };
+        };
+      }
+    ).toRiskStationPayload(reviewedAnswerStation);
+
+    expect(payload.quiz).toEqual({
+      question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
+    });
+    expect(payload.quiz?.answers).toBeUndefined();
+    expect(payload.quiz?.acceptedAnswers).toBeUndefined();
   });
 });
 

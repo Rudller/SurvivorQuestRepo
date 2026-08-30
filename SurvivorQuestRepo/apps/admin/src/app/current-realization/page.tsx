@@ -23,6 +23,7 @@ import type { CurrentRealizationOverview } from "@/features/current-realization/
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
 import { CurrentRealizationRiskQuizPanel } from "@/features/current-realization/components/current-realization-risk-quiz-panel";
+import { CurrentRealizationRiskChatPanel } from "@/features/current-realization/components/current-realization-risk-chat-panel";
 import { useGetRiskTeamStatusQuery, useResetRiskTeamAttemptsMutation } from "@/features/risk-quiz/api/risk-quiz.api";
 import { AdminShell } from "@/shared/components/admin-shell";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
@@ -682,6 +683,14 @@ export default function CurrentRealizationPage() {
               canManageTasks={canManageCurrentRealization}
               isRiskQuizRealization={isRiskQuizRealization}
             />
+
+            {/* Sits with the review queue rather than at the foot of the page: both
+                are things the Game Master watches and acts on mid-game, and the
+                chat is useless if it needs a scroll past the map and the event
+                log to reach. */}
+            {isRiskQuizRealization ? (
+              <CurrentRealizationRiskChatPanel realizationId={overview.realization.id} />
+            ) : null}
 
             <CurrentRealizationTeamsMap
               realization={overview.realization}

@@ -116,6 +116,8 @@ export type CreateRealizationDto = {
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  riskChatEnabled?: boolean;
+  riskChatTeamsCanPost?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
   pointsQrCodes?: unknown;
@@ -384,6 +386,11 @@ export function validateRealizationPayload(
     logoUrl: payload.logoUrl?.trim() || undefined,
     hideMap: payload.hideMap === true,
     hideTaskList: payload.hideTaskList === true,
+    // Both default to on when the field is absent, unlike hideTaskList above —
+    // an older client that does not send them must not silently switch the chat
+    // off for a realization that had it.
+    riskChatEnabled: payload.riskChatEnabled !== false,
+    riskChatTeamsCanPost: payload.riskChatTeamsCanPost !== false,
     mapImageUrl: payload.mapImageUrl?.trim() || undefined,
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,

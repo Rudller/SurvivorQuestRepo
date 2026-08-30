@@ -111,6 +111,8 @@ type RealizationDto = {
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  riskChatEnabled?: boolean;
+  riskChatTeamsCanPost?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -150,6 +152,8 @@ type CreateRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -195,6 +199,8 @@ type UpdateRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  riskChatEnabled: boolean;
+  riskChatTeamsCanPost: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -426,6 +432,10 @@ function normalizeRealization(dto: RealizationDto): Realization {
         ? dto.timedStationPointsDecayEnabled
         : false,
     hideTaskList: dto.hideTaskList === true,
+    // Both default to on when absent, matching the backend DTO — a response
+    // from an older server must not read as "chat off".
+    riskChatEnabled: dto.riskChatEnabled !== false,
+    riskChatTeamsCanPost: dto.riskChatTeamsCanPost !== false,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,

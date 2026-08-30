@@ -12,6 +12,7 @@ import { MiniSudokuKeypadSection } from "./mini-sudoku-station-panel";
 import { QuizAudioPanel } from "./quiz-audio-station-panel";
 import { RebusStationPanel } from "./rebus-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
+import { TrueFalseStationPanel } from "./true-false-station-panel";
 import { createStation } from "./station-smoke.fixtures";
 import { buildStationPreviewModel, type UseStationPreviewModelArgs } from "./use-station-preview-model";
 import { WordleInteractionPanel } from "./wordle-station-panel";
@@ -78,6 +79,8 @@ function buildPreviewModel(overrides: Partial<UseStationPreviewModelArgs> & { st
     miniSudokuResult: null,
     matchingConnections: {},
     matchingAttempts: 0,
+    trueFalseSelections: [],
+    isSubmittingTrueFalse: false,
     remainingTimeSeconds: null,
     elapsedTimeSeconds: null,
     finalTenSecondsProgress: 0,
@@ -454,6 +457,83 @@ describe("station panel interactivity — fresh attempt state", () => {
 
     await fireEvent.press(getAllByText(firstLetter)[0]);
     expect(onPressBoardCell).toHaveBeenCalledWith(0);
+  });
+
+  it("true-false: statement buttons are tappable while the submit button is still disabled", async () => {
+    const model = buildPreviewModel({
+      station: createStation({
+        stationType: "true-false",
+        quizQuestion: "Oznaczcie każde zdanie jako prawdziwe lub fałszywe.",
+        quizAnswers: ["Zdanie A :: T", "Zdanie B :: F", "Zdanie C :: T", "Zdanie D :: F"],
+      }),
+      // Nothing marked yet, so the real gate must hold the submit shut while
+      // still leaving every statement tappable.
+      trueFalseSelections: [],
+    });
+    expect(model.trueFalseStatements).toHaveLength(4);
+    expect(model.trueFalseAllAnswered).toBe(false);
+    expect(model.trueFalseIsActionDisabled).toBe(true);
+
+    const onSelect = jest.fn();
+    const { getAllByText } = await render(
+      <TrueFalseStationPanel
+        statements={model.trueFalseStatements}
+        selections={[]}
+        result={null}
+        isActionDisabled={model.trueFalseIsActionDisabled}
+        isInteractiveLocked={false}
+        isSubmitting={false}
+        onSelect={onSelect}
+        onSubmit={jest.fn()}
+      />,
+    );
+
+    await fireEvent.press(getAllByText("Prawda")[0]);
+    expect(onSelect).toHaveBeenCalledWith(0, true);
+  });
+
+  it("true-false: the real gate opens only once every statement is marked", () => {
+    const station = createStation({
+      stationType: "true-false",
+      quizQuestion: "Oznaczcie każde zdanie jako prawdziwe lub fałszywe.",
+      quizAnswers: ["Zdanie A :: T", "Zdanie B :: F", "Zdanie C :: T", "Zdanie D :: F"],
+    });
+
+    const halfMarked = buildPreviewModel({
+      station,
+      trueFalseSelections: [true, false, null, null],
+    });
+    expect(halfMarked.trueFalseAllAnswered).toBe(false);
+    expect(halfMarked.trueFalseIsActionDisabled).toBe(true);
+
+    const allMarkedWrong = buildPreviewModel({
+      station,
+      trueFalseSelections: [true, false, true, true],
+    });
+    expect(allMarkedWrong.trueFalseAllAnswered).toBe(true);
+    expect(allMarkedWrong.trueFalseIsActionDisabled).toBe(false);
+    expect(allMarkedWrong.trueFalseIsCorrect).toBe(false);
+
+    const allMarkedRight = buildPreviewModel({
+      station,
+      trueFalseSelections: [true, false, true, false],
+    });
+    expect(allMarkedRight.trueFalseIsCorrect).toBe(true);
+  });
+
+  it("fill-blank runs the open-quiz path, sharing its answer checking", () => {
+    const model = buildPreviewModel({
+      station: createStation({
+        stationType: "fill-blank",
+        quizQuestion: "Ta gra nazywa się ___.",
+        quizAnswers: ["SurvivorQuest", "A", "B", "C"],
+        quizCorrectAnswerIndex: 0,
+      }),
+    });
+
+    expect(model.isOpenQuizStation).toBe(true);
+    expect(model.isFillBlankStation).toBe(true);
+    expect(model.openQuizAnswer).toBe("SURVIVORQUEST");
   });
 
   it("quiz/audio-quiz: answer options are tappable before an answer is picked", async () => {
