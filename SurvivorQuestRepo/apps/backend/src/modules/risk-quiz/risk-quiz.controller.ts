@@ -7,17 +7,26 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { RiskDifficulty } from '@prisma/client';
+import type { Express } from 'express';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
+  MOBILE_PHOTO_UPLOAD_THROTTLE,
   MOBILE_QR_RESOLVE_THROTTLE,
   RISK_QUIZ_PENDING_DRAW_THROTTLE,
 } from '../../common/security/throttle.constants';
+import {
+  assertValidTeamPhotoFile,
+  MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES,
+} from '../mobile/domain/team-photo-upload.helpers';
 import { RiskQuizService } from './risk-quiz.service';
 
 type Payload = Record<string, unknown>;
@@ -108,6 +117,27 @@ export class RiskQuizController {
       selectedIndex: optionalFiniteNumber(payload, 'selectedIndex'),
       completed: optionalBoolean(payload, 'completed'),
       completionCode: optionalString(payload, 'completionCode'),
+    });
+  }
+
+  @Post('photo')
+  @Throttle(MOBILE_PHOTO_UPLOAD_THROTTLE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES },
+    }),
+  )
+  async submitPhotoTask(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { sessionToken?: string; cardId?: string; stationId?: string },
+  ) {
+    assertValidTeamPhotoFile(file);
+    const payload = requirePayload(body);
+    return this.riskQuizService.submitPhotoTask({
+      sessionToken: requireString(payload, 'sessionToken'),
+      cardId: requireString(payload, 'cardId'),
+      stationId: requireString(payload, 'stationId'),
+      file: file!,
     });
   }
 

@@ -49,6 +49,7 @@ function createService() {
       create: jest.fn(),
     },
     station: { findUnique: jest.fn() },
+    teamPhoto: { create: jest.fn() },
     riskAttempt: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
@@ -70,8 +71,18 @@ function createService() {
     cloneStationsForScenario: jest.fn().mockResolvedValue([]),
   };
 
-  const service = new RiskQuizService(prisma as never, stationService as never);
-  return { service, prisma, stationService };
+  const stationStorageService = {
+    uploadTeamTaskPhoto: jest
+      .fn()
+      .mockResolvedValue({ key: 'photos/1.jpg', url: 'https://cdn/photos/1.jpg' }),
+  };
+
+  const service = new RiskQuizService(
+    prisma as never,
+    stationService as never,
+    stationStorageService as never,
+  );
+  return { service, prisma, stationService, stationStorageService };
 }
 
 const team = { id: 'team-1', points: 0 };
@@ -221,7 +232,11 @@ describe('RiskQuizService.getDeckStatus', () => {
 
     const result = await service.getDeckStatus('token');
 
-    expect(result).toEqual({ categoryCount: 0, remainingCards: 0 });
+    expect(result).toEqual({
+      categoryCount: 0,
+      remainingCards: 0,
+      teamPoints: team.points,
+    });
     expect(prisma.riskSchemeCategory.findMany).not.toHaveBeenCalled();
   });
 
@@ -242,14 +257,49 @@ describe('RiskQuizService.getDeckStatus', () => {
       { stationId: 'station-4' },
       { stationId: 'station-5' },
     ]);
-    prisma.riskAttempt.findMany.mockResolvedValue([
-      { stationId: 'station-1' },
-      { stationId: 'station-2' },
-    ]);
+    prisma.riskAttempt.findMany
+      // Attempted stations for the remaining-card count...
+      .mockResolvedValueOnce([{ stationId: 'station-1' }, { stationId: 'station-2' }])
+      // ...then the team's photo cards and their verdicts.
+      .mockResolvedValueOnce([
+        {
+          stationId: 'station-photo',
+          isCorrect: true,
+          pointsDelta: 30,
+          station: { name: 'TEST — Zadanie fotograficzne' },
+        },
+        {
+          stationId: 'station-photo-2',
+          isCorrect: null,
+          pointsDelta: 20,
+          station: { name: 'Druga fotka' },
+        },
+      ]);
 
     const result = await service.getDeckStatus('token');
 
-    expect(result).toEqual({ categoryCount: 2, remainingCards: 3 });
+    // teamPoints rides along so the idle scan screen can notice a score the
+    // Game Master changed by deciding a photo card.
+    expect(result).toEqual({
+      categoryCount: 2,
+      remainingCards: 3,
+      teamPoints: team.points,
+      photoReviews: [
+        {
+          stationId: 'station-photo',
+          stationName: 'TEST — Zadanie fotograficzne',
+          isCorrect: true,
+          pointsDelta: 30,
+        },
+        {
+          stationId: 'station-photo-2',
+          stationName: 'Druga fotka',
+          isCorrect: null,
+          // Frozen, not paid — reported as zero until the verdict lands.
+          pointsDelta: 0,
+        },
+      ],
+    });
   });
 });
 
@@ -1078,6 +1128,179 @@ describe('RiskQuizService.submitAnswer', () => {
       }),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RiskQuizService.submitPhotoTask', () => {
+  const photoStation = {
+    ...quizStation,
+    id: 'station-photo',
+    type: 'PHOTO_TASK',
+    quizData: null,
+  };
+  const photoFile = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
+
+  function arrangePhotoSubmission(prisma: ReturnType<typeof createService>['prisma']) {
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue({ ...card, difficulty: 'MEDIUM' });
+    prisma.station.findUnique.mockResolvedValue(photoStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+  }
+
+  it('stores the photo and an undecided attempt without paying the team yet', async () => {
+    const { service, prisma, stationStorageService } = createService();
+    arrangePhotoSubmission(prisma);
+    // Two correct answers so far: the frozen award must carry that streak.
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      { isCorrect: true },
+      { isCorrect: true },
+    ]);
+
+    const result = await service.submitPhotoTask({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-photo',
+      file: photoFile as never,
+    });
+
+    expect(stationStorageService.uploadTeamTaskPhoto).toHaveBeenCalled();
+    expect(result.status).toBe('pending');
+    // MEDIUM pays 20, streak of 3 multiplies by 1.5.
+    expect(result.pendingPointsDelta).toBe(30);
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ isCorrect: null, pointsDelta: 30 }),
+      }),
+    );
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a station that is not a photo task', async () => {
+    const { service, prisma } = createService();
+    arrangePhotoSubmission(prisma);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+
+    await expect(
+      service.submitPhotoTask({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-1',
+        file: photoFile as never,
+      }),
+    ).rejects.toThrow('This station does not accept photo submissions');
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a second photo for a station already attempted', async () => {
+    const { service, prisma, stationStorageService } = createService();
+    arrangePhotoSubmission(prisma);
+    prisma.riskAttempt.findFirst.mockResolvedValue({ id: 'existing' });
+
+    await expect(
+      service.submitPhotoTask({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-photo',
+        file: photoFile as never,
+      }),
+    ).rejects.toThrow('Station already attempted');
+    expect(stationStorageService.uploadTeamTaskPhoto).not.toHaveBeenCalled();
+  });
+
+  it('leaves the streak alone while the photo is undecided', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    // Newest first: an undecided photo card sits between two correct answers.
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      { isCorrect: null },
+      { isCorrect: true },
+      { isCorrect: true },
+    ]);
+    prisma.team.update.mockResolvedValue({ ...team, points: 10 });
+
+    const result = await service.submitAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      selectedIndex: 1,
+    });
+
+    expect(result.streak).toBe(3);
+  });
+});
+
+describe('RiskQuizService photo review decisions', () => {
+  function arrangeDecision(
+    prisma: ReturnType<typeof createService>['prisma'],
+    attempt: { id: string; pointsDelta: number; isCorrect: boolean | null } | null,
+  ) {
+    prisma.realization.findUnique.mockResolvedValue(realization);
+    prisma.team.findUnique.mockResolvedValue({ ...team, realizationId: realization.id });
+    prisma.riskPoolStation.findFirst.mockResolvedValue({
+      categoryId: 'category-1',
+      difficulty: 'MEDIUM',
+    });
+    prisma.riskAttempt.findFirst.mockResolvedValue(attempt);
+    prisma.team.update.mockResolvedValue({ ...team, points: 30 });
+  }
+
+  it('pays the award frozen at submission when the Game Master approves', async () => {
+    const { service, prisma } = createService();
+    // 30 = MEDIUM's 20 with the x1.5 the team had going when it sent the photo.
+    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: 30, isCorrect: null });
+
+    const result = await service.adminCompleteCard(
+      realization.id,
+      team.id,
+      'station-photo',
+    );
+
+    expect(result.pointsAwarded).toBe(30);
+    expect(prisma.riskAttempt.update).toHaveBeenCalledWith({
+      where: { id: 'attempt-1' },
+      data: { isCorrect: true, pointsDelta: 30 },
+    });
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: team.id },
+      // Nothing was paid out while it was pending, so the whole award lands now.
+      data: { points: { increment: 30 } },
+    });
+  });
+
+  it('charges the flat penalty once when the Game Master rejects', async () => {
+    const { service, prisma } = createService();
+    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: 30, isCorrect: null });
+
+    const result = await service.adminFailCard(
+      realization.id,
+      team.id,
+      'station-photo',
+    );
+
+    expect(result.pointsAwarded).toBe(-10);
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: team.id },
+      // -10, not -40: the frozen 30 was never on the team's account.
+      data: { points: { increment: -10 } },
+    });
+  });
+
+  it('still settles a decided attempt by the difference', async () => {
+    const { service, prisma } = createService();
+    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: -10, isCorrect: false });
+
+    await service.adminCompleteCard(realization.id, team.id, 'station-photo');
+
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: team.id },
+      // Flat 20 for MEDIUM, minus the -10 already taken.
+      data: { points: { increment: 30 } },
+    });
   });
 });
 

@@ -18,6 +18,7 @@ import {
 import {
   fetchMobileSessionState,
   getMobileApiErrorStatusCode,
+  postRiskQuizPhotoTask,
 } from "../../expedition-stage/api/mobile-session.api";
 import {
   fetchRiskQuizDeckStatus,
@@ -30,6 +31,7 @@ import {
   type RiskScanResult,
   type RiskTestMenuEntry,
 } from "../api/risk-quiz.api";
+import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
@@ -213,6 +215,17 @@ export function RiskQuizScreen({
     shouldShowRiskQuizIntro(session.realization?.status),
   );
   const [teamPoints, setTeamPoints] = useState(0);
+  // Verdict on a photo card the team sent earlier, waiting to be shown. It is
+  // only ever raised between cards (see refreshDeckStatus): a decision landing
+  // mid-task must not cover the task the team is playing right now.
+  const [photoVerdictNotice, setPhotoVerdictNotice] = useState<{
+    stationName: string;
+    isCorrect: boolean;
+    pointsDelta: number;
+  } | null>(null);
+  // Station ids whose verdict has already been shown (or was already decided
+  // when this screen opened, so an old decision never pops up on a fresh app).
+  const announcedPhotoVerdictsRef = useRef<Set<string> | null>(null);
   const [streak, setStreak] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
   const [deckStatus, setDeckStatus] = useState<RiskDeckStatus | null>(null);
@@ -318,16 +331,46 @@ export function RiskQuizScreen({
     };
   }, [showIntro, apiBaseUrl, sessionToken, session.selectedLanguage, onSessionInvalid]);
 
-  async function refreshDeckStatus() {
+  // useCallback so the idle poll below can depend on it without restarting the
+  // interval on every render.
+  const refreshDeckStatus = useCallback(async () => {
     try {
       const status = await fetchRiskQuizDeckStatus(apiBaseUrl, { sessionToken });
       setDeckStatus(status);
+      // Picks up a score the team did not earn on this device — a photo card
+      // the Game Master has just approved or rejected.
+      if (typeof status.teamPoints === "number") {
+        setTeamPoints(status.teamPoints);
+      }
+
+      const decided = (status.photoReviews ?? []).filter(
+        (review) => review.isCorrect !== null,
+      );
+      if (announcedPhotoVerdictsRef.current === null) {
+        // First read of the session: everything already decided is history.
+        announcedPhotoVerdictsRef.current = new Set(
+          decided.map((review) => review.stationId),
+        );
+        return;
+      }
+
+      const fresh = decided.find(
+        (review) => !announcedPhotoVerdictsRef.current?.has(review.stationId),
+      );
+      if (fresh) {
+        announcedPhotoVerdictsRef.current.add(fresh.stationId);
+        setPhotoVerdictNotice({
+          stationName: fresh.stationName,
+          isCorrect: fresh.isCorrect === true,
+          pointsDelta: fresh.pointsDelta,
+        });
+      }
     } catch (error) {
       if (getMobileApiErrorStatusCode(error) === 401) {
         onSessionInvalid();
       }
     }
-  }
+  }, [apiBaseUrl, sessionToken, onSessionInvalid]);
 
   useEffect(() => {
     if (showIntro) {
@@ -394,7 +437,13 @@ export function RiskQuizScreen({
       pollInFlight = true;
       try {
         const result = await fetchRiskQuizPendingDraw(apiBaseUrl, { sessionToken });
-        if (cancelled || !result.draw || activeDraw) {
+        if (cancelled || activeDraw) {
+          return;
+        }
+        if (!result.draw) {
+          // Idle tick: no card waiting, so use the round trip to refresh the
+          // deck and the score instead of letting the screen go stale.
+          void refreshDeckStatus();
           return;
         }
         openDrawnCard({
@@ -423,7 +472,17 @@ export function RiskQuizScreen({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [showIntro, activeDraw, isTestMenuOpen, isScannerVisible, apiBaseUrl, sessionToken, onSessionInvalid, openDrawnCard]);
+  }, [
+    showIntro,
+    activeDraw,
+    isTestMenuOpen,
+    isScannerVisible,
+    apiBaseUrl,
+    sessionToken,
+    onSessionInvalid,
+    openDrawnCard,
+    refreshDeckStatus,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -714,6 +773,38 @@ export function RiskQuizScreen({
   // scored server-side as a plain "completed = correct" self-report (see
   // resolveOutcome() in risk-quiz.service.ts), same as the "Ukończone" /
   // "Poddaję się" buttons this replaces for those types.
+  // Photo cards do not score themselves: the picture goes to the Game Master
+  // and the card stays open showing "waiting for approval". The attempt is
+  // created server-side without a verdict, which is what keeps the station from
+  // being drawn again in the meantime.
+  async function submitPhotoTask(stationId: string, fileUri: string): Promise<string | null> {
+    if (!activeDraw || submittedCardIdRef.current === activeDraw.cardId) {
+      return null;
+    }
+    const cardId = activeDraw.cardId;
+    submittedCardIdRef.current = cardId;
+    setErrorMessage(null);
+    try {
+      await postRiskQuizPhotoTask(apiBaseUrl, {
+        sessionToken,
+        cardId,
+        stationId,
+        fileUri,
+      });
+      void refreshDeckStatus();
+      return null;
+    } catch (error) {
+      submittedCardIdRef.current = null;
+      if (getMobileApiErrorStatusCode(error) === 401) {
+        onSessionInvalid();
+        return null;
+      }
+      const message = error instanceof Error ? error.message : "Nie udało się wysłać zdjęcia.";
+      setErrorMessage(message);
+      return message;
+    }
+  }
+
   // The station panels treat a non-null return as "the send failed" and skip
   // their success state, so hand them the real error instead of always null.
   async function completeCurrentCard(completed: boolean, completionCode?: string): Promise<string | null> {
@@ -1050,7 +1141,7 @@ export function RiskQuizScreen({
                     isCompletionCodeCardType(activeDraw.station.type) ? completionCode : undefined,
                   )
                 }
-                onSubmitPhotoTask={async () => completeCurrentCard(true)}
+                onSubmitPhotoTask={(stationId, fileUri) => submitPhotoTask(stationId, fileUri)}
                 onQuizFailed={() => void completeCurrentCard(false)}
                 onQuizPassed={() => void completeCurrentCard(true)}
                 onTimeExpired={() => void completeCurrentCard(false)}
@@ -1214,6 +1305,70 @@ export function RiskQuizScreen({
               </Text>
             </Pressable>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/*
+        Verdict on a photo card the Game Master has just decided. Gated on
+        `!activeDraw` as well as on its own state: the deck poll that raises it
+        is idle-only, but a card can still be drawn in the same breath, and a
+        countdown running under a modal is the one thing this must never do.
+      */}
+      <Modal
+        visible={photoVerdictNotice !== null && !activeDraw}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoVerdictNotice(null)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-center px-6"
+          style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)" }}
+          onPress={() => setPhotoVerdictNotice(null)}
+        >
+          <View className="w-full max-w-[520px]">
+            <ChamferedPanel
+              cut={26}
+              backgroundColor={EXPEDITION_THEME.panel}
+              borderColor={photoVerdictNotice?.isCorrect ? "#22c55e" : EXPEDITION_THEME.danger}
+              borderWidth={3}
+              glowColor={photoVerdictNotice?.isCorrect ? "#22c55e" : EXPEDITION_THEME.danger}
+              glowRadius={16}
+              glowOpacity={0.5}
+              texture="cross-hatch"
+              textureColor={EXPEDITION_THEME.accent}
+              textureOpacity={0.08}
+              textureScale={1.3}
+              style={{ paddingHorizontal: 24, paddingVertical: 26, alignItems: "center", rowGap: 10 }}
+            >
+              <Text
+                className="text-center font-black"
+                style={{
+                  color: photoVerdictNotice?.isCorrect ? "#22c55e" : EXPEDITION_THEME.danger,
+                  fontSize: 30,
+                }}
+              >
+                {photoVerdictNotice?.isCorrect ? "Zdjęcie zatwierdzone!" : "Zdjęcie odrzucone"}
+              </Text>
+              <Text
+                className="text-center"
+                style={{ color: EXPEDITION_THEME.textMuted, fontSize: 15 }}
+              >
+                {photoVerdictNotice?.stationName}
+              </Text>
+              <Text
+                className="text-center font-extrabold"
+                style={{ color: EXPEDITION_THEME.accentStrong, fontSize: 24 }}
+              >
+                {`${(photoVerdictNotice?.pointsDelta ?? 0) >= 0 ? "+" : ""}${photoVerdictNotice?.pointsDelta ?? 0} pkt`}
+              </Text>
+              <Text
+                className="mt-1 text-center"
+                style={{ color: EXPEDITION_THEME.textSubtle, fontSize: 13 }}
+              >
+                Dotknij, aby zamknąć
+              </Text>
+            </ChamferedPanel>
+          </View>
         </Pressable>
       </Modal>
 

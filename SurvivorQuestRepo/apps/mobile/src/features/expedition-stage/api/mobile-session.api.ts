@@ -794,6 +794,28 @@ export async function postMobileUploadTaskPhoto(
   }>(apiBaseUrl, "/api/mobile/task/photo", formData, options);
 }
 
+// Ryzykanci photo cards: same multipart shape as the expedition upload above,
+// plus the drawn card, since the outcome hangs off RiskAttempt there rather
+// than TeamTaskProgress.
+export async function postRiskQuizPhotoTask(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; cardId: string; stationId: string; fileUri: string },
+  options?: MobileApiRequestOptions,
+) {
+  const formData = new FormData();
+  formData.append("sessionToken", payload.sessionToken);
+  formData.append("cardId", payload.cardId);
+  formData.append("stationId", payload.stationId);
+  formData.append("file", buildPhotoFormDataPart(payload.fileUri));
+
+  return requestMobileApiMultipart<{
+    status: "pending";
+    photoUrl: string;
+    pendingPointsDelta: number;
+    teamPoints: number;
+  }>(apiBaseUrl, "/api/mobile/risk-quiz/photo", formData, options);
+}
+
 export function getApiErrorMessage(error: unknown, fallback?: string, language?: RealizationLanguage) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;

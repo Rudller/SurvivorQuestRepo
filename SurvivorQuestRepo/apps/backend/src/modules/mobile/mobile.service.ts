@@ -3177,6 +3177,14 @@ export class MobileService {
       this.stationService.findStationsByIds(realization.stationIds),
     ]);
 
+    // A Ryzykanci pool station belongs to the realization's deck, not to its
+    // scenario, so it is absent from realization.stationIds and would drop out
+    // of the lookup below.
+    const riskPoolStations = await this.prisma.riskPoolStation.findMany({
+      where: { category: { realizationId: realization.id } },
+      include: { station: true },
+    });
+
     const progressByKey = new Map(
       progresses.map((progress) => [
         `${progress.teamId}:${progress.stationId}`,
@@ -3184,9 +3192,21 @@ export class MobileService {
       ]),
     );
     const teamById = new Map(teams.map((team) => [team.id, team]));
-    const stationById = new Map(
-      stations.map((station) => [station.id, station]),
-    );
+    const stationById = new Map<
+      string,
+      { id: string; name: string; description: string }
+    >([
+      ...stations.map(
+        (station) => [station.id, station] as [string, typeof station],
+      ),
+      ...riskPoolStations.map(
+        (poolStation) =>
+          [poolStation.stationId, poolStation.station] as [
+            string,
+            (typeof riskPoolStations)[number]['station'],
+          ],
+      ),
+    ]);
 
     const latestPhotoByKey = new Map<string, (typeof photos)[number]>();
     for (const photo of photos) {
@@ -3199,8 +3219,24 @@ export class MobileService {
       }
     }
 
+    // Ryzykanci photo cards never touch TeamTaskProgress — their outcome lives
+    // in RiskAttempt, and an attempt with no verdict yet is exactly what "this
+    // photo is waiting for the Game Master" means there. Both games therefore
+    // feed the same review list.
+    const pendingRiskAttempts = await this.prisma.riskAttempt.findMany({
+      where: { realizationId: realization.id, isCorrect: null },
+      select: { teamId: true, stationId: true },
+    });
+    const pendingRiskKeys = new Set(
+      pendingRiskAttempts.map((attempt) => `${attempt.teamId}:${attempt.stationId}`),
+    );
+
     const pending = Array.from(latestPhotoByKey.values()).filter((photo) => {
-      const progress = progressByKey.get(`${photo.teamId}:${photo.stationId}`);
+      const key = `${photo.teamId}:${photo.stationId}`;
+      if (pendingRiskKeys.has(key)) {
+        return true;
+      }
+      const progress = progressByKey.get(key);
       return progress?.status === TaskStatus.IN_PROGRESS;
     });
 

@@ -6,15 +6,30 @@ import {
   useFailCurrentRealizationTeamTaskMutation,
   useGetPendingPhotoReviewsQuery,
 } from "../api/current-realization.api";
+import {
+  useCompleteRiskCardMutation,
+  useFailRiskCardMutation,
+} from "@/features/risk-quiz/api/risk-quiz.api";
+import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 
 type CurrentRealizationPhotoReviewsPanelProps = {
   selectedRealizationId?: string;
   canManageTasks?: boolean;
+  // Ryzykanci score a card through RiskAttempt, not TeamTaskProgress, so the
+  // verdict has to travel to the deck's own endpoints — the same ones the
+  // team-tasks board already uses for Zalicz/Niezalicz there.
+  isRiskQuizRealization?: boolean;
+  // Concrete realization id for those endpoints: selectedRealizationId is
+  // undefined whenever the page is showing "the current realization", which
+  // the classic task endpoints understand and the deck ones do not.
+  riskRealizationId?: string;
 };
 
 export function CurrentRealizationPhotoReviewsPanel({
   selectedRealizationId,
   canManageTasks = false,
+  isRiskQuizRealization = false,
+  riskRealizationId,
 }: CurrentRealizationPhotoReviewsPanelProps) {
   const { data: reviews } = useGetPendingPhotoReviewsQuery(
     { realizationId: selectedRealizationId },
@@ -22,14 +37,19 @@ export function CurrentRealizationPhotoReviewsPanel({
   );
   const [completeTask, { isLoading: isCompleting }] = useCompleteCurrentRealizationTeamTaskMutation();
   const [failTask, { isLoading: isFailing }] = useFailCurrentRealizationTeamTaskMutation();
+  const [completeRiskCard, { isLoading: isCompletingRiskCard }] = useCompleteRiskCardMutation();
+  const [failRiskCard, { isLoading: isFailingRiskCard }] = useFailRiskCardMutation();
   const [actionError, setActionError] = useState<string | null>(null);
+  // The reviewed row simply vanishes from the list, which on its own reads as
+  // "nothing happened" — say what was decided and what it cost or paid.
+  const [lastDecision, setLastDecision] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     teamId: string;
     stationId: string;
     action: "approve" | "reject";
   } | null>(null);
 
-  const isMutating = isCompleting || isFailing;
+  const isMutating = isCompleting || isFailing || isCompletingRiskCard || isFailingRiskCard;
 
   if (!canManageTasks) {
     return null;
@@ -45,23 +65,55 @@ export function CurrentRealizationPhotoReviewsPanel({
     }
 
     setActionError(null);
+    setLastDecision(null);
     setPendingAction({ teamId, stationId, action });
     try {
       const basePayload = { realizationId: selectedRealizationId, teamId, stationId };
-      if (action === "approve") {
+      if (isRiskQuizRealization) {
+        const realizationId = riskRealizationId ?? selectedRealizationId;
+        if (!realizationId) {
+          throw new Error("Brak realizacji");
+        }
+        const riskPayload = { realizationId, teamId, stationId };
+        const result =
+          action === "approve"
+            ? await completeRiskCard(riskPayload).unwrap()
+            : await failRiskCard(riskPayload).unwrap();
+        setLastDecision(
+          `${action === "approve" ? "Zatwierdzono" : "Odrzucono"} zdjęcie — ${
+            result.pointsAwarded >= 0 ? "+" : ""
+          }${result.pointsAwarded} pkt, drużyna ma ${result.teamPoints} pkt.`,
+        );
+      } else if (action === "approve") {
         await completeTask(basePayload).unwrap();
+        setLastDecision("Zatwierdzono zdjęcie — zadanie zaliczone.");
       } else {
         await failTask({ ...basePayload, reason: "photo_rejected_by_admin" }).unwrap();
+        setLastDecision("Odrzucono zdjęcie — zadanie niezaliczone.");
       }
-    } catch {
-      setActionError("Nie udało się zapisać decyzji dotyczącej zdjęcia.");
+    } catch (error) {
+      // Show what actually failed: the blanket message hid a missing
+      // realization id here for a whole test round.
+      setActionError(
+        resolveApiErrorMessage(error) ?? "Nie udało się zapisać decyzji dotyczącej zdjęcia.",
+      );
     } finally {
       setPendingAction(null);
     }
   }
 
   if (!reviews || reviews.length === 0) {
-    return null;
+    // The list empties out the moment the last photo is decided, so the panel
+    // sticks around just long enough to show what happened.
+    if (!lastDecision) {
+      return null;
+    }
+
+    return (
+      <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4 text-sm text-emerald-100">
+        {lastDecision}
+      </div>
+    );
   }
 
   return (
@@ -71,6 +123,12 @@ export function CurrentRealizationPhotoReviewsPanel({
           Zdjęcia czekające na akceptację ({reviews.length})
         </h2>
       </div>
+
+      {lastDecision ? (
+        <div className="mb-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-2 text-xs text-emerald-100">
+          {lastDecision}
+        </div>
+      ) : null}
 
       {actionError ? (
         <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">

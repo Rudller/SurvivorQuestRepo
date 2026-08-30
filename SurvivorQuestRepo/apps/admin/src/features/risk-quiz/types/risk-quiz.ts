@@ -108,7 +108,9 @@ export type RiskTeamResetResult = {
 // that actually carries a per-team status, mirroring the classic game's
 // per-station task table. A printed card is just an interchangeable QR key
 // into a (category, difficulty) pool, so it isn't the unit shown here.
-export type RiskTeamBoardTaskStatus = "todo" | "done" | "failed";
+// "in-progress" is a photo card whose picture is with the Game Master: the
+// station is taken (it will not be drawn again) but nothing has been scored.
+export type RiskTeamBoardTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
 export type RiskTeamBoardTask = {
   categoryId: string;

@@ -58,6 +58,18 @@ export async function postRiskQuizScan(
 export type RiskDeckStatus = {
   categoryCount: number;
   remainingCards: number;
+  // Current team score. Comes back with every deck read so the scan screen
+  // notices points that changed without the team doing anything — a photo card
+  // approved (or rejected) by the Game Master.
+  teamPoints?: number;
+  // The team's photo cards and their verdicts; isCorrect stays null until the
+  // Game Master decides.
+  photoReviews?: {
+    stationId: string;
+    stationName: string;
+    isCorrect: boolean | null;
+    pointsDelta: number;
+  }[];
 };
 
 export async function fetchRiskQuizDeckStatus(

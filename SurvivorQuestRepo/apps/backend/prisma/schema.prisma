@@ -511,7 +511,12 @@ model RiskAttempt {
   cardId        String
   stationId     String
   selectedIndex Int?
-  isCorrect     Boolean
+  // null while a photo-task card waits for the Game Master's decision: the
+  // station counts as attempted (it can't be drawn again) but nothing has been
+  // scored yet. pointsDelta already holds the frozen award for that moment —
+  // difficulty points times the streak multiplier the team had when it sent
+  // the photo — and is applied to the team only once the decision lands.
+  isCorrect     Boolean?
   pointsDelta   Int
   createdAt     DateTime       @default(now())
   realization   Realization    @relation(fields: [realizationId], references: [id], onDelete: Cascade)

@@ -250,7 +250,9 @@ export const riskQuizApi = baseApi.injectEndpoints({
         url: teamTaskPath(realizationId, teamId, stationId, "complete"),
         method: "POST",
       }),
-      invalidatesTags: ["RiskQuiz"],
+      // Also "Realization": a verdict moves team points and clears the card
+      // from the photo-review list, both of which live under that tag.
+      invalidatesTags: ["RiskQuiz", "Realization"],
     }),
     failRiskCard: build.mutation<
       RiskTeamCardActionResult,
@@ -260,7 +262,7 @@ export const riskQuizApi = baseApi.injectEndpoints({
         url: teamTaskPath(realizationId, teamId, stationId, "fail"),
         method: "POST",
       }),
-      invalidatesTags: ["RiskQuiz"],
+      invalidatesTags: ["RiskQuiz", "Realization"],
     }),
     resetRiskCard: build.mutation<
       RiskTeamCardActionResult,

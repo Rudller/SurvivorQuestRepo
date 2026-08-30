@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
+import { StationStorageService } from '../station/station-storage.service';
 import { getOpaqueTokenCandidates } from '../../shared/lib/opaque-token';
 import {
   isCodeProtectedStationType,
@@ -72,6 +73,7 @@ export class RiskQuizService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stationService: StationService,
+    private readonly stationStorageService: StationStorageService,
   ) {}
 
   // --- Realization-owned deck clones ---
@@ -478,8 +480,11 @@ export class RiskQuizService {
   async getDeckStatus(sessionToken: string) {
     const { team, realization } = await this.requireTeamSession(sessionToken);
 
+    // teamPoints rides along on every deck-status read: it is the only thing
+    // the scan screen polls while idle, and a photo card approved by the Game
+    // Master changes a team's score with nothing else to announce it.
     if (!realization.riskSchemeId) {
-      return { categoryCount: 0, remainingCards: 0 };
+      return { categoryCount: 0, remainingCards: 0, teamPoints: team.points };
     }
 
     const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
@@ -489,7 +494,7 @@ export class RiskQuizService {
     const categoryIds = schemeCategories.map((item) => item.categoryId);
 
     if (categoryIds.length === 0) {
-      return { categoryCount: 0, remainingCards: 0 };
+      return { categoryCount: 0, remainingCards: 0, teamPoints: team.points };
     }
 
     const poolStations = await this.prisma.riskPoolStation.findMany({
@@ -515,7 +520,34 @@ export class RiskQuizService {
     return {
       categoryCount: categoryIds.length,
       remainingCards,
+      teamPoints: team.points,
+      photoReviews: await this.listTeamPhotoReviews(team.id),
     };
+  }
+
+  // Every photo card this team has sent, with its verdict (null while the Game
+  // Master has not decided). The scan screen polls this to announce a decision
+  // that happened on somebody else's screen.
+  private async listTeamPhotoReviews(teamId: string) {
+    const attempts = await this.prisma.riskAttempt.findMany({
+      where: { teamId, station: { type: PrismaStationType.PHOTO_TASK } },
+      select: {
+        stationId: true,
+        isCorrect: true,
+        pointsDelta: true,
+        station: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return attempts.map((attempt) => ({
+      stationId: attempt.stationId,
+      stationName: attempt.station.name,
+      isCorrect: attempt.isCorrect,
+      // Nothing has been paid out while the verdict is missing.
+      pointsDelta: attempt.isCorrect === null ? 0 : attempt.pointsDelta,
+    }));
   }
 
   // Delivers (and consumes) a remote draw an admin queued via
@@ -616,6 +648,120 @@ export class RiskQuizService {
             }
           : undefined,
     };
+  }
+
+  // Photo cards follow the same shape as a photo task in a normal realization:
+  // the picture goes to storage and to the Game Master, who decides whether it
+  // counts. The difference is where the outcome lives — RiskAttempt, created
+  // here without one — and that the award is frozen now rather than at the
+  // moment somebody clicks (see setCardOutcome).
+  async submitPhotoTask(input: {
+    sessionToken: string;
+    cardId: string;
+    stationId: string;
+    file: Express.Multer.File;
+  }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+    const { card, station } = await this.requireCardStationPair(
+      realization.id,
+      input.cardId,
+      input.stationId,
+    );
+
+    if (fromPrismaStationType(station.type) !== 'photo-task') {
+      throw new BadRequestException(
+        'This station does not accept photo submissions',
+      );
+    }
+
+    const existingAttempt = await this.prisma.riskAttempt.findFirst({
+      where: { teamId: team.id, stationId: station.id },
+    });
+    if (existingAttempt) {
+      throw new BadRequestException('Station already attempted');
+    }
+
+    const uploaded = await this.stationStorageService.uploadTeamTaskPhoto(
+      input.file,
+      {
+        realizationId: realization.id,
+        teamId: team.id,
+        stationId: station.id,
+      },
+    );
+
+    const streak = (await this.getCurrentStreak(team.id)) + 1;
+    const frozenAward = Math.round(
+      RISK_DIFFICULTY_POINTS[card.difficulty].correct *
+        this.resolveStreakMultiplier(streak),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.teamPhoto.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: station.id,
+          kind: 'TASK_PROOF',
+          objectKey: uploaded.key,
+          url: uploaded.url,
+        },
+      }),
+      this.prisma.riskAttempt.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          cardId: card.id,
+          stationId: station.id,
+          isCorrect: null,
+          pointsDelta: frozenAward,
+        },
+      }),
+    ]);
+
+    return {
+      status: 'pending' as const,
+      photoUrl: uploaded.url,
+      pendingPointsDelta: frozenAward,
+      teamPoints: team.points,
+    };
+  }
+
+  private async requireCardStationPair(
+    realizationId: string,
+    cardId: string,
+    stationId: string,
+  ) {
+    const [card, station] = await Promise.all([
+      this.prisma.riskCard.findUnique({ where: { id: cardId } }),
+      this.prisma.station.findUnique({ where: { id: stationId } }),
+    ]);
+
+    if (!card || card.realizationId !== realizationId) {
+      throw new NotFoundException('Card not found');
+    }
+    if (!station) {
+      throw new NotFoundException('Station not found');
+    }
+
+    const poolMembership = await this.prisma.riskPoolStation.findUnique({
+      where: {
+        categoryId_difficulty_stationId: {
+          categoryId: card.categoryId,
+          difficulty: card.difficulty,
+          stationId: station.id,
+        },
+      },
+    });
+    if (!poolMembership) {
+      throw new BadRequestException(
+        "Station does not belong to this card's pool",
+      );
+    }
+
+    return { card, station };
   }
 
   async submitAnswer(input: {
@@ -739,6 +885,12 @@ export class RiskQuizService {
 
     let streak = 0;
     for (const attempt of recentAttempts) {
+      // A photo card still waiting for the Game Master is undecided, so it
+      // neither extends the streak nor breaks it — the team should not lose a
+      // run because nobody has looked at its photo yet.
+      if (attempt.isCorrect === null) {
+        continue;
+      }
       if (!attempt.isCorrect) {
         break;
       }
@@ -1365,7 +1517,7 @@ export class RiskQuizService {
 
     const attempts = await this.prisma.riskAttempt.findMany({
       where: { realizationId: realization.id, teamId },
-      select: { pointsDelta: true },
+      select: { pointsDelta: true, isCorrect: true },
     });
 
     if (attempts.length === 0) {
@@ -1373,8 +1525,11 @@ export class RiskQuizService {
       return { teamId, resetCount: 0, pointsAdjusted: 0 };
     }
 
+    // Undecided photo cards carry their frozen award in pointsDelta but that
+    // award never reached the team, so taking it away here would leave the team
+    // short by exactly the amount it was never given.
     const pointsToRemove = attempts.reduce(
-      (sum, attempt) => sum + attempt.pointsDelta,
+      (sum, attempt) => (attempt.isCorrect === null ? sum : sum + attempt.pointsDelta),
       0,
     );
 
@@ -1455,11 +1610,16 @@ export class RiskQuizService {
     const tasks = poolStations
       .map((poolStation) => {
         const attempt = attemptByStationId.get(poolStation.stationId);
-        const status: 'todo' | 'done' | 'failed' = !attempt
+        // A photo card waiting for the Game Master is neither passed nor
+        // failed — same "in-progress" the classic board uses for a submitted
+        // photo, so the admin table reads identically in both games.
+        const status: 'todo' | 'in-progress' | 'done' | 'failed' = !attempt
           ? 'todo'
-          : attempt.isCorrect
-            ? 'done'
-            : 'failed';
+          : attempt.isCorrect === null
+            ? 'in-progress'
+            : attempt.isCorrect
+              ? 'done'
+              : 'failed';
         return {
           categoryId: poolStation.categoryId,
           categoryName: categoryNameById.get(poolStation.categoryId) ?? '',
@@ -1467,7 +1627,9 @@ export class RiskQuizService {
           stationId: poolStation.stationId,
           stationName: poolStation.station.name,
           status,
-          pointsAwarded: attempt?.pointsDelta ?? 0,
+          // The frozen award is not on the team's account yet, so show nothing
+          // until the verdict lands.
+          pointsAwarded: attempt && attempt.isCorrect !== null ? attempt.pointsDelta : 0,
         };
       })
       .sort((left, right) => {
@@ -1532,13 +1694,21 @@ export class RiskQuizService {
     }
 
     const poolStation = await this.requireRiskPoolStationOrThrow(stationId);
-    const pointsDelta = isCorrect
-      ? RISK_DIFFICULTY_POINTS[poolStation.difficulty].correct
-      : RISK_DIFFICULTY_POINTS[poolStation.difficulty].incorrect;
-
     const existingAttempt = await this.prisma.riskAttempt.findFirst({
       where: { teamId, stationId },
     });
+
+    // Approving a photo card pays what the team locked in when it sent the
+    // photo (difficulty points times the streak multiplier of that moment),
+    // not the flat rate an out-of-band admin override uses — otherwise the
+    // award would depend on how long the Game Master took to look at it.
+    const isPendingPhotoDecision =
+      existingAttempt !== null && existingAttempt.isCorrect === null;
+    const pointsDelta = isCorrect
+      ? isPendingPhotoDecision
+        ? existingAttempt.pointsDelta
+        : RISK_DIFFICULTY_POINTS[poolStation.difficulty].correct
+      : RISK_DIFFICULTY_POINTS[poolStation.difficulty].incorrect;
 
     const updatedTeam = existingAttempt
       ? await this.applyCardOutcomeUpdate(
@@ -1566,12 +1736,16 @@ export class RiskQuizService {
   }
 
   private async applyCardOutcomeUpdate(
-    existingAttempt: { id: string; pointsDelta: number },
+    existingAttempt: { id: string; pointsDelta: number; isCorrect: boolean | null },
     isCorrect: boolean,
     pointsDelta: number,
     teamId: string,
   ) {
-    const pointsAdjustment = pointsDelta - existingAttempt.pointsDelta;
+    // An undecided attempt's pointsDelta was frozen, not paid out, so there is
+    // nothing to take back before paying the decided amount.
+    const alreadyApplied =
+      existingAttempt.isCorrect === null ? 0 : existingAttempt.pointsDelta;
+    const pointsAdjustment = pointsDelta - alreadyApplied;
     const [, updatedTeam] = await this.prisma.$transaction([
       this.prisma.riskAttempt.update({
         where: { id: existingAttempt.id },

@@ -17,7 +17,6 @@ import type { Express } from 'express';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import {
   MOBILE_JOIN_THROTTLE,
   MOBILE_PHOTO_UPLOAD_THROTTLE,
@@ -25,13 +24,11 @@ import {
   MOBILE_SESSION_STATE_THROTTLE,
 } from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
+import {
+  assertValidTeamPhotoFile,
+  MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES,
+} from './domain/team-photo-upload.helpers';
 
-const MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024;
-const ALLOWED_TEAM_PHOTO_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-]);
 
 type AdminFailTaskPayload = {
   reason?: string;
@@ -97,24 +94,6 @@ function optionalFiniteNumber(payload: MobilePayload, key: string) {
   }
 
   return value;
-}
-
-function assertValidTeamPhotoFile(file: Express.Multer.File | undefined) {
-  if (!file) {
-    throw new BadRequestException('Photo is required');
-  }
-
-  if (!ALLOWED_TEAM_PHOTO_MIME_TYPES.has(file.mimetype)) {
-    throw new BadRequestException('Unsupported photo type');
-  }
-
-  if (!Number.isFinite(file.size) || file.size <= 0) {
-    throw new BadRequestException('Invalid photo file');
-  }
-
-  if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
-    throw new BadRequestException('Invalid photo file signature');
-  }
 }
 
 @Controller(['mobile', 'api/mobile'])

@@ -674,7 +674,13 @@ export default function CurrentRealizationPage() {
 
             <CurrentRealizationPhotoReviewsPanel
               selectedRealizationId={selectedRealizationArg?.realizationId}
+              // The deck endpoints address a realization by id and have no
+              // "current" shorthand, so hand them the resolved one — while
+              // viewing the current realization the selection above is
+              // deliberately undefined.
+              riskRealizationId={overview.realization.id}
               canManageTasks={canManageCurrentRealization}
+              isRiskQuizRealization={isRiskQuizRealization}
             />
 
             <CurrentRealizationTeamsMap
