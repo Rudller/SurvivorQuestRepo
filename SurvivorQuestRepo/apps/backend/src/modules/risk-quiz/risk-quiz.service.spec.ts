@@ -55,6 +55,22 @@ function createService() {
     },
     station: { findUnique: jest.fn() },
     teamPhoto: { create: jest.fn() },
+    riskPig: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      delete: jest.fn(),
+    },
+    riskPigEffect: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    riskPigGrant: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      create: jest.fn(),
+    },
     riskChatMessage: {
       create: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -1268,6 +1284,162 @@ describe('RiskQuizService.submitPhotoTask', () => {
     expect(result.streak).toBe(3);
   });
 });
+
+describe('RiskQuizService świnie', () => {
+  const pigRealization = {
+    ...realization,
+    status: 'IN_PROGRESS',
+    // Ten minutes in with a five-minute interval puts us squarely inside tick 2.
+    startedAt: new Date(Date.now() - 10 * 60 * 1000),
+    durationMinutes: 120,
+    pigsEnabled: true,
+    pigGrantIntervalMinutes: 5,
+    pigEffectSeconds: 90,
+    pigTypesEnabled: [],
+  };
+
+  function teamsWithPoints(count) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `team-${index + 1}`,
+      name: `Drużyna ${index + 1}`,
+      slotNumber: index + 1,
+      // Ascending points, so team-1 is bottom of the table.
+      points: index * 10,
+    }));
+  }
+
+  function arrangePigs(prisma, options = {}) {
+    const current = { ...pigRealization, ...(options.realization ?? {}) };
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: current,
+    });
+    prisma.realization.findUnique.mockResolvedValue(current);
+    prisma.team.findMany.mockResolvedValue(options.teams ?? teamsWithPoints(12));
+    return current;
+  }
+
+  it('grants to the bottom quarter plus one wildcard', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    const granted = prisma.riskPigGrant.create.mock.calls.map(
+      (call) => call[0].data.teamId,
+    );
+    // 12 teams -> bottom quarter is 3, plus the single wildcard.
+    expect(granted).toHaveLength(4);
+    expect(granted.slice(0, 3)).toEqual(['team-1', 'team-2', 'team-3']);
+  });
+
+  it('still grants to somebody when only two teams are playing', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma, { teams: teamsWithPoints(2) });
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    const granted = prisma.riskPigGrant.create.mock.calls.map(
+      (call) => call[0].data.teamId,
+    );
+    // A quarter of two rounds to nothing, so the floor of one has to hold.
+    expect(granted).toContain('team-1');
+    expect(granted.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sends the wildcard to whoever has received the fewest so far', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    // Everyone outside the bottom quarter has had two pigs except team-9.
+    prisma.riskPigGrant.groupBy.mockResolvedValue(
+      teamsWithPoints(12)
+        .filter((team) => !['team-1', 'team-2', 'team-3', 'team-9'].includes(team.id))
+        .map((team) => ({ teamId: team.id, _count: { teamId: 2 } })),
+    );
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    const granted = prisma.riskPigGrant.create.mock.calls.map(
+      (call) => call[0].data.teamId,
+    );
+    // This is what stops a consistently strong team from finishing the game
+    // without ever throwing one.
+    expect(granted[3]).toBe('team-9');
+  });
+
+  it('grants nothing twice for the same tick', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    // The other tablet won the race and already wrote every grant row.
+    prisma.riskPigGrant.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('duplicate', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    expect(prisma.riskPig.create).not.toHaveBeenCalled();
+  });
+
+  it('hands out nothing before the first interval has elapsed', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma, {
+      realization: { startedAt: new Date(Date.now() - 60 * 1000) },
+    });
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    expect(prisma.riskPigGrant.create).not.toHaveBeenCalled();
+  });
+
+  it('skips a team that is still sitting on an unused pig', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    prisma.riskPig.findUnique.mockResolvedValue({ id: 'pig-1', type: 'SHAKE' });
+
+    await service.getPigState({ sessionToken: 'token' });
+
+    expect(prisma.riskPigGrant.create).toHaveBeenCalled();
+    expect(prisma.riskPig.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses to throw without holding a pig', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    prisma.riskPig.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
+    ).rejects.toThrow('This team holds no pig');
+  });
+
+  it('refuses a target that is already under a pig', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    prisma.riskPig.findUnique.mockResolvedValue({ id: 'pig-1', type: 'FOG' });
+    prisma.riskPigEffect.findMany.mockResolvedValue([{ targetTeamId: 'team-2' }]);
+
+    await expect(
+      service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
+    ).rejects.toThrow('This team cannot be targeted right now');
+    expect(prisma.riskPigEffect.create).not.toHaveBeenCalled();
+  });
+
+  it('marks the room as unavailable only while an effect is live', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    // findMany is already filtered by expiresAt > now in the query, so an empty
+    // result is what an expired effect looks like from here.
+    prisma.riskPigEffect.findMany.mockResolvedValue([]);
+
+    const state = await service.getPigState({ sessionToken: 'token' });
+
+    expect(state.targets.every((target) => target.isAvailable)).toBe(true);
+  });
+});
+
 
 describe('RiskQuizService chat', () => {
   const chatRealization = {

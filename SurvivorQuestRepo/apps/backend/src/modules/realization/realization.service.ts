@@ -168,6 +168,10 @@ export class RealizationService {
         hideTaskList: validated.hideTaskList,
         riskChatEnabled: validated.riskChatEnabled,
         riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
+        pigsEnabled: validated.pigsEnabled,
+        pigGrantIntervalMinutes: validated.pigGrantIntervalMinutes,
+        pigEffectSeconds: validated.pigEffectSeconds,
+        pigShowThrowerName: validated.pigShowThrowerName,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -385,6 +389,10 @@ export class RealizationService {
         hideTaskList: validated.hideTaskList,
         riskChatEnabled: validated.riskChatEnabled,
         riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
+        pigsEnabled: validated.pigsEnabled,
+        pigGrantIntervalMinutes: validated.pigGrantIntervalMinutes,
+        pigEffectSeconds: validated.pigEffectSeconds,
+        pigShowThrowerName: validated.pigShowThrowerName,
         status: toPrismaRealizationStatus(nextStatus),
         scheduledAt: new Date(validated.scheduledAt),
         ...(isStartingNow ? { startedAt: new Date() } : {}),

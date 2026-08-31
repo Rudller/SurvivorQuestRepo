@@ -275,6 +275,10 @@ export type Realization = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -340,6 +344,10 @@ export type RealizationExportRealizationData = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
 };

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-import { RiskDifficulty } from '@prisma/client';
+import { RiskDifficulty, RiskPigType } from '@prisma/client';
 import type { Express } from 'express';
 import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.guard';
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
@@ -28,6 +28,7 @@ import {
   assertValidTeamPhotoFile,
   MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES,
 } from '../mobile/domain/team-photo-upload.helpers';
+import { RISK_PIG_TYPES } from './risk-quiz.constants';
 import { RiskQuizService } from './risk-quiz.service';
 
 type Payload = Record<string, unknown>;
@@ -171,6 +172,27 @@ export class RiskQuizController {
     return this.riskQuizService.postTeamChatMessage({
       sessionToken: requireString(payload, 'sessionToken'),
       content: requireString(payload, 'content'),
+    });
+  }
+
+  @Post('pigs')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async getPigState(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.getPigState({
+      sessionToken: requireString(payload, 'sessionToken'),
+    });
+  }
+
+  @Post('pigs/throw')
+  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  async throwPig(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.throwPig({
+      sessionToken: requireString(payload, 'sessionToken'),
+      // Absent means "pick a target for me" — the picker offers that as a
+      // button next to the team list.
+      targetTeamId: optionalString(payload, 'targetTeamId'),
     });
   }
 
@@ -374,6 +396,33 @@ export class RiskQuizController {
     return this.riskQuizService.postGameMasterChatMessage({
       realizationId,
       content: requireString(payload, 'content'),
+    });
+  }
+
+  @Get('admin/realizations/:realizationId/pigs')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listPigStateForAdmin(@Param('realizationId') realizationId: string) {
+    return this.riskQuizService.listPigStateForAdmin(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/pigs/throw')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async throwPigAsGameMaster(
+    @Param('realizationId') realizationId: string,
+    @Body() rawPayload: unknown,
+  ) {
+    const payload = requirePayload(rawPayload);
+    const type = requireString(payload, 'type');
+    if (!RISK_PIG_TYPES.includes(type as RiskPigType)) {
+      throw new BadRequestException('Unknown pig type');
+    }
+
+    return this.riskQuizService.throwPigAsGameMaster({
+      realizationId,
+      targetTeamId: requireString(payload, 'targetTeamId'),
+      type: type as RiskPigType,
     });
   }
 

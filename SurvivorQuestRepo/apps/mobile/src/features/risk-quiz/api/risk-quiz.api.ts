@@ -186,6 +186,62 @@ export async function postRiskQuizChatMessage(
   );
 }
 
+export type RiskPigType =
+  | "FLASHLIGHT"
+  | "UPSIDE_DOWN"
+  | "SHAKE"
+  | "FOG"
+  | "SQUEAL"
+  | "HASTE"
+  | "OVERHEAD";
+
+export type RiskPigTarget = {
+  teamId: string;
+  teamName: string;
+  teamColor: string | null;
+  // False while that team is already under a pig — shown greyed out rather than
+  // hidden, because seeing who is currently suffering is half the fun.
+  isAvailable: boolean;
+};
+
+export type RiskPigState = {
+  enabled: boolean;
+  held: { type: RiskPigType } | null;
+  // expiresAt is an absolute ISO instant, so the tablet can tick a smooth
+  // countdown between polls without drifting.
+  // fromName is null when the realization hides who threw the pig — the server
+  // masks it there rather than here, so the name never reaches the tablet.
+  incoming: { type: RiskPigType; fromName: string | null; expiresAt: string } | null;
+  targets: RiskPigTarget[];
+};
+
+export async function fetchRiskQuizPigs(
+  apiBaseUrl: string,
+  payload: { sessionToken: string },
+) {
+  return requestMobileApi<RiskPigState>(apiBaseUrl, "/mobile/risk-quiz/pigs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Omitting targetTeamId asks the server to pick — that is both the "losuj cel"
+// button and the fallback when the chosen team got hit by somebody else between
+// rendering the list and tapping it.
+export async function postRiskQuizPigThrow(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; targetTeamId?: string },
+) {
+  return requestMobileApi<RiskPigState>(
+    apiBaseUrl,
+    "/mobile/risk-quiz/pigs/throw",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export type RiskPendingDraw = {
   cardId: string;
   categoryName: string;

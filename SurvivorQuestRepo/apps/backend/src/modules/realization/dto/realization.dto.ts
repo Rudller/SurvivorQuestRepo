@@ -118,6 +118,10 @@ export type CreateRealizationDto = {
   hideTaskList?: boolean;
   riskChatEnabled?: boolean;
   riskChatTeamsCanPost?: boolean;
+  pigsEnabled?: boolean;
+  pigGrantIntervalMinutes?: number;
+  pigEffectSeconds?: number;
+  pigShowThrowerName?: boolean;
   changedBy?: string;
   scenarioStations?: unknown;
   pointsQrCodes?: unknown;
@@ -194,6 +198,24 @@ export function validateTranslateRealizationTextsPayload(
     targetLanguage: payload.targetLanguage,
     texts,
   };
+}
+
+// Bounds picked so the mechanic stays recognisable: below a minute the room
+// never gets a break, above twenty a long game hands out barely any pigs.
+function clampPigInterval(value: unknown) {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 5;
+  }
+  return Math.min(20, Math.max(1, parsed));
+}
+
+function clampPigEffectSeconds(value: unknown) {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 90;
+  }
+  return Math.min(300, Math.max(15, parsed));
 }
 
 function sanitizeInstructors(value: unknown) {
@@ -391,6 +413,13 @@ export function validateRealizationPayload(
     // off for a realization that had it.
     riskChatEnabled: payload.riskChatEnabled !== false,
     riskChatTeamsCanPost: payload.riskChatTeamsCanPost !== false,
+    pigsEnabled: payload.pigsEnabled !== false,
+    // Clamped rather than rejected: these come from number inputs an admin can
+    // empty, and a realization with a zero-minute interval would hand out pigs
+    // on every single poll.
+    pigGrantIntervalMinutes: clampPigInterval(payload.pigGrantIntervalMinutes),
+    pigEffectSeconds: clampPigEffectSeconds(payload.pigEffectSeconds),
+    pigShowThrowerName: payload.pigShowThrowerName !== false,
     mapImageUrl: payload.mapImageUrl?.trim() || undefined,
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,

@@ -23,13 +23,16 @@ import {
 import {
   fetchRiskQuizChat,
   fetchRiskQuizDeckStatus,
+  fetchRiskQuizPigs,
   fetchRiskQuizPendingDraw,
   fetchRiskQuizTestMenu,
   postRiskQuizAnswer,
   postRiskQuizChatMessage,
+  postRiskQuizPigThrow,
   postRiskQuizReviewedAnswer,
   postRiskQuizScan,
   type RiskChatMessage,
+  type RiskPigState,
   type RiskAnswerResult,
   type RiskDeckStatus,
   type RiskScanResult,
@@ -42,6 +45,12 @@ import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
 import { RiskQuizChatDock } from "../components/risk-quiz-chat-dock";
+import {
+  RiskQuizPigBanner,
+  RiskQuizPigButton,
+  RiskQuizPigEffectLayer,
+} from "../components/risk-quiz-pig-effects";
+import { RiskQuizPigTargetPicker } from "../components/risk-quiz-pig-target-picker";
 import { RiskQuizBackground } from "../components/risk-quiz-background";
 import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
@@ -190,6 +199,10 @@ const IDLE_POLL_INTERVAL_MS = 4000;
 // during the intro and while the scanner is open, and a room that goes quiet
 // exactly when somebody is scanning is worse than a slightly slower one.
 const CHAT_POLL_INTERVAL_MS = 5000;
+// Pigs ride their own interval for the same reason the chat does: an effect has
+// to land whether or not the team is mid-card, and the idle poll is gated off
+// during the intro and while the scanner is open.
+const PIG_POLL_INTERVAL_MS = 5000;
 // Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
 // same hold-the-team-banner gesture as normal gameplay's station test menu.
 const TEST_MENU_TRIGGER_HOLD_MS = 5000;
@@ -198,6 +211,8 @@ const TEST_MENU_TRIGGER_HOLD_MS = 5000;
 // to re-derive where the in-flow content actually starts.
 const SCREEN_EDGE_PADDING = 12;
 const SCREEN_ROW_GAP = 10;
+// Clearance between the floating pig button and the bottom bar it rides above.
+const PIG_BUTTON_GAP = 10;
 // The card countdown's box is a fixed size rather than a measured one. It used
 // to be measured with onLayout and fed back into the content area's marginTop,
 // which meant a freshly opened card laid itself out two or three more times
@@ -249,6 +264,10 @@ export function RiskQuizScreen({
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [pigState, setPigState] = useState<RiskPigState | null>(null);
+  const [isPigPickerOpen, setIsPigPickerOpen] = useState(false);
+  const [isThrowingPig, setIsThrowingPig] = useState(false);
+  const [pigError, setPigError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<RiskChatMessage[]>([]);
   const [chatEnabled, setChatEnabled] = useState(false);
   const [chatCanPost, setChatCanPost] = useState(false);
@@ -267,6 +286,10 @@ export function RiskQuizScreen({
   const [exhaustedNotice, setExhaustedNotice] = useState<{ categoryName: string } | null>(null);
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Measured rather than assumed: the bar's height comes out of the adaptive
+  // scale ladder, and the pig button is anchored above whatever it turns out
+  // to be.
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(0);
   const [topPanelHeight, setTopPanelHeight] = useState(0);
   // Height of the scrollable content area, measured so an inline station card
   // can be capped to it (see the card wrapper below).
@@ -887,6 +910,59 @@ export function RiskQuizScreen({
     };
   }, [apiBaseUrl, sessionToken, showIntro, onSessionInvalid]);
 
+  // Pigs poll on their own interval, ungated — an effect must land whether the
+  // team is mid-card, scanning, or idle.
+  useEffect(() => {
+    if (showIntro) {
+      return;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const pollPigs = async () => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const next = await fetchRiskQuizPigs(apiBaseUrl, { sessionToken });
+        if (!cancelled) {
+          setPigState(next);
+        }
+      } catch (error) {
+        if (getMobileApiErrorStatusCode(error) === 401) {
+          onSessionInvalid();
+        }
+        // Anything else is silent — the next tick retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollPigs();
+    const interval = setInterval(() => void pollPigs(), PIG_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [apiBaseUrl, sessionToken, showIntro, onSessionInvalid]);
+
+  // Drives the banner's countdown between five-second polls. It only nudges a
+  // clock value — the remaining seconds are derived from the effect's absolute
+  // expiry below, so this effect never depends on anything it changes.
+  const hasIncomingPig = Boolean(pigState?.incoming);
+  const [pigClockMs, setPigClockMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasIncomingPig) {
+      return;
+    }
+
+    const interval = setInterval(() => setPigClockMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [hasIncomingPig]);
+
   // Expanding the dock marks everything currently in it as read. The collapsed
   // strip only previews the newest line, so it does not count as having read
   // the backlog behind it.
@@ -914,6 +990,33 @@ export function RiskQuizScreen({
     const lastReadIndex = chatMessages.findIndex((item) => item.id === lastReadChatId);
     return lastReadIndex < 0 ? chatMessages.length : chatMessages.length - lastReadIndex - 1;
   })();
+
+  async function throwPig(targetTeamId?: string) {
+    if (isThrowingPig) {
+      return;
+    }
+
+    setPigError(null);
+    setIsThrowingPig(true);
+    try {
+      const next = await postRiskQuizPigThrow(apiBaseUrl, {
+        sessionToken,
+        targetTeamId,
+      });
+      setPigState(next);
+      setIsPigPickerOpen(false);
+    } catch (error) {
+      if (getMobileApiErrorStatusCode(error) === 401) {
+        onSessionInvalid();
+        return;
+      }
+      setPigError(
+        error instanceof Error ? error.message : "Nie udało się rzucić świni.",
+      );
+    } finally {
+      setIsThrowingPig(false);
+    }
+  }
 
   async function sendChatMessage() {
     const content = chatDraft.trim();
@@ -1105,9 +1208,21 @@ export function RiskQuizScreen({
     );
   }
 
+  const incomingPig = pigState?.enabled ? pigState.incoming : null;
+  const incomingPigSecondsLeft = incomingPig
+    ? Math.max(0, Math.ceil((Date.parse(incomingPig.expiresAt) - pigClockMs) / 1000))
+    : 0;
+  // Stops applying the effect the moment it runs out, without waiting for the
+  // next poll to confirm it.
+  const activePig = incomingPigSecondsLeft > 0 ? incomingPig : null;
+
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       <RiskQuizBackground isLightTheme={isLightTheme} />
+      {/* Wraps the whole screen rather than just the card: a pig lands on a
+          timer and can arrive while the team is idle between cards, so the
+          effect has to have something to act on either way. */}
+      <RiskQuizPigEffectLayer type={activePig?.type ?? null}>
       <View className="flex-1 px-3 py-3" style={{ rowGap: 10, paddingBottom: keyboardHeight || undefined }}>
         <Pressable
           onPressIn={handleTestMenuHoldStart}
@@ -1124,6 +1239,7 @@ export function RiskQuizScreen({
             teamIcon={teamIcon}
             teamBadgeImageUrl={teamBadgeImageUrl}
             points={teamPoints}
+            pigCount={pigState?.enabled ? (pigState.held ? 1 : 0) : null}
             languageFlag={currentLanguageFlag}
             showLanguageButton={hasMultipleLanguageOptions}
             onOpenLanguagePicker={handleLanguageButtonPress}
@@ -1422,22 +1538,72 @@ export function RiskQuizScreen({
           ) : null}
 
           {keyboardHeight === 0 ? (
-            <View className="w-full max-w-[560px]">
-              <RiskQuizBottomPanel
-                remainingLabel={countdown.remainingLabel}
-                isCompleted={countdown.isCompleted}
-                streak={streak}
-                multiplier={multiplier}
-                onOpenQrScanner={() => setIsScannerVisible(true)}
-                isScannerOpening={isResolvingScan}
-                isCardOpen={Boolean(activeDraw)}
-                onCloseCard={dismissActiveCard}
-              />
+            <View className="w-full items-center" style={{ position: "relative" }}>
+              <View
+                className="w-full max-w-[560px]"
+                onLayout={(event) => setBottomPanelHeight(event.nativeEvent.layout.height)}
+              >
+                <RiskQuizBottomPanel
+                  remainingLabel={countdown.remainingLabel}
+                  isCompleted={countdown.isCompleted}
+                  streak={streak}
+                  multiplier={multiplier}
+                  onOpenQrScanner={() => setIsScannerVisible(true)}
+                  isScannerOpening={isResolvingScan}
+                  isCardOpen={Boolean(activeDraw)}
+                  onCloseCard={dismissActiveCard}
+                />
+              </View>
+
+              {/* Floated over the column rather than sitting in it: as a real
+                  row it pushed the rules and the chat up the screen every time
+                  a pig arrived, and they would drop back down the moment it was
+                  thrown. Anchored to the bar's measured height so it rides just
+                  above it, hard against the right edge of the screen. */}
+              {pigState?.enabled && pigState.held && !activeDraw ? (
+                <View
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    bottom: bottomPanelHeight + PIG_BUTTON_GAP,
+                  }}
+                >
+                  <RiskQuizPigButton
+                    type={pigState.held.type}
+                    onPress={() => {
+                      setPigError(null);
+                      setIsPigPickerOpen(true);
+                    }}
+                  />
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
       </View>
+      </RiskQuizPigEffectLayer>
 
+      {/* Above the effect layer on purpose — a darkened or upside-down screen
+          reads as a broken tablet unless something says what is going on. */}
+      {activePig ? (
+        <RiskQuizPigBanner
+          type={activePig.type}
+          fromName={activePig.fromName}
+          secondsLeft={incomingPigSecondsLeft}
+        />
+      ) : null}
+
+      {pigState?.enabled && pigState.held ? (
+        <RiskQuizPigTargetPicker
+          visible={isPigPickerOpen}
+          type={pigState.held.type}
+          targets={pigState.targets}
+          isThrowing={isThrowingPig}
+          errorMessage={pigError}
+          onThrow={(targetTeamId) => void throwPig(targetTeamId)}
+          onClose={() => setIsPigPickerOpen(false)}
+        />
+      ) : null}
 
       <QrScannerOverlay
         visible={isScannerVisible}

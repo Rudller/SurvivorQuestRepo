@@ -39,6 +39,41 @@ export type RiskChatState = {
   messages: RiskChatMessage[];
 };
 
+export type RiskPigType =
+  | "FLASHLIGHT"
+  | "UPSIDE_DOWN"
+  | "SHAKE"
+  | "FOG"
+  | "SQUEAL"
+  | "HASTE"
+  | "OVERHEAD";
+
+// Mirrors RISK_PIG_LABELS in the backend's risk-quiz.constants.ts.
+export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
+  FLASHLIGHT: "Latarka",
+  UPSIDE_DOWN: "Do góry nogami",
+  SHAKE: "Trzęsienie",
+  FOG: "Mgła",
+  SQUEAL: "Kwik",
+  HASTE: "Pośpiech",
+  OVERHEAD: "Nad głową",
+};
+
+export type RiskPigAdminTeam = {
+  teamId: string;
+  teamName: string;
+  points: number;
+  heldPigType: RiskPigType | null;
+  activePigType: RiskPigType | null;
+  activeFromName: string | null;
+  activeSecondsLeft: number | null;
+};
+
+export type RiskPigAdminState = {
+  enabled: boolean;
+  teams: RiskPigAdminTeam[];
+};
+
 function adminPath(suffix: string) {
   return buildApiPath(`/mobile/risk-quiz/admin${suffix}`);
 }
@@ -235,6 +270,22 @@ export const riskQuizApi = baseApi.injectEndpoints({
       }),
     }),
 
+    // --- Świnie ---
+    getRiskPigs: build.query<RiskPigAdminState, { realizationId: string }>({
+      query: ({ realizationId }) =>
+        adminPath(`/realizations/${encodeURIComponent(realizationId)}/pigs`),
+    }),
+    throwRiskPig: build.mutation<
+      RiskPigAdminState,
+      { realizationId: string; targetTeamId: string; type: RiskPigType }
+    >({
+      query: ({ realizationId, targetTeamId, type }) => ({
+        url: adminPath(`/realizations/${encodeURIComponent(realizationId)}/pigs/throw`),
+        method: "POST",
+        body: { targetTeamId, type },
+      }),
+    }),
+
     // --- Cards + board (per realization) ---
     getRiskCards: build.query<RiskCardWithCategory[], { realizationId: string }>({
       query: ({ realizationId }) =>
@@ -354,6 +405,8 @@ export const {
   useAssignCategoryToSchemeMutation,
   useRemoveCategoryFromSchemeMutation,
   useGetRiskSchemeCardCodesQuery,
+  useGetRiskPigsQuery,
+  useThrowRiskPigMutation,
   useGetRiskChatQuery,
   useSendRiskChatMessageMutation,
   useGetRiskCardsQuery,

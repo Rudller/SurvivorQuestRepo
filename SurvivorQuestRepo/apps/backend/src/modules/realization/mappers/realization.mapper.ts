@@ -257,6 +257,10 @@ export function buildRealizationEntity(input: {
     hideTaskList: boolean;
     riskChatEnabled: boolean;
     riskChatTeamsCanPost: boolean;
+    pigsEnabled: boolean;
+    pigGrantIntervalMinutes: number;
+    pigEffectSeconds: number;
+    pigShowThrowerName: boolean;
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     startedAt: Date | null;
@@ -317,6 +321,10 @@ export function buildRealizationEntity(input: {
     hideTaskList: realization.hideTaskList,
     riskChatEnabled: realization.riskChatEnabled,
     riskChatTeamsCanPost: realization.riskChatTeamsCanPost,
+    pigsEnabled: realization.pigsEnabled,
+    pigGrantIntervalMinutes: realization.pigGrantIntervalMinutes,
+    pigEffectSeconds: realization.pigEffectSeconds,
+    pigShowThrowerName: realization.pigShowThrowerName,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),

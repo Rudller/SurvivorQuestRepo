@@ -23,6 +23,7 @@ import type { CurrentRealizationOverview } from "@/features/current-realization/
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
 import { CurrentRealizationRiskChatPanel } from "@/features/current-realization/components/current-realization-risk-chat-panel";
+import { CurrentRealizationRiskPigsPanel } from "@/features/current-realization/components/current-realization-risk-pigs-panel";
 import { useGetRiskTeamStatusQuery, useResetRiskTeamAttemptsMutation } from "@/features/risk-quiz/api/risk-quiz.api";
 import { AdminShell } from "@/shared/components/admin-shell";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
@@ -725,6 +726,10 @@ export default function CurrentRealizationPage() {
                 log to reach. */}
             {isRiskQuizRealization ? (
               <CurrentRealizationRiskChatPanel realizationId={overview.realization.id} />
+            ) : null}
+
+            {isRiskQuizRealization ? (
+              <CurrentRealizationRiskPigsPanel realizationId={overview.realization.id} />
             ) : null}
 
             {overview.realization.type !== "hotel-games" && !isRiskQuizRealization ? (

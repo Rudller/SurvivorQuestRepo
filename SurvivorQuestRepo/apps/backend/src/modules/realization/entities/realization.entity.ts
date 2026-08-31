@@ -81,6 +81,10 @@ export type RealizationEntity = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   // When the organiser actually pressed start, as opposed to the planned slot
@@ -157,6 +161,10 @@ export type ValidatedRealizationPayload = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

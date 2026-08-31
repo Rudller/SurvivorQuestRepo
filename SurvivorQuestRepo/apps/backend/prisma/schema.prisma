@@ -254,6 +254,18 @@ model Realization {
   // channel by letting the Game Master post while teams can only read.
   riskChatEnabled     Boolean            @default(true)
   riskChatTeamsCanPost Boolean           @default(true)
+  // Świnie: nuisance effects teams throw at each other. The grant interval is
+  // read on every poll rather than scheduled — there is no scheduler in this
+  // backend — so changing it takes effect from the next tick onwards.
+  pigsEnabled         Boolean            @default(true)
+  pigGrantIntervalMinutes Int            @default(5)
+  pigEffectSeconds    Int                @default(90)
+  // Off hides the thrower from the victim and from the chat announcement. The
+  // real name is still stored on the effect — the Game Master has to be able to
+  // settle an argument about who did what.
+  pigShowThrowerName  Boolean            @default(true)
+  // Empty means "every type"; otherwise the Game Master's chosen pool.
+  pigTypesEnabled     RiskPigType[]      @default([])
   joinCode            String             @unique
   riskSchemeId        String?
   createdAt           DateTime           @default(now())
@@ -274,6 +286,9 @@ model Realization {
   riskCards           RiskCard[]
   riskAttempts        RiskAttempt[]
   riskChatMessages    RiskChatMessage[]
+  riskPigs            RiskPig[]
+  riskPigEffects      RiskPigEffect[]
+  riskPigGrants       RiskPigGrant[]
 }
 
 model Team {
@@ -303,6 +318,10 @@ model Team {
   pointsQrClaims     PointsQrCodeClaim[]
   riskAttempts       RiskAttempt[]
   riskChatMessages   RiskChatMessage[]
+  heldPig            RiskPig?
+  incomingPigEffect  RiskPigEffect?          @relation("RiskPigEffectTarget")
+  thrownPigEffects   RiskPigEffect[]         @relation("RiskPigEffectSource")
+  riskPigGrants      RiskPigGrant[]
   riskPendingDraw    RiskPendingDraw?
   pendingStationLaunch PendingStationLaunch?
 
@@ -625,4 +644,71 @@ model RiskChatMessage {
 
   @@unique([realizationId, dedupeKey])
   @@index([realizationId, createdAt])
+}
+
+enum RiskPigType {
+  FLASHLIGHT
+  UPSIDE_DOWN
+  SHAKE
+  FOG
+  SQUEAL
+  HASTE
+  OVERHEAD
+}
+
+// A pig a team is holding, not yet thrown. One per team, enforced by the unique
+// below rather than in code — the same trick RiskPendingDraw uses. Holding is
+// capped at one on purpose: nobody stockpiles, so the volume of pigs in the air
+// stays bounded no matter how long the game runs.
+model RiskPig {
+  id            String      @id @default(uuid())
+  realizationId String
+  ownerTeamId   String      @unique
+  // Rolled at grant time, not at throw time: the team knows what it is holding
+  // and chooses who gets it, not what they get.
+  type          RiskPigType
+  createdAt     DateTime    @default(now())
+  realization   Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  ownerTeam     Team        @relation(fields: [ownerTeamId], references: [id], onDelete: Cascade)
+
+  @@index([realizationId])
+}
+
+// A pig currently landing on a team. One per team, so a single crew can never be
+// buried — and while this row is live the team is greyed out in everyone's
+// target picker, which is what spreads the pigs around the room on its own.
+model RiskPigEffect {
+  id            String      @id @default(uuid())
+  realizationId String
+  targetTeamId  String      @unique
+  // null when the Game Master threw it by hand, outside the economy.
+  fromTeamId    String?
+  fromName      String
+  type          RiskPigType
+  // Swept lazily on read: with no scheduler there is nothing to run in the
+  // background, and expiresAt <= now already means "not active".
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+  realization   Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  targetTeam    Team        @relation("RiskPigEffectTarget", fields: [targetTeamId], references: [id], onDelete: Cascade)
+  fromTeam      Team?       @relation("RiskPigEffectSource", fields: [fromTeamId], references: [id], onDelete: SetNull)
+
+  @@index([realizationId, expiresAt])
+}
+
+// One row per team per grant tick. tickKey is derived from the realization's
+// start time and its interval, so every tablet polling at once computes the
+// same key and the unique index settles the race — no locking, same approach as
+// RiskChatMessage.dedupeKey.
+model RiskPigGrant {
+  id            String      @id @default(uuid())
+  realizationId String
+  teamId        String
+  tickKey       String
+  createdAt     DateTime    @default(now())
+  realization   Realization @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  team          Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([realizationId, teamId, tickKey])
+  @@index([realizationId, teamId])
 }

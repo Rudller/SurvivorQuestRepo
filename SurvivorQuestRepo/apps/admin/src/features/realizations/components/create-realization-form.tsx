@@ -150,6 +150,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [hideTaskList, setHideTaskList] = useState(false);
   const [riskChatEnabled, setRiskChatEnabled] = useState(true);
   const [riskChatTeamsCanPost, setRiskChatTeamsCanPost] = useState(true);
+  const [pigsEnabled, setPigsEnabled] = useState(true);
+  const [pigGrantIntervalMinutes, setPigGrantIntervalMinutes] = useState(5);
+  const [pigEffectSeconds, setPigEffectSeconds] = useState(90);
+  const [pigShowThrowerName, setPigShowThrowerName] = useState(true);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
   const [formError, setFormError] = useState<string | null>(null);
@@ -531,6 +535,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setHideTaskList(data.realization.hideTaskList);
     setRiskChatEnabled(data.realization.riskChatEnabled);
     setRiskChatTeamsCanPost(data.realization.riskChatTeamsCanPost);
+    setPigsEnabled(data.realization.pigsEnabled);
+    setPigGrantIntervalMinutes(data.realization.pigGrantIntervalMinutes);
+    setPigEffectSeconds(data.realization.pigEffectSeconds);
+    setPigShowThrowerName(data.realization.pigShowThrowerName);
     setStatus(data.realization.status);
     setScheduledAt(toDateTimeLocalValue(data.realization.scheduledAt));
     setScenarioStations(data.scenarioStations);
@@ -646,6 +654,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     hideTaskList,
     riskChatEnabled,
     riskChatTeamsCanPost,
+    pigsEnabled,
+    pigGrantIntervalMinutes,
+    pigEffectSeconds,
+    pigShowThrowerName,
     status,
     scheduledAt,
     scenarioStations,
@@ -792,6 +804,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 hideTaskList,
                 riskChatEnabled,
                 riskChatTeamsCanPost,
+                pigsEnabled,
+                pigGrantIntervalMinutes,
+                pigEffectSeconds,
+                pigShowThrowerName,
                 status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations ? normalizedScenarioStations : undefined,
@@ -1324,6 +1340,58 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     />
                     Drużyny mogą pisać — odznacz, by zostawić sam kanał ogłoszeń
                   </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={pigsEnabled}
+                      onChange={(event) => setPigsEnabled(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Świnie — przeszkadzajki rzucane między drużynami
+                  </label>
+
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={pigShowThrowerName}
+                      disabled={!pigsEnabled}
+                      onChange={(event) => setPigShowThrowerName(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Świnie — widoczna nazwa drużyny rzucającej
+                  </label>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Świnie co ile minut (1-20)
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={pigGrantIntervalMinutes}
+                        disabled={!pigsEnabled}
+                        onChange={(event) => setPigGrantIntervalMinutes(Number(event.target.value))}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-55"
+                      />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">
+                        Czas działania świni (15-300 s)
+                      </span>
+                      <input
+                        type="number"
+                        min={15}
+                        max={300}
+                        value={pigEffectSeconds}
+                        disabled={!pigsEnabled}
+                        onChange={(event) => setPigEffectSeconds(Number(event.target.value))}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-55"
+                      />
+                    </label>
+                  </div>
                 </FormSection>
 
                 <FormSection title="Mapa">

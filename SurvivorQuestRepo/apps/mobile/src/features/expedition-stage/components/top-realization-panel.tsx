@@ -5,6 +5,7 @@ import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/mod
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { useCountUpValue } from "../../../shared/ui/use-count-up-value";
 import { PanelSurface, type PanelCornerStyle } from "../../../shared/ui/chamfered-panel";
+import { PigIcon } from "../../risk-quiz/components/risk-quiz-icons";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -16,6 +17,9 @@ type TopRealizationPanelProps = {
   teamIcon: string;
   teamBadgeImageUrl?: string | null;
   points: number;
+  // Ryzykanci only: how many pigs the team is holding. Null everywhere else,
+  // which hides the counter — the regular expedition stage has no pigs.
+  pigCount?: number | null;
   languageFlag?: string;
   showLanguageButton?: boolean;
   onOpenLanguagePicker?: () => void;
@@ -33,27 +37,32 @@ const TOP_REALIZATION_PANEL_TEXT: Record<
     logo: string;
     team: string;
     points: string;
+    pigs: string;
   }
 > = {
   polish: {
     logo: "Logo",
     team: "Drużyna",
     points: "Punkty",
+    pigs: "Świnie",
   },
   english: {
     logo: "Logo",
     team: "Team",
     points: "Points",
+    pigs: "Pigs",
   },
   ukrainian: {
     logo: "Логотип",
     team: "Команда",
     points: "Бали",
+    pigs: "Свині",
   },
   russian: {
     logo: "Логотип",
     team: "Команда",
     points: "Очки",
+    pigs: "Свиньи",
   },
 };
 
@@ -113,6 +122,7 @@ export function TopRealizationPanel({
   teamIcon,
   teamBadgeImageUrl,
   points,
+  pigCount = null,
   languageFlag,
   showLanguageButton = false,
   onOpenLanguagePicker,
@@ -146,6 +156,7 @@ export function TopRealizationPanel({
   const teamMetaFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
   const pointsLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 8, 7, 13);
   const pointsFontSize = adaptiveLayout.fs(isTabletLayout ? 24 : 15, 14, 28);
+  const pigIconSize = adaptiveLayout.s(isTabletLayout ? 20 : 14, 12, 24);
   // The chamfered look leans on its outlines, so they carry more weight than
   // the hairline border the rounded variant uses.
   const panelBorderWidth =
@@ -240,6 +251,31 @@ export function TopRealizationPanel({
                   {text.team} {teamSlot ?? "-"} • {teamColorLabel}
                 </Text>
               </View>
+              {/* Sits next to the score rather than out on its own: a held pig
+                  is a resource the team spends, so it belongs where they
+                  already look for what they have. */}
+              {pigCount !== null ? (
+                <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
+                  <Text
+                    className="uppercase tracking-widest"
+                    style={{ color: cardMutedTextColor, fontSize: pointsLabelFontSize }}
+                    numberOfLines={1}
+                  >
+                    {text.pigs}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", columnGap: 4 }}>
+                    <PigIcon size={pigIconSize} color={cardTextColor} />
+                    <Text
+                      className="font-extrabold text-right"
+                      style={{ color: cardTextColor, fontSize: pointsFontSize, includeFontPadding: false }}
+                      numberOfLines={1}
+                    >
+                      {pigCount}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
               <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
                 <Text
                   className="uppercase tracking-widest"

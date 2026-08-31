@@ -1,4 +1,4 @@
-import { RiskDifficulty, StationType } from '@prisma/client';
+import { RiskDifficulty, RiskPigType, StationType } from '@prisma/client';
 
 export const RISK_DIFFICULTY_ORDER: RiskDifficulty[] = [
   RiskDifficulty.EASY,
@@ -61,6 +61,33 @@ export const RISK_STREAK_MULTIPLIER_CAP = 2;
 // column with megabytes.
 export const RISK_REVIEWED_ANSWER_MAX_LENGTH = 2000;
 
+// --- Świnie ---
+
+// Fraction of the field that gets a pig on every grant tick, taken from the
+// bottom of the table. This is what makes the mechanic a catch-up one: the
+// teams having a bad time get the ammunition.
+export const RISK_PIG_WEAKEST_FRACTION = 1 / 4;
+
+// One extra pig per tick on top of the bottom slice, handed to whoever has
+// received the fewest so far. Looks like pure luck from the outside, but it is
+// what guarantees a team that is never in the bottom quarter still gets to
+// throw one before the game ends.
+export const RISK_PIG_WILDCARD_COUNT = 1;
+
+// Wording for every pig, kept next to the enum so adding a type is one edit in
+// each of two places rather than a hunt across the codebase.
+export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
+  FLASHLIGHT: 'Latarka',
+  UPSIDE_DOWN: 'Do góry nogami',
+  SHAKE: 'Trzęsienie',
+  FOG: 'Mgła',
+  SQUEAL: 'Kwik',
+  HASTE: 'Pośpiech',
+  OVERHEAD: 'Nad głową',
+};
+
+export const RISK_PIG_TYPES = Object.keys(RISK_PIG_LABELS) as RiskPigType[];
+
 // Upper bound on one chat message. Deliberately far below the reviewed-answer
 // ceiling: this is a room people talk in, not a place to paste an essay, and a
 // runaway message would push everything else off a tablet screen.
@@ -79,6 +106,7 @@ export const RISK_CHAT_SYSTEM_EVENTS = {
   gameEnd: 'game-end',
   leadChange: 'lead-change',
   deckExhausted: 'deck-exhausted',
+  pigThrown: 'pig-thrown',
 } as const;
 
 // Shown in place of a team name when a team was removed or never named.

@@ -42,6 +42,7 @@
     },
     "plugins": [
       "expo-audio",
+      "expo-sensors",
       "expo-asset",
       [
         "expo-navigation-bar",

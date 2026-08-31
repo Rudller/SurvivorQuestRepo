@@ -1,4 +1,4 @@
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
 
 type IconProps = {
   size: number;
@@ -59,6 +59,24 @@ export function StopwatchIcon({ size, color }: IconProps) {
       <Path d="M9.5 2H14.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
       <Path d="M12 2V5" stroke={color} strokeWidth={2} strokeLinecap="round" />
       <Path d="M12 10V14H15" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// Line art rather than a filled silhouette, so the pig sits on the accent
+// colour the same way the scanner and stopwatch icons do and needs no second
+// colour for the snout and eyes.
+export function PigIcon({ size, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M6.4 7.6L4.6 3.4L9.3 5.2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M17.6 7.6L19.4 3.4L14.7 5.2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Ellipse cx={12} cy={13} rx={8} ry={6.6} stroke={color} strokeWidth={1.8} />
+      <Ellipse cx={12} cy={14.6} rx={3.4} ry={2.6} stroke={color} strokeWidth={1.8} />
+      <Path d="M10.9 14.2V15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M13.1 14.2V15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M8.8 10.4V11.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M15.2 10.4V11.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

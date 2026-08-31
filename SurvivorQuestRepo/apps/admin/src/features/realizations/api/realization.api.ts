@@ -113,6 +113,10 @@ type RealizationDto = {
   hideTaskList?: boolean;
   riskChatEnabled?: boolean;
   riskChatTeamsCanPost?: boolean;
+  pigsEnabled?: boolean;
+  pigGrantIntervalMinutes?: number;
+  pigEffectSeconds?: number;
+  pigShowThrowerName?: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -154,6 +158,10 @@ type CreateRealizationPayload = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -201,6 +209,10 @@ type UpdateRealizationPayload = {
   hideTaskList: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
+  pigsEnabled: boolean;
+  pigGrantIntervalMinutes: number;
+  pigEffectSeconds: number;
+  pigShowThrowerName: boolean;
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -436,6 +448,10 @@ function normalizeRealization(dto: RealizationDto): Realization {
     // from an older server must not read as "chat off".
     riskChatEnabled: dto.riskChatEnabled !== false,
     riskChatTeamsCanPost: dto.riskChatTeamsCanPost !== false,
+    pigsEnabled: dto.pigsEnabled !== false,
+    pigGrantIntervalMinutes: dto.pigGrantIntervalMinutes ?? 5,
+    pigEffectSeconds: dto.pigEffectSeconds ?? 90,
+    pigShowThrowerName: dto.pigShowThrowerName !== false,
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,

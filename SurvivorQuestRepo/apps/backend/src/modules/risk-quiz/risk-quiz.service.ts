@@ -4,10 +4,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   Prisma,
   RiskChatAuthorKind,
   RiskDifficulty,
+  RiskPigType,
   RiskPoolStation as PrismaRiskPoolStationRow,
   Station as PrismaStationRow,
   StationType as PrismaStationType,
@@ -34,6 +36,10 @@ import {
   RISK_CHAT_MESSAGE_MAX_LENGTH,
   RISK_CHAT_SYSTEM_EVENTS,
   RISK_DIFFICULTY_POINTS,
+  RISK_PIG_LABELS,
+  RISK_PIG_TYPES,
+  RISK_PIG_WEAKEST_FRACTION,
+  RISK_PIG_WILDCARD_COUNT,
   RISK_REVIEWED_ANSWER_MAX_LENGTH,
   resolveRiskTeamDisplayName,
   RISK_STREAK_MULTIPLIER_CAP,
@@ -45,6 +51,19 @@ import {
 // (see fromPrismaStationType). Comparing against 'quiz'/'audio-quiz' here
 // silently never matched, so every QUIZ-type risk card fell through to the
 // generic "completed / gave up" flow instead of showing real answer options.
+// Deterministic stand-in for Math.random when two tablets must agree. Two
+// concurrent syncs of the same tick have to pick the same wildcard, and a hash
+// of (tick, team) gives an order that is stable across processes yet does not
+// simply march down the slot numbers.
+function stableTieBreak(tickKey: string, teamId: string) {
+  const seed = `${tickKey}:${teamId}`;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) % 1_000_003;
+  }
+  return hash;
+}
+
 const ANSWER_INDEX_STATION_TYPES = new Set<PrismaStationType>([
   PrismaStationType.QUIZ,
   PrismaStationType.AUDIO_QUIZ,
@@ -1357,6 +1376,431 @@ export class RiskQuizService {
       dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.leadChange}:${leader.id}:${leader.points}`,
       content: `${leaderName} wychodzi na prowadzenie (${leader.points} pkt).`,
     });
+  }
+
+  // --- Świnie: przeszkadzajki rzucane między drużynami ---
+
+  async getPigState(input: { sessionToken: string }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+
+    if (!realization.pigsEnabled) {
+      return {
+        enabled: false as const,
+        held: null,
+        incoming: null,
+        targets: [],
+      };
+    }
+
+    await this.syncPigGrants(realization.id);
+    return this.readPigState(
+      realization.id,
+      team.id,
+      realization.pigShowThrowerName,
+    );
+  }
+
+  async listPigStateForAdmin(realizationId: string) {
+    const realization = await this.requireRealizationOrThrow(realizationId);
+    if (!realization.pigsEnabled) {
+      return { enabled: false as const, teams: [] };
+    }
+
+    await this.syncPigGrants(realization.id);
+
+    const now = new Date();
+    const [teams, held, effects] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { realizationId },
+        orderBy: { slotNumber: 'asc' },
+        select: { id: true, name: true, slotNumber: true, points: true },
+      }),
+      this.prisma.riskPig.findMany({ where: { realizationId } }),
+      this.prisma.riskPigEffect.findMany({
+        where: { realizationId, expiresAt: { gt: now } },
+      }),
+    ]);
+
+    const heldByTeam = new Map(held.map((pig) => [pig.ownerTeamId, pig]));
+    const effectByTeam = new Map(
+      effects.map((effect) => [effect.targetTeamId, effect]),
+    );
+
+    return {
+      enabled: true as const,
+      teams: teams.map((item) => {
+        const effect = effectByTeam.get(item.id);
+        return {
+          teamId: item.id,
+          teamName: resolveRiskTeamDisplayName(item),
+          points: item.points,
+          heldPigType: heldByTeam.get(item.id)?.type ?? null,
+          activePigType: effect?.type ?? null,
+          activeFromName: effect?.fromName ?? null,
+          activeSecondsLeft: effect
+            ? Math.max(
+                0,
+                Math.ceil((effect.expiresAt.getTime() - now.getTime()) / 1000),
+              )
+            : null,
+        };
+      }),
+    };
+  }
+
+  async throwPig(input: { sessionToken: string; targetTeamId?: string }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+
+    if (!realization.pigsEnabled) {
+      throw new BadRequestException('Pigs are disabled for this realization');
+    }
+
+    const held = await this.prisma.riskPig.findUnique({
+      where: { ownerTeamId: team.id },
+    });
+    if (!held) {
+      throw new BadRequestException('This team holds no pig');
+    }
+
+    const available = await this.listAvailablePigTargets(
+      realization.id,
+      team.id,
+    );
+    if (available.length === 0) {
+      throw new BadRequestException('No team can be targeted right now');
+    }
+
+    // Omitting the target means "pick for me" — the picker offers that as a
+    // button, and it is also the fallback the client uses when the chosen team
+    // got hit by somebody else between rendering the list and tapping.
+    const target = input.targetTeamId
+      ? available.find((item) => item.id === input.targetTeamId)
+      : available[Math.floor(Math.random() * available.length)];
+    if (!target) {
+      throw new BadRequestException('This team cannot be targeted right now');
+    }
+
+    const fromName = resolveRiskTeamDisplayName(team);
+    const expiresAt = new Date(
+      Date.now() + realization.pigEffectSeconds * 1000,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.riskPig.delete({ where: { id: held.id } }),
+      this.prisma.riskPigEffect.create({
+        data: {
+          realizationId: realization.id,
+          targetTeamId: target.id,
+          fromTeamId: team.id,
+          fromName,
+          type: held.type,
+          expiresAt,
+        },
+      }),
+    ]);
+
+    await this.announcePigThrow({
+      realizationId: realization.id,
+      targetTeamId: target.id,
+      fromName,
+      showThrowerName: realization.pigShowThrowerName,
+      targetName: resolveRiskTeamDisplayName(target),
+      type: held.type,
+    });
+
+    return this.readPigState(
+      realization.id,
+      team.id,
+      realization.pigShowThrowerName,
+    );
+  }
+
+  async throwPigAsGameMaster(input: {
+    realizationId: string;
+    targetTeamId: string;
+    type: RiskPigType;
+  }) {
+    const realization = await this.requireRealizationOrThrow(
+      input.realizationId,
+    );
+    if (!realization.pigsEnabled) {
+      throw new BadRequestException('Pigs are disabled for this realization');
+    }
+
+    const target = await this.prisma.team.findUnique({
+      where: { id: input.targetTeamId },
+      select: { id: true, name: true, slotNumber: true, realizationId: true },
+    });
+    if (!target || target.realizationId !== realization.id) {
+      throw new NotFoundException('Team not found');
+    }
+
+    // The Game Master overwrites whatever is running rather than being told the
+    // team is busy — a manual throw is a deliberate act, not part of the
+    // economy the availability rule exists to balance.
+    await this.prisma.riskPigEffect.deleteMany({
+      where: { targetTeamId: target.id },
+    });
+    await this.prisma.riskPigEffect.create({
+      data: {
+        realizationId: realization.id,
+        targetTeamId: target.id,
+        fromTeamId: null,
+        fromName: 'Mistrz Gry',
+        type: input.type,
+        expiresAt: new Date(Date.now() + realization.pigEffectSeconds * 1000),
+      },
+    });
+
+    await this.announcePigThrow({
+      realizationId: realization.id,
+      targetTeamId: target.id,
+      fromName: 'Mistrz Gry',
+      // The Game Master is never anonymous: an announcement from the host is
+      // the one case where knowing the source is the whole point.
+      showThrowerName: true,
+      targetName: resolveRiskTeamDisplayName(target),
+      type: input.type,
+    });
+
+    return this.listPigStateForAdmin(realization.id);
+  }
+
+  private async readPigState(
+    realizationId: string,
+    teamId: string,
+    showThrowerName: boolean,
+  ) {
+    const now = new Date();
+    const [held, incoming, targets] = await Promise.all([
+      this.prisma.riskPig.findUnique({ where: { ownerTeamId: teamId } }),
+      this.prisma.riskPigEffect.findUnique({
+        where: { targetTeamId: teamId },
+      }),
+      this.listPigTargets(realizationId, teamId),
+    ]);
+
+    return {
+      enabled: true as const,
+      held: held ? { type: held.type } : null,
+      incoming:
+        incoming && incoming.expiresAt.getTime() > now.getTime()
+          ? {
+              type: incoming.type,
+              // Masked for the victim only — the stored row keeps the real name
+              // so the Game Master's panel can still say who threw it.
+              fromName: showThrowerName ? incoming.fromName : null,
+              // An absolute instant rather than a countdown: the tablet ticks
+              // between five-second polls, and counting down a number the
+              // client also mutates makes the timer drift and forces an effect
+              // to depend on something it changes itself.
+              expiresAt: incoming.expiresAt.toISOString(),
+            }
+          : null,
+      targets,
+    };
+  }
+
+  private async listPigTargets(realizationId: string, teamId: string) {
+    const now = new Date();
+    const [teams, effects] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { realizationId, id: { not: teamId } },
+        orderBy: { slotNumber: 'asc' },
+        select: { id: true, name: true, slotNumber: true, color: true },
+      }),
+      this.prisma.riskPigEffect.findMany({
+        where: { realizationId, expiresAt: { gt: now } },
+        select: { targetTeamId: true },
+      }),
+    ]);
+
+    const busy = new Set(effects.map((effect) => effect.targetTeamId));
+    return teams.map((item) => ({
+      teamId: item.id,
+      teamName: resolveRiskTeamDisplayName(item),
+      teamColor: item.color,
+      // A team already under a pig is greyed out rather than hidden: seeing that
+      // somebody is currently having a bad time is half the fun.
+      isAvailable: !busy.has(item.id),
+    }));
+  }
+
+  private async listAvailablePigTargets(realizationId: string, teamId: string) {
+    const now = new Date();
+    const [teams, effects] = await Promise.all([
+      this.prisma.team.findMany({
+        where: { realizationId, id: { not: teamId } },
+        select: { id: true, name: true, slotNumber: true },
+      }),
+      this.prisma.riskPigEffect.findMany({
+        where: { realizationId, expiresAt: { gt: now } },
+        select: { targetTeamId: true },
+      }),
+    ]);
+
+    const busy = new Set(effects.map((effect) => effect.targetTeamId));
+    return teams.filter((item) => !busy.has(item.id));
+  }
+
+  private async announcePigThrow(input: {
+    realizationId: string;
+    targetTeamId: string;
+    fromName: string;
+    showThrowerName: boolean;
+    targetName: string;
+    type: RiskPigType;
+  }) {
+    await this.announceSystemMessage({
+      realizationId: input.realizationId,
+      teamId: input.targetTeamId,
+      systemEvent: RISK_CHAT_SYSTEM_EVENTS.pigThrown,
+      // Unique per throw: unlike the derived events, this one is a real moment
+      // and every single one of them belongs in the room's history.
+      dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.pigThrown}:${randomUUID()}`,
+      // Composed once, at throw time: a chat line is history and cannot be
+      // masked retroactively if the setting changes later in the game.
+      content: input.showThrowerName
+        ? `${input.fromName} rzuca świnię „${RISK_PIG_LABELS[input.type]}” w drużynę ${input.targetName}!`
+        : `Ktoś rzuca świnię „${RISK_PIG_LABELS[input.type]}” w drużynę ${input.targetName}!`,
+    });
+  }
+
+  /**
+   * Hands out pigs for every grant tick that has come due since the last read.
+   *
+   * There is no scheduler in this backend, so this runs off the polls instead —
+   * the same approach the chat's system messages use. Every tablet re-derives
+   * the same tick at the same time, so the unique index on
+   * (realizationId, teamId, tickKey) is what settles the race: whoever inserts
+   * the grant row first is the one that creates the pig.
+   */
+  private async syncPigGrants(realizationId: string) {
+    const realization = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        durationMinutes: true,
+        pigsEnabled: true,
+        pigGrantIntervalMinutes: true,
+        pigTypesEnabled: true,
+      },
+    });
+    if (
+      !realization?.pigsEnabled ||
+      !realization.startedAt ||
+      realization.status === 'DONE' ||
+      realization.pigGrantIntervalMinutes <= 0
+    ) {
+      return;
+    }
+
+    const endsAt =
+      realization.startedAt.getTime() + realization.durationMinutes * 60_000;
+    if (Date.now() >= endsAt) {
+      return;
+    }
+
+    const intervalMs = realization.pigGrantIntervalMinutes * 60_000;
+    const elapsed = Date.now() - realization.startedAt.getTime();
+    // Tick 0 is the moment the game starts; the first hand-out is one whole
+    // interval later, so nobody is throwing pigs before anyone has played.
+    const tickIndex = Math.floor(elapsed / intervalMs);
+    if (tickIndex < 1) {
+      return;
+    }
+
+    const tickKey = `tick:${tickIndex}`;
+    const teams = await this.prisma.team.findMany({
+      where: { realizationId },
+      select: { id: true, points: true, slotNumber: true },
+    });
+    if (teams.length < 2) {
+      return;
+    }
+
+    const grantCounts = await this.prisma.riskPigGrant.groupBy({
+      by: ['teamId'],
+      where: { realizationId },
+      _count: { teamId: true },
+    });
+    const receivedByTeam = new Map(
+      grantCounts.map((row) => [row.teamId, row._count.teamId]),
+    );
+
+    const weakestCount = Math.max(
+      1,
+      Math.round(teams.length * RISK_PIG_WEAKEST_FRACTION),
+    );
+    const weakest = [...teams].sort(
+        (a, b) => a.points - b.points || a.slotNumber - b.slotNumber,
+      )
+      .slice(0, weakestCount);
+    const weakestIds = new Set(weakest.map((item) => item.id));
+
+    // The "random" slot, chosen from whoever has received the fewest pigs so
+    // far. Ties break on a hash of (tick, team) rather than Math.random so two
+    // tablets syncing the same tick agree on the winner — and so the order
+    // still looks arbitrary instead of marching down the slot numbers.
+    const wildcards = teams
+      .filter((item) => !weakestIds.has(item.id))
+      .sort((a, b) => {
+        const received =
+          (receivedByTeam.get(a.id) ?? 0) - (receivedByTeam.get(b.id) ?? 0);
+        if (received !== 0) {
+          return received;
+        }
+        return (
+          stableTieBreak(tickKey, a.id) - stableTieBreak(tickKey, b.id)
+        );
+      })
+      .slice(0, RISK_PIG_WILDCARD_COUNT);
+
+    const pool =
+      realization.pigTypesEnabled.length > 0
+        ? realization.pigTypesEnabled
+        : RISK_PIG_TYPES;
+
+    for (const recipient of [...weakest, ...wildcards]) {
+      try {
+        // Grant row first: it is the unique-guarded one, so winning it is what
+        // earns the right to create the pig.
+        await this.prisma.riskPigGrant.create({
+          data: { realizationId, teamId: recipient.id, tickKey },
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          continue;
+        }
+        throw error;
+      }
+
+      // Holding is capped at one, so a team sitting on an unused pig simply
+      // skips this round rather than stockpiling.
+      const alreadyHolding = await this.prisma.riskPig.findUnique({
+        where: { ownerTeamId: recipient.id },
+      });
+      if (alreadyHolding) {
+        continue;
+      }
+
+      await this.prisma.riskPig.create({
+        data: {
+          realizationId,
+          ownerTeamId: recipient.id,
+          type: pool[Math.floor(Math.random() * pool.length)],
+        },
+      });
+    }
   }
 
   // --- Admin: categories (reusable task pools), schemes (decks), cards, board ---
