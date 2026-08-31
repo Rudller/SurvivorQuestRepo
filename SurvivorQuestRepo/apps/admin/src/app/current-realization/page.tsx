@@ -22,7 +22,6 @@ import {
 import type { CurrentRealizationOverview } from "@/features/current-realization/types/current-realization-overview";
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
-import { CurrentRealizationRiskQuizPanel } from "@/features/current-realization/components/current-realization-risk-quiz-panel";
 import { CurrentRealizationRiskChatPanel } from "@/features/current-realization/components/current-realization-risk-chat-panel";
 import { useGetRiskTeamStatusQuery, useResetRiskTeamAttemptsMutation } from "@/features/risk-quiz/api/risk-quiz.api";
 import { AdminShell } from "@/shared/components/admin-shell";
@@ -296,6 +295,17 @@ export default function CurrentRealizationPage() {
     () => new Map((riskTeamStatus?.teams ?? []).map((team) => [team.teamId, team])),
     [riskTeamStatus],
   );
+  const riskCardsTotal = useMemo(
+    () =>
+      (riskTeamStatus?.teams ?? []).reduce(
+        (total, team) => ({
+          attempted: total.attempted + team.totalAttempted,
+          available: total.available + team.totalCards,
+        }),
+        { attempted: 0, available: 0 },
+      ),
+    [riskTeamStatus],
+  );
   const [resetRiskTeamAttempts, { isLoading: isResettingRiskCards }] = useResetRiskTeamAttemptsMutation();
   const [pendingRiskResetTeamId, setPendingRiskResetTeamId] = useState<string | null>(null);
 
@@ -441,17 +451,31 @@ export default function CurrentRealizationPage() {
               </p>
             )}
           </div>
-          <div className="self-start rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
-            <p>Kod dołączenia</p>
-            <p className="mt-0.5 text-sm font-semibold tracking-widest">{overview?.realization.joinCode ?? "---"}</p>
-            <button
-              type="button"
-              onClick={() => void showJoinCodeQr()}
-              disabled={!overview?.realization.joinCode || isGeneratingJoinCodeQr}
-              className="mt-1.5 w-full rounded-md border border-amber-400/40 px-2 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              {isGeneratingJoinCodeQr ? "Generuję..." : "Pokaż QR"}
-            </button>
+          <div className="flex self-start gap-3">
+            {isRiskQuizRealization && overview ? (
+              <a
+                href={`/risk-quiz/${overview.realization.id}/prompter`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/20"
+              >
+                Otwórz prompter
+              </a>
+            ) : null}
+            <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
+              <p>Kod dołączenia</p>
+              <p className="mt-0.5 text-sm font-semibold tracking-widest">
+                {overview?.realization.joinCode ?? "---"}
+              </p>
+              <button
+                type="button"
+                onClick={() => void showJoinCodeQr()}
+                disabled={!overview?.realization.joinCode || isGeneratingJoinCodeQr}
+                className="mt-1.5 w-full rounded-md border border-amber-400/40 px-2 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                {isGeneratingJoinCodeQr ? "Generuję..." : "Pokaż QR"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -652,7 +676,7 @@ export default function CurrentRealizationPage() {
 
         {overview && (
           <div className="mt-5 space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                 <p className="text-xs uppercase tracking-wider text-zinc-500">Aktywne drużyny</p>
                 <p className="mt-1 text-xl font-semibold text-zinc-100">
@@ -667,9 +691,20 @@ export default function CurrentRealizationPage() {
                 <p className="mt-1 text-xs text-zinc-400">{topTeam ? `${topTeam.points} pkt` : "Brak danych"}</p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-                <p className="text-xs uppercase tracking-wider text-zinc-500">Ukończone zadania</p>
-                <p className="mt-1 text-xl font-semibold text-zinc-100">{overview.stats.completedTasks}</p>
-                <p className="mt-1 text-xs text-zinc-400">Pozostało: {remainingTasks}</p>
+                <p className="text-xs uppercase tracking-wider text-zinc-500">
+                  {isRiskQuizRealization ? "Łączna statystyka kart" : "Ukończone zadania"}
+                </p>
+                <p className="mt-1 text-xl font-semibold text-zinc-100">
+                  {isRiskQuizRealization
+                    ? `${riskCardsTotal.attempted}/${riskCardsTotal.available}`
+                    : overview.stats.completedTasks}
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Pozostało:{" "}
+                  {isRiskQuizRealization
+                    ? Math.max(riskCardsTotal.available - riskCardsTotal.attempted, 0)
+                    : remainingTasks}
+                </p>
               </div>
             </div>
 
@@ -692,14 +727,15 @@ export default function CurrentRealizationPage() {
               <CurrentRealizationRiskChatPanel realizationId={overview.realization.id} />
             ) : null}
 
-            <CurrentRealizationTeamsMap
-              realization={overview.realization}
-              teams={overview.teams}
-              teamStationNumberingEnabled={selectedOverviewRealization?.teamStationNumberingEnabled ?? true}
-            />
+            {overview.realization.type !== "hotel-games" && !isRiskQuizRealization ? (
+              <CurrentRealizationTeamsMap
+                realization={overview.realization}
+                teams={overview.teams}
+                teamStationNumberingEnabled={selectedOverviewRealization?.teamStationNumberingEnabled ?? true}
+              />
+            ) : null}
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <div className="space-y-5">
+            <div className="space-y-5">
                 <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/70">
                   <div className="border-b border-zinc-800 px-4 py-3">
                     <h2 className="text-sm font-semibold text-zinc-100">Drużyny</h2>
@@ -880,30 +916,6 @@ export default function CurrentRealizationPage() {
                     </table>
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-5">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-                  <h2 className="text-sm font-semibold text-zinc-100">Konfiguracja</h2>
-                  <div className="mt-3 space-y-2 text-sm text-zinc-300">
-                    <p>
-                      <span className="text-zinc-500">Status:</span> {overview.realization.status}
-                    </p>
-                    <p>
-                      <span className="text-zinc-500">Lokalizacja wymagana:</span>{" "}
-                      {overview.realization.locationRequired ? "Tak" : "Nie"}
-                    </p>
-                    {isRiskQuizRealization ? null : (
-                      <p>
-                        <span className="text-zinc-500">Stanowiska:</span>{" "}
-                        {overview.realization.stations
-                          .map((station) => station.stationName || station.stationId)
-                          .join(", ")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
                   <h2 className="text-sm font-semibold text-zinc-100">Log zdarzeń</h2>
                   <div className="mt-3 max-h-105 space-y-2.5 overflow-y-auto pr-1">
@@ -949,15 +961,7 @@ export default function CurrentRealizationPage() {
                     </button>
                   ) : null}
                 </div>
-              </div>
             </div>
-
-            {isRiskQuizRealization ? (
-              <CurrentRealizationRiskQuizPanel
-                realizationId={overview.realization.id}
-                realizationName={overview.realization.companyName}
-              />
-            ) : null}
           </div>
         )}
       </div>

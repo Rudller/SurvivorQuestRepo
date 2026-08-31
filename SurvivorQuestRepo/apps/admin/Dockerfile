@@ -14,6 +14,7 @@ COPY apps/mobile/package.json apps/mobile/package.json
 RUN pnpm install --frozen-lockfile --filter admin...
 
 COPY apps/admin apps/admin
+COPY apps/mobile/assets/karty apps/mobile/assets/karty
 
 # Keep Docker build on the root workspace lock/config.
 RUN rm -f apps/admin/pnpm-lock.yaml apps/admin/pnpm-workspace.yaml

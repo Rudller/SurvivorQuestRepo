@@ -68,7 +68,7 @@ export function CurrentRealizationRiskChatPanel({
   const messages = chat?.messages ?? [];
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+    <div className="flex h-96 flex-col rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-100">Czat</h2>
         {chat && !chat.canPost ? (
@@ -78,7 +78,7 @@ export function CurrentRealizationRiskChatPanel({
         ) : null}
       </div>
 
-      <div className="mb-3 max-h-80 space-y-2 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+      <div className="mb-3 min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
         {messages.length === 0 ? (
           <p className="text-xs text-zinc-500">Jeszcze nikt nic nie napisał.</p>
         ) : null}

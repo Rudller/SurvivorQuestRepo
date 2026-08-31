@@ -9,6 +9,7 @@ import {
   buildStationQrArchiveFileName,
 } from "@/shared/lib/station-qr-file-name";
 import { downloadQrImagesAsZip } from "@/shared/lib/qr-zip";
+import { renderRiskCardImage, riskCardOrdinal } from "../lib/risk-card-image";
 import {
   QrImageLightbox,
   type QrImageLightboxImage,
@@ -20,7 +21,7 @@ type RiskSchemeQrPanelProps = {
   onClose: () => void;
 };
 
-const QR_IMAGE_WIDTH = 220;
+const QR_IMAGE_WIDTH = 350;
 
 function difficultyLabel(value: string) {
   return (
@@ -49,9 +50,15 @@ export function RiskSchemeQrPanel({
   const [qrImagesByCode, setQrImagesByCode] = useState<Record<string, string>>(
     {},
   );
+  const [cardImagesByCode, setCardImagesByCode] = useState<
+    Record<string, string>
+  >({});
+  const [showPrintableCards, setShowPrintableCards] = useState(false);
+  const [isGeneratingCards, setIsGeneratingCards] = useState(false);
   const [lightboxImage, setLightboxImage] =
     useState<QrImageLightboxImage | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingQrZip, setIsDownloadingQrZip] = useState(false);
+  const [isDownloadingCardZip, setIsDownloadingCardZip] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,7 +71,7 @@ export function RiskSchemeQrPanel({
     void Promise.all(
       codes.map(async (entry) => {
         const qrImage = await QRCode.toDataURL(entry.code, {
-          margin: 1,
+          margin: 2,
           width: QR_IMAGE_WIDTH,
           errorCorrectionLevel: "M",
         });
@@ -81,7 +88,44 @@ export function RiskSchemeQrPanel({
     };
   }, [codes]);
 
-  const downloadableEntries = useMemo(
+  async function generateCardImages() {
+    if (!codes || codes.length === 0) {
+      return [];
+    }
+
+    setDownloadError(null);
+    setIsGeneratingCards(true);
+    try {
+      const items = await Promise.all(
+        codes.map(async (entry) => {
+          const qrImage =
+            qrImagesByCode[entry.code] ??
+            (await QRCode.toDataURL(entry.code, {
+              margin: 2,
+              width: QR_IMAGE_WIDTH,
+              errorCorrectionLevel: "M",
+            }));
+          const cardImage = await renderRiskCardImage({
+            qrImage,
+            categoryName: entry.categoryName,
+            difficulty: entry.difficulty,
+            ordinal: riskCardOrdinal(entry.code),
+          });
+          return [entry.code, cardImage] as const;
+        }),
+      );
+      const generatedImages = Object.fromEntries(items);
+      setCardImagesByCode(generatedImages);
+      return items.map(([code, qrImage]) => ({ code, qrImage }));
+    } catch {
+      setDownloadError("Nie udało się wygenerować gotowych kart.");
+      return [];
+    } finally {
+      setIsGeneratingCards(false);
+    }
+  }
+
+  const downloadableQrEntries = useMemo(
     () =>
       (codes ?? [])
         .map((entry) => {
@@ -104,23 +148,85 @@ export function RiskSchemeQrPanel({
     [codes, qrImagesByCode, schemeName],
   );
 
-  async function handleDownloadZip() {
-    if (downloadableEntries.length === 0) {
+  const downloadableCardEntries = useMemo(
+    () =>
+      (codes ?? [])
+        .map((entry) => {
+          const qrImage = cardImagesByCode[entry.code];
+          return qrImage
+            ? {
+                fileName: buildRiskCardQrFileName(
+                  schemeName,
+                  entry.categoryName,
+                  entry.code,
+                ),
+                qrImage,
+              }
+            : null;
+        })
+        .filter((entry): entry is { fileName: string; qrImage: string } =>
+          Boolean(entry),
+        ),
+    [codes, cardImagesByCode, schemeName],
+  );
+
+  async function handleDownloadQrZip() {
+    if (downloadableQrEntries.length === 0) {
       setDownloadError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
     }
 
     setDownloadError(null);
-    setIsDownloading(true);
+    setIsDownloadingQrZip(true);
     try {
       await downloadQrImagesAsZip(
-        downloadableEntries,
+        downloadableQrEntries,
         buildStationQrArchiveFileName(`${schemeName} - Ryzykanci`),
       );
     } catch {
       setDownloadError("Nie udało się przygotować paczki ZIP.");
     } finally {
-      setIsDownloading(false);
+      setIsDownloadingQrZip(false);
+    }
+  }
+
+  async function handleDownloadCardZip() {
+    setDownloadError(null);
+    setIsDownloadingCardZip(true);
+    try {
+      let entries = downloadableCardEntries;
+      if (entries.length !== (codes?.length ?? 0)) {
+        const generated = await generateCardImages();
+        const generatedByCode = new Map(
+          generated.map((entry) => [entry.code, entry.qrImage]),
+        );
+        entries = (codes ?? []).flatMap((entry) => {
+          const qrImage = generatedByCode.get(entry.code);
+          return qrImage
+            ? [
+                {
+                  fileName: buildRiskCardQrFileName(
+                    schemeName,
+                    entry.categoryName,
+                    entry.code,
+                  ),
+                  qrImage,
+                },
+              ]
+            : [];
+        });
+      }
+      if (entries.length === 0) {
+        return;
+      }
+      await downloadQrImagesAsZip(
+        entries,
+        buildStationQrArchiveFileName(`${schemeName} - Ryzykanci - karty`),
+      );
+    } catch {
+      setDownloadError("Nie udało się przygotować paczki kart ZIP.");
+    } finally {
+      setIsDownloadingCardZip(false);
     }
   }
 
@@ -137,25 +243,39 @@ export function RiskSchemeQrPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold text-zinc-100">
-              Kody QR do druku
+              Kody QR i karty do druku
             </h2>
             <p className="mt-1 text-sm text-zinc-400">{schemeName}</p>
             <p className="mt-1 text-xs text-zinc-500">
-              Kody są wyliczane z kategorii tej talii, więc możesz je
-              wydrukować, zanim powstanie jakakolwiek realizacja — ta sama
-              naklejka zadziała w każdej realizacji zbudowanej na tej talii.
+              Domyślnie widzisz same kody QR. Możesz przełączyć je na gotowe
+              karty ze szablonem, kategorią, numerem i ikoną. Te same kody
+              zadziałają w każdej realizacji zbudowanej na tej talii.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={() => void handleDownloadZip()}
-              disabled={isDownloading || downloadableEntries.length === 0}
+              onClick={() => void handleDownloadQrZip()}
+              disabled={
+                isDownloadingQrZip || downloadableQrEntries.length === 0
+              }
               className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isDownloading
+              {isDownloadingQrZip
                 ? "Przygotowywanie paczki ZIP..."
-                : `Pobierz paczkę ZIP${downloadableEntries.length > 0 ? ` (${downloadableEntries.length})` : ""}`}
+                : `Pobierz paczkę ZIP${downloadableQrEntries.length > 0 ? ` (${downloadableQrEntries.length})` : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownloadCardZip()}
+              disabled={
+                isDownloadingCardZip || isGeneratingCards || !codes?.length
+              }
+              className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDownloadingCardZip
+                ? "Przygotowywanie kart ZIP..."
+                : `Pobierz paczkę kart ZIP${codes?.length ? ` (${codes.length})` : ""}`}
             </button>
             <button
               type="button"
@@ -186,9 +306,35 @@ export function RiskSchemeQrPanel({
       ) : null}
 
       {!isLoading && !isError && codes && codes.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {codes.map((entry) => {
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (showPrintableCards) {
+                setShowPrintableCards(false);
+                return;
+              }
+              void generateCardImages().then((entries) => {
+                if (entries.length > 0) {
+                  setShowPrintableCards(true);
+                }
+              });
+            }}
+            disabled={isGeneratingCards}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-amber-300 disabled:opacity-60"
+          >
+            {isGeneratingCards
+              ? "Generowanie kart..."
+              : showPrintableCards
+                ? "Pokaż same QR"
+                : "Wygeneruj karty"}
+          </button>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {codes.map((entry) => {
             const qrImage = qrImagesByCode[entry.code];
+            const cardImage = cardImagesByCode[entry.code];
+            const displayImage = showPrintableCards ? cardImage : qrImage;
+            const isShowingCard = showPrintableCards && Boolean(cardImage);
             const fileName = buildRiskCardQrFileName(
               schemeName,
               entry.categoryName,
@@ -207,14 +353,16 @@ export function RiskSchemeQrPanel({
                   {entry.code}
                 </p>
                 <div className="mt-2 flex min-h-48 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
-                  {qrImage ? (
+                  {displayImage ? (
                     <button
                       type="button"
                       onClick={() =>
                         setLightboxImage({
-                          src: qrImage,
-                          downloadSrc: qrImage,
-                          alt: `Kod QR ${entry.code}`,
+                          src: displayImage,
+                          downloadSrc: displayImage,
+                          alt: isShowingCard
+                            ? `Karta ${entry.categoryName} ${riskCardOrdinal(entry.code)}`
+                            : `Kod QR ${entry.code}`,
                           downloadFileName: fileName,
                           caption: entry.code,
                         })
@@ -223,28 +371,37 @@ export function RiskSchemeQrPanel({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={qrImage}
-                        alt={`Kod QR ${entry.code}`}
-                        className="h-40 w-40 rounded-md bg-white p-1"
+                        src={displayImage}
+                        alt={
+                          isShowingCard
+                            ? `Karta ${entry.categoryName} ${riskCardOrdinal(entry.code)}`
+                            : `Kod QR ${entry.code}`
+                        }
+                        className={
+                          isShowingCard
+                            ? "h-auto max-h-96 w-auto rounded-md"
+                            : "h-40 w-40 rounded-md bg-white p-1"
+                        }
                       />
                     </button>
                   ) : (
                     <p className="text-xs text-zinc-500">Renderowanie kodu...</p>
                   )}
                 </div>
-                {qrImage ? (
+                {displayImage ? (
                   <a
-                    href={qrImage}
+                    href={displayImage}
                     download={fileName}
                     className="mt-2 block rounded-md border border-zinc-700 px-2.5 py-1.5 text-center text-xs text-zinc-200 transition hover:border-zinc-500"
                   >
-                    Pobierz PNG
+                    {isShowingCard ? "Pobierz gotową kartę PNG" : "Pobierz QR PNG"}
                   </a>
                 ) : null}
               </article>
             );
-          })}
+            })}
           </div>
+        </div>
         ) : null}
       </aside>
 

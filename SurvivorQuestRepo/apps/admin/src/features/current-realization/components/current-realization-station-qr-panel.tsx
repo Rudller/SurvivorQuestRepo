@@ -88,11 +88,21 @@ export function CurrentRealizationStationQrPanel({
   const [copiedStationId, setCopiedStationId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [isDownloadingCardZip, setIsDownloadingCardZip] = useState(false);
   const [lightboxImage, setLightboxImage] =
     useState<QrImageLightboxImage | null>(null);
+  const [riskQrDownloadEntries, setRiskQrDownloadEntries] = useState<
+    RiskCardQrDownloadEntry[]
+  >([]);
   const [riskCardDownloadEntries, setRiskCardDownloadEntries] = useState<
     RiskCardQrDownloadEntry[]
   >([]);
+  const handleRiskQrsDownloadableChange = useCallback(
+    (entries: RiskCardQrDownloadEntry[]) => {
+      setRiskQrDownloadEntries(entries);
+    },
+    [],
+  );
   const handleRiskCardsDownloadableChange = useCallback(
     (entries: RiskCardQrDownloadEntry[]) => {
       setRiskCardDownloadEntries(entries);
@@ -321,7 +331,7 @@ export function CurrentRealizationStationQrPanel({
     downloadableEntries.length +
     downloadableHuntEntries.length +
     downloadablePointsEntries.length +
-    riskCardDownloadEntries.length;
+    riskQrDownloadEntries.length;
 
   async function handleCopyEntryUrl(stationId: string, entryUrl: string) {
     setCopyError(null);
@@ -348,7 +358,7 @@ export function CurrentRealizationStationQrPanel({
       !downloadableEntries.length &&
       !downloadableHuntEntries.length &&
       !downloadablePointsEntries.length &&
-      !riskCardDownloadEntries.length
+      !riskQrDownloadEntries.length
     ) {
       setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
@@ -399,7 +409,7 @@ export function CurrentRealizationStationQrPanel({
       );
     });
 
-    riskCardDownloadEntries.forEach(({ fileName, qrImage }, index) => {
+    riskQrDownloadEntries.forEach(({ fileName, qrImage }, index) => {
       window.setTimeout(
         () => {
           const anchor = document.createElement("a");
@@ -421,7 +431,7 @@ export function CurrentRealizationStationQrPanel({
       !downloadableEntries.length &&
       !downloadableHuntEntries.length &&
       !downloadablePointsEntries.length &&
-      !riskCardDownloadEntries.length
+      !riskQrDownloadEntries.length
     ) {
       setCopyError("Kody QR nie są jeszcze gotowe do pobrania.");
       return;
@@ -456,7 +466,7 @@ export function CurrentRealizationStationQrPanel({
             ),
             qrImage,
           })),
-          ...riskCardDownloadEntries,
+          ...riskQrDownloadEntries,
         ],
         buildStationQrArchiveFileName(realization.companyName),
       );
@@ -464,6 +474,26 @@ export function CurrentRealizationStationQrPanel({
       setCopyError("Nie udało się przygotować paczki ZIP.");
     } finally {
       setIsDownloadingZip(false);
+    }
+  }
+
+  async function handleDownloadCardZip() {
+    if (riskCardDownloadEntries.length === 0) {
+      setCopyError('Najpierw kliknij „Wygeneruj karty” w sekcji kart poniżej.');
+      return;
+    }
+
+    setCopyError(null);
+    setIsDownloadingCardZip(true);
+    try {
+      await downloadQrImagesAsZip(
+        riskCardDownloadEntries,
+        buildStationQrArchiveFileName(`${realization.companyName} - Ryzykanci - karty`),
+      );
+    } catch {
+      setCopyError("Nie udało się przygotować paczki kart ZIP.");
+    } finally {
+      setIsDownloadingCardZip(false);
     }
   }
 
@@ -492,7 +522,7 @@ export function CurrentRealizationStationQrPanel({
                 Odświeżenie pobiera aktualne dane, bez tworzenia nowych kodów.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => refetch()}
@@ -519,6 +549,23 @@ export function CurrentRealizationStationQrPanel({
                   ? "Przygotowywanie paczki ZIP..."
                   : `Pobierz paczkę ZIP${downloadableQrCount > 0 ? ` (${downloadableQrCount})` : ""}`}
               </button>
+              {realization.type === "risk-quiz" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadCardZip()}
+                  disabled={riskCardDownloadEntries.length === 0 || isDownloadingCardZip}
+                  title={
+                    riskCardDownloadEntries.length === 0
+                      ? 'Najpierw kliknij „Wygeneruj karty” w sekcji kart.'
+                      : undefined
+                  }
+                  className="rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isDownloadingCardZip
+                    ? "Przygotowywanie kart ZIP..."
+                    : `Pobierz paczkę kart ZIP${riskCardDownloadEntries.length > 0 ? ` (${riskCardDownloadEntries.length})` : ""}`}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}
@@ -803,11 +850,12 @@ export function CurrentRealizationStationQrPanel({
           {realization.type === "risk-quiz" ? (
             <div className="space-y-3 border-t border-zinc-800 pt-5">
               <h3 className="text-sm font-semibold text-zinc-100">
-                Karty QR do wydruku
+                Kody QR i karty do wydruku
               </h3>
               <RiskCardsQrPanel
                 realizationId={realization.id}
                 realizationName={realization.companyName}
+                onDownloadableQrsChange={handleRiskQrsDownloadableChange}
                 onDownloadableCardsChange={handleRiskCardsDownloadableChange}
               />
             </div>
