@@ -23,6 +23,7 @@ import {
   MOBILE_PHOTO_UPLOAD_THROTTLE,
   MOBILE_QR_RESOLVE_THROTTLE,
   RISK_QUIZ_PENDING_DRAW_THROTTLE,
+  RISK_QUIZ_POLL_THROTTLE,
 } from '../../common/security/throttle.constants';
 import {
   assertValidTeamPhotoFile,
@@ -156,7 +157,7 @@ export class RiskQuizController {
   }
 
   @Post('chat')
-  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  @Throttle(RISK_QUIZ_POLL_THROTTLE)
   async listChatMessages(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.riskQuizService.listChatMessages({
@@ -176,7 +177,7 @@ export class RiskQuizController {
   }
 
   @Post('pigs')
-  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  @Throttle(RISK_QUIZ_POLL_THROTTLE)
   async getPigState(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.riskQuizService.getPigState({
@@ -197,7 +198,7 @@ export class RiskQuizController {
   }
 
   @Post('deck-status')
-  @Throttle(MOBILE_QR_RESOLVE_THROTTLE)
+  @Throttle(RISK_QUIZ_POLL_THROTTLE)
   async getDeckStatus(@Body() rawPayload: unknown) {
     const payload = requirePayload(rawPayload);
     return this.riskQuizService.getDeckStatus(

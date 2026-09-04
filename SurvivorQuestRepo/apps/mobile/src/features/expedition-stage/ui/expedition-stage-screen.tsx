@@ -1508,7 +1508,7 @@ export function ExpeditionStageScreen({
             </Text>
           </View>
         ) : sessionState.realization.hideMap ? (
-          <View style={StyleSheet.absoluteFillObject}>
+          <View style={StyleSheet.absoluteFill}>
             <Image
               source={
                 sessionState.realization.mapImageUrl

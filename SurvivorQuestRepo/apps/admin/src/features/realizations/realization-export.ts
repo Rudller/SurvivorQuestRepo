@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { Realization, RealizationExportFile } from "./types/realization";
 import { toRealizationStationDraft } from "./components/realization-stations-editor";
+import {
+  RISK_PIG_LABELS,
+  type RiskPigType,
+} from "@/features/risk-quiz/api/risk-quiz.api";
 
 const realizationExportDataSchema = z.object({
   companyName: z.string(),
@@ -39,6 +43,7 @@ const realizationExportDataSchema = z.object({
   pigGrantIntervalMinutes: z.number(),
   pigEffectSeconds: z.number(),
   pigShowThrowerName: z.boolean(),
+  pigTypesEnabled: z.array(z.string()).optional(),
   status: z.enum(["planned", "in-progress", "done"]),
   scheduledAt: z.string(),
 });
@@ -124,6 +129,7 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       pigGrantIntervalMinutes: realization.pigGrantIntervalMinutes,
       pigEffectSeconds: realization.pigEffectSeconds,
       pigShowThrowerName: realization.pigShowThrowerName,
+      pigTypesEnabled: realization.pigTypesEnabled,
       status: realization.status,
       scheduledAt: realization.scheduledAt,
     },
@@ -156,10 +162,20 @@ export function parseRealizationExportFile(raw: unknown): RealizationExportFile 
     return null;
   }
 
+  const { pigTypesEnabled, ...realization } = result.data.realization;
+
   return {
     schemaVersion: 1,
     exportedAt: result.data.exportedAt,
-    realization: result.data.realization,
+    realization: {
+      ...realization,
+      // Kept as a loose string[] in the schema and narrowed here on purpose: a
+      // file written by a newer build can name a pig this one has never heard
+      // of, and dropping that single entry beats refusing the whole import.
+      pigTypesEnabled: pigTypesEnabled?.filter(
+        (item): item is RiskPigType => item in RISK_PIG_LABELS,
+      ),
+    },
     scenarioStations: result.data.scenarioStations as RealizationExportFile["scenarioStations"],
   };
 }

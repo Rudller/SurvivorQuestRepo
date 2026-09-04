@@ -259,7 +259,7 @@ model Realization {
   // backend — so changing it takes effect from the next tick onwards.
   pigsEnabled         Boolean            @default(true)
   pigGrantIntervalMinutes Int            @default(5)
-  pigEffectSeconds    Int                @default(90)
+  pigEffectSeconds    Int                @default(60)
   // Off hides the thrower from the victim and from the chat announcement. The
   // real name is still stored on the effect — the Game Master has to be able to
   // settle an argument about who did what.
@@ -651,9 +651,11 @@ enum RiskPigType {
   UPSIDE_DOWN
   SHAKE
   FOG
-  SQUEAL
-  HASTE
+  DARKNESS
   OVERHEAD
+  MIRROR
+  SLIDE
+  SILENCE
 }
 
 // A pig a team is holding, not yet thrown. One per team, enforced by the unique

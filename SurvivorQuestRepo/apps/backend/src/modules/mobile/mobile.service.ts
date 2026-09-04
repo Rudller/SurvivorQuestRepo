@@ -57,8 +57,8 @@ import {
   parseTeamColor,
   toLowerSafe,
 } from './domain/mobile-team.helpers';
+import { SESSION_TTL_MS } from './domain/mobile-session.helpers';
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOCATION_MAX_ACCURACY_METERS = 10_000;
 const LOCATION_MAX_SPEED_MPS = 120;
 const MINUTES_TO_MS = 60_000;
@@ -519,6 +519,13 @@ export class MobileService {
     name: string;
     color: string;
     badgeKey?: string;
+    // Set when the team picks an emoji after having taken a selfie. The banner
+    // draws the photo whenever there is one, so the two are mutually exclusive
+    // in the UI and have to be mutually exclusive here too — otherwise choosing
+    // an emoji would silently do nothing. The uploaded file itself is left in
+    // storage (it stays in the realization's photo history); only the banner
+    // stops pointing at it.
+    clearSelfie?: boolean;
   }) {
     const { assignment, team, realization } = await this.requireSession(
       input.sessionToken,
@@ -572,6 +579,11 @@ export class MobileService {
       changedFields.push('badge');
     }
 
+    const clearsSelfie = input.clearSelfie === true && Boolean(team.badgeImageUrl);
+    if (clearsSelfie) {
+      changedFields.push('selfie');
+    }
+
     try {
       await this.prisma.team.update({
         where: { id: team.id },
@@ -580,6 +592,7 @@ export class MobileService {
           color,
           badgeKey: nextBadgeKey,
           status: TeamStatus.ACTIVE,
+          ...(clearsSelfie ? { badgeImageUrl: null } : {}),
         },
       });
     } catch (error) {
@@ -602,6 +615,7 @@ export class MobileService {
       name: teamName,
       color,
       badgeKey: nextBadgeKey,
+      badgeImageUrl: clearsSelfie ? null : team.badgeImageUrl,
       changedFields,
       customizationOccupancy,
     };

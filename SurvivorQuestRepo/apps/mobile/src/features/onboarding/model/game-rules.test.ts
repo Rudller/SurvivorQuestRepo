@@ -49,26 +49,27 @@ describe("shouldShowGameRulesPopup", () => {
     expect(shouldShowGameRulesPopup(buildSession(), false)).toBe(true);
   });
 
-  // Ryzykanci put the whole briefing on the waiting screen, so the popup would
-  // only repeat what the tablet has been showing for the last few minutes.
-  it("never shows the popup for a Ryzykanci realization", () => {
-    const session = buildSession({ realization: { type: "risk-quiz" } });
-
-    expect(shouldShowGameRulesPopup(session, false)).toBe(false);
-  });
-
   it("still shows the popup for other realization types", () => {
     const session = buildSession({ realization: { type: "expedition" } });
 
     expect(shouldShowGameRulesPopup(session, false)).toBe(true);
   });
 
-  // The flag lives in AsyncStorage, so a tablet that joined before this change
-  // can resume with it already set to true — the type check has to hold anyway.
-  it("ignores a stored showGameRulesAfterStart flag for Ryzykanci", () => {
+  // Ryzykanci used to be excluded by type. They now get the "Zasady gry" field
+  // in the admin panel like every other type, so the popup has to follow.
+  it("shows the popup for Ryzykanci once they have rules text", () => {
     const session = buildSession({
       session: { showGameRulesAfterStart: true },
       realization: { type: "risk-quiz" },
+    });
+
+    expect(shouldShowGameRulesPopup(session, false)).toBe(true);
+  });
+
+  it("keeps Ryzykanci without rules text popup-free", () => {
+    const session = buildSession({
+      session: { showGameRulesAfterStart: true },
+      realization: { type: "risk-quiz", gameRules: "   " },
     });
 
     expect(shouldShowGameRulesPopup(session, false)).toBe(false);

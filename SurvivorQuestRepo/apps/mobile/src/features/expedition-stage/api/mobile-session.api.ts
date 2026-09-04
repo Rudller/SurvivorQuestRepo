@@ -709,7 +709,24 @@ export function buildMobileApiHttpError(data: MobileApiError, fallbackStatusCode
   return { message, statusCode };
 }
 
+// An empty base is never a legitimate call: on web it turns every request into a
+// same-origin one and the Expo dev server answers with HTML, which surfaces as
+// an unparseable response rather than "the app does not know where the backend
+// is". Fail with something a log will explain.
+function requireApiBaseUrl(baseUrl: string) {
+  if (!baseUrl.trim()) {
+    throw new MobileApiHttpError({
+      statusCode: 0,
+      code: "HTTP_ERROR",
+      message: "Brak adresu serwera. Otwórz ekran dołączania i ustaw adres API.",
+      responseBody: null,
+    });
+  }
+}
+
 export async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
+  requireApiBaseUrl(baseUrl);
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {

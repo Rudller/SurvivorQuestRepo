@@ -1,3 +1,4 @@
+import type { RiskPigType } from "@/features/risk-quiz/api/risk-quiz.api";
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
 import type {
@@ -117,6 +118,7 @@ type RealizationDto = {
   pigGrantIntervalMinutes?: number;
   pigEffectSeconds?: number;
   pigShowThrowerName?: boolean;
+  pigTypesEnabled?: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -162,6 +164,7 @@ type CreateRealizationPayload = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled?: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -213,6 +216,7 @@ type UpdateRealizationPayload = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled?: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   changedBy?: string;
@@ -450,8 +454,9 @@ function normalizeRealization(dto: RealizationDto): Realization {
     riskChatTeamsCanPost: dto.riskChatTeamsCanPost !== false,
     pigsEnabled: dto.pigsEnabled !== false,
     pigGrantIntervalMinutes: dto.pigGrantIntervalMinutes ?? 5,
-    pigEffectSeconds: dto.pigEffectSeconds ?? 90,
+    pigEffectSeconds: dto.pigEffectSeconds ?? 60,
     pigShowThrowerName: dto.pigShowThrowerName !== false,
+    pigTypesEnabled: dto.pigTypesEnabled ?? [],
     status: dto.status,
     scheduledAt: dto.scheduledAt,
     createdAt: dto.createdAt,

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
@@ -454,14 +455,14 @@ export default function CurrentRealizationPage() {
           </div>
           <div className="flex self-start gap-3">
             {isRiskQuizRealization && overview ? (
-              <a
+              <Link
                 href={`/risk-quiz/${overview.realization.id}/prompter`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/20"
               >
                 Otwórz prompter
-              </a>
+              </Link>
             ) : null}
             <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-right text-xs text-amber-200">
               <p>Kod dołączenia</p>

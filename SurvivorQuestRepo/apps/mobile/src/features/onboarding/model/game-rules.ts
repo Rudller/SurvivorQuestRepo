@@ -1,16 +1,5 @@
 import type { OnboardingSession } from "./types";
 
-// Realization types that carry their whole briefing somewhere else and so have
-// no separate rules step. Ryzykanci show everything on the waiting screen the
-// team stares at until the admin starts, so a popup afterwards would only
-// repeat it. The admin forms hide the "Zasady gry" field for these types too —
-// keep the two in step.
-const REALIZATION_TYPES_WITHOUT_GAME_RULES = new Set(["risk-quiz"]);
-
-export function isGameRulesSupportedForRealizationType(type: string | undefined) {
-  return !type || !REALIZATION_TYPES_WITHOUT_GAME_RULES.has(type);
-}
-
 // Decides whether the post-start rules popup belongs on screen. Deliberately
 // checked at render time rather than baked into the stored
 // `showGameRulesAfterStart` flag: that flag is persisted in AsyncStorage, so a
@@ -22,7 +11,9 @@ export function shouldShowGameRulesPopup(
 ) {
   if (!session || isWaitingForAdminStart) return false;
   if (!session.showGameRulesAfterStart) return false;
-  if (!isGameRulesSupportedForRealizationType(session.realization?.type)) return false;
 
+  // No type is excluded any more — Ryzykanci included. The admin forms offer the
+  // "Zasady gry" field for every type, so gating it here would leave operators
+  // filling a box nobody ever sees. Having rules text is the whole switch.
   return Boolean(session.realization?.gameRules?.trim());
 }

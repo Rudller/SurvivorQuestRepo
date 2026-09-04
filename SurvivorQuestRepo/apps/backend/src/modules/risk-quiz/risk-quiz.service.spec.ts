@@ -6,10 +6,11 @@ import {
   RISK_CHAT_MESSAGE_MAX_LENGTH,
   RISK_REVIEWED_ANSWER_MAX_LENGTH,
 } from './risk-quiz.constants';
+import { SESSION_TTL_MS } from '../mobile/domain/mobile-session.helpers';
 
 function createService() {
   const prisma = {
-    teamAssignment: { findFirst: jest.fn() },
+    teamAssignment: { findFirst: jest.fn(), update: jest.fn() },
     realization: { findUnique: jest.fn(), update: jest.fn() },
     riskCard: {
       findUnique: jest.fn(),
@@ -116,6 +117,7 @@ function createService() {
 const team = { id: 'team-1', points: 0 };
 const realization = { id: 'realization-1' };
 const assignment = {
+  id: 'assignment-1',
   team,
   realization,
   expiresAt: new Date(Date.now() + 60_000),
@@ -1294,7 +1296,7 @@ describe('RiskQuizService świnie', () => {
     durationMinutes: 120,
     pigsEnabled: true,
     pigGrantIntervalMinutes: 5,
-    pigEffectSeconds: 90,
+    pigEffectSeconds: 60,
     pigTypesEnabled: [],
   };
 
@@ -1425,6 +1427,26 @@ describe('RiskQuizService świnie', () => {
       service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
     ).rejects.toThrow('This team cannot be targeted right now');
     expect(prisma.riskPigEffect.create).not.toHaveBeenCalled();
+  });
+
+  // The effect row is never swept: expiresAt <= now is what "not active" means,
+  // so a team that was hit an hour ago still has a row. That team is offered as
+  // a target again, and targetTeamId is unique — so landing on it has to clear
+  // the stale row first or the throw dies on a P2002.
+  it('clears a stale expired effect before landing a new one on the same team', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    prisma.riskPig.findUnique.mockResolvedValue({ id: 'pig-1', type: 'FOG' });
+    // Empty because the query filters on expiresAt > now: this is exactly what
+    // a team carrying an expired row looks like from here.
+    prisma.riskPigEffect.findMany.mockResolvedValue([]);
+
+    await service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' });
+
+    expect(prisma.riskPigEffect.deleteMany).toHaveBeenCalledWith({
+      where: { targetTeamId: 'team-2' },
+    });
+    expect(prisma.riskPigEffect.create).toHaveBeenCalled();
   });
 
   it('marks the room as unavailable only while an effect is live', async () => {
@@ -2873,5 +2895,42 @@ describe('RiskQuizService.listSchemeCardCodes', () => {
     await expect(service.listSchemeCardCodes('nope')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+});
+
+describe('RiskQuizService session lifetime', () => {
+  // Ryzykancy runs entirely on this module's endpoints, so MobileService's own
+  // sliding refresh never fires for a team that is mid-game. Without these the
+  // session dies exactly SESSION_TTL_MS after the join, mid-game or not.
+  it('slides the session window once the assignment is past half its lifetime', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS / 4),
+    });
+
+    await service.pollPendingDraw('token');
+
+    expect(prisma.teamAssignment.update).toHaveBeenCalledTimes(1);
+    const [refresh] = prisma.teamAssignment.update.mock.calls[0] as [
+      { where: { id: string }; data: { lastSeenAt: Date; expiresAt: Date } },
+    ];
+    expect(refresh.where).toEqual({ id: 'assignment-1' });
+    expect(refresh.data.lastSeenAt.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(refresh.data.expiresAt.getTime()).toBeGreaterThan(
+      Date.now() + SESSION_TTL_MS - 5_000,
+    );
+  });
+
+  it('leaves a fresh session alone so the play screen polls do not write every few seconds', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS - 60_000),
+    });
+
+    await service.pollPendingDraw('token');
+
+    expect(prisma.teamAssignment.update).not.toHaveBeenCalled();
   });
 });

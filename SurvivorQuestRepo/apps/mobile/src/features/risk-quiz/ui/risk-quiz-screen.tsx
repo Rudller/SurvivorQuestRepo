@@ -203,6 +203,20 @@ const CHAT_POLL_INTERVAL_MS = 5000;
 // to land whether or not the team is mid-card, and the idle poll is gated off
 // during the intro and while the scanner is open.
 const PIG_POLL_INTERVAL_MS = 5000;
+// Backoff for the one request on this screen that is not on an interval.
+const DECK_STATUS_RETRY_BASE_MS = 1500;
+const DECK_STATUS_RETRY_MAX_MS = 10000;
+
+// These polls stay silent on screen on purpose — a team mid-game must not be
+// shown a network error every five seconds. They must not be silent in the log
+// too, though: a tablet that comes back from a reload without its card count,
+// chat or pigs left nothing behind to explain why.
+function logRiskQuizPollFailure(source: string, error: unknown, apiBaseUrl: string) {
+  console.error(`[RiskQuiz] ${source} poll failed`, error, {
+    apiBaseUrl: apiBaseUrl || "(brak)",
+    statusCode: getMobileApiErrorStatusCode(error),
+  });
+}
 // Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
 // same hold-the-team-banner gesture as normal gameplay's station test menu.
 const TEST_MENU_TRIGGER_HOLD_MS = 5000;
@@ -244,6 +258,18 @@ export function RiskQuizScreen({
   const [showIntro, setShowIntro] = useState(() =>
     shouldShowRiskQuizIntro(session.realization?.status),
   );
+  // The prop is an inline arrow in mobile-app.tsx, so its identity changes on
+  // every render of the parent. Left in the poll effects' dependency arrays it
+  // tore each of them down and rebuilt them — and every rebuild fires an
+  // immediate request before the interval resumes. That is what turned an
+  // ordinary re-render into a burst against the rate limiter.
+  const onSessionInvalidRef = useRef(onSessionInvalid);
+  useEffect(() => {
+    onSessionInvalidRef.current = onSessionInvalid;
+  }, [onSessionInvalid]);
+  const handleSessionInvalid = useCallback(() => {
+    onSessionInvalidRef.current();
+  }, []);
   const [teamPoints, setTeamPoints] = useState(0);
   // Verdict on a photo card the team sent earlier, waiting to be shown. It is
   // only ever raised between cards (see refreshDeckStatus): a decision landing
@@ -364,7 +390,7 @@ export function RiskQuizScreen({
         }
 
         if (getMobileApiErrorStatusCode(error) === 401) {
-          onSessionInvalid();
+          handleSessionInvalid();
           return;
         }
       }
@@ -382,7 +408,7 @@ export function RiskQuizScreen({
         clearTimeout(timeoutId);
       }
     };
-  }, [showIntro, apiBaseUrl, sessionToken, session.selectedLanguage, onSessionInvalid]);
+  }, [showIntro, apiBaseUrl, sessionToken, session.selectedLanguage, handleSessionInvalid]);
 
   // useCallback so the idle poll below can depend on it without restarting the
   // interval on every render.
@@ -404,7 +430,7 @@ export function RiskQuizScreen({
         announcedPhotoVerdictsRef.current = new Set(
           decided.map((review) => review.stationId),
         );
-        return;
+        return true;
       }
 
       const fresh = decided.find(
@@ -418,18 +444,49 @@ export function RiskQuizScreen({
           pointsDelta: fresh.pointsDelta,
         });
       }
+      return true;
     } catch (error) {
+      logRiskQuizPollFailure("deck-status", error, apiBaseUrl);
       if (getMobileApiErrorStatusCode(error) === 401) {
-        onSessionInvalid();
+        handleSessionInvalid();
       }
+      return false;
     }
-  }, [apiBaseUrl, sessionToken, onSessionInvalid]);
+  }, [apiBaseUrl, sessionToken, handleSessionInvalid]);
 
   useEffect(() => {
     if (showIntro) {
       return;
     }
-    void refreshDeckStatus();
+
+    // Used to be a single call on hand-off from the intro screen, with every
+    // error but a 401 swallowed. One failed request — a reload racing the
+    // backend, a dropped connection — and the remaining-card count stayed blank
+    // for the rest of the game, because nothing else refetches it until the
+    // team answers a card. It retries now, and stops once it has an answer.
+    let cancelled = false;
+    let attempt = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const load = async () => {
+      const loaded = await refreshDeckStatus();
+      if (cancelled || loaded) {
+        return;
+      }
+
+      attempt += 1;
+      const delay = Math.min(DECK_STATUS_RETRY_BASE_MS * attempt, DECK_STATUS_RETRY_MAX_MS);
+      timeoutId = setTimeout(() => void load(), delay);
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
     // Only when the intro screen hands off to the scan screen — later
     // updates come from refreshDeckStatus() calls after each answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -511,7 +568,7 @@ export function RiskQuizScreen({
           return;
         }
         if (getMobileApiErrorStatusCode(error) === 401) {
-          onSessionInvalid();
+          handleSessionInvalid();
         }
         // Any other error is silent — the next tick just retries.
       } finally {
@@ -532,7 +589,7 @@ export function RiskQuizScreen({
     isScannerVisible,
     apiBaseUrl,
     sessionToken,
-    onSessionInvalid,
+    handleSessionInvalid,
     openDrawnCard,
     refreshDeckStatus,
   ]);
@@ -892,10 +949,11 @@ export function RiskQuizScreen({
           );
         }
       } catch (error) {
+        logRiskQuizPollFailure("chat", error, apiBaseUrl);
         if (getMobileApiErrorStatusCode(error) === 401) {
-          onSessionInvalid();
+          handleSessionInvalid();
         }
-        // Anything else is silent — the next tick retries.
+        // The next tick retries.
       } finally {
         inFlight = false;
       }
@@ -908,7 +966,7 @@ export function RiskQuizScreen({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [apiBaseUrl, sessionToken, showIntro, onSessionInvalid]);
+  }, [apiBaseUrl, sessionToken, showIntro, handleSessionInvalid]);
 
   // Pigs poll on their own interval, ungated — an effect must land whether the
   // team is mid-card, scanning, or idle.
@@ -931,10 +989,11 @@ export function RiskQuizScreen({
           setPigState(next);
         }
       } catch (error) {
+        logRiskQuizPollFailure("pigs", error, apiBaseUrl);
         if (getMobileApiErrorStatusCode(error) === 401) {
-          onSessionInvalid();
+          handleSessionInvalid();
         }
-        // Anything else is silent — the next tick retries.
+        // The next tick retries.
       } finally {
         inFlight = false;
       }
@@ -947,7 +1006,7 @@ export function RiskQuizScreen({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [apiBaseUrl, sessionToken, showIntro, onSessionInvalid]);
+  }, [apiBaseUrl, sessionToken, showIntro, handleSessionInvalid]);
 
   // Drives the banner's countdown between five-second polls. It only nudges a
   // clock value — the remaining seconds are derived from the effect's absolute
@@ -1222,7 +1281,7 @@ export function RiskQuizScreen({
       {/* Wraps the whole screen rather than just the card: a pig lands on a
           timer and can arrive while the team is idle between cards, so the
           effect has to have something to act on either way. */}
-      <RiskQuizPigEffectLayer type={activePig?.type ?? null}>
+      <RiskQuizPigEffectLayer type={activePig?.type ?? null} isLightTheme={isLightTheme}>
       <View className="flex-1 px-3 py-3" style={{ rowGap: 10, paddingBottom: keyboardHeight || undefined }}>
         <Pressable
           onPressIn={handleTestMenuHoldStart}

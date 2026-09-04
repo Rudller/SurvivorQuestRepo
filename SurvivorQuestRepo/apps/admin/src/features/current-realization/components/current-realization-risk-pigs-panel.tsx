@@ -11,17 +11,6 @@ import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 
 const PIG_TYPES = Object.keys(RISK_PIG_LABELS) as RiskPigType[];
 
-// Kwik and Pośpiech exist end to end — enum, labels, the server hands them out —
-// but nothing happens on the tablet yet. Flagging them here keeps a Game Master
-// from throwing a blank and wondering why the room stayed quiet.
-const UNIMPLEMENTED_PIG_TYPES = new Set<RiskPigType>(["SQUEAL", "HASTE"]);
-
-function pigOptionLabel(type: RiskPigType) {
-  return UNIMPLEMENTED_PIG_TYPES.has(type)
-    ? `${RISK_PIG_LABELS[type]} (nie działa)`
-    : RISK_PIG_LABELS[type];
-}
-
 type CurrentRealizationRiskPigsPanelProps = {
   realizationId: string;
 };
@@ -122,7 +111,7 @@ export function CurrentRealizationRiskPigsPanel({
               >
                 {PIG_TYPES.map((pigType) => (
                   <option key={pigType} value={pigType}>
-                    {pigOptionLabel(pigType)}
+                    {RISK_PIG_LABELS[pigType]}
                   </option>
                 ))}
               </select>

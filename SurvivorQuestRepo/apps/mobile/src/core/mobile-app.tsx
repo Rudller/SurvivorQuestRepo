@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import * as NavigationBar from "expo-navigation-bar";
+import { NavigationBar } from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
@@ -31,6 +31,7 @@ import {
 } from "../features/onboarding/model/types";
 import { RealizationOnboardingScreen } from "../features/onboarding/ui/realization-onboarding-screen";
 import { shouldShowGameRulesPopup } from "../features/onboarding/model/game-rules";
+import { resolveSessionApiBaseUrl } from "../shared/api/api-base-url";
 import { applyLiveIntroText } from "../features/onboarding/model/waiting-session";
 import { resolveStartCountdown } from "../features/onboarding/model/start-countdown";
 import { StartCountdownPanel } from "../features/risk-quiz/components/start-countdown-panel";
@@ -518,8 +519,8 @@ export function MobileApp() {
       }
 
       try {
-        await NavigationBar.setButtonStyleAsync(activeThemeMode === "dark" ? "light" : "dark");
-        await NavigationBar.setVisibilityAsync("hidden");
+        NavigationBar.setStyle(activeThemeMode === "dark" ? "light" : "dark");
+        NavigationBar.setHidden(true);
       } catch {
         // ignore - immersive mode is best effort on Android devices
       }
@@ -566,7 +567,22 @@ export function MobileApp() {
             await AsyncStorage.removeItem(ONBOARDING_SESSION_STORAGE_KEY);
             return;
           }
-          setOnboardingSession(parsed as OnboardingSession);
+
+          // A reload restores the session verbatim, address included, and every
+          // request is then built from it. When that address is missing or no
+          // longer parses, `${baseUrl}${path}` used to collapse to a bare path —
+          // which on web quietly asks the Expo dev server for the API and on a
+          // device just fails, with no way back except wiping the session. Fall
+          // back to the same chain the join screen walks.
+          const repairedBaseUrl = await resolveSessionApiBaseUrl(parsed.apiBaseUrl);
+          if (!isActive) {
+            return;
+          }
+
+          setOnboardingSession({
+            ...(parsed as OnboardingSession),
+            apiBaseUrl: repairedBaseUrl,
+          });
         }
       } catch {
         // keep onboarding as fallback

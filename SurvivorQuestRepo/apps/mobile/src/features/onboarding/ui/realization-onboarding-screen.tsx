@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { resolveUiLanguage, type UiLanguage } from "../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS, getTeamColors } from "../model/constants";
+import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS, getTeamColors } from "../model/constants";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -27,6 +27,12 @@ import {
   type TeamColor,
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
+import { TeamIconPickerModal, type TeamIconPickerText } from "./team-icon-picker-modal";
+import {
+  API_BASE_URL_OVERRIDE_STORAGE_KEY,
+  API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY,
+  normalizeApiBaseUrl,
+} from "../../../shared/api/api-base-url";
 import { JoinCodeQrScannerOverlay } from "../components/join-code-qr-scanner-overlay";
 import { PhotoCaptureOverlay } from "../../../shared/ui/photo-capture-overlay";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
@@ -178,8 +184,7 @@ type MobileSessionStateResponse = {
   };
 };
 
-const API_BASE_URL_OVERRIDE_STORAGE_KEY = "sq.mobile.api-base-url-override.v1";
-const API_LAST_SUCCESSFUL_BASE_URL_STORAGE_KEY = "sq.mobile.api-base-url-last-successful.v1";
+
 const MOBILE_DEVICE_ID_STORAGE_KEY = "sq.mobile.device-id.v1";
 const CUSTOMIZATION_OCCUPANCY_POLL_INTERVAL_MS = 2500;
 const LOCAL_DEFAULT_API_BASE_URL = "http://192.168.18.2:3001";
@@ -290,6 +295,7 @@ type OnboardingUiText = {
   networkError: (rawMessage: string) => string;
   unexpectedConnectionError: string;
   teamCustomizationText: TeamCustomizationStepText;
+  teamIconPickerText: TeamIconPickerText;
 };
 
 const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
@@ -415,13 +421,23 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Customizacja drużyny",
       teamNamePlaceholder: "Nazwa drużyny",
       teamColorLabel: "Kolor drużyny",
-      selfieLabel: "Selfie drużyny",
+      languageLabel: "Język treści gry",
+      avatarLabel: "Awatar drużyny",
+      avatarHint: "Zdjęcie albo emotka — na banerze widać jedno z nich.",
+      photoOption: "Zrób zdjęcie",
+      emojiOption: "Wybierz emotkę",
       takeSelfie: "Zrób selfie",
       retakeSelfie: "Zrób ponownie",
       selfieOverlayTitle: "Zrób selfie drużyny",
       selfieOverlaySubtitle: "To zdjęcie będzie widoczne jako identyfikator waszej drużyny.",
       startAction: "Start!",
       startingAction: "Uruchamianie...",
+    },
+    teamIconPickerText: {
+      title: "Wybierz emotkę drużyny",
+      hint: "Emotki zajęte przez inne drużyny są nieaktywne.",
+      closeAction: "Zamknij",
+      takenLabel: (slotNumber: number) => `D${slotNumber}`,
     },
   },
   english: {
@@ -541,13 +557,23 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Team customization",
       teamNamePlaceholder: "Team name",
       teamColorLabel: "Team color",
-      selfieLabel: "Team selfie",
+      languageLabel: "Game content language",
+      avatarLabel: "Team avatar",
+      avatarHint: "A photo or an emoji — the banner shows one of them.",
+      photoOption: "Take a photo",
+      emojiOption: "Pick an emoji",
       takeSelfie: "Take a selfie",
       retakeSelfie: "Retake",
       selfieOverlayTitle: "Take your team selfie",
       selfieOverlaySubtitle: "This photo will be shown as your team's identifier.",
       startAction: "Start!",
       startingAction: "Starting...",
+    },
+    teamIconPickerText: {
+      title: "Pick your team emoji",
+      hint: "Emoji taken by other teams are disabled.",
+      closeAction: "Close",
+      takenLabel: (slotNumber: number) => `T${slotNumber}`,
     },
   },
   ukrainian: {
@@ -669,13 +695,23 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Налаштування команди",
       teamNamePlaceholder: "Назва команди",
       teamColorLabel: "Колір команди",
-      selfieLabel: "Селфі команди",
+      languageLabel: "Мова ігрового контенту",
+      avatarLabel: "Аватар команди",
+      avatarHint: "Фото або емодзі — на банері видно одне з них.",
+      photoOption: "Зробити фото",
+      emojiOption: "Вибрати емодзі",
       takeSelfie: "Зробити селфі",
       retakeSelfie: "Зробити ще раз",
       selfieOverlayTitle: "Зробіть селфі команди",
       selfieOverlaySubtitle: "Це фото буде відображатися як ідентифікатор вашої команди.",
       startAction: "Старт!",
       startingAction: "Запуск...",
+    },
+    teamIconPickerText: {
+      title: "Виберіть емодзі команди",
+      hint: "Емодзі, зайняті іншими командами, недоступні.",
+      closeAction: "Закрити",
+      takenLabel: (slotNumber: number) => `К${slotNumber}`,
     },
   },
   russian: {
@@ -796,13 +832,23 @@ const ONBOARDING_UI_TEXT: Record<UiLanguage, OnboardingUiText> = {
       customizationLabel: "Настройка команды",
       teamNamePlaceholder: "Название команды",
       teamColorLabel: "Цвет команды",
-      selfieLabel: "Селфи команды",
+      languageLabel: "Язык игрового контента",
+      avatarLabel: "Аватар команды",
+      avatarHint: "Фото или эмодзи — на баннере видно одно из них.",
+      photoOption: "Сделать фото",
+      emojiOption: "Выбрать эмодзи",
       takeSelfie: "Сделать селфи",
       retakeSelfie: "Сделать ещё раз",
       selfieOverlayTitle: "Сделайте селфи команды",
       selfieOverlaySubtitle: "Это фото будет отображаться как идентификатор вашей команды.",
       startAction: "Старт!",
       startingAction: "Запуск...",
+    },
+    teamIconPickerText: {
+      title: "Выберите эмодзи команды",
+      hint: "Эмодзи, занятые другими командами, недоступны.",
+      closeAction: "Закрыть",
+      takenLabel: (slotNumber: number) => `К${slotNumber}`,
     },
   },
 };
@@ -968,47 +1014,6 @@ function resolveBannerTextColor(hexColor: string) {
   const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
 
   return brightness > 172 ? "#0f172a" : "#f8fafc";
-}
-
-function normalizeApiBaseUrl(value: string | null | undefined) {
-  const trimmed = value?.trim() ?? "";
-  if (!trimmed) {
-    return null;
-  }
-
-  const hasExplicitProtocol = /^https?:\/\//i.test(trimmed);
-  const hostCandidate = hasExplicitProtocol
-    ? (() => {
-        try {
-          return new URL(trimmed).hostname.toLowerCase();
-        } catch {
-          return "";
-        }
-      })()
-    : trimmed.split("/")[0]?.split(":")[0]?.trim().toLowerCase() ?? "";
-  const shouldUseHttpByDefault =
-    hostCandidate === "localhost" ||
-    hostCandidate === "10.0.2.2" ||
-    hostCandidate === "127.0.0.1" ||
-    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
-    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
-    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostCandidate) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostCandidate);
-  const inferredProtocol = shouldUseHttpByDefault ? "http" : "https";
-  const candidate = hasExplicitProtocol ? trimmed : `${inferredProtocol}://${trimmed}`;
-  let parsed: URL;
-  try {
-    parsed = new URL(candidate);
-  } catch {
-    return null;
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return null;
-  }
-
-  const pathname = parsed.pathname.replace(/\/+$/, "");
-  return `${parsed.origin}${pathname}`;
 }
 
 function addBaseUrlCandidate(list: string[], candidate: string | null) {
@@ -1256,22 +1261,29 @@ const DEFAULT_TEAM_COLOR_INDEX = Math.max(
   0,
 );
 
+const DEFAULT_TEAM_ICON = TEAM_ICONS[0];
+
 function getDefaultTeamCustomization(slotNumber: number | null | undefined) {
   const slotOffset = Math.max((slotNumber ?? 1) - 1, 0);
   return {
     color: TEAM_COLORS[(DEFAULT_TEAM_COLOR_INDEX + slotOffset) % TEAM_COLORS.length].key,
+    // Walked by slot the same way the colour is, so two teams opening the editor
+    // at once do not both land on the first emoji and immediately collide.
+    icon: TEAM_ICONS[slotOffset % TEAM_ICONS.length],
   };
 }
 
-function hasCompleteTeamCustomization<T extends { name: string | null; color: string | null; badgeImageUrl: string | null }>(
-  team: T,
-): team is T & { name: string; color: TeamColor; badgeImageUrl: string } {
-  return Boolean(
-    team.name?.trim() &&
-      isTeamColor(team.color) &&
-      typeof team.badgeImageUrl === "string" &&
-      team.badgeImageUrl.trim().length > 0,
-  );
+// An avatar counts as chosen whether it is a photo or an emoji. Requiring the
+// photo specifically would send every team that picked an emoji back into the
+// editor on each rejoin.
+function hasCompleteTeamCustomization<
+  T extends { name: string | null; color: string | null; badgeImageUrl: string | null; badgeKey?: string | null },
+>(team: T): team is T & { name: string; color: TeamColor } {
+  const hasAvatar =
+    (typeof team.badgeImageUrl === "string" && team.badgeImageUrl.trim().length > 0) ||
+    (typeof team.badgeKey === "string" && team.badgeKey.trim().length > 0);
+
+  return Boolean(team.name?.trim() && isTeamColor(team.color) && hasAvatar);
 }
 
 function normalizeOccupancyMap(
@@ -1368,6 +1380,8 @@ export function RealizationOnboardingScreen({
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [teamName, setTeamName] = useState("");
   const [teamColor, setTeamColor] = useState<TeamColor>(DEFAULT_TEAM_COLOR);
+  const [teamIcon, setTeamIcon] = useState<string>(DEFAULT_TEAM_ICON);
+  const [isIconPickerOpen, setIsIconPickerOpen] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [isSelfieOverlayOpen, setIsSelfieOverlayOpen] = useState(false);
   const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
@@ -1479,6 +1493,10 @@ export function RealizationOnboardingScreen({
         state.team.badgeImageUrl.trim()
       ) {
         setSelfieUrl(state.team.badgeImageUrl);
+      }
+
+      if (typeof state.team.badgeKey === "string" && state.team.badgeKey.trim()) {
+        setTeamIcon(state.team.badgeKey.trim());
       }
     }
   }, [apiBaseUrl, selectedLanguage, selectedTeam, sessionToken]);
@@ -1698,7 +1716,8 @@ export function RealizationOnboardingScreen({
     const effectiveRealizationCode = options?.realizationCode ?? realizationCode;
     const effectiveTeamColor = options?.color ?? teamColor;
     const effectiveTeamIcon =
-      (options && "badgeImageUrl" in options ? options.badgeImageUrl : selfieUrl) ?? "";
+      (options && "badgeImageUrl" in options ? options.badgeImageUrl : selfieUrl) ||
+      teamIcon;
     const effectiveSelectedColor = teamColors.find((color) => color.key === effectiveTeamColor) ?? selectedColor;
     const normalizedStatus = normalizeRealizationStatus(effectiveRealization?.status);
     const awaitingAdminStart = normalizedStatus === "planned" && Boolean(effectiveApiBaseUrl);
@@ -1970,6 +1989,8 @@ export function RealizationOnboardingScreen({
         setTeamColor(defaultCustomization.color);
       }
 
+      setTeamIcon(join.team.badgeKey?.trim() || defaultCustomization.icon);
+
       setSelfieUrl(
         typeof join.team.badgeImageUrl === "string" && join.team.badgeImageUrl.trim()
           ? join.team.badgeImageUrl
@@ -2040,6 +2061,8 @@ export function RealizationOnboardingScreen({
         setTeamColor(defaultCustomization.color);
       }
 
+      setTeamIcon(result.team.badgeKey?.trim() || defaultCustomization.icon);
+
       setSelfieUrl(
         typeof result.team.badgeImageUrl === "string" && result.team.badgeImageUrl.trim()
           ? result.team.badgeImageUrl
@@ -2091,6 +2114,12 @@ export function RealizationOnboardingScreen({
           sessionToken,
           name: trimmedName,
           color: teamColor,
+          badgeKey: teamIcon,
+          // The banner draws a photo whenever the team has one, so an emoji only
+          // takes effect if the photo goes with it. No local selfie means the
+          // emoji is the choice on screen — say so, and let the server drop the
+          // stale photo it may still be holding.
+          clearSelfie: selfieUrl === null,
         }),
       });
 
@@ -2123,6 +2152,8 @@ export function RealizationOnboardingScreen({
     async (input: {
       nextColor: TeamColor;
       previousColor: TeamColor;
+      nextIcon?: string;
+      previousIcon?: string;
     }) => {
       if (!sessionToken || !apiBaseUrl) {
         return;
@@ -2140,6 +2171,7 @@ export function RealizationOnboardingScreen({
             body: JSON.stringify({
               sessionToken,
               color: input.nextColor,
+              ...(typeof input.nextIcon === "string" ? { badgeKey: input.nextIcon } : {}),
             }),
           },
         );
@@ -2158,6 +2190,9 @@ export function RealizationOnboardingScreen({
         }
 
         setTeamColor(input.previousColor);
+        if (typeof input.previousIcon === "string") {
+          setTeamIcon(input.previousIcon);
+        }
         setSaveFeedback(text.liveSaveFailedMessage(getErrorMessage(error, text)), "error");
         await refreshCustomizationState().catch(() => undefined);
       }
@@ -2191,6 +2226,41 @@ export function RealizationOnboardingScreen({
     selectedTeam,
     setSaveFeedback,
     teamColor,
+    text,
+  ]);
+
+  const handleTeamIconChange = useCallback((value: string) => {
+    const previousIcon = teamIcon;
+    const occupiedBy = customizationOccupancy.icons?.[value];
+    if (
+      typeof occupiedBy === "number" &&
+      (!selectedTeam || occupiedBy !== selectedTeam)
+    ) {
+      setCustomizationBlockMessage(text.iconTakenMessage(occupiedBy));
+      return;
+    }
+
+    setTeamIcon(value);
+    setIsIconPickerOpen(false);
+    // Picking an emoji is picking it *instead of* the photo. Dropping the local
+    // preview here is what flips the pair of cards over; the photo itself is
+    // released server-side on save, via clearSelfie.
+    setSelfieUrl(null);
+    setCustomizationBlockMessage(null);
+    setSaveFeedback(null, null);
+    void persistLiveCustomization({
+      nextColor: teamColor,
+      previousColor: teamColor,
+      nextIcon: value,
+      previousIcon,
+    });
+  }, [
+    customizationOccupancy.icons,
+    persistLiveCustomization,
+    selectedTeam,
+    setSaveFeedback,
+    teamColor,
+    teamIcon,
     text,
   ]);
 
@@ -2868,6 +2938,7 @@ export function RealizationOnboardingScreen({
               teamName={teamName}
               teamColor={teamColor}
               selfiePreviewUri={selfieUrl}
+              teamIcon={teamIcon}
               teamColors={teamColors}
               selectedColor={selectedColor}
               bannerTextColor={bannerTextColor}
@@ -2884,7 +2955,12 @@ export function RealizationOnboardingScreen({
               onTeamNameChange={handleTeamNameChange}
               onTeamColorChange={handleTeamColorChange}
               onOpenSelfieCapture={handleOpenSelfieCapture}
+              onOpenIconPicker={() => setIsIconPickerOpen(true)}
               onSave={onSaveCustomization}
+              languageFlag={currentLanguageFlag}
+              languageName={selectedLanguageLabel}
+              showLanguagePicker={hasMultipleLanguageOptions}
+              onOpenLanguagePicker={() => setIsLanguagePickerOpen(true)}
             />
           )}
 
@@ -2895,6 +2971,18 @@ export function RealizationOnboardingScreen({
           )}
         </View>
       </ScrollView>
+
+      <TeamIconPickerModal
+        visible={isIconPickerOpen}
+        isTabletLayout={isTabletLayout}
+        icons={TEAM_ICONS}
+        selectedIcon={selfieUrl ? null : teamIcon}
+        occupiedIcons={customizationOccupancy.icons ?? {}}
+        selectedTeam={selectedTeam}
+        text={text.teamIconPickerText}
+        onSelect={handleTeamIconChange}
+        onRequestClose={() => setIsIconPickerOpen(false)}
+      />
 
       <Modal
         visible={isLanguagePickerOpen}

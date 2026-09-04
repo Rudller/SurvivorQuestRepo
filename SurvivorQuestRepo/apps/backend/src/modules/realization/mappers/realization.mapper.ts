@@ -3,6 +3,7 @@ import {
   RealizationLanguage as PrismaRealizationLanguage,
   RealizationStatus as PrismaRealizationStatus,
   RealizationType as PrismaRealizationType,
+  RiskPigType,
 } from '@prisma/client';
 import type {
   RealizationEntity,
@@ -261,6 +262,7 @@ export function buildRealizationEntity(input: {
     pigGrantIntervalMinutes: number;
     pigEffectSeconds: number;
     pigShowThrowerName: boolean;
+    pigTypesEnabled: RiskPigType[];
     status: PrismaRealizationStatus;
     scheduledAt: Date;
     startedAt: Date | null;
@@ -325,6 +327,7 @@ export function buildRealizationEntity(input: {
     pigGrantIntervalMinutes: realization.pigGrantIntervalMinutes,
     pigEffectSeconds: realization.pigEffectSeconds,
     pigShowThrowerName: realization.pigShowThrowerName,
+    pigTypesEnabled: realization.pigTypesEnabled,
     status: resolveRealizationStatus(
       fromPrismaRealizationStatus(realization.status),
       realization.scheduledAt.toISOString(),

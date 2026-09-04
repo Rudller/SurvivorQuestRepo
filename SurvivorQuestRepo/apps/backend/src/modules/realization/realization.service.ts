@@ -172,6 +172,7 @@ export class RealizationService {
         pigGrantIntervalMinutes: validated.pigGrantIntervalMinutes,
         pigEffectSeconds: validated.pigEffectSeconds,
         pigShowThrowerName: validated.pigShowThrowerName,
+        pigTypesEnabled: validated.pigTypesEnabled,
         joinCode: (
           await this.joinCodeService.createUniqueJoinCode(realizationId, {
             findExistingByStoredOrLegacy: async (
@@ -393,6 +394,7 @@ export class RealizationService {
         pigGrantIntervalMinutes: validated.pigGrantIntervalMinutes,
         pigEffectSeconds: validated.pigEffectSeconds,
         pigShowThrowerName: validated.pigShowThrowerName,
+        pigTypesEnabled: validated.pigTypesEnabled,
         status: toPrismaRealizationStatus(nextStatus),
         scheduledAt: new Date(validated.scheduledAt),
         ...(isStartingNow ? { startedAt: new Date() } : {}),

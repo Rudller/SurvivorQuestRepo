@@ -81,9 +81,11 @@ export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
   UPSIDE_DOWN: 'Do góry nogami',
   SHAKE: 'Trzęsienie',
   FOG: 'Mgła',
-  SQUEAL: 'Kwik',
-  HASTE: 'Pośpiech',
+  DARKNESS: 'Ciemność',
   OVERHEAD: 'Nad głową',
+  MIRROR: 'Lustro',
+  SLIDE: 'Ślizg',
+  SILENCE: 'Cisza',
 };
 
 export const RISK_PIG_TYPES = Object.keys(RISK_PIG_LABELS) as RiskPigType[];

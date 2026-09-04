@@ -127,6 +127,70 @@ describe('MobileService team selection', () => {
     expect(prisma.team.update).not.toHaveBeenCalled();
     expect(prisma.eventLog.create).not.toHaveBeenCalled();
   });
+
+  it('releases the selfie when the team claims with an emoji instead', async () => {
+    const { service, prisma } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { id: 'assignment-self', deviceId: 'device-1' },
+      team: {
+        id: 'team-1',
+        slotNumber: 1,
+        name: 'Wilki',
+        color: 'red',
+        badgeKey: null,
+        badgeImageUrl: 'https://cdn.example/selfie.jpg',
+      },
+      realization: { id: 'realization-1' },
+    });
+    prisma.team.findMany.mockResolvedValue([]);
+
+    const result = await service.claimMobileTeam({
+      sessionToken: 'token',
+      name: 'Wilki',
+      color: 'red',
+      badgeKey: '🦊',
+      clearSelfie: true,
+    });
+
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: 'team-1' },
+      data: expect.objectContaining({ badgeKey: '🦊', badgeImageUrl: null }),
+    });
+    expect(result.badgeImageUrl).toBeNull();
+    expect(result.changedFields).toContain('selfie');
+  });
+
+  it('keeps the selfie when clearSelfie is not requested', async () => {
+    const { service, prisma } = createService();
+
+    jest.spyOn(service as never, 'requireSession').mockResolvedValue({
+      assignment: { id: 'assignment-self', deviceId: 'device-1' },
+      team: {
+        id: 'team-1',
+        slotNumber: 1,
+        name: 'Wilki',
+        color: 'red',
+        badgeKey: null,
+        badgeImageUrl: 'https://cdn.example/selfie.jpg',
+      },
+      realization: { id: 'realization-1' },
+    });
+    prisma.team.findMany.mockResolvedValue([]);
+
+    const result = await service.claimMobileTeam({
+      sessionToken: 'token',
+      name: 'Wilki',
+      color: 'red',
+    });
+
+    const updateArgs = prisma.team.update.mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect(updateArgs.data).not.toHaveProperty('badgeImageUrl');
+    expect(result.badgeImageUrl).toBe('https://cdn.example/selfie.jpg');
+    expect(result.changedFields).not.toContain('selfie');
+  });
 });
 
 describe('MobileService remote station launch', () => {

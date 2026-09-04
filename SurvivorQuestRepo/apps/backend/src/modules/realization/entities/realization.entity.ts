@@ -1,3 +1,4 @@
+import type { RiskPigType } from '@prisma/client';
 import type {
   StationEntity,
   StationQuiz,
@@ -85,6 +86,7 @@ export type RealizationEntity = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   // When the organiser actually pressed start, as opposed to the planned slot
@@ -165,6 +167,7 @@ export type ValidatedRealizationPayload = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled?: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   changedBy: string;

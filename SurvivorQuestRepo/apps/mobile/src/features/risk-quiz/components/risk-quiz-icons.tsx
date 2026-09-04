@@ -63,20 +63,25 @@ export function StopwatchIcon({ size, color }: IconProps) {
   );
 }
 
-// Line art rather than a filled silhouette, so the pig sits on the accent
-// colour the same way the scanner and stopwatch icons do and needs no second
-// colour for the snout and eyes.
+// Front-facing pig head. The snout is one path with an even-odd fill rule, so
+// the nostrils are genuine holes rather than dots painted in a second colour —
+// the icon then sits on the button's dark panel and on the team-coloured card in
+// the top bar without either placement needing to know the other's background.
+// Solid ears and snout give it enough weight to still read as a pig at the 20px
+// the top bar draws it at, where pure line art turned to mush.
 export function PigIcon({ size, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M6.4 7.6L4.6 3.4L9.3 5.2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M17.6 7.6L19.4 3.4L14.7 5.2" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-      <Ellipse cx={12} cy={13} rx={8} ry={6.6} stroke={color} strokeWidth={1.8} />
-      <Ellipse cx={12} cy={14.6} rx={3.4} ry={2.6} stroke={color} strokeWidth={1.8} />
-      <Path d="M10.9 14.2V15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-      <Path d="M13.1 14.2V15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-      <Path d="M8.8 10.4V11.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Path d="M15.2 10.4V11.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M5.6 8.4L3.9 3.3L9.4 5.5Z" fill={color} />
+      <Path d="M18.4 8.4L20.1 3.3L14.6 5.5Z" fill={color} />
+      <Ellipse cx={12} cy={12.8} rx={8} ry={6.6} stroke={color} strokeWidth={1.7} />
+      <Circle cx={8.7} cy={10.4} r={0.95} fill={color} />
+      <Circle cx={15.3} cy={10.4} r={0.95} fill={color} />
+      <Path
+        d="M11 12.2H13A2.6 2.6 0 0 1 13 17.4H11A2.6 2.6 0 0 1 11 12.2ZM11.85 14.8A0.85 0.85 0 1 1 10.15 14.8A0.85 0.85 0 1 1 11.85 14.8ZM13.85 14.8A0.85 0.85 0 1 1 12.15 14.8A0.85 0.85 0 1 1 13.85 14.8Z"
+        fill={color}
+        fillRule="evenodd"
+      />
     </Svg>
   );
 }

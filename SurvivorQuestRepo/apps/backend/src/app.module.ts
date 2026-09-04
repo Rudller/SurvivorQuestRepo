@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import {
+  VENUE_IP_THROTTLE,
+  mobileAwareTracker,
+} from './common/security/throttle.constants';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -18,8 +22,25 @@ import { UsersModule } from './modules/users/users.module';
   imports: [
     ThrottlerModule.forRoot({
       throttlers: [
-        { name: 'short', ttl: 60_000, limit: 120 },
-        { name: 'long', ttl: 15 * 60_000, limit: 1_000 },
+        // Keyed per device on mobile paths, per IP everywhere else. Left on the
+        // address these were one shared budget for a whole venue: 120 requests
+        // a minute split between fifteen tablets is eight each, which onboarding
+        // alone blows through in seconds.
+        {
+          name: 'short',
+          ttl: 60_000,
+          limit: 120,
+          getTracker: mobileAwareTracker,
+        },
+        {
+          name: 'long',
+          ttl: 15 * 60_000,
+          limit: 1_000,
+          getTracker: mobileAwareTracker,
+        },
+        // Never named by a @Throttle decorator, so it applies to every route as
+        // the per-address ceiling the per-device buckets no longer provide.
+        VENUE_IP_THROTTLE,
       ],
     }),
     PrismaModule,

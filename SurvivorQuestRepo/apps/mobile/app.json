@@ -2,16 +2,10 @@
   "expo": {
     "name": "SurvivorQuest",
     "slug": "survivorquest",
-    "version": "1.1.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/survivor_icon_1024.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.survivorquest.app",
@@ -27,7 +21,6 @@
         "foregroundImage": "./assets/survivor_icon_512.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "CAMERA",
@@ -47,7 +40,15 @@
       [
         "expo-navigation-bar",
         {
-          "visibility": "hidden"
+          "hidden": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ]
     ],

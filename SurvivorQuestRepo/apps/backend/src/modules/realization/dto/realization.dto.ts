@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { RiskPigType } from '@prisma/client';
 import type {
   PointsQrCodeDraftPayload,
   RealizationLanguage,
@@ -122,6 +123,7 @@ export type CreateRealizationDto = {
   pigGrantIntervalMinutes?: number;
   pigEffectSeconds?: number;
   pigShowThrowerName?: boolean;
+  pigTypesEnabled?: unknown;
   changedBy?: string;
   scenarioStations?: unknown;
   pointsQrCodes?: unknown;
@@ -210,12 +212,39 @@ function clampPigInterval(value: unknown) {
   return Math.min(20, Math.max(1, parsed));
 }
 
+// Kept in step with the Prisma default. A minute is long enough to be a real
+// nuisance and short enough that a team never feels parked.
+const DEFAULT_PIG_EFFECT_SECONDS = 60;
+
 function clampPigEffectSeconds(value: unknown) {
   const parsed = Math.round(Number(value));
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 90;
+    return DEFAULT_PIG_EFFECT_SECONDS;
   }
   return Math.min(300, Math.max(15, parsed));
+}
+
+// The pool the grant roll draws from. Two behaviours worth stating outright:
+//
+// An empty list means *every* type — that is the column default and what
+// syncPigGrants already assumes, so an operator who unticks everything gets the
+// full set back rather than a realization that hands out pigs which never land.
+// Turning the mechanic off is what pigsEnabled is for.
+//
+// A payload with no such field at all means "leave the pool alone", hence the
+// undefined: an older admin client that does not know about this setting must
+// not silently widen a pool somebody narrowed on purpose.
+function sanitizePigTypes(value: unknown): RiskPigType[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const known = new Set<string>(Object.values(RiskPigType));
+  const picked = value.filter(
+    (item): item is RiskPigType => typeof item === 'string' && known.has(item),
+  );
+
+  return Array.from(new Set(picked));
 }
 
 function sanitizeInstructors(value: unknown) {
@@ -420,6 +449,7 @@ export function validateRealizationPayload(
     pigGrantIntervalMinutes: clampPigInterval(payload.pigGrantIntervalMinutes),
     pigEffectSeconds: clampPigEffectSeconds(payload.pigEffectSeconds),
     pigShowThrowerName: payload.pigShowThrowerName !== false,
+    pigTypesEnabled: sanitizePigTypes(payload.pigTypesEnabled),
     mapImageUrl: payload.mapImageUrl?.trim() || undefined,
     offerPdfUrl: payload.offerPdfUrl?.trim() || undefined,
     offerPdfName: payload.offerPdfName?.trim() || undefined,

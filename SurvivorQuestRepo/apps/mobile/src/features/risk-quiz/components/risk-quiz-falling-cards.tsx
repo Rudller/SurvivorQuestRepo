@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, useWindowDimensions, View } from "react-native";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { pseudoRandom } from "../../../shared/math/pseudo-random";
 
 type RiskQuizFallingCardsProps = {
   isLightTheme: boolean;
@@ -16,13 +17,6 @@ const DRIVER_CYCLE_MS = 34000;
 const FALL_SPEEDS = [2, 3, 4];
 const PHONE_CARD_COUNT = 9;
 const TABLET_CARD_COUNT = 14;
-
-// Deterministic stand-in for Math.random: the scatter has to survive re-renders
-// (otherwise every state change reshuffles the sky) and stay stable in tests.
-function pseudoRandom(seed: number) {
-  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-  return value - Math.floor(value);
-}
 
 export function RiskQuizFallingCards({ isLightTheme }: RiskQuizFallingCardsProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();

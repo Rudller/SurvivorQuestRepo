@@ -44,9 +44,11 @@ export type RiskPigType =
   | "UPSIDE_DOWN"
   | "SHAKE"
   | "FOG"
-  | "SQUEAL"
-  | "HASTE"
-  | "OVERHEAD";
+  | "DARKNESS"
+  | "OVERHEAD"
+  | "MIRROR"
+  | "SLIDE"
+  | "SILENCE";
 
 // Mirrors RISK_PIG_LABELS in the backend's risk-quiz.constants.ts.
 export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
@@ -54,9 +56,11 @@ export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
   UPSIDE_DOWN: "Do góry nogami",
   SHAKE: "Trzęsienie",
   FOG: "Mgła",
-  SQUEAL: "Kwik",
-  HASTE: "Pośpiech",
+  DARKNESS: "Ciemność",
   OVERHEAD: "Nad głową",
+  MIRROR: "Lustro",
+  SLIDE: "Ślizg",
+  SILENCE: "Cisza",
 };
 
 export type RiskPigAdminTeam = {

@@ -61,7 +61,13 @@ export function StartCountdownPanel({
   });
   const audioModeReadyRef = useRef<Promise<void> | null>(null);
 
-  const isGo = state.phase === "go";
+  // "done" draws START too, not just "go". The switch to the game screen happens
+  // in an effect, which React runs *after* it has painted the render that first
+  // saw "done" — so that frame is painted with this panel still mounted, and
+  // reading secondsLeft there put a bare 0 on screen between START and the game.
+  // The panel is only ever mounted for a countdown that actually has time on it,
+  // so a zero here can only mean the count is over.
+  const isGo = state.phase !== "counting";
   // The beat this component reacts to. Folding START into the same key means
   // one effect drives every beat, so the last one can never double-fire with
   // the "1" it replaces.

@@ -37,7 +37,7 @@ describe("RiskQuizPigTargetPicker", () => {
     const { getByText } = await renderPicker();
 
     expect(getByText("Świnia: Latarka")).toBeTruthy();
-    expect(getByText("Ekran gaśnie — świeć sobie palcem.")).toBeTruthy();
+    expect(getByText("Ekran gaśnie. Przesuwaj palcem — świeci tylko krąg pod palcem.")).toBeTruthy();
   });
 
   it("throws at the chosen team", async () => {

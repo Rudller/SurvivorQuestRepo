@@ -24,6 +24,10 @@ import {
   resolveCompletionCodeInputMode,
 } from '../mobile/domain/mobile-station.helpers';
 import {
+  SESSION_TTL_MS,
+  shouldRefreshSessionTtl,
+} from '../mobile/domain/mobile-session.helpers';
+import {
   fromPrismaStationType,
   mapStation,
 } from '../station/mappers/station.mapper';
@@ -347,6 +351,22 @@ export class RiskQuizService {
 
     if (assignment.expiresAt.getTime() < Date.now()) {
       throw new UnauthorizedException('Session expired');
+    }
+
+    // Ryzykancy runs entirely on this module's endpoints, so the sliding
+    // refresh in MobileService.requireSession never fires for a team that is
+    // mid-game, and the session would die exactly SESSION_TTL_MS after the
+    // join whether or not the tablet is in use. Guarded on the remaining
+    // lifetime so the play screen's three polls do not each turn into a write
+    // every few seconds per tablet.
+    if (shouldRefreshSessionTtl(assignment.expiresAt)) {
+      await this.prisma.teamAssignment.update({
+        where: { id: assignment.id },
+        data: {
+          lastSeenAt: new Date(),
+          expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+        },
+      });
     }
 
     return { team: assignment.team, realization: assignment.realization };
@@ -1491,6 +1511,14 @@ export class RiskQuizService {
 
     await this.prisma.$transaction([
       this.prisma.riskPig.delete({ where: { id: held.id } }),
+      // Expired effects are never swept — expiresAt <= now already means "not
+      // active" — so the target may still carry a row from an earlier hit, and
+      // targetTeamId is unique. Without this the throw dies on a P2002 the
+      // moment anyone is targeted twice across an expiry boundary. The Game
+      // Master's path has always done the same thing for the same reason.
+      this.prisma.riskPigEffect.deleteMany({
+        where: { targetTeamId: target.id },
+      }),
       this.prisma.riskPigEffect.create({
         data: {
           realizationId: realization.id,

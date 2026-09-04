@@ -12,16 +12,23 @@ import {
   formatRealizationLanguageSummary,
   formatStationsTotalTime,
   getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
   isRealizationLanguageSelectionInvalid,
   parseRealizationLanguageSelection,
   realizationLanguageOptions,
   toRealizationLanguagePayload,
   realizationTypeOptions,
 } from "../types/realization";
+import {
+  RISK_PIG_LABELS,
+  type RiskPigType,
+} from "@/features/risk-quiz/api/risk-quiz.api";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
 import { FormSection } from "@/shared/components/form-section";
+
+const ALL_PIG_TYPES = Object.keys(RISK_PIG_LABELS) as RiskPigType[];
 import { SummaryCard } from "@/shared/components/summary-card";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
@@ -233,11 +240,39 @@ export function EditRealizationPanel({
     riskChatTeamsCanPost: realization.riskChatTeamsCanPost ?? true,
     pigsEnabled: realization.pigsEnabled ?? true,
     pigGrantIntervalMinutes: realization.pigGrantIntervalMinutes ?? 5,
-    pigEffectSeconds: realization.pigEffectSeconds ?? 90,
+    pigEffectSeconds: realization.pigEffectSeconds ?? 60,
     pigShowThrowerName: realization.pigShowThrowerName ?? true,
+    pigTypesEnabled: realization.pigTypesEnabled ?? [],
     status: realization.status as RealizationStatus,
     scheduledAt: toDateTimeLocalValue(realization.scheduledAt),
   });
+
+  // An empty stored list means "every type" — that is the column default and
+  // what the grant roll assumes — so it has to be expanded before the checkboxes
+  // can show anything sensible.
+  const activePigTypes =
+    editValues.pigTypesEnabled.length > 0
+      ? editValues.pigTypesEnabled
+      : ALL_PIG_TYPES;
+
+  function togglePigType(pigType: RiskPigType, isChecked: boolean) {
+    setEditValues((prev) => {
+      const current =
+        prev.pigTypesEnabled.length > 0 ? prev.pigTypesEnabled : ALL_PIG_TYPES;
+      const next = isChecked
+        ? [...current, pigType]
+        : current.filter((item) => item !== pigType);
+
+      return {
+        ...prev,
+        // Everything ticked is stored back as the empty list rather than an
+        // explicit six. Otherwise this realization would be frozen to the types
+        // that existed the day it was saved, and would silently skip any pig
+        // added later.
+        pigTypesEnabled: next.length === ALL_PIG_TYPES.length ? [] : next,
+      };
+    });
+  }
 
   const scenarioById = useMemo(
     () => new Map(scenarios.map((s) => [s.id, s])),
@@ -448,28 +483,25 @@ export function EditRealizationPanel({
       return;
     }
 
+    // Always a full pass from the base language, overwriting whatever sits in
+    // the target. The button's job is to make the translation mirror the base
+    // text, and once the original has been edited a stale translation is worse
+    // than no translation at all.
     const texts: string[] = [];
     const fields: Array<"introText" | "gameRules"> = [];
-    const currentTranslation = editValues.translations[textEditingLanguage];
 
-    if (!currentTranslation?.introText?.trim() && editValues.introText.trim()) {
+    if (editValues.introText.trim()) {
       fields.push("introText");
       texts.push(editValues.introText);
     }
-    if (
-      !isRiskQuizType &&
-      !currentTranslation?.gameRules?.trim() &&
-      editValues.gameRules.trim()
-    ) {
+    if (editValues.gameRules.trim()) {
       fields.push("gameRules");
       texts.push(editValues.gameRules);
     }
 
     if (texts.length === 0) {
       setAutoTranslateMessage(
-        isRiskQuizType
-          ? "Tekst wstępu ma już tłumaczenie dla tego języka."
-          : "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
+        "Nie ma czego tłumaczyć — wpisz najpierw tekst wstępu lub zasady gry w języku podstawowym.",
       );
       return;
     }
@@ -495,6 +527,9 @@ export function EditRealizationPanel({
           translations: { ...prev.translations, [textEditingLanguage]: next },
         };
       });
+      setAutoTranslateMessage(
+        `Przetłumaczono z: ${getRealizationLanguageLabel(baseTextLanguage)} na: ${getRealizationLanguageLabel(textEditingLanguage)}.`,
+      );
     } catch {
       setAutoTranslateMessage(
         "Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.",
@@ -900,6 +935,7 @@ export function EditRealizationPanel({
                 pigGrantIntervalMinutes: editValues.pigGrantIntervalMinutes,
                 pigEffectSeconds: editValues.pigEffectSeconds,
                 pigShowThrowerName: editValues.pigShowThrowerName,
+                pigTypesEnabled: editValues.pigTypesEnabled,
                 status: editValues.status,
                 scheduledAt: normalizedScheduledAt,
                 scenarioStations: useCustomScenarioStations
@@ -1761,6 +1797,44 @@ export function EditRealizationPanel({
                       />
                     </label>
                   </div>
+                  <div className="space-y-2">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">
+                      Świnie w puli
+                    </span>
+                    <p className="text-xs text-zinc-500">
+                      Losowane są tylko zaznaczone. Odznacz tę, która nie sprawdza
+                      się w terenie — żeby wyłączyć mechanikę w całości, użyj
+                      przełącznika na górze sekcji.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {ALL_PIG_TYPES.map((pigType) => {
+                        const isChecked = activePigTypes.includes(pigType);
+                        return (
+                          <label
+                            key={pigType}
+                            className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              // The last one standing cannot be unticked: an empty
+                              // list is how the server spells "every type", so
+                              // clearing them all would quietly turn them all back
+                              // on instead of off.
+                              disabled={
+                                !editValues.pigsEnabled ||
+                                (isChecked && activePigTypes.length === 1)
+                              }
+                              onChange={(event) =>
+                                togglePigType(pigType, event.target.checked)
+                              }
+                            />
+                            {RISK_PIG_LABELS[pigType]}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </FormSection>
 
                 <FormSection title="Mapa">
@@ -1957,6 +2031,17 @@ export function EditRealizationPanel({
                   )}
                 </div>
 
+                {textEditableLanguages.length <= 1 && (
+                  // Without this the tab is a dead end: on a one-language
+                  // realization the whole language row disappears and nothing
+                  // says that per-language texts and the auto-translator exist
+                  // at all, let alone what turns them on.
+                  <p className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400">
+                    Auto-tłumacz wstępu i zasad włącza się po zaznaczeniu co
+                    najmniej dwóch języków w sekcji &bdquo;Język realizacji&rdquo; (zakładka
+                    Podstawowe informacje).
+                  </p>
+                )}
                 {textEditableLanguages.length > 1 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
@@ -2032,26 +2117,20 @@ export function EditRealizationPanel({
                   onChange={updateEffectiveIntroText}
                   placeholder={
                     isRiskQuizType
-                      ? "Treść widoczna na ekranie oczekiwania — tu wpisz też zasady gry."
+                      ? "Treść widoczna na ekranie oczekiwania."
                       : "Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
                   }
                   rows={isRiskQuizType ? 10 : 5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
-                {/* Ryzykanci carry their whole briefing in the intro text on the
-                    waiting screen, so they get no separate rules field — the mobile
-                    app skips the post-start rules popup for them too (see
-                    apps/mobile/src/features/onboarding/model/game-rules.ts). */}
-                {!isRiskQuizType && (
-                  <StyledMarkdownEditor
-                    label="Zasady gry"
-                    value={effectiveGameRules}
-                    onChange={updateEffectiveGameRules}
-                    placeholder="Wpisz zasady gry widoczne po Welcome screen."
-                    rows={8}
-                    helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-                  />
-                )}
+                <StyledMarkdownEditor
+                  label="Zasady gry"
+                  value={effectiveGameRules}
+                  onChange={updateEffectiveGameRules}
+                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                  rows={8}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
               </FormSection>
             )}
 
@@ -2173,12 +2252,10 @@ export function EditRealizationPanel({
                     <span className="text-zinc-500">Tekst wstępu:</span>{" "}
                     {editValues.introText.trim() ? "Tak" : "Nie"}
                   </p>
-                  {!isRiskQuizType && (
-                    <p>
-                      <span className="text-zinc-500">Zasady gry:</span>{" "}
-                      {editValues.gameRules.trim() ? "Tak" : "Nie"}
-                    </p>
-                  )}
+                  <p>
+                    <span className="text-zinc-500">Zasady gry:</span>{" "}
+                    {editValues.gameRules.trim() ? "Tak" : "Nie"}
+                  </p>
                   <p>
                     <span className="text-zinc-500">
                       Leaderboard w trakcie gry:

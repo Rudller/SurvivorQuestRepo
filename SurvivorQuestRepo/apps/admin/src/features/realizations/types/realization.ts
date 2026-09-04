@@ -1,3 +1,4 @@
+import type { RiskPigType } from "@/features/risk-quiz/api/risk-quiz.api";
 import type { Station, StationType } from "@/features/games/types/station";
 
 export type RealizationStatus = "planned" | "in-progress" | "done";
@@ -279,6 +280,7 @@ export type Realization = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
   createdAt: string;
@@ -348,6 +350,7 @@ export type RealizationExportRealizationData = {
   pigGrantIntervalMinutes: number;
   pigEffectSeconds: number;
   pigShowThrowerName: boolean;
+  pigTypesEnabled?: RiskPigType[];
   status: RealizationStatus;
   scheduledAt: string;
 };

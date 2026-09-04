@@ -74,6 +74,19 @@ function optionalString(payload: MobilePayload, key: string) {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function optionalBoolean(payload: MobilePayload, key: string) {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'boolean') {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  return value;
+}
+
 function requireFiniteNumber(payload: MobilePayload, key: string) {
   const value = payload[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -134,6 +147,7 @@ export class MobileController {
       name: requireString(payload, 'name'),
       color: requireString(payload, 'color'),
       badgeKey: optionalString(payload, 'badgeKey'),
+      clearSelfie: optionalBoolean(payload, 'clearSelfie'),
     });
   }
 

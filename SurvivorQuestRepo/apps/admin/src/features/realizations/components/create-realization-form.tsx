@@ -17,6 +17,7 @@ import {
   formatRealizationLanguageSummary,
   formatStationsTotalTime,
   getRealizationLanguageFlag,
+  getRealizationLanguageLabel,
   isRealizationLanguageSelectionInvalid,
   parseRealizationLanguageSelection,
   realizationLanguageOptions,
@@ -152,7 +153,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [riskChatTeamsCanPost, setRiskChatTeamsCanPost] = useState(true);
   const [pigsEnabled, setPigsEnabled] = useState(true);
   const [pigGrantIntervalMinutes, setPigGrantIntervalMinutes] = useState(5);
-  const [pigEffectSeconds, setPigEffectSeconds] = useState(90);
+  const [pigEffectSeconds, setPigEffectSeconds] = useState(60);
   const [pigShowThrowerName, setPigShowThrowerName] = useState(true);
   const [status, setStatus] = useState<RealizationStatus>("planned");
   const [scheduledAt, setScheduledAt] = useState(() => toDateTimeLocalValue(new Date().toISOString()));
@@ -326,8 +327,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     }));
   }
 
-  // Ryzykanci have no separate rules field, so their whole briefing lives in
-  // the intro text — seed it rather than handing the operator an empty box.
+  // Ryzykanci get a stock briefing in the intro text rather than an empty box.
   // Only ever touches text that is empty or still the untouched default, so
   // flipping the type around never eats something someone wrote.
   function handleTypeChange(nextType: RealizationType) {
@@ -348,24 +348,25 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
       return;
     }
 
+    // Always a full pass from the base language, overwriting whatever sits in
+    // the target. The button's job is to make the translation mirror the base
+    // text, and once the original has been edited a stale translation is worse
+    // than no translation at all.
     const texts: string[] = [];
     const fields: Array<"introText" | "gameRules"> = [];
-    const currentTranslation = translations[textEditingLanguage];
 
-    if (!currentTranslation?.introText?.trim() && introText.trim()) {
+    if (introText.trim()) {
       fields.push("introText");
       texts.push(introText);
     }
-    if (!isRiskQuizType && !currentTranslation?.gameRules?.trim() && gameRules.trim()) {
+    if (gameRules.trim()) {
       fields.push("gameRules");
       texts.push(gameRules);
     }
 
     if (texts.length === 0) {
       setAutoTranslateMessage(
-        isRiskQuizType
-          ? "Tekst wstępu ma już tłumaczenie dla tego języka."
-          : "Tekst wstępu i zasady gry mają już tłumaczenie dla tego języka.",
+        "Nie ma czego tłumaczyć — wpisz najpierw tekst wstępu lub zasady gry w języku podstawowym.",
       );
       return;
     }
@@ -388,6 +389,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
         });
         return { ...current, [textEditingLanguage]: next };
       });
+      setAutoTranslateMessage(
+        `Przetłumaczono z: ${getRealizationLanguageLabel(baseTextLanguage)} na: ${getRealizationLanguageLabel(textEditingLanguage)}.`,
+      );
     } catch {
       setAutoTranslateMessage("Nie udało się przetłumaczyć tekstu. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
     }
@@ -1545,6 +1549,17 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   )}
                 </div>
 
+                {textEditableLanguages.length <= 1 && (
+                  // Without this the tab is a dead end: on a one-language
+                  // realization the whole language row disappears and nothing
+                  // says that per-language texts and the auto-translator exist
+                  // at all, let alone what turns them on.
+                  <p className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400">
+                    Auto-tłumacz wstępu i zasad włącza się po zaznaczeniu co
+                    najmniej dwóch języków w sekcji &bdquo;Język realizacji&rdquo; (zakładka
+                    Podstawowe informacje).
+                  </p>
+                )}
                 {textEditableLanguages.length > 1 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/60 bg-amber-400/10 px-2 py-0.5 text-xs text-amber-200">
@@ -1596,26 +1611,20 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   onChange={updateEffectiveIntroText}
                   placeholder={
                     isRiskQuizType
-                      ? "Treść widoczna na ekranie oczekiwania — tu wpisz też zasady gry."
+                      ? "Treść widoczna na ekranie oczekiwania."
                       : "Treść wyświetlana po customizacji drużyny, przed startem aplikacji."
                   }
                   rows={isRiskQuizType ? 10 : 5}
                   helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
                 />
-                {/* Ryzykanci carry their whole briefing in the intro text on the
-                    waiting screen, so they get no separate rules field — the mobile
-                    app skips the post-start rules popup for them too (see
-                    apps/mobile/src/features/onboarding/model/game-rules.ts). */}
-                {!isRiskQuizType && (
-                  <StyledMarkdownEditor
-                    label="Zasady gry"
-                    value={effectiveGameRules}
-                    onChange={updateEffectiveGameRules}
-                    placeholder="Wpisz zasady gry widoczne po Welcome screen."
-                    rows={8}
-                    helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
-                  />
-                )}
+                <StyledMarkdownEditor
+                  label="Zasady gry"
+                  value={effectiveGameRules}
+                  onChange={updateEffectiveGameRules}
+                  placeholder="Wpisz zasady gry widoczne po Welcome screen."
+                  rows={8}
+                  helperText="To pole jest opcjonalne. Obsługuje podstawowe formatowanie i listy."
+                />
               </FormSection>
             )}
 
@@ -1764,11 +1773,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p>
                     <span className="text-zinc-500">Tekst wstępu:</span> {introText.trim() ? "Tak" : "Nie"}
                   </p>
-                  {!isRiskQuizType && (
-                    <p>
-                      <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
-                    </p>
-                  )}
+                  <p>
+                    <span className="text-zinc-500">Zasady gry:</span> {gameRules.trim() ? "Tak" : "Nie"}
+                  </p>
                   <p>
                     <span className="text-zinc-500">Leaderboard w trakcie gry:</span> {showLeaderboardDuringGame ? "Tak" : "Nie"}
                   </p>

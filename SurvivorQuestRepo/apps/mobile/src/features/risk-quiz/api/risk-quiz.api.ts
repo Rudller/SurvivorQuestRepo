@@ -191,9 +191,11 @@ export type RiskPigType =
   | "UPSIDE_DOWN"
   | "SHAKE"
   | "FOG"
-  | "SQUEAL"
-  | "HASTE"
-  | "OVERHEAD";
+  | "DARKNESS"
+  | "OVERHEAD"
+  | "MIRROR"
+  | "SLIDE"
+  | "SILENCE";
 
 export type RiskPigTarget = {
   teamId: string;

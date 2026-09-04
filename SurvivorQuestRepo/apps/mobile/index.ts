@@ -1,3 +1,7 @@
+// First, and deliberately so: it registers LogBox ignore patterns, and the
+// warning it hides is emitted while the module graph below is still loading.
+import "./src/shared/dev/silence-known-warnings";
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

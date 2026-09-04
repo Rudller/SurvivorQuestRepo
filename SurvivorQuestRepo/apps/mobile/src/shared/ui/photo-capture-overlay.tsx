@@ -172,6 +172,16 @@ export function PhotoCaptureOverlay({
   const closeSize = adaptiveLayout.hit(isTabletLayout ? 54 : 42);
   const shutterSize = adaptiveLayout.hit(isLandscape ? (isTabletLayout ? 64 : 52) : isTabletLayout ? 84 : 68);
   const cameraMaxHeight = adaptiveLayout.s(isTabletLayout ? 620 : 420, 320, 680);
+  // A definite height instead of `flex: 1` inside a full-height panel. The panel
+  // used to be pinned to the whole screen so the camera had something to grow
+  // into, which left a large empty band under a camera that was capped anyway.
+  // Sizing the camera first lets the panel wrap its content. The share of the
+  // screen is a ceiling for short screens (a phone in landscape is not as tall
+  // as the camera would like); on a tablet the cap above still wins.
+  const cameraHeight = Math.min(
+    cameraMaxHeight,
+    Math.round(panelMaxHeight * (isLandscape ? 0.72 : 0.62)),
+  );
 
   return (
     <Animated.View className="absolute inset-0 z-50" style={[{ backgroundColor: backdropColor }, backdropStyle]}>
@@ -183,7 +193,6 @@ export function PhotoCaptureOverlay({
           className="w-full border"
           style={{
             maxHeight: panelMaxHeight,
-            height: permission?.granted ? panelMaxHeight : undefined,
             borderRadius: panelRadius,
             padding: panelPadding,
             borderColor: EXPEDITION_THEME.border,
@@ -246,11 +255,9 @@ export function PhotoCaptureOverlay({
               </Pressable>
             </View>
           ) : (
-            <View style={{ marginTop: contentGap, flex: 1, minHeight: 0 }}>
+            <View style={{ marginTop: contentGap }}>
               <View
                 style={{
-                  flex: 1,
-                  minHeight: 0,
                   flexDirection: isLandscape ? "row" : "column",
                   alignItems: isLandscape ? "stretch" : undefined,
                   columnGap: isLandscape ? contentGap : undefined,
@@ -259,9 +266,12 @@ export function PhotoCaptureOverlay({
                 <View
                   className="overflow-hidden border bg-black"
                   style={{
-                    flex: 1,
-                    minHeight: 0,
-                    maxHeight: cameraMaxHeight,
+                    // Landscape lays the controls out beside the camera, so
+                    // `flex` there means width; the height is explicit in both
+                    // orientations.
+                    flex: isLandscape ? 1 : undefined,
+                    width: isLandscape ? undefined : "100%",
+                    height: cameraHeight,
                     borderRadius: adaptiveLayout.s(isTabletLayout ? 28 : 18, 16, 34),
                     borderColor: EXPEDITION_THEME.border,
                   }}
