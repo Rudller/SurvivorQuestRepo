@@ -47,7 +47,9 @@ export type RiskAnswerResult = {
 
 export async function postRiskQuizScan(
   apiBaseUrl: string,
-  payload: { sessionToken: string; code: string },
+  // selectedLanguage jest opcjonalny i wstecznie zgodny, ale bez niego backend
+  // trafia w skrot "jezyk bazowy" i lokalizacja stacji nie robi nic.
+  payload: { sessionToken: string; code: string; selectedLanguage?: string },
 ) {
   return requestMobileApi<RiskScanResult>(apiBaseUrl, "/mobile/risk-quiz/scan", {
     method: "POST",
@@ -110,6 +112,7 @@ export async function postRiskQuizAnswer(
     // "Na czas"/"na punkty" cards: the code the organizer hands out at the
     // spot. Verified server-side, same as in a normal realization.
     completionCode?: string;
+    selectedLanguage?: string;
   },
 ) {
   return requestMobileApi<RiskAnswerResult>(apiBaseUrl, "/mobile/risk-quiz/answer", {
@@ -253,7 +256,7 @@ export type RiskPendingDraw = {
 
 export async function fetchRiskQuizPendingDraw(
   apiBaseUrl: string,
-  payload: { sessionToken: string },
+  payload: { sessionToken: string; selectedLanguage?: string },
 ) {
   return requestMobileApi<{ draw: RiskPendingDraw | null }>(
     apiBaseUrl,

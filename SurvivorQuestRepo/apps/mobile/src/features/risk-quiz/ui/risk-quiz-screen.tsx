@@ -545,7 +545,10 @@ export function RiskQuizScreen({
       }
       pollInFlight = true;
       try {
-        const result = await fetchRiskQuizPendingDraw(apiBaseUrl, { sessionToken });
+        const result = await fetchRiskQuizPendingDraw(apiBaseUrl, {
+          sessionToken,
+          selectedLanguage: session.selectedLanguage,
+        });
         if (cancelled || activeDraw) {
           return;
         }
@@ -588,6 +591,9 @@ export function RiskQuizScreen({
     isScannerVisible,
     apiBaseUrl,
     sessionToken,
+    // Zmiana jezyka ma restartowac polling: kolejne dobrania maja przychodzic
+    // juz w nowym jezyku.
+    session.selectedLanguage,
     handleSessionInvalid,
     openDrawnCard,
     refreshDeckStatus,
@@ -812,7 +818,11 @@ export function RiskQuizScreen({
     setIsResolvingScan(true);
     setErrorMessage(null);
     try {
-      const result = await postRiskQuizScan(apiBaseUrl, { sessionToken, code: rawValue });
+      const result = await postRiskQuizScan(apiBaseUrl, {
+        sessionToken,
+        code: rawValue,
+        selectedLanguage: session.selectedLanguage,
+      });
       setIsScannerVisible(false);
       if (result.exhausted) {
         setExhaustedNotice({ categoryName: result.categoryName });
@@ -849,6 +859,9 @@ export function RiskQuizScreen({
         sessionToken,
         cardId,
         stationId: activeDraw.station.id,
+        // Ten sam jezyk, w ktorym stacja przyszla - serwer ocenia wzgledem tego
+        // samego quizu, ktory zobaczyla druzyna.
+        selectedLanguage: session.selectedLanguage,
         ...input,
       });
       setAnswerResult(result);
