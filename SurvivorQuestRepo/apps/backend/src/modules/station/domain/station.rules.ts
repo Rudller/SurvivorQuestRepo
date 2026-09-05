@@ -76,6 +76,23 @@ export function isWordPuzzleStationType(stationType: StationType) {
   );
 }
 
+// Podzbior lamiglowek, dla ktorych `question` jest sama trescia zagadki - haslem,
+// slowem do ulozenia, szyfrogramem - a nie pytaniem do przetlumaczenia. Maszynowe
+// tlumaczenie takiego pola nie przeklada zagadki, tylko podmienia ja na inna,
+// do ktorej zapisana odpowiedz przestaje pasowac.
+//
+// Wyjatki wzgledem isWordPuzzleStationType: mini-sudoku, strong-password i memory
+// opisuja zadanie proza (plansza bierze sie ze stationId albo z regul), wiec ich
+// pytanie tlumaczy sie normalnie.
+export function isPuzzleSecretQuestionStationType(stationType: StationType) {
+  return (
+    isWordPuzzleStationType(stationType) &&
+    stationType !== 'mini-sudoku' &&
+    stationType !== 'strong-password' &&
+    stationType !== 'memory'
+  );
+}
+
 export function isMatchingStationType(stationType: StationType) {
   return stationType === 'matching';
 }

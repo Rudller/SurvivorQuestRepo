@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { normalizeTrueFalseAnswer as normalizeTrueFalseAnswerRule } from '../domain/station.rules';
+import { buildStationQuizFromInput } from '../normalizers/station-quiz.normalizer';
 import type {
   StationDraftInput,
   StationEntity,
@@ -43,111 +43,6 @@ const DEFAULT_STATION_DESCRIPTION =
 
 function isCompletionCodeRequired(type: StationType) {
   return type === 'time' || type === 'points';
-}
-
-function isQuizDataStationType(type: StationType) {
-  return (
-    type === 'quiz' ||
-    type === 'audio-quiz' ||
-    type === 'wordle' ||
-    type === 'hangman' ||
-    type === 'mastermind' ||
-    type === 'anagram' ||
-    type === 'caesar-cipher' ||
-    type === 'memory' ||
-    type === 'simon' ||
-    type === 'rebus' ||
-    type === 'boggle' ||
-    type === 'mini-sudoku' ||
-    type === 'matching' ||
-    type === 'strong-password' ||
-    type === 'open-quiz' ||
-    type === 'reviewed-answer' ||
-    type === 'true-false' ||
-    type === 'fill-blank'
-  );
-}
-
-// fill-blank stores and checks exactly like an open question: one typed answer
-// plus optional accepted variants. Only the card's presentation differs.
-function isOpenQuizStationType(type: StationType) {
-  return type === 'open-quiz' || type === 'fill-blank';
-}
-
-function isReviewedAnswerStationType(type: StationType) {
-  return type === 'reviewed-answer';
-}
-
-// Trimmed, de-duplicated, order-preserving list of the reviewer's key points.
-function collectAnswerKeys(value: unknown): string[] {
-  if (value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    throw new BadRequestException('Invalid payload');
-  }
-
-  const seen = new Set<string>();
-  const keys: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') {
-      throw new BadRequestException('Invalid payload');
-    }
-
-    const trimmed = item.trim();
-    if (!trimmed || seen.has(trimmed.toLowerCase())) {
-      continue;
-    }
-
-    seen.add(trimmed.toLowerCase());
-    keys.push(trimmed);
-  }
-
-  return keys;
-}
-
-function isWordPuzzleStationType(type: StationType) {
-  return (
-    type === 'wordle' ||
-    type === 'hangman' ||
-    type === 'mastermind' ||
-    type === 'anagram' ||
-    type === 'caesar-cipher' ||
-    type === 'rebus' ||
-    type === 'boggle' ||
-    type === 'memory' ||
-    type === 'simon' ||
-    type === 'mini-sudoku' ||
-    type === 'strong-password'
-  );
-}
-
-function isMatchingStationType(type: StationType) {
-  return type === 'matching';
-}
-
-function isTrueFalseStationType(type: StationType) {
-  return type === 'true-false';
-}
-
-// Re-exported from station.rules so this module keeps the same self-contained
-// shape as normalizeMatchingAnswer beside it.
-const normalizeTrueFalseAnswer = normalizeTrueFalseAnswerRule;
-
-function normalizeMatchingAnswer(value: string) {
-  const normalized = value.trim();
-  const match = normalized.match(/^(.+?)\s*(?:->|=|:)\s*(.+)$/);
-  if (!match) {
-    return '';
-  }
-
-  const left = match[1].trim();
-  const right = match[2].trim();
-  if (!left || !right) {
-    return '';
-  }
-
-  return `${left} -> ${right}`;
 }
 
 export type CreateStationDto = {
@@ -204,21 +99,6 @@ function ensureStringAllowingEmpty(value: unknown) {
   }
 
   return value.trim() || DEFAULT_STATION_DESCRIPTION;
-}
-
-// undefined/blank leaves the shift unset, so the station falls back to its
-// deterministic per-station default (see resolveCaesarShift on mobile).
-function ensureCaesarShift(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 25) {
-    throw new BadRequestException('Invalid payload');
-  }
-
-  return parsed;
 }
 
 function ensurePositiveNumber(value: unknown) {
@@ -366,133 +246,10 @@ function ensureStationQuiz(
   value: unknown,
   type: StationType,
 ): StationQuiz | undefined {
-  if (!isQuizDataStationType(type)) {
-    return undefined;
-  }
-
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new BadRequestException('Invalid payload');
-  }
-
-  const quiz = value as Record<string, unknown>;
-  const question = ensureTrimmedString(quiz.question);
-
-  if (isWordPuzzleStationType(type)) {
-    const caesarShift =
-      type === 'caesar-cipher'
-        ? ensureCaesarShift(quiz.caesarShift)
-        : undefined;
-
-    return {
-      question,
-      answers: [question, 'A', 'B', 'C'],
-      correctAnswerIndex: 0,
-      ...(caesarShift !== undefined ? { caesarShift } : {}),
-    };
-  }
-
-  // Nothing here is ever compared to what a team types — the Game Master judges
-  // that. acceptedAnswers carries the (optional) key points they tick off while
-  // reading, and answers mirrors the word-puzzle shape purely so the row keeps
-  // parsing: parseStationQuizData drops a quiz whose answers contain an empty
-  // string, which would take the question down with it on a card saved with no
-  // key at all.
-  if (isReviewedAnswerStationType(type)) {
-    const answerKeys = collectAnswerKeys(quiz.acceptedAnswers);
-
-    return {
-      question,
-      answers: [question, 'A', 'B', 'C'],
-      correctAnswerIndex: 0,
-      ...(answerKeys.length > 0 ? { acceptedAnswers: answerKeys } : {}),
-    };
-  }
-
-  if (isOpenQuizStationType(type)) {
-    const correctAnswer = ensureTrimmedString(
-      Array.isArray(quiz.answers) ? quiz.answers[0] : undefined,
-    );
-
-    const seenAcceptedAnswers = new Set<string>([correctAnswer.toLowerCase()]);
-    const acceptedAnswers: string[] = [];
-    if (quiz.acceptedAnswers !== undefined) {
-      if (!Array.isArray(quiz.acceptedAnswers)) {
-        throw new BadRequestException('Invalid payload');
-      }
-
-      for (const item of quiz.acceptedAnswers) {
-        if (typeof item !== 'string') {
-          throw new BadRequestException('Invalid payload');
-        }
-
-        const trimmed = item.trim();
-        if (!trimmed) {
-          continue;
-        }
-
-        const key = trimmed.toLowerCase();
-        if (seenAcceptedAnswers.has(key)) {
-          continue;
-        }
-
-        seenAcceptedAnswers.add(key);
-        acceptedAnswers.push(trimmed);
-      }
-    }
-
-    return {
-      question,
-      answers: [correctAnswer, 'A', 'B', 'C'],
-      correctAnswerIndex: 0,
-      ...(acceptedAnswers.length > 0 ? { acceptedAnswers } : {}),
-    };
-  }
-
-  if (
-    !Array.isArray(quiz.answers) ||
-    quiz.answers.length !== QUIZ_ANSWER_COUNT
-  ) {
-    throw new BadRequestException('Invalid payload');
-  }
-
-  const answers = quiz.answers.map((answer) => ensureTrimmedString(answer));
-  const normalizedAnswers = isMatchingStationType(type)
-    ? answers.map((answer) => normalizeMatchingAnswer(answer))
-    : isTrueFalseStationType(type)
-      ? answers.map((answer) => normalizeTrueFalseAnswer(answer))
-      : answers;
-  const correctAnswerIndex = Math.round(Number(quiz.correctAnswerIndex));
-  const audioUrl =
-    typeof quiz.audioUrl === 'string' && quiz.audioUrl.trim()
-      ? quiz.audioUrl.trim()
-      : undefined;
-
-  if (
-    normalizedAnswers.some((answer) => !answer) ||
-    !Number.isInteger(correctAnswerIndex) ||
-    correctAnswerIndex < 0 ||
-    correctAnswerIndex >= QUIZ_ANSWER_COUNT
-  ) {
-    throw new BadRequestException('Invalid payload');
-  }
-
-  return {
-    question,
-    answers: [
-      normalizedAnswers[0],
-      normalizedAnswers[1],
-      normalizedAnswers[2],
-      normalizedAnswers[3],
-    ],
-    // matching and true-false spread their answer across all four slots, so
-    // there is no single "correct" index to keep — pin it rather than storing
-    // whatever the form happened to send.
-    correctAnswerIndex:
-      isMatchingStationType(type) || isTrueFalseStationType(type)
-        ? 0
-        : correctAnswerIndex,
-    audioUrl,
-  };
+  // Sciezka HTTP: felerna lista kluczy odpowiedzi konczy sie 400, bo klienta da
+  // sie poprawic. Szkic osadzony w realizacji (station.normalizer.ts) uzywa tego
+  // samego buildera z 'skip'.
+  return buildStationQuizFromInput(value, type);
 }
 
 const STATION_TRANSLATION_LANGUAGES: (keyof StationTranslations)[] = [

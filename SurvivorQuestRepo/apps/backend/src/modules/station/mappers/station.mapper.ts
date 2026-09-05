@@ -1,5 +1,10 @@
 import { Prisma, StationType as PrismaStationType } from '@prisma/client';
 import { buildStationFallbackImage } from '../domain/station.defaults';
+import {
+  STATION_TRANSLATION_QUIZ_FIELD_NAMES,
+  readStationQuiz,
+  serializeStationQuiz,
+} from '../domain/station-quiz.schema';
 import type {
   StationEntity,
   StationKind,
@@ -8,7 +13,6 @@ import type {
   StationTranslations,
   StationType,
 } from '../domain/station.types';
-import { QUIZ_ANSWER_COUNT } from '../domain/station.rules';
 
 function deriveStationKind(input: {
   scenarioInstanceId: string | null;
@@ -80,93 +84,13 @@ export function toPrismaStationQuizData(quiz: StationQuiz | undefined) {
     return Prisma.DbNull;
   }
 
-  return {
-    question: quiz.question,
-    answers: quiz.answers,
-    correctAnswerIndex: quiz.correctAnswerIndex,
-    ...(quiz.audioUrl ? { audioUrl: quiz.audioUrl } : {}),
-    ...(quiz.acceptedAnswers?.length
-      ? { acceptedAnswers: quiz.acceptedAnswers }
-      : {}),
-    ...(quiz.caesarShift !== undefined
-      ? { caesarShift: quiz.caesarShift }
-      : {}),
-  } as Prisma.InputJsonValue;
-}
-
-function parseCaesarShift(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    return undefined;
-  }
-
-  return value >= 1 && value <= 25 ? value : undefined;
+  return serializeStationQuiz(quiz) as Prisma.InputJsonValue;
 }
 
 function parseStationQuizData(
   quizData: Prisma.JsonValue | null,
 ): StationQuiz | undefined {
-  if (!quizData || typeof quizData !== 'object' || Array.isArray(quizData)) {
-    return undefined;
-  }
-
-  const payload = quizData as Record<string, unknown>;
-  const question = payload.question;
-  const answers = payload.answers;
-  const correctAnswerIndex = payload.correctAnswerIndex;
-  const audioUrl = payload.audioUrl;
-  const acceptedAnswers = payload.acceptedAnswers;
-  const caesarShift = parseCaesarShift(payload.caesarShift);
-
-  if (
-    typeof question !== 'string' ||
-    !Array.isArray(answers) ||
-    answers.length !== QUIZ_ANSWER_COUNT ||
-    !answers.every((answer) => typeof answer === 'string') ||
-    typeof correctAnswerIndex !== 'number'
-  ) {
-    return undefined;
-  }
-
-  const normalizedQuestion = question.trim();
-  const normalizedAnswers = answers.map((answer) => answer.trim());
-  const normalizedCorrectAnswerIndex = Math.round(correctAnswerIndex);
-
-  if (
-    !normalizedQuestion ||
-    normalizedAnswers.some((answer) => !answer) ||
-    !Number.isInteger(normalizedCorrectAnswerIndex) ||
-    normalizedCorrectAnswerIndex < 0 ||
-    normalizedCorrectAnswerIndex >= QUIZ_ANSWER_COUNT
-  ) {
-    return undefined;
-  }
-
-  const normalizedAudioUrl =
-    typeof audioUrl === 'string' && audioUrl.trim()
-      ? audioUrl.trim()
-      : undefined;
-  const normalizedAcceptedAnswers = Array.isArray(acceptedAnswers)
-    ? acceptedAnswers.filter(
-        (answer): answer is string =>
-          typeof answer === 'string' && answer.trim().length > 0,
-      )
-    : undefined;
-
-  return {
-    question: normalizedQuestion,
-    answers: [
-      normalizedAnswers[0],
-      normalizedAnswers[1],
-      normalizedAnswers[2],
-      normalizedAnswers[3],
-    ],
-    correctAnswerIndex: normalizedCorrectAnswerIndex,
-    audioUrl: normalizedAudioUrl,
-    ...(normalizedAcceptedAnswers?.length
-      ? { acceptedAnswers: normalizedAcceptedAnswers }
-      : {}),
-    ...(caesarShift !== undefined ? { caesarShift } : {}),
-  };
+  return readStationQuiz(quizData);
 }
 
 export function toPrismaStationTranslationsData(
@@ -194,15 +118,11 @@ export function toPrismaStationTranslationsData(
     }
 
     if (value.quiz) {
-      next.quiz = {
-        question: value.quiz.question,
-        answers: value.quiz.answers,
-        correctAnswerIndex: value.quiz.correctAnswerIndex,
-        ...(value.quiz.audioUrl ? { audioUrl: value.quiz.audioUrl } : {}),
-        ...(value.quiz.acceptedAnswers?.length
-          ? { acceptedAnswers: value.quiz.acceptedAnswers }
-          : {}),
-      } as Prisma.InputJsonValue;
+      // Biala lista, a nie przeoczenie: mechanika zagadki (caesarShift) zostaje
+      // w bazowej stacji i nie ma per-jezykowej kopii.
+      next.quiz = serializeStationQuiz(value.quiz, {
+        fields: STATION_TRANSLATION_QUIZ_FIELD_NAMES,
+      }) as Prisma.InputJsonValue;
     }
 
     if (Object.keys(next).length === 0) {

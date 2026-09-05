@@ -5,9 +5,9 @@ import {
   toPrismaStationQuizData,
   toPrismaStationTranslationsData,
 } from './station.mapper';
-import type { StationQuiz } from '../domain/station.types';
+import type { StationQuiz, StationTranslations } from '../domain/station.types';
 
-function buildStationRow(quizData: unknown) {
+function buildStationRow(quizData: unknown, translations?: unknown) {
   return {
     id: 'station-1',
     name: 'Szyfr Cezara',
@@ -21,7 +21,8 @@ function buildStationRow(quizData: unknown) {
     qrEntryCode: null,
     qrScanCodes: null,
     quizData: quizData as never,
-    translations: toPrismaStationTranslationsData(undefined) as never,
+    translations: (translations ??
+      toPrismaStationTranslationsData(undefined)) as never,
     challengeDifficultyMode: 'admin',
     challengeDifficulty: 'medium',
     completionStopwatchEnabled: false,
@@ -93,5 +94,72 @@ describe('station.mapper caesar shift persistence', () => {
     const station = mapStation(buildStationRow(stored));
 
     expect(station.quiz?.acceptedAnswers).toEqual(['warszawa', 'wawa']);
+  });
+});
+
+describe('station.mapper quiz shape', () => {
+  it('drops a quiz whose answers are not four slots', () => {
+    const station = mapStation(
+      buildStationRow({
+        question: 'TAJNEHASLO',
+        answers: ['TAJNEHASLO', 'A'],
+        correctAnswerIndex: 0,
+      }),
+    );
+
+    expect(station.quiz).toBeUndefined();
+  });
+});
+
+// Tlumaczenie przechowuje wylacznie tekst. Mechanika zagadki zostaje w bazowej
+// stacji, bo admin nie ma dla niej pola per jezyk - kopia per jezyk moglaby sie
+// z baza rozjechac i nikt by tego nie zobaczyl.
+describe('station.mapper translation quiz persistence', () => {
+  const translated: StationTranslations = {
+    english: {
+      name: 'Caesar cipher',
+      quiz: {
+        question: 'SECRETWORD',
+        answers: ['SECRETWORD', 'A', 'B', 'C'],
+        correctAnswerIndex: 0,
+        acceptedAnswers: ['secretword'],
+        caesarShift: 11,
+      },
+    },
+  };
+
+  function storedEnglishQuiz() {
+    const stored = toPrismaStationTranslationsData(translated) as Record<
+      string,
+      { quiz?: Record<string, unknown> }
+    >;
+
+    return stored.english.quiz;
+  }
+
+  it('stores every translatable quiz field', () => {
+    expect(storedEnglishQuiz()).toMatchObject({
+      question: 'SECRETWORD',
+      answers: ['SECRETWORD', 'A', 'B', 'C'],
+      correctAnswerIndex: 0,
+      acceptedAnswers: ['secretword'],
+    });
+  });
+
+  it('never stores caesarShift in a per-language override', () => {
+    expect(storedEnglishQuiz()).not.toHaveProperty('caesarShift');
+  });
+
+  it('round-trips a stored translation back into an entity', () => {
+    const station = mapStation(
+      buildStationRow(null, toPrismaStationTranslationsData(translated)),
+    );
+
+    expect(station.translations?.english?.quiz).toMatchObject({
+      question: 'SECRETWORD',
+      correctAnswerIndex: 0,
+      acceptedAnswers: ['secretword'],
+    });
+    expect(station.translations?.english?.name).toBe('Caesar cipher');
   });
 });
