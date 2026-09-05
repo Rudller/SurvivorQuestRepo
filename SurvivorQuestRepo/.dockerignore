@@ -9,6 +9,8 @@ build
 
 apps/mobile/*
 !apps/mobile/package.json
+# apps/admin importuje szablony kart Ryzykantów w czasie builda.
+!apps/mobile/assets/karty
 apps/*/node_modules
 apps/*/.next
 apps/*/coverage
