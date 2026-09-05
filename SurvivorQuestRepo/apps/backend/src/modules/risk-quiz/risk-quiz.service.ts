@@ -12,6 +12,7 @@ import {
   RiskPigType,
   RiskPoolStation as PrismaRiskPoolStationRow,
   Station as PrismaStationRow,
+  RealizationLanguage as PrismaRealizationLanguage,
   StationType as PrismaStationType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -27,6 +28,15 @@ import {
   SESSION_TTL_MS,
   shouldRefreshSessionTtl,
 } from '../mobile/domain/mobile-session.helpers';
+import {
+  readStationQuizText,
+  serializeStationQuiz,
+} from '../station/domain/station-quiz.schema';
+import {
+  resolveLocalizedStationPresentation,
+  resolveRealizationLanguageContext,
+} from '../mobile/domain/mobile-language.helpers';
+import { fromPrismaRealizationLanguage } from '../realization/mappers/realization.mapper';
 import {
   fromPrismaStationType,
   mapStation,
@@ -384,7 +394,11 @@ export class RiskQuizService {
 
   // --- Device-facing: scan + answer ---
 
-  async scanCard(input: { sessionToken: string; code: string }) {
+  async scanCard(input: {
+    sessionToken: string;
+    code: string;
+    selectedLanguage?: string;
+  }) {
     const { team, realization } = await this.requireTeamSession(
       input.sessionToken,
     );
@@ -470,7 +484,10 @@ export class RiskQuizService {
       cardId: card.id,
       categoryName: card.category.name,
       difficulty: card.difficulty,
-      station: this.toRiskStationPayload(chosen.station),
+      station: this.toRiskStationPayload(
+        chosen.station,
+        this.resolveRiskLanguageContext(realization, input.selectedLanguage),
+      ),
     };
   }
 
@@ -626,8 +643,8 @@ export class RiskQuizService {
   // way to know about a real physical scan the team might be making at the
   // same instant on the same device — there's no server-side "currently
   // showing" state for that today, and a race there is left unhandled.
-  async pollPendingDraw(sessionToken: string) {
-    const { team } = await this.requireTeamSession(sessionToken);
+  async pollPendingDraw(sessionToken: string, selectedLanguage?: string) {
+    const { team, realization } = await this.requireTeamSession(sessionToken);
 
     const pendingDraw = await this.prisma.riskPendingDraw.findUnique({
       where: { teamId: team.id },
@@ -653,79 +670,79 @@ export class RiskQuizService {
         cardId: pendingDraw.cardId,
         categoryName: pendingDraw.card.category.name,
         difficulty: pendingDraw.card.difficulty,
-        station: this.toRiskStationPayload(pendingDraw.station),
+        station: this.toRiskStationPayload(
+          pendingDraw.station,
+          this.resolveRiskLanguageContext(realization, selectedLanguage),
+        ),
       },
     };
   }
 
-  private toRiskStationPayload(station: {
-    id: string;
-    type: PrismaStationType;
-    name: string;
-    description: string;
-    imageUrl: string | null;
-    points: number;
-    timeLimitSeconds: number;
-    completionCode: string | null;
-    quizData: unknown;
-  }) {
-    const quiz = station.quizData as {
-      question?: string;
-      answers?: string[];
-      correctAnswerIndex?: number;
-      audioUrl?: string;
-      acceptedAnswers?: string[];
-      caesarShift?: number;
-    } | null;
+  // Realization.language jest enumem KRZYCZACYM, a requireTeamSession zwraca
+  // surowy wiersz. Podanie 'OTHER' wprost do resolveRealizationLanguageContext
+  // konczy sie cicho: kontekst degeneruje sie do jezyka bazowego i zwraca tresc
+  // bazowa, wiec lokalizacja wygladalaby na dzialajaca, nie robiac nic.
+  private resolveRiskLanguageContext(
+    realization: {
+      language: PrismaRealizationLanguage;
+      customLanguage: string | null;
+    },
+    selectedLanguage?: string,
+  ) {
+    return resolveRealizationLanguageContext({
+      language: fromPrismaRealizationLanguage(realization.language),
+      customLanguage: realization.customLanguage ?? undefined,
+      selectedLanguage,
+    });
+  }
+
+  private toRiskStationPayload(
+    station: PrismaStationRow,
+    languageContext: ReturnType<typeof resolveRealizationLanguageContext>,
+  ) {
+    const entity = mapStation(station);
+    const localized = resolveLocalizedStationPresentation(
+      entity,
+      languageContext,
+    );
     const completionCodeLength =
       parseCompletionCode(station.completionCode)?.length ?? 0;
 
-    // A reviewed-answer card keeps its answer key in quizData.answers[0] for the
-    // Game Master's review panel. That key must never reach the tablet, and the
-    // generic branch below would ship it: it forwards `answers` wholesale. The
-    // question alone is all this card type renders, so send exactly that — and
-    // note the generic branch also gates on Array.isArray(answers), which would
-    // otherwise drop the question too on a card saved without a key.
+    // Karta reviewed-answer trzyma klucz recenzenta w quizData.answers[0]. Ten
+    // klucz nie ma prawa trafic na tablet, a galaz ogolna wyslalaby go razem z
+    // cala tablica. Karta renderuje samo pytanie, wiec tyle wysylamy - przez
+    // czytnik ratunkowy, bo wiersz zapisany bez klucza nie ma tablicy answers
+    // i galaz ogolna zabralaby ze soba rowniez pytanie.
     const isReviewedAnswer = station.type === PrismaStationType.REVIEWED_ANSWER;
+    const reviewedQuestion =
+      localized.quiz?.question ??
+      readStationQuizText(station.quizData).question;
 
     return {
-      id: station.id,
-      type: fromPrismaStationType(station.type),
-      name: station.name,
-      description: station.description,
+      id: entity.id,
+      type: entity.type,
+      name: localized.name,
+      description: localized.description,
+      // Surowa wartosc, nie entity.imageUrl - to drugie podstawia fallback z
+      // dicebear, a uklad karty zaklada, ze brak obrazka to null.
       imageUrl: station.imageUrl,
-      points: station.points,
-      timeLimitSeconds: station.timeLimitSeconds,
+      points: entity.points,
+      timeLimitSeconds: entity.timeLimitSeconds,
       completionCodeLength:
         completionCodeLength > 0 ? completionCodeLength : undefined,
       completionCodeInputMode: resolveCompletionCodeInputMode(
         station.completionCode,
       ),
-      // Full quiz payload (including the correct answer / secret) is exposed
-      // here for every type now, not just quiz/audio-quiz — the mobile client
-      // renders the real interactive station panels for non-answer-index
-      // types (wordle, mastermind, ...), which need their secret client-side
-      // the same way normal (non-risk-quiz) stations already do. Quiz/audio-
-      // quiz correctness is still verified server-side in submitAnswer() via
-      // resolveOutcome() below, so this doesn't change how those are scored.
+      // Pelny quiz (z sekretem) jedzie na tablet dla kazdego typu poza
+      // reviewed-answer, bo klient renderuje prawdziwe panele stacji, ktore
+      // potrzebuja sekretu po swojej stronie - tak samo jak zwykle stacje.
+      // Poprawnosc quiz/audio-quiz i tak weryfikuje resolveOutcome na serwerze.
       quiz: isReviewedAnswer
-        ? quiz?.question
-          ? { question: quiz.question }
+        ? reviewedQuestion
+          ? { question: reviewedQuestion }
           : undefined
-        : quiz && Array.isArray(quiz.answers)
-          ? {
-              question: quiz.question,
-              answers: quiz.answers,
-              correctAnswerIndex: quiz.correctAnswerIndex,
-              audioUrl: quiz.audioUrl,
-              acceptedAnswers: quiz.acceptedAnswers,
-              // caesar-cipher stations need the admin-set shift client-side,
-              // otherwise the panel falls back to a derived one and shows a
-              // different cipher than the admin previewed.
-              ...(typeof quiz.caesarShift === 'number'
-                ? { caesarShift: quiz.caesarShift }
-                : {}),
-            }
+        : localized.quiz
+          ? serializeStationQuiz(localized.quiz)
           : undefined,
     };
   }
@@ -916,6 +933,7 @@ export class RiskQuizService {
     selectedIndex?: number;
     completed?: boolean;
     completionCode?: string;
+    selectedLanguage?: string;
   }) {
     const { team, realization } = await this.requireTeamSession(
       input.sessionToken,
@@ -978,7 +996,11 @@ export class RiskQuizService {
       }
     }
 
-    const { isCorrect, correctIndex } = this.resolveOutcome(station, input);
+    const { isCorrect, correctIndex } = this.resolveOutcome(
+      station,
+      input,
+      this.resolveRiskLanguageContext(realization, input.selectedLanguage),
+    );
     const priorStreak = await this.getCurrentStreak(team.id);
     const streak = isCorrect ? priorStreak + 1 : 0;
     const multiplier = isCorrect ? this.resolveStreakMultiplier(streak) : 1;
@@ -1060,11 +1082,18 @@ export class RiskQuizService {
    * them, applied uniformly regardless of type.
    */
   private resolveOutcome(
-    station: { type: PrismaStationType; quizData: unknown },
+    station: PrismaStationRow,
     input: { selectedIndex?: number; completed?: boolean },
+    languageContext: ReturnType<typeof resolveRealizationLanguageContext>,
   ): { isCorrect: boolean; correctIndex?: number } {
     if (ANSWER_INDEX_STATION_TYPES.has(station.type)) {
-      const quiz = station.quizData as { correctAnswerIndex?: number } | null;
+      // Ocena musi isc po TYM SAMYM quizie, ktory poszedl na tablet. answers i
+      // correctAnswerIndex sa jedna grupa: gdyby indeks bral sie z bazy, a
+      // odpowiedzi z tlumaczenia, angielski quiz bylby oceniany polskim kluczem.
+      const quiz = resolveLocalizedStationPresentation(
+        mapStation(station),
+        languageContext,
+      ).quiz;
       if (
         typeof input.selectedIndex !== 'number' ||
         !quiz ||
@@ -1156,7 +1185,11 @@ export class RiskQuizService {
   }
 
   private async readRoom(
-    realization: { id: string; riskChatEnabled: boolean; riskChatTeamsCanPost: boolean },
+    realization: {
+      id: string;
+      riskChatEnabled: boolean;
+      riskChatTeamsCanPost: boolean;
+    },
     afterId: string | undefined,
     // Who is reading, so the tablet can tell its own lines apart without having
     // to know its team id from anywhere else — the mobile session does not
@@ -1766,9 +1799,8 @@ export class RiskQuizService {
       1,
       Math.round(teams.length * RISK_PIG_WEAKEST_FRACTION),
     );
-    const weakest = [...teams].sort(
-        (a, b) => a.points - b.points || a.slotNumber - b.slotNumber,
-      )
+    const weakest = [...teams]
+      .sort((a, b) => a.points - b.points || a.slotNumber - b.slotNumber)
       .slice(0, weakestCount);
     const weakestIds = new Set(weakest.map((item) => item.id));
 
@@ -1784,9 +1816,7 @@ export class RiskQuizService {
         if (received !== 0) {
           return received;
         }
-        return (
-          stableTieBreak(tickKey, a.id) - stableTieBreak(tickKey, b.id)
-        );
+        return stableTieBreak(tickKey, a.id) - stableTieBreak(tickKey, b.id);
       })
       .slice(0, RISK_PIG_WILDCARD_COUNT);
 
@@ -2421,7 +2451,8 @@ export class RiskQuizService {
     // award never reached the team, so taking it away here would leave the team
     // short by exactly the amount it was never given.
     const pointsToRemove = attempts.reduce(
-      (sum, attempt) => (attempt.isCorrect === null ? sum : sum + attempt.pointsDelta),
+      (sum, attempt) =>
+        attempt.isCorrect === null ? sum : sum + attempt.pointsDelta,
       0,
     );
 
@@ -2521,7 +2552,8 @@ export class RiskQuizService {
           status,
           // The frozen award is not on the team's account yet, so show nothing
           // until the verdict lands.
-          pointsAwarded: attempt && attempt.isCorrect !== null ? attempt.pointsDelta : 0,
+          pointsAwarded:
+            attempt && attempt.isCorrect !== null ? attempt.pointsDelta : 0,
         };
       })
       .sort((left, right) => {
@@ -2629,7 +2661,11 @@ export class RiskQuizService {
   }
 
   private async applyCardOutcomeUpdate(
-    existingAttempt: { id: string; pointsDelta: number; isCorrect: boolean | null },
+    existingAttempt: {
+      id: string;
+      pointsDelta: number;
+      isCorrect: boolean | null;
+    },
     isCorrect: boolean,
     pointsDelta: number,
     teamId: string,

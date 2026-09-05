@@ -3,7 +3,8 @@ import type {
   RealizationLanguage,
   RealizationTranslations,
 } from '../../realization/realization.service';
-import type { StationEntity, StationQuiz } from '../../station/station.service';
+import { mergeStationQuizTranslation } from '../../station/domain/station-quiz.schema';
+import type { StationEntity } from '../../station/station.service';
 
 type LanguageOption = { value: RealizationLanguage; label: string };
 
@@ -177,19 +178,6 @@ function pickFirstString(values: Array<string | undefined>, fallback: string) {
   return fallback;
 }
 
-function pickFirstQuiz(
-  values: Array<StationQuiz | undefined>,
-  fallback: StationQuiz | undefined,
-) {
-  for (const value of values) {
-    if (value && Array.isArray(value.answers)) {
-      return value;
-    }
-  }
-
-  return fallback;
-}
-
 export function resolveLocalizedStationPresentation(
   station: StationEntity,
   context: MobileRealizationLanguageContext,
@@ -219,9 +207,10 @@ export function resolveLocalizedStationPresentation(
       translations.map((value) => value?.description),
       station.description,
     ),
-    quiz: pickFirstQuiz(
-      translations.map((value) => value?.quiz),
+    quiz: mergeStationQuizTranslation(
       station.quiz,
+      translations.map((value) => value?.quiz),
+      station.type,
     ),
   };
 }

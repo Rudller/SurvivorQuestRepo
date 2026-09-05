@@ -106,6 +106,10 @@ export class RiskQuizController {
     return this.riskQuizService.scanCard({
       sessionToken: requireString(payload, 'sessionToken'),
       code: requireString(payload, 'code'),
+      // Opcjonalny i wstecznie zgodny: starszy klient go nie wysyla i dostaje
+      // to samo co dotad. Bez niego lokalizacja stacji jest bezczynna, bo
+      // kontekst trafia w skrot "jezyk bazowy".
+      selectedLanguage: optionalString(payload, 'selectedLanguage'),
     });
   }
 
@@ -120,6 +124,8 @@ export class RiskQuizController {
       selectedIndex: optionalFiniteNumber(payload, 'selectedIndex'),
       completed: optionalBoolean(payload, 'completed'),
       completionCode: optionalString(payload, 'completionCode'),
+      // Ocena musi isc po tym samym quizie, ktory zobaczyla druzyna.
+      selectedLanguage: optionalString(payload, 'selectedLanguage'),
     });
   }
 
@@ -132,7 +138,8 @@ export class RiskQuizController {
   )
   async submitPhotoTask(
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() body: { sessionToken?: string; cardId?: string; stationId?: string },
+    @Body()
+    body: { sessionToken?: string; cardId?: string; stationId?: string },
   ) {
     assertValidTeamPhotoFile(file);
     const payload = requirePayload(body);
@@ -221,6 +228,7 @@ export class RiskQuizController {
     const payload = requirePayload(rawPayload);
     return this.riskQuizService.pollPendingDraw(
       requireString(payload, 'sessionToken'),
+      optionalString(payload, 'selectedLanguage'),
     );
   }
 

@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { RiskQuizService } from './risk-quiz.service';
+import { resolveRealizationLanguageContext } from '../mobile/domain/mobile-language.helpers';
 import { Prisma } from '@prisma/client';
 import {
   RISK_CARDS_PER_POOL,
@@ -101,9 +102,10 @@ function createService() {
   };
 
   const stationStorageService = {
-    uploadTeamTaskPhoto: jest
-      .fn()
-      .mockResolvedValue({ key: 'photos/1.jpg', url: 'https://cdn/photos/1.jpg' }),
+    uploadTeamTaskPhoto: jest.fn().mockResolvedValue({
+      key: 'photos/1.jpg',
+      url: 'https://cdn/photos/1.jpg',
+    }),
   };
 
   const service = new RiskQuizService(
@@ -131,6 +133,11 @@ const card = {
   category: { name: 'Historia' },
 };
 
+// Sciezka gry rowniez idzie teraz przez mapStation() (lokalizacja stacji), wiec
+// mock musi byc calym wierszem, a nie wycinkiem - tak jak dawniej tylko odczyty
+// adminskie. Tablica odpowiedzi ma cztery sloty, bo tyle wymaga zapis stacji:
+// wiersz z dwoma nie powstalby przez admina i nie przeszedlby juz wczesniej przez
+// zwykla (nie-Ryzykancka) sciezke.
 const quizStation = {
   id: 'station-1',
   type: 'QUIZ', // raw Prisma StationType enum value, as a real Station row would have
@@ -140,13 +147,11 @@ const quizStation = {
   points: 0,
   timeLimitSeconds: 0,
   completionCode: null,
-  quizData: { question: 'Q1?', answers: ['a', 'b'], correctAnswerIndex: 1 },
-};
-
-// Admin-facing reads run the pool's station through mapStation(), which touches
-// every column, so those mocks need a whole row rather than the partial above.
-const quizStationRow = {
-  ...quizStation,
+  quizData: {
+    question: 'Q1?',
+    answers: ['a', 'b', 'c', 'd'],
+    correctAnswerIndex: 1,
+  },
   categories: [],
   qrEntryCode: null,
   qrScanCodes: [],
@@ -165,6 +170,9 @@ const quizStationRow = {
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
+
+// Zachowana nazwa dla odczytow adminskich - dzis to ten sam pelny wiersz.
+const quizStationRow = quizStation;
 
 describe('RiskQuizService.scanCard', () => {
   it('draws a random station assignment that the team has not attempted yet', async () => {
@@ -204,10 +212,8 @@ describe('RiskQuizService.scanCard', () => {
         completionCodeInputMode: 'alphanumeric',
         quiz: {
           question: 'Q1?',
-          answers: ['a', 'b'],
+          answers: ['a', 'b', 'c', 'd'],
           correctAnswerIndex: 1,
-          audioUrl: undefined,
-          acceptedAnswers: undefined,
         },
       },
     });
@@ -289,7 +295,10 @@ describe('RiskQuizService.getDeckStatus', () => {
     ]);
     prisma.riskAttempt.findMany
       // Attempted stations for the remaining-card count...
-      .mockResolvedValueOnce([{ stationId: 'station-1' }, { stationId: 'station-2' }])
+      .mockResolvedValueOnce([
+        { stationId: 'station-1' },
+        { stationId: 'station-2' },
+      ])
       // ...then the team's photo cards and their verdicts.
       .mockResolvedValueOnce([
         {
@@ -840,28 +849,25 @@ describe('RiskQuizService.assignStationToPool', () => {
     'QR_HUNT',
     'REBUS',
     'STRONG_PASSWORD',
-  ])(
-    'rejects %s, a type Ryzykanci does not carry',
-    async (type) => {
-      const { service, prisma } = createService();
-      prisma.station.findUnique.mockResolvedValue({
-        ...quizStation,
-        type,
-        scenarioInstanceId: null,
-        realizationId: null,
-      });
-      prisma.riskCategory.findUnique.mockResolvedValue({ realizationId: null });
+  ])('rejects %s, a type Ryzykanci does not carry', async (type) => {
+    const { service, prisma } = createService();
+    prisma.station.findUnique.mockResolvedValue({
+      ...quizStation,
+      type,
+      scenarioInstanceId: null,
+      realizationId: null,
+    });
+    prisma.riskCategory.findUnique.mockResolvedValue({ realizationId: null });
 
-      await expect(
-        service.assignStationToPool({
-          categoryId: 'category-1',
-          difficulty: 'EASY' as never,
-          stationId: quizStation.id,
-        }),
-      ).rejects.toThrow(BadRequestException);
-      expect(prisma.riskPoolStation.create).not.toHaveBeenCalled();
-    },
-  );
+    await expect(
+      service.assignStationToPool({
+        categoryId: 'category-1',
+        difficulty: 'EASY' as never,
+        stationId: quizStation.id,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.riskPoolStation.create).not.toHaveBeenCalled();
+  });
 
   it('rejects a station already cloned into a scenario', async () => {
     const { service, prisma } = createService();
@@ -1191,11 +1197,20 @@ describe('RiskQuizService.submitPhotoTask', () => {
     type: 'PHOTO_TASK',
     quizData: null,
   };
-  const photoFile = { buffer: Buffer.from('x'), mimetype: 'image/jpeg', size: 1 };
+  const photoFile = {
+    buffer: Buffer.from('x'),
+    mimetype: 'image/jpeg',
+    size: 1,
+  };
 
-  function arrangePhotoSubmission(prisma: ReturnType<typeof createService>['prisma']) {
+  function arrangePhotoSubmission(
+    prisma: ReturnType<typeof createService>['prisma'],
+  ) {
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
-    prisma.riskCard.findUnique.mockResolvedValue({ ...card, difficulty: 'MEDIUM' });
+    prisma.riskCard.findUnique.mockResolvedValue({
+      ...card,
+      difficulty: 'MEDIUM',
+    });
     prisma.station.findUnique.mockResolvedValue(photoStation);
     prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
     prisma.riskAttempt.findFirst.mockResolvedValue(null);
@@ -1317,7 +1332,9 @@ describe('RiskQuizService świnie', () => {
       realization: current,
     });
     prisma.realization.findUnique.mockResolvedValue(current);
-    prisma.team.findMany.mockResolvedValue(options.teams ?? teamsWithPoints(12));
+    prisma.team.findMany.mockResolvedValue(
+      options.teams ?? teamsWithPoints(12),
+    );
     return current;
   }
 
@@ -1355,7 +1372,9 @@ describe('RiskQuizService świnie', () => {
     // Everyone outside the bottom quarter has had two pigs except team-9.
     prisma.riskPigGrant.groupBy.mockResolvedValue(
       teamsWithPoints(12)
-        .filter((team) => !['team-1', 'team-2', 'team-3', 'team-9'].includes(team.id))
+        .filter(
+          (team) => !['team-1', 'team-2', 'team-3', 'team-9'].includes(team.id),
+        )
         .map((team) => ({ teamId: team.id, _count: { teamId: 2 } })),
     );
 
@@ -1421,7 +1440,9 @@ describe('RiskQuizService świnie', () => {
     const { service, prisma } = createService();
     arrangePigs(prisma);
     prisma.riskPig.findUnique.mockResolvedValue({ id: 'pig-1', type: 'FOG' });
-    prisma.riskPigEffect.findMany.mockResolvedValue([{ targetTeamId: 'team-2' }]);
+    prisma.riskPigEffect.findMany.mockResolvedValue([
+      { targetTeamId: 'team-2' },
+    ]);
 
     await expect(
       service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
@@ -1461,7 +1482,6 @@ describe('RiskQuizService świnie', () => {
     expect(state.targets.every((target) => target.isAvailable)).toBe(true);
   });
 });
-
 
 describe('RiskQuizService chat', () => {
   const chatRealization = {
@@ -1595,7 +1615,9 @@ describe('RiskQuizService chat', () => {
     // No lead-change on record yet, so the first read announces...
     prisma.riskChatMessage.findFirst.mockResolvedValueOnce(null);
     // ...and the second read sees the same team already holding the lead.
-    prisma.riskChatMessage.findFirst.mockResolvedValueOnce({ teamId: 'team-2' });
+    prisma.riskChatMessage.findFirst.mockResolvedValueOnce({
+      teamId: 'team-2',
+    });
 
     await service.listChatMessages({ sessionToken: 'token' });
     await service.listChatMessages({ sessionToken: 'token' });
@@ -1675,7 +1697,12 @@ describe('RiskQuizService.submitReviewedAnswer', () => {
     type: 'REVIEWED_ANSWER',
     quizData: {
       question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
-      answers: ['Wymieńcie trzy przyczyny rozbicia dzielnicowego.', 'A', 'B', 'C'],
+      answers: [
+        'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
+        'A',
+        'B',
+        'C',
+      ],
       correctAnswerIndex: 0,
       acceptedAnswers: ['testament Krzywoustego', 'brak zasady pryncypatu'],
     },
@@ -1685,7 +1712,10 @@ describe('RiskQuizService.submitReviewedAnswer', () => {
     prisma: ReturnType<typeof createService>['prisma'],
   ) {
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
-    prisma.riskCard.findUnique.mockResolvedValue({ ...card, difficulty: 'MEDIUM' });
+    prisma.riskCard.findUnique.mockResolvedValue({
+      ...card,
+      difficulty: 'MEDIUM',
+    });
     prisma.station.findUnique.mockResolvedValue(reviewedAnswerStation);
     prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
     prisma.riskAttempt.findFirst.mockResolvedValue(null);
@@ -1789,11 +1819,21 @@ describe('RiskQuizService.submitReviewedAnswer', () => {
 
     const payload = (
       service as unknown as {
-        toRiskStationPayload: (station: typeof reviewedAnswerStation) => {
-          quiz?: { question?: string; answers?: string[]; acceptedAnswers?: string[] };
+        toRiskStationPayload: (
+          station: typeof reviewedAnswerStation,
+          languageContext: ReturnType<typeof resolveRealizationLanguageContext>,
+        ) => {
+          quiz?: {
+            question?: string;
+            answers?: string[];
+            acceptedAnswers?: string[];
+          };
         };
       }
-    ).toRiskStationPayload(reviewedAnswerStation);
+    ).toRiskStationPayload(
+      reviewedAnswerStation,
+      resolveRealizationLanguageContext({ language: 'polish' }),
+    );
 
     expect(payload.quiz).toEqual({
       question: 'Wymieńcie trzy przyczyny rozbicia dzielnicowego.',
@@ -1806,10 +1846,17 @@ describe('RiskQuizService.submitReviewedAnswer', () => {
 describe('RiskQuizService photo review decisions', () => {
   function arrangeDecision(
     prisma: ReturnType<typeof createService>['prisma'],
-    attempt: { id: string; pointsDelta: number; isCorrect: boolean | null } | null,
+    attempt: {
+      id: string;
+      pointsDelta: number;
+      isCorrect: boolean | null;
+    } | null,
   ) {
     prisma.realization.findUnique.mockResolvedValue(realization);
-    prisma.team.findUnique.mockResolvedValue({ ...team, realizationId: realization.id });
+    prisma.team.findUnique.mockResolvedValue({
+      ...team,
+      realizationId: realization.id,
+    });
     prisma.riskPoolStation.findFirst.mockResolvedValue({
       categoryId: 'category-1',
       difficulty: 'MEDIUM',
@@ -1821,7 +1868,11 @@ describe('RiskQuizService photo review decisions', () => {
   it('pays the award frozen at submission when the Game Master approves', async () => {
     const { service, prisma } = createService();
     // 30 = MEDIUM's 20 with the x1.5 the team had going when it sent the photo.
-    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: 30, isCorrect: null });
+    arrangeDecision(prisma, {
+      id: 'attempt-1',
+      pointsDelta: 30,
+      isCorrect: null,
+    });
 
     const result = await service.adminCompleteCard(
       realization.id,
@@ -1843,7 +1894,11 @@ describe('RiskQuizService photo review decisions', () => {
 
   it('charges the flat penalty once when the Game Master rejects', async () => {
     const { service, prisma } = createService();
-    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: 30, isCorrect: null });
+    arrangeDecision(prisma, {
+      id: 'attempt-1',
+      pointsDelta: 30,
+      isCorrect: null,
+    });
 
     const result = await service.adminFailCard(
       realization.id,
@@ -1861,7 +1916,11 @@ describe('RiskQuizService photo review decisions', () => {
 
   it('still settles a decided attempt by the difference', async () => {
     const { service, prisma } = createService();
-    arrangeDecision(prisma, { id: 'attempt-1', pointsDelta: -10, isCorrect: false });
+    arrangeDecision(prisma, {
+      id: 'attempt-1',
+      pointsDelta: -10,
+      isCorrect: false,
+    });
 
     await service.adminCompleteCard(realization.id, team.id, 'station-photo');
 
@@ -2241,10 +2300,8 @@ describe('RiskQuizService.pollPendingDraw', () => {
           completionCodeInputMode: 'alphanumeric',
           quiz: {
             question: 'Q1?',
-            answers: ['a', 'b'],
+            answers: ['a', 'b', 'c', 'd'],
             correctAnswerIndex: 1,
-            audioUrl: undefined,
-            acceptedAnswers: undefined,
           },
         },
       },
@@ -2932,5 +2989,159 @@ describe('RiskQuizService session lifetime', () => {
     await service.pollPendingDraw('token');
 
     expect(prisma.teamAssignment.update).not.toHaveBeenCalled();
+  });
+});
+
+// Do 2026-09-05 toRiskStationPayload nie dotykal Station.translations w ogole:
+// realizacja Ryzykantow prowadzona po angielsku pokazywala polskie zadania, mimo
+// ze admin zapisuje tlumaczenia przez ten sam modal co dla zwyklych stacji.
+//
+// Uwaga na dwie pulapki, ktore sprawilyby, ze "naprawa" byla by pozorna:
+//  1. Realization.language to enum KRZYCZACY ('OTHER'), a requireTeamSession
+//     zwraca surowy wiersz. Bez fromPrismaRealizationLanguage kontekst
+//     degeneruje sie do jezyka bazowego i cicho zwraca tresc bazowa.
+//  2. resolveAvailableLanguages przy language !== 'other' zwraca DOKLADNIE jeden
+//     jezyk, wiec wielojezycznosc wyraza sie przez OTHER + liste w
+//     customLanguage. Realizacja oznaczona wprost jako angielska nigdy nie
+//     serwuje translations.
+describe('RiskQuizService station localisation', () => {
+  const multiLanguageRealization = {
+    ...realization,
+    riskSchemeId: 'scheme-1',
+    language: 'OTHER',
+    customLanguage: 'polski + angielski',
+  };
+
+  function localisedStationRow(overrides: Record<string, unknown> = {}) {
+    return {
+      ...quizStationRow,
+      name: 'Pytanie',
+      description: 'Opis',
+      quizData: {
+        question: 'Stolica Polski?',
+        answers: ['Warszawa', 'Krakow', 'Gdansk', 'Poznan'],
+        correctAnswerIndex: 0,
+      },
+      translations: {
+        english: {
+          name: 'Question',
+          description: 'Description',
+          quiz: {
+            question: 'Capital of Poland?',
+            answers: ['Warsaw', 'Cracow', 'Gdansk', 'Poznan'],
+            correctAnswerIndex: 0,
+          },
+        },
+      },
+      ...overrides,
+    };
+  }
+
+  function arrangeScan(stationRow: Record<string, unknown>) {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: multiLanguageRealization,
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: stationRow.id, station: stationRow },
+    ]);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+
+    return service;
+  }
+
+  it('ships the English station text to a player who selected English', async () => {
+    const service = arrangeScan(localisedStationRow());
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+      selectedLanguage: 'english',
+    });
+
+    expect(result).toMatchObject({
+      exhausted: false,
+      station: {
+        name: 'Question',
+        description: 'Description',
+        quiz: { question: 'Capital of Poland?' },
+      },
+    });
+  });
+
+  // caesarShift nie ma per-jezykowej kopii - musi przetrwac lokalizacje, inaczej
+  // panel wylicza inny szyfr niz ten, ktory admin ustawil.
+  it('keeps the admin-set caesarShift through localisation', async () => {
+    const service = arrangeScan(
+      localisedStationRow({
+        type: 'CAESAR_CIPHER',
+        quizData: {
+          question: 'WKDMQH',
+          answers: ['WKDMQH', 'A', 'B', 'C'],
+          correctAnswerIndex: 0,
+          caesarShift: 5,
+        },
+        translations: {
+          english: {
+            quiz: {
+              question: 'VHFUHW',
+              answers: ['VHFUHW', 'A', 'B', 'C'],
+              correctAnswerIndex: 0,
+            },
+          },
+        },
+      }),
+    );
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+      selectedLanguage: 'english',
+    });
+
+    expect(result).toMatchObject({
+      station: { quiz: { caesarShift: 5, question: 'WKDMQH' } },
+    });
+  });
+
+  it('falls back to the base text when the language has no translation', async () => {
+    const service = arrangeScan(localisedStationRow({ translations: null }));
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+      selectedLanguage: 'english',
+    });
+
+    expect(result).toMatchObject({
+      station: { name: 'Pytanie', quiz: { question: 'Stolica Polski?' } },
+    });
+  });
+
+  // Klucz recenzenta siedzi w answers[0] i nie ma prawa trafic na tablet, a wiersz
+  // zapisany bez klucza w ogole nie ma tablicy answers - pytanie musi przejsc
+  // mimo to.
+  it('still redacts a reviewed-answer card and keeps a keyless one readable', async () => {
+    const service = arrangeScan(
+      localisedStationRow({
+        type: 'REVIEWED_ANSWER',
+        quizData: { question: 'Opisz strategie' },
+        translations: null,
+      }),
+    );
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+    });
+
+    expect(result).toMatchObject({
+      station: { quiz: { question: 'Opisz strategie' } },
+    });
+    expect(
+      (result as { station: { quiz?: Record<string, unknown> } }).station.quiz,
+    ).not.toHaveProperty('answers');
   });
 });

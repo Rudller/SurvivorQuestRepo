@@ -1,4 +1,8 @@
 import {
+  readStationQuizText,
+  serializeStationQuiz,
+} from '../station/domain/station-quiz.schema';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -579,7 +583,8 @@ export class MobileService {
       changedFields.push('badge');
     }
 
-    const clearsSelfie = input.clearSelfie === true && Boolean(team.badgeImageUrl);
+    const clearsSelfie =
+      input.clearSelfie === true && Boolean(team.badgeImageUrl);
     if (clearsSelfie) {
       changedFields.push('selfie');
     }
@@ -3256,7 +3261,9 @@ export class MobileService {
       },
     });
     const pendingRiskKeys = new Set(
-      pendingRiskAttempts.map((attempt) => `${attempt.teamId}:${attempt.stationId}`),
+      pendingRiskAttempts.map(
+        (attempt) => `${attempt.teamId}:${attempt.stationId}`,
+      ),
     );
 
     const photoReviewItems = Array.from(latestPhotoByKey.values())
@@ -3307,10 +3314,11 @@ export class MobileService {
           return null;
         }
 
-        const quiz = poolStation.quizData as {
-          question?: string;
-          acceptedAnswers?: string[];
-        } | null;
+        // Czytnik ratunkowy, nie readStationQuiz: karty reviewed-answer zapisane
+        // przez starszy build nie maja tablicy answers, a recenzent i tak musi
+        // zobaczyc pytanie. Swiadomie w jezyku bazowym - Game Master ocenia w
+        // jezyku, w ktorym zadanie napisano.
+        const quiz = readStationQuizText(poolStation.quizData);
 
         return {
           kind: 'text' as const,
@@ -3584,10 +3592,6 @@ export class MobileService {
       station,
       languageContext,
     );
-    const quizAudioUrl =
-      (localized.quiz?.audioUrl && localized.quiz.audioUrl.trim()) ||
-      (station.quiz?.audioUrl && station.quiz.audioUrl.trim()) ||
-      undefined;
     const parsedCompletionCode = parseCompletionCode(
       station.completionCode ?? '',
     );
@@ -3612,22 +3616,11 @@ export class MobileService {
       ),
       completionCodeLength:
         completionCodeLength > 0 ? completionCodeLength : undefined,
+      // Nagranie bazowe i caesarShift gwarantuje juz mergeStationQuizTranslation,
+      // wiec nie ma tu czego doklejac recznie.
       quiz:
         localized.quiz && Array.isArray(localized.quiz.answers)
-          ? {
-              question: localized.quiz.question,
-              answers: localized.quiz.answers,
-              correctAnswerIndex: localized.quiz.correctAnswerIndex,
-              ...(quizAudioUrl ? { audioUrl: quizAudioUrl } : {}),
-              ...(localized.quiz.acceptedAnswers?.length
-                ? { acceptedAnswers: localized.quiz.acceptedAnswers }
-                : {}),
-              // Not translation-dependent — always read from the base
-              // station, never the per-language override.
-              ...(typeof station.quiz?.caesarShift === 'number'
-                ? { caesarShift: station.quiz.caesarShift }
-                : {}),
-            }
+          ? serializeStationQuiz(localized.quiz)
           : undefined,
       color: station.color,
       latitude: station.latitude,

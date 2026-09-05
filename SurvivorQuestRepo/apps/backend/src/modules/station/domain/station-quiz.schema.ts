@@ -1,5 +1,8 @@
-import { QUIZ_ANSWER_COUNT } from './station.rules';
-import type { StationQuiz } from './station.types';
+import {
+  QUIZ_ANSWER_COUNT,
+  isPuzzleSecretQuestionStationType,
+} from './station.rules';
+import type { StationQuiz, StationType } from './station.types';
 
 // Pojedyncze źródło prawdy dla pól StationQuiz.
 //
@@ -228,5 +231,63 @@ export function readStationQuizText(raw: unknown): StationQuizText {
   return {
     question,
     ...(acceptedAnswers ? { acceptedAnswers } : {}),
+  };
+}
+
+/**
+ * Scala bazowy quiz z per-jezykowymi nadpisaniami wedlug rol pol.
+ *
+ * Zastepuje pickFirstQuiz, ktore zwracalo CALY przetlumaczony obiekt. Skoro
+ * tlumaczenie z zalozenia nie niesie mechaniki, takie podmienienie gubilo ja
+ * bezszelestnie - konsumenci lataly to potem po swojemu albo wcale.
+ */
+export function mergeStationQuizTranslation(
+  base: StationQuiz | undefined,
+  candidates: Array<StationQuiz | undefined>,
+  stationType: StationType,
+): StationQuiz | undefined {
+  const translation = candidates.find(
+    (candidate) => candidate && Array.isArray(candidate.answers),
+  );
+
+  if (!base) {
+    // Stacja bez bazowego quizu, ale z przetlumaczonym, to uszkodzone dane.
+    // Mechanike bralibysmy znikad, wiec nie udajemy, ze ja mamy.
+    if (!translation) {
+      return undefined;
+    }
+
+    const { caesarShift: _mechanics, ...withoutMechanics } = translation;
+    return withoutMechanics;
+  }
+
+  if (!translation) {
+    return base;
+  }
+
+  // Grupa `content` jest atomowa: answers i correctAnswerIndex musza pochodzic
+  // z tego samego zrodla, inaczej angielski quiz jest oceniany polskim kluczem.
+  // Dla zagadek, ktorych pytanie JEST trescia lamiglowki, cala grupa zostaje
+  // bazowa - przetlumaczone haslo to inna zagadka, nie ta sama po angielsku.
+  const content = isPuzzleSecretQuestionStationType(stationType)
+    ? base
+    : translation;
+
+  return {
+    question: content.question,
+    answers: content.answers,
+    correctAnswerIndex: content.correctAnswerIndex,
+    ...(content.acceptedAnswers?.length
+      ? { acceptedAnswers: content.acceptedAnswers }
+      : {}),
+    // Nagranie zwykle istnieje tylko po bazowemu; brak wersji per jezyk nie moze
+    // wyciszyc stacji.
+    audioUrl:
+      trimmedOrUndefined(translation.audioUrl) ??
+      trimmedOrUndefined(base.audioUrl),
+    // Mechanika zawsze z bazy - nie jest tekstem i nie ma pola per jezyk.
+    ...(base.caesarShift !== undefined
+      ? { caesarShift: base.caesarShift }
+      : {}),
   };
 }
