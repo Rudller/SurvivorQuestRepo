@@ -1,0 +1,64 @@
+name: Backend CI Gate
+
+on:
+  # Do 2026-09-05 zaden workflow nie uruchamial testow backendu - 285 przechodzacych
+  # testow lezalo w repo bez zadnej ochrony. Push jest tu rownie wazny co PR, bo
+  # praca idzie bezposrednio na main.
+  # (GitHub Actions nie obsluguje kotwic YAML, stad powtorzony blok paths.)
+  push:
+    branches: [main]
+    paths:
+      - "SurvivorQuestRepo/apps/backend/**"
+      - "SurvivorQuestRepo/package.json"
+      - "SurvivorQuestRepo/pnpm-lock.yaml"
+      - "SurvivorQuestRepo/pnpm-workspace.yaml"
+      - ".github/workflows/backend-ci-gate.yml"
+  pull_request:
+    paths:
+      - "SurvivorQuestRepo/apps/backend/**"
+      - "SurvivorQuestRepo/package.json"
+      - "SurvivorQuestRepo/pnpm-lock.yaml"
+      - "SurvivorQuestRepo/pnpm-workspace.yaml"
+      - ".github/workflows/backend-ci-gate.yml"
+
+jobs:
+  backend-ci-gate:
+    name: Typecheck and test (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: SurvivorQuestRepo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: SurvivorQuestRepo/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # 21 plikow w apps/backend/src importuje @prisma/client, a klient generuje sie
+      # dopiero tutaj. Bez tego kroku ts-jest wywala sie na brakujacych typach, zanim
+      # dojdzie do pierwszego assertu. Generowanie nie laczy sie z baza, ale datasource
+      # deklaruje env("DATABASE_URL"), wiec zmienna musi istniec.
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+        run: pnpm --filter backend prisma generate
+
+      - name: Typecheck
+        run: pnpm --filter backend typecheck
+
+      - name: Test
+        run: pnpm --filter backend test

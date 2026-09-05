@@ -1,0 +1,57 @@
+name: Docker Build Gate
+
+on:
+  # Awaria z 2026-08-31: COPY apps/mobile/assets/karty w apps/admin/Dockerfile nie
+  # mial czego kopiowac, bo .dockerignore wyklucza apps/mobile/*. Obrazy nie byly
+  # budowane nigdzie poza produkcja, wiec deploy padal przez miesiac, zanim ktos
+  # zauwazyl. Ten gate buduje je tam, gdzie widac to od razu.
+  # (GitHub Actions nie obsluguje kotwic YAML, stad powtorzony blok paths.)
+  push:
+    branches: [main]
+    paths:
+      - "SurvivorQuestRepo/apps/**"
+      # Zmiana .dockerignore byla pierwotna przyczyna awarii z 31.08 - musi byc tutaj.
+      - "SurvivorQuestRepo/.dockerignore"
+      - "SurvivorQuestRepo/package.json"
+      - "SurvivorQuestRepo/pnpm-lock.yaml"
+      - "SurvivorQuestRepo/pnpm-workspace.yaml"
+      - ".github/workflows/docker-build-gate.yml"
+  pull_request:
+    paths:
+      - "SurvivorQuestRepo/apps/**"
+      # Zmiana .dockerignore byla pierwotna przyczyna awarii z 31.08 - musi byc tutaj.
+      - "SurvivorQuestRepo/.dockerignore"
+      - "SurvivorQuestRepo/package.json"
+      - "SurvivorQuestRepo/pnpm-lock.yaml"
+      - "SurvivorQuestRepo/pnpm-workspace.yaml"
+      - ".github/workflows/docker-build-gate.yml"
+
+jobs:
+  docker-build-gate:
+    name: Build ${{ matrix.app }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Kazdy obraz ma dostac wlasny werdykt - jeden zepsuty nie ma ukrywac reszty.
+      fail-fast: false
+      matrix:
+        app: [admin, web, backend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Budujemy wylacznie po to, zeby sprawdzic, ze build przechodzi - obrazy nie sa
+      # nigdzie pushowane. Produkcja nadal buduje u siebie przez docker compose.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: SurvivorQuestRepo
+          file: SurvivorQuestRepo/apps/${{ matrix.app }}/Dockerfile
+          push: false
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://example.invalid
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
