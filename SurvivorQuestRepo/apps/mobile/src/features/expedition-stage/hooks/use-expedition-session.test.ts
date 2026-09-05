@@ -1,11 +1,5 @@
 import type { ExpeditionSessionState } from "../model/types";
 
-jest.mock("@react-native-async-storage/async-storage", () => ({
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-}));
-
 import {
   buildMobileApiHttpError,
   getMobileApiErrorCode,
@@ -20,6 +14,14 @@ import {
   isRetriableNetworkError,
   runRequestWithRetry,
 } from "./use-expedition-session";
+
+// jest.mock i tak jest hoistowane ponad importy - trzymanie go pod nimi
+// zadowala import/first, nie zmieniajac kolejnosci wykonania.
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+}));
 
 function createSessionState(): ExpeditionSessionState {
   return {

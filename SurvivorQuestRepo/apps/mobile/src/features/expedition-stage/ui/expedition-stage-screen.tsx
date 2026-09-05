@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useAnimatedValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -879,8 +879,8 @@ export function ExpeditionStageScreen({
   const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
   const hasAutoSelectedStationRef = useRef(false);
   const autoLocationSyncTimestampRef = useRef(0);
-  const uiChromeOpacity = useRef(new Animated.Value(1)).current;
-  const tasksPanelExpansion = useRef(new Animated.Value(isTabletLayout ? 1 : 0)).current;
+  const uiChromeOpacity = useAnimatedValue(1);
+  const tasksPanelExpansion = useAnimatedValue(isTabletLayout ? 1 : 0);
   const { playerLocation, requestCurrentLocation } = usePlayerLocation();
   const mapPlayerLocation = useMemo(() => {
     return playerLocation ?? null;

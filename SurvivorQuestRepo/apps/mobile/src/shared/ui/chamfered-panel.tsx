@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Image, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { Animated, Easing, Image, View, type LayoutChangeEvent, type StyleProp, type ViewStyle, useAnimatedValue } from "react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path, Pattern } from "react-native-svg";
 
 // A panel whose corners are cut at 45 degrees instead of rounded, so each
@@ -99,7 +99,7 @@ export function ChamferedPanel({
   children,
 }: ChamferedPanelProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const glowPulseAnimation = useRef(new Animated.Value(1)).current;
+  const glowPulseAnimation = useAnimatedValue(1);
   // SVG clip paths and patterns are referenced by id, so every instance needs
   // its own or two panels on screen would share the first one's definitions.
   const instanceId = useId().replace(/[^a-zA-Z0-9]/g, "");

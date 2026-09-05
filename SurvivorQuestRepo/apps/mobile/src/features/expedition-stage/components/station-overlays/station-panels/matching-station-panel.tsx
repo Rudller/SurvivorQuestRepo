@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Text, View, type GestureResponderEvent } from "react-native";
+import { Animated, PanResponder, Text, View, type GestureResponderEvent, useAnimatedValue } from "react-native";
 import Svg, { Line } from "react-native-svg";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
@@ -111,8 +111,8 @@ export function MatchingStationPanel({
   const boardContainerRef = useRef<View | null>(null);
   const boardFrameRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const activeSnapRightRef = useRef<DotPointRight | null>(null);
-  const dragX = useRef(new Animated.Value(0)).current;
-  const dragY = useRef(new Animated.Value(0)).current;
+  const dragX = useAnimatedValue(0);
+  const dragY = useAnimatedValue(0);
   const [activeDragMeta, setActiveDragMeta] = useState<ActiveDragMeta | null>(null);
   const activeDragRef = useRef<ActiveDragState | null>(null);
   const canInteract = !isInteractiveLocked && matchingAttemptsLeft > 0;

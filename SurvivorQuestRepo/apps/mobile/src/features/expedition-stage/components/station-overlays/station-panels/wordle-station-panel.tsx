@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View, useAnimatedValue } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../../onboarding/model/constants";
@@ -134,7 +134,7 @@ function WordleRevealCell({
   state,
   isRevealed,
 }: WordleRevealCellProps) {
-  const flipScaleAnimation = useRef(new Animated.Value(1)).current;
+  const flipScaleAnimation = useAnimatedValue(1);
   const wasRevealedRef = useRef(isRevealed);
   const revealLetterFontSize = Math.max(9, Math.min(24, Math.floor(cellSize * 0.58)));
   const [displayedState, setDisplayedState] = useState<WordleCellState | undefined>(
@@ -334,7 +334,7 @@ export function WordleInteractionPanel({
   const keyboardKeyHeight = layout.isTablet ? keyboardKeySize : Math.round(keyboardKeySize * 1.25);
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
   const previousInputRef = useRef<string[]>(inputCharacters);
-  const inputShakeAnimation = useRef(new Animated.Value(0)).current;
+  const inputShakeAnimation = useAnimatedValue(0);
 
   if (inputPopAnimationsRef.current.length !== displayLength) {
     inputPopAnimationsRef.current = Array.from(

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, Text, View, type DimensionValue } from "react-native";
+import { Animated, Pressable, Text, View, type DimensionValue, useAnimatedValue } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../../../i18n";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -107,7 +107,7 @@ const MemoryCardButton = memo(function MemoryCardButton({
   }, [card.id, onPressCard]);
 
   const isFaceUp = card.revealed || card.matched;
-  const flipScaleAnimation = useRef(new Animated.Value(1)).current;
+  const flipScaleAnimation = useAnimatedValue(1);
   const wasFaceUpRef = useRef(isFaceUp);
   const [showsSymbol, setShowsSymbol] = useState(isFaceUp);
 

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Animated, Pressable, Text, View, useAnimatedValue } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
@@ -280,7 +280,7 @@ export function QuizPrestartOverlay({
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletLayout = adaptiveLayout.isTablet;
   const accentButtonTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.background;
-  const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const slideAnimation = useAnimatedValue(visible ? 1 : 0);
   const [isMounted, setIsMounted] = useState(visible);
   const [displayStationName, setDisplayStationName] = useState(stationName);
   const [selectedDifficulty, setSelectedDifficulty] = useState<ChallengeDifficulty | null>(

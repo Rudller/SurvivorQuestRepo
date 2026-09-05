@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
   View,
+  useAnimatedValue,
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { resolveUiLanguage, type UiLanguage } from "../../i18n";
@@ -1322,7 +1323,7 @@ export function RealizationOnboardingScreen({
   recoveryIntent,
   onRecoveryConsumed,
 }: RealizationOnboardingScreenProps) {
-  const routePulse = useRef(new Animated.Value(0)).current;
+  const routePulse = useAnimatedValue(0);
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletLayout = adaptiveLayout.isWideLayout;
   const contentMaxWidth = adaptiveLayout.s(isTabletLayout ? 560 : 448, 420, 700);

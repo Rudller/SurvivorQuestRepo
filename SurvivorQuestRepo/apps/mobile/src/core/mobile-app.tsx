@@ -16,6 +16,7 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
+  useAnimatedValue,
 } from "react-native";
 import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from "react-native-svg";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -98,7 +99,7 @@ function HorizontalSafeArea({ children, className, style }: HorizontalSafeAreaPr
 // halo and Android's `elevation` can't be tinted, so a coloured soft falloff
 // has to be painted by hand.
 function BreathingLogoGlow({ boxHeight }: { boxHeight: number }) {
-  const breath = useRef(new Animated.Value(0)).current;
+  const breath = useAnimatedValue(0);
   const isReduceMotionEnabled = useReduceMotion();
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, ScrollView, View, type StyleProp, type ViewStyle, useAnimatedValue } from "react-native";
 import { EXPEDITION_THEME } from "../../features/onboarding/model/constants";
 import { useReduceMotion } from "../a11y/use-reduce-motion";
 
@@ -68,7 +68,7 @@ export function AutoScrollingBox({
   const maxScrollYRef = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
-  const scrollYAnimation = useRef(new Animated.Value(0)).current;
+  const scrollYAnimation = useAnimatedValue(0);
   const [isScrollableBelow, setIsScrollableBelow] = useState(false);
   // Mirrors contentHeightRef/visibleHeightRef into state — only these two
   // drive the thumb's size/track, so re-rendering on every scroll tick isn't

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Image, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Image, Pressable, Text, View, useAnimatedValue } from "react-native";
 import { CameraView, useCameraPermissions, type CameraType } from "expo-camera";
 import { useUiLanguage, type UiLanguage } from "../../features/i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../features/onboarding/model/constants";
@@ -90,7 +90,7 @@ export function PhotoCaptureOverlay({
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isMounted, setIsMounted] = useState(visible);
-  const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const slideAnimation = useAnimatedValue(visible ? 1 : 0);
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {

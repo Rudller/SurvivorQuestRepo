@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Animated, Pressable, Text, View, useAnimatedValue } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../onboarding/model/constants";
@@ -95,7 +95,7 @@ export function QrScannerOverlay({
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
   const [isMounted, setIsMounted] = useState(visible);
-  const slideAnimation = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const slideAnimation = useAnimatedValue(visible ? 1 : 0);
 
   useEffect(() => {
     if (!visible) {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Image, Pressable, Text, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Animated, Image, Pressable, Text, View, useAnimatedValue } from "react-native";
 import { SvgUri } from "react-native-svg";
 
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
@@ -164,7 +164,7 @@ export function StationMediaPanel({
     50,
   );
   const photoTaskLabelFontSize = adaptiveLayout.fs(isTabletOverlay ? 15 : 12, 11, 18);
-  const photoTaskPulseAnimation = useRef(new Animated.Value(0)).current;
+  const photoTaskPulseAnimation = useAnimatedValue(0);
   const isPhotoTaskCaptureIdle =
     isPhotoTaskStation &&
     Boolean(photoTaskCapture?.canCapture) &&

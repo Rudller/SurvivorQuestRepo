@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Keyboard, Platform, Pressable, Text, View } from "react-native";
+import { Animated, Keyboard, Platform, Pressable, Text, View, useAnimatedValue } from "react-native";
 import { SvgUri } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/model/constants";
@@ -1020,10 +1020,10 @@ export function StationPreviewOverlay({
   const [isOverlayMounted, setIsOverlayMounted] = useState(Boolean(stationProp));
   const [quizOutcomePopup, setQuizOutcomePopup] = useState<QuizOutcomePopup | null>(null);
   const [timeoutPopupSecondsLeft, setTimeoutPopupSecondsLeft] = useState<number | null>(null);
-  const overlaySlideAnimation = useRef(new Animated.Value(stationProp ? 1 : 0)).current;
-  const quizFeedbackAnimation = useRef(new Animated.Value(0)).current;
-  const timerPulseAnimation = useRef(new Animated.Value(0)).current;
-  const codeInputShakeAnimation = useRef(new Animated.Value(0)).current;
+  const overlaySlideAnimation = useAnimatedValue(stationProp ? 1 : 0);
+  const quizFeedbackAnimation = useAnimatedValue(0);
+  const timerPulseAnimation = useAnimatedValue(0);
+  const codeInputShakeAnimation = useAnimatedValue(0);
   const codeInputResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeInputSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const simonPlaybackRunRef = useRef(0);
