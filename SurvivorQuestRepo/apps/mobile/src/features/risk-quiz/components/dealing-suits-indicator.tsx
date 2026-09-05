@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 import Svg from "react-native-svg";
 
@@ -53,7 +53,7 @@ export function DealingSuitsIndicator({
   size: number;
   cycleDurationMs: number;
 }) {
-  const cycle = useRef(new Animated.Value(0)).current;
+  const cycle = useState(() => new Animated.Value(0))[0];
   const isReduceMotionEnabled = useReduceMotion();
 
   useEffect(() => {

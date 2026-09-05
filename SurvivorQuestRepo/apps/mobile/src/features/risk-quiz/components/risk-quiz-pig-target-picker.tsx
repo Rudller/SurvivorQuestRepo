@@ -2,8 +2,10 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
-import { RISK_PIG_DESCRIPTIONS, RISK_PIG_LABELS } from "./risk-quiz-pig-effects";
 import type { RiskPigTarget, RiskPigType } from "../api/risk-quiz.api";
+import { useUiLanguage } from "../../i18n";
+import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
+import { RISK_PIG_TEXT } from "../model/risk-quiz-pig-text";
 
 // Team.color is a palette key ("amber"), never a hex — the same lookup the chat
 // dock uses, so a team reads the same colour everywhere.
@@ -30,6 +32,9 @@ export function RiskQuizPigTargetPicker({
   onThrow,
   onClose,
 }: RiskQuizPigTargetPickerProps) {
+  const uiLanguage = useUiLanguage();
+  const text = RISK_QUIZ_TEXT[uiLanguage].targetPicker;
+  const pigText = RISK_PIG_TEXT[uiLanguage];
   const availableCount = targets.filter((target) => target.isAvailable).length;
 
   return (
@@ -41,10 +46,10 @@ export function RiskQuizPigTargetPicker({
         >
           <View>
             <Text className="font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 17 }}>
-              {`Świnia: ${RISK_PIG_LABELS[type]}`}
+              {pigText.heading(pigText.labels[type])}
             </Text>
             <Text style={{ color: EXPEDITION_THEME.textMuted, fontSize: 13 }}>
-              {RISK_PIG_DESCRIPTIONS[type]}
+              {pigText.descriptions[type]}
             </Text>
           </View>
           <Pressable
@@ -53,7 +58,7 @@ export function RiskQuizPigTargetPicker({
             className="px-4 py-2 active:opacity-80"
             style={{ backgroundColor: EXPEDITION_THEME.panelStrong }}
           >
-            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 14 }}>Anuluj</Text>
+            <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 14 }}>{text.cancel}</Text>
           </Pressable>
         </View>
 
@@ -91,7 +96,7 @@ export function RiskQuizPigTargetPicker({
                 </Text>
                 {target.isAvailable ? null : (
                   <Text style={{ color: EXPEDITION_THEME.textSubtle, fontSize: 12 }}>
-                    już oświniona
+                    {text.alreadyHit}
                   </Text>
                 )}
               </Pressable>
@@ -100,7 +105,7 @@ export function RiskQuizPigTargetPicker({
 
           {targets.length === 0 ? (
             <Text className="text-center" style={{ color: EXPEDITION_THEME.textMuted, fontSize: 14, marginTop: 20 }}>
-              Nie ma kogo oświnić — grasz sam.
+              {text.nobodyToHit}
             </Text>
           ) : null}
         </ScrollView>
@@ -129,7 +134,7 @@ export function RiskQuizPigTargetPicker({
                 fontSize: 13,
               }}
             >
-              {isThrowing ? "Rzucam..." : "Losuj cel"}
+              {isThrowing ? text.throwing : text.randomTarget}
             </Text>
           </Pressable>
         </View>

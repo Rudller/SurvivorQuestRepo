@@ -724,16 +724,82 @@ function requireApiBaseUrl(baseUrl: string) {
   }
 }
 
+/**
+ * Ordinary calls get seven seconds. A request that has not answered by then is
+ * not slow, it is gone — a tablet that wandered out of range keeps the socket
+ * open and `fetch` waits forever, leaving the player on a spinner that never
+ * resolves. This is an outdoor game; that happens.
+ */
+export const MOBILE_API_REQUEST_TIMEOUT_MS = 7000;
+
+/** Photos are megabytes over field Wi-Fi, so they get their own, longer budget. */
+export const MOBILE_API_UPLOAD_TIMEOUT_MS = 30000;
+
+/**
+ * Marks a timeout so the UI can tell it apart from a server error and show its
+ * own wording. The base URL rides along because the join screen reports which
+ * address stopped answering.
+ */
+export const MOBILE_API_TIMEOUT_ERROR_PREFIX = "__mobile_api_timeout__:";
+
+export function isMobileApiTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith(MOBILE_API_TIMEOUT_ERROR_PREFIX);
+}
+
+/**
+ * `fetch` with a deadline.
+ *
+ * A caller's own signal still wins and propagates untouched: a screen aborting
+ * on unmount is a deliberate cancellation, not a network fault, and must not
+ * surface to the player as "the server stopped answering".
+ */
+async function fetchWithTimeout(
+  requestUrl: string,
+  init: RequestInit,
+  timeoutMs: number,
+  baseUrl: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const callerSignal = init.signal;
+  const abortFromCaller = () => controller.abort();
+  callerSignal?.addEventListener("abort", abortFromCaller);
+
+  try {
+    return await fetch(requestUrl, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut && error instanceof Error && error.name === "AbortError") {
+      throw new Error(`${MOBILE_API_TIMEOUT_ERROR_PREFIX}${baseUrl}`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
+  }
+}
+
 export async function requestMobileApi<T>(baseUrl: string, path: string, init?: RequestInit) {
   requireApiBaseUrl(baseUrl);
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+  const response = await fetchWithTimeout(
+    `${baseUrl}${path}`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
     },
-  });
+    MOBILE_API_REQUEST_TIMEOUT_MS,
+    baseUrl,
+  );
 
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 
@@ -751,11 +817,12 @@ export async function requestMobileApi<T>(baseUrl: string, path: string, init?: 
 }
 
 async function requestMobileApiMultipart<T>(baseUrl: string, path: string, formData: FormData, options?: MobileApiRequestOptions) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    body: formData,
-    signal: options?.signal,
-  });
+  const response = await fetchWithTimeout(
+    `${baseUrl}${path}`,
+    { method: "POST", body: formData, signal: options?.signal },
+    MOBILE_API_UPLOAD_TIMEOUT_MS,
+    baseUrl,
+  );
 
   const data = (await response.json().catch(() => ({}))) as T & MobileApiError;
 

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Rect, SvgUri } from "react-native-svg";
+import Svg, { Rect } from "react-native-svg";
 import { useAudioQuizPlayback } from "../../expedition-stage/components/station-overlays/station-panels/use-audio-quiz-playback";
 import type { OnboardingSession, RealizationLanguage, RealizationLanguageOption } from "../../onboarding/model/types";
 import { getRealizationLanguageFlag, getRealizationLanguageLabel } from "../../onboarding/model/types";
 import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../../onboarding/model/constants";
 import { resolveUiLanguage } from "../../i18n";
+import { describeRiskQuizError } from "../model/risk-quiz-error-text";
+import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
 import { isInvalidCompletionCodeErrorMessage } from "../../expedition-stage/components/station-overlays/puzzle-helpers";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
@@ -42,6 +44,7 @@ import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
+import { PauseIcon, PlayIcon } from "../components/risk-quiz-icons";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
 import { RiskQuizChatDock } from "../components/risk-quiz-chat-dock";
@@ -102,8 +105,6 @@ const COMPLETION_CODE_TYPES = new Set(["time", "points"]);
 function isCompletionCodeCardType(stationType: string) {
   return COMPLETION_CODE_TYPES.has(stationType);
 }
-const AUDIO_PLAY_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-play.svg";
-const AUDIO_PAUSE_ICON_SVG_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/filled/player-pause.svg";
 // Decorative static waveform — purely visual, not driven by real audio data.
 const AUDIO_TRACK_BAR_HEIGHTS = [10, 18, 26, 16, 30, 20, 34, 22, 14, 28, 18, 32, 20, 12, 26, 16, 30, 20, 24, 14, 18, 28, 22, 16, 30, 20, 12, 24, 18, 10];
 
@@ -147,13 +148,11 @@ function AudioTrackCard({ isPlaying, isLoading, onPress }: { isPlaying: boolean;
         {isLoading ? (
           <ActivityIndicator color={EXPEDITION_THEME.background} />
         ) : (
-          <SvgUri
-            uri={isPlaying ? AUDIO_PAUSE_ICON_SVG_URI : AUDIO_PLAY_ICON_SVG_URI}
-            width={38}
-            height={38}
-            color={EXPEDITION_THEME.background}
-            fill={EXPEDITION_THEME.background}
-          />
+          isPlaying ? (
+            <PauseIcon size={38} color={EXPEDITION_THEME.background} />
+          ) : (
+            <PlayIcon size={38} color={EXPEDITION_THEME.background} />
+          )
         )}
       </View>
     </Pressable>
@@ -329,11 +328,11 @@ export function RiskQuizScreen({
   const [testMenuEntries, setTestMenuEntries] = useState<RiskTestMenuEntry[]>([]);
   const [testMenuError, setTestMenuError] = useState<string | null>(null);
   const testMenuHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const questionRevealAnimation = useRef(new Animated.Value(0)).current;
+  const questionRevealAnimation = useState(() => new Animated.Value(0))[0];
   // The deck view's own half of that transition: 1 while the scan screen is
   // the visible screen, 0 while a card has taken it over.
-  const deckIdleRevealAnimation = useRef(new Animated.Value(1)).current;
-  const timerShakeAnimation = useRef(new Animated.Value(0)).current;
+  const deckIdleRevealAnimation = useState(() => new Animated.Value(1))[0];
+  const timerShakeAnimation = useState(() => new Animated.Value(0))[0];
   const autoDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Card whose outcome already went to the backend. A ref, not state: station
   // panels report a solved task through two callbacks in a row (onCompleteTask,
@@ -749,6 +748,8 @@ export function RiskQuizScreen({
     session.realization?.language ??
     "polish";
 
+  const riskQuizText = RISK_QUIZ_TEXT[resolveUiLanguage(selectedLanguage)];
+
   const availableLanguageOptions = useMemo<RealizationLanguageOption[]>(() => {
     if (liveRealization?.availableLanguages && liveRealization.availableLanguages.length > 0) {
       return liveRealization.availableLanguages;
@@ -825,7 +826,7 @@ export function RiskQuizScreen({
         return;
       }
       setIsScannerVisible(false);
-      setErrorMessage(error instanceof Error ? error.message : "Nie udało się zeskanować karty.");
+      setErrorMessage(describeRiskQuizError(error, riskQuizText.errors.scan, riskQuizText.errors));
     } finally {
       setIsResolvingScan(false);
     }
@@ -864,7 +865,7 @@ export function RiskQuizScreen({
         onSessionInvalid();
         return null;
       }
-      const message = error instanceof Error ? error.message : "Nie udało się wysłać wyniku.";
+      const message = describeRiskQuizError(error, riskQuizText.errors.submitOutcome, riskQuizText.errors);
       // A mistyped completion code is the code panel's business — it shakes the
       // input and lets the player retype. Putting it in the screen-level error
       // line as well would leave a raw "Invalid completion code" sitting under
@@ -909,7 +910,7 @@ export function RiskQuizScreen({
         onSessionInvalid();
         return null;
       }
-      const message = error instanceof Error ? error.message : "Nie udało się wysłać zdjęcia.";
+      const message = describeRiskQuizError(error, riskQuizText.errors.submitPhoto, riskQuizText.errors);
       setErrorMessage(message);
       return message;
     }
@@ -1070,7 +1071,7 @@ export function RiskQuizScreen({
         return;
       }
       setPigError(
-        error instanceof Error ? error.message : "Nie udało się rzucić świni.",
+        describeRiskQuizError(error, riskQuizText.errors.throwPig, riskQuizText.errors),
       );
     } finally {
       setIsThrowingPig(false);
@@ -1107,7 +1108,7 @@ export function RiskQuizScreen({
         return;
       }
       setChatError(
-        error instanceof Error ? error.message : "Nie udało się wysłać wiadomości.",
+        describeRiskQuizError(error, riskQuizText.errors.sendChat, riskQuizText.errors),
       );
     } finally {
       setIsSendingChat(false);
@@ -1139,7 +1140,7 @@ export function RiskQuizScreen({
         onSessionInvalid();
         return null;
       }
-      const message = error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.";
+      const message = describeRiskQuizError(error, riskQuizText.errors.submitReviewedAnswer, riskQuizText.errors);
       setErrorMessage(message);
       return message;
     }
@@ -1189,7 +1190,7 @@ export function RiskQuizScreen({
         onSessionInvalid();
         return;
       }
-      setTestMenuError(error instanceof Error ? error.message : "Nie udało się wczytać menu testowego.");
+      setTestMenuError(describeRiskQuizError(error, riskQuizText.errors.testMenu, riskQuizText.errors));
     } finally {
       setIsLoadingTestMenu(false);
     }

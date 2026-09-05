@@ -2,17 +2,17 @@ import { Text, View } from "react-native";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { AnswerBubbleIcon, CardBackIcon, QrScannerIcon } from "./risk-quiz-icons";
+import { useUiLanguage } from "../../i18n";
+import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
 
-// The three beats of one card. Labels are split into two lines by hand so the
-// columns stay the same height whatever the screen width.
-const ROUND_STEPS = [
-  { Icon: CardBackIcon, firstLine: "Wybierz", secondLine: "kartę" },
-  { Icon: QrScannerIcon, firstLine: "Zeskanuj", secondLine: "kod QR" },
-  { Icon: AnswerBubbleIcon, firstLine: "Odpowiedz", secondLine: "na pytanie" },
-] as const;
+// The three beats of one card. Each label is split into two lines by hand so the
+// columns stay the same height whatever the screen width — which is also why the
+// wording lives in the text table as two fields rather than one sentence.
+const STEP_ICONS = [CardBackIcon, QrScannerIcon, AnswerBubbleIcon] as const;
 
 export function RiskQuizHowToPlay() {
   const adaptiveLayout = useAdaptiveLayout();
+  const text = RISK_QUIZ_TEXT[useUiLanguage()].howToPlay;
   const isTabletLayout = adaptiveLayout.isTablet;
   const stepIconSize = adaptiveLayout.s(isTabletLayout ? 38 : 28, 24, 44);
   const stepFontSize = adaptiveLayout.fs(isTabletLayout ? 15 : 12, 11, 17);
@@ -24,10 +24,12 @@ export function RiskQuizHowToPlay() {
   return (
     <View style={{ width: "100%", maxWidth: 420, paddingHorizontal: stepPaddingHorizontal }}>
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-        {ROUND_STEPS.map((step) => (
+        {text.steps.map((step, stepIndex) => {
+          const Icon = STEP_ICONS[stepIndex];
+          return (
           <View key={step.firstLine} style={{ flex: 1, alignItems: "center" }}>
             <View style={{ marginBottom: stepIconMarginBottom }}>
-              <step.Icon size={stepIconSize} color={EXPEDITION_THEME.accent} />
+              <Icon size={stepIconSize} color={EXPEDITION_THEME.accent} />
             </View>
             <Text className="text-center font-semibold" style={{ color: EXPEDITION_THEME.textPrimary, fontSize: stepFontSize }}>
               {step.firstLine}
@@ -36,14 +38,15 @@ export function RiskQuizHowToPlay() {
               {step.secondLine}
             </Text>
           </View>
-        ))}
+          );
+        })}
       </View>
 
       <Text
         className="text-center"
         style={{ color: EXPEDITION_THEME.textMuted, fontSize: footerFontSize, marginTop: footerMarginTop }}
       >
-        Seria bez pudła mnoży punkty za kolejne karty.
+        {text.streakNote}
       </Text>
     </View>
   );

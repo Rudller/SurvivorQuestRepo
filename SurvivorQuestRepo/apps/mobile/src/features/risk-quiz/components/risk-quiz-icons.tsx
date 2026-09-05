@@ -5,6 +5,9 @@ type IconProps = {
   color: string;
 };
 
+/** Lighter heart of the flame, so it reads as fire and not a coloured blob. */
+const EMBER_CORE_COLOR = "#FFE9A8";
+
 export function QrScannerIcon({ size, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -48,6 +51,46 @@ export function AnswerBubbleIcon({ size, color }: IconProps) {
         strokeLinejoin="round"
       />
       <Circle cx={12.2} cy={13.7} r={1} fill={color} />
+    </Svg>
+  );
+}
+
+/*
+  Audio transport and the streak flame used to be fetched at runtime — the
+  transport icons from unpkg, the flame as a GIF from a stock-image CDN. This is
+  an outdoor game played on field Wi-Fi, so those simply failed to appear
+  whenever the signal was poor, with no fallback behind them. Drawn locally they
+  cannot go missing.
+*/
+export function PlayIcon({ size, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M7 4.8v14.4a1 1 0 0 0 1.53.85l11.2-7.2a1 1 0 0 0 0-1.7L8.53 3.95A1 1 0 0 0 7 4.8Z" fill={color} />
+    </Svg>
+  );
+}
+
+export function PauseIcon({ size, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={6} y={4} width={4.4} height={16} rx={1.4} fill={color} />
+      <Rect x={13.6} y={4} width={4.4} height={16} rx={1.4} fill={color} />
+    </Svg>
+  );
+}
+
+/** Flame beside the streak multiplier. */
+export function StreakFlameIcon({ size, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12.6 1.8c2.3 3.4 1.2 5.4-.2 7-1.1 1.3-2.2 2.4-1.7 4.2-1.5-.6-2-2.2-1.8-3.6-1.9 1.6-3.4 3.9-3.4 6.5A8.5 8.5 0 0 0 20 16c0-4.4-2.6-6.6-4.6-8.4-1.8-1.6-2.9-3.2-2.8-5.8Z"
+        fill={color}
+      />
+      <Path
+        d="M12 13.5c1.4 1.2 2.2 2.3 2.2 3.6a2.4 2.4 0 0 1-4.8 0c0-1 .8-2.2 2.6-3.6Z"
+        fill={EMBER_CORE_COLOR}
+      />
     </Svg>
   );
 }

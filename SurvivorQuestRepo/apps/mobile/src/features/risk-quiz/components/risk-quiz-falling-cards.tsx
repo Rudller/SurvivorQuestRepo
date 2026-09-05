@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Animated, Easing, useWindowDimensions, View } from "react-native";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
@@ -22,7 +22,7 @@ export function RiskQuizFallingCards({ isLightTheme }: RiskQuizFallingCardsProps
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletLayout = adaptiveLayout.isTablet;
-  const driver = useRef(new Animated.Value(0)).current;
+  const driver = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const fallLoop = Animated.loop(

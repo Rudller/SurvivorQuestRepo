@@ -168,7 +168,7 @@ export function RiskQuizChatDock({
     ),
   );
 
-  const expandAnimation = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
+  const expandAnimation = useState(() => new Animated.Value(isExpanded ? 1 : 0))[0];
   // Swapped at the animation's midpoint rather than cross-faded, the same trick
   // the bottom bar's scan/close button uses for its flip — one content at a
   // time, so neither can steal a tap from the other mid-transition.

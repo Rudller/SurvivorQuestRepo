@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 import {
   RecordingPresets,
@@ -42,7 +42,7 @@ export function SilenceEffect({ children, fallback }: SilenceEffectProps) {
   // Starts revealed and only darkens once the microphone is actually running.
   // Blacking the screen out first would punish a team on a tablet that turns out
   // to have no recording permission at all.
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useState(() => new Animated.Value(0))[0];
   const [status, setStatus] = useState<"checking" | "ready" | "unavailable">(
     "checking",
   );

@@ -17,6 +17,8 @@ import { useReduceMotion } from "../../../shared/a11y/use-reduce-motion";
 import { pseudoRandom } from "../../../shared/math/pseudo-random";
 import { PigIcon } from "./risk-quiz-icons";
 import type { RiskPigType } from "../api/risk-quiz.api";
+import { useUiLanguage } from "../../i18n";
+import { RISK_PIG_TEXT } from "../model/risk-quiz-pig-text";
 
 // Both sensors are loaded lazily and defensively rather than imported at the
 // top of the file. Pigs are handed out by the server from a pool, so a tablet
@@ -108,34 +110,7 @@ export function smoothIlluminance(previous: number | null, sample: number): numb
   return previous + (lux - previous) * DARKNESS_SMOOTHING;
 }
 
-// Polish names for every pig, mirroring RISK_PIG_LABELS in the backend's
-// risk-quiz.constants.ts.
-export const RISK_PIG_LABELS: Record<RiskPigType, string> = {
-  FLASHLIGHT: "Latarka",
-  UPSIDE_DOWN: "Do góry nogami",
-  SHAKE: "Trzęsienie",
-  FOG: "Mgła",
-  DARKNESS: "Ciemność",
-  OVERHEAD: "Nad głową",
-  MIRROR: "Lustro",
-  SLIDE: "Ślizg",
-  SILENCE: "Cisza",
-};
 
-// Doubles as the text on the briefing card, so each one says what is happening
-// *and* what to do about it — a team reading "Mgła na ekranie" and nothing else
-// would just wait for it to pass.
-export const RISK_PIG_DESCRIPTIONS: Record<RiskPigType, string> = {
-  FLASHLIGHT: "Ekran gaśnie. Przesuwaj palcem — świeci tylko krąg pod palcem.",
-  UPSIDE_DOWN: "Ekran staje na głowie. Obróćcie tablet.",
-  SHAKE: "Ekran się trzęsie. Celujcie uważniej.",
-  FOG: "Ekran zachodzi mgłą. Przecierajcie go palcem na boki tam, gdzie chcecie widzieć — przetarte miejsce powoli zachodzi z powrotem.",
-  DARKNESS: "Ekran widać tylko w ciemności — im ciemniej, tym wyraźniej. Schowajcie tablet przed światłem.",
-  OVERHEAD: "Ekran świeci tylko trzymany nad głową, ekranem w dół.",
-  MIRROR: "Ekran w lustrze. Wszystko jest odbite — czytajcie i celujcie na odwrót.",
-  SLIDE: "Ekran ucieka po tablecie. Celujcie z wyprzedzeniem.",
-  SILENCE: "Ekran widać tylko w ciszy. Im głośniej mówicie, tym ciemniej — tablet was słyszy.",
-};
 
 type PigEffectLayerProps = {
   type: RiskPigType | null;
@@ -234,6 +209,7 @@ export function RiskQuizPigEffectLayer({ type, isLightTheme, children }: PigEffe
 // reads as a broken tablet; a team that has been told what is happening and
 // what to do about it reads it as the prank it is.
 function PigBriefing({ type }: { type: RiskPigType }) {
+  const pigText = RISK_PIG_TEXT[useUiLanguage()];
   return (
     <View
       testID="risk-pig-briefing"
@@ -251,26 +227,26 @@ function PigBriefing({ type }: { type: RiskPigType }) {
         className="uppercase tracking-widest"
         style={{ color: EXPEDITION_THEME.textSubtle, fontSize: 13, marginBottom: 10 }}
       >
-        Dostajesz świnię
+        {pigText.incoming}
       </Text>
       <Text
         className="font-extrabold uppercase tracking-widest text-center"
         style={{ color: EXPEDITION_THEME.accent, fontSize: 34, marginBottom: 14 }}
       >
-        {RISK_PIG_LABELS[type]}
+        {pigText.labels[type]}
       </Text>
       <Text
         className="text-center"
         style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 17, lineHeight: 24 }}
       >
-        {RISK_PIG_DESCRIPTIONS[type]}
+        {pigText.descriptions[type]}
       </Text>
     </View>
   );
 }
 
 function ShakeEffect({ children }: { children: ReactNode }) {
-  const offset = useRef(new Animated.Value(0)).current;
+  const offset = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -589,8 +565,8 @@ function FogEffect({ children, isLightTheme }: { children: ReactNode; isLightThe
   const originRef = useRef({ x: 0, y: 0 });
   const [size, setSize] = useState({ width: 0, height: 0 });
 
-  const drift = useRef(new Animated.Value(0)).current;
-  const baseClarity = useRef(new Animated.Value(0)).current;
+  const drift = useState(() => new Animated.Value(0))[0];
+  const baseClarity = useState(() => new Animated.Value(0))[0];
   const baseClarityRef = useRef(0);
   const baseDecayRef = useRef<Animated.CompositeAnimation | null>(null);
   const lastRubAtRef = useRef(0);
@@ -958,6 +934,7 @@ function FogEffect({ children, isLightTheme }: { children: ReactNode; isLightThe
 // not, whereas raw acceleration is near-universal — and its Z axis answers this
 // exact question directly: +1g with the screen up, -1g with the screen down.
 function OverheadEffect({ children }: { children: ReactNode }) {
+  const pigText = RISK_PIG_TEXT[useUiLanguage()];
   const [isFaceDown, setIsFaceDown] = useState(false);
   // "checking" until the sensor has actually confirmed itself. Rendering the
   // dark overlay before that would look identical to a broken effect on a
@@ -1040,7 +1017,7 @@ function OverheadEffect({ children }: { children: ReactNode }) {
               paddingHorizontal: 24,
             }}
           >
-            Podnieś tablet nad głowę ekranem w dół
+            {pigText.overheadHint}
           </Text>
         </View>
       )}
@@ -1055,10 +1032,11 @@ function OverheadEffect({ children }: { children: ReactNode }) {
 const DARKNESS_MAX_OPACITY = 1;
 
 function DarknessEffect({ children }: { children: ReactNode }) {
+  const pigText = RISK_PIG_TEXT[useUiLanguage()];
   // Starts fully revealed and only darkens once the sensor has confirmed
   // itself. Blacking the screen out during "checking" would flash on every
   // device, including the ones that turn out to have no light sensor at all.
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useState(() => new Animated.Value(0))[0];
   const [status, setStatus] = useState<"checking" | "ready" | "unavailable">(
     "checking",
   );
@@ -1148,7 +1126,7 @@ function DarknessEffect({ children }: { children: ReactNode }) {
             paddingHorizontal: 24,
           }}
         >
-          Schowajcie tablet przed światłem — im ciemniej, tym więcej widać
+          {pigText.darknessHint}
         </Text>
       </Animated.View>
     </View>
@@ -1162,7 +1140,7 @@ const SLIDE_RANGE_PX = 42;
 
 function SlideEffect({ children }: { children: ReactNode }) {
   const prefersReducedMotion = useReduceMotion();
-  const drift = useRef(new Animated.Value(0)).current;
+  const drift = useState(() => new Animated.Value(0))[0];
 
   // Reduce motion softens this rather than switching it off. Killing the drift
   // outright would leave the pig doing literally nothing, which is the one
@@ -1224,6 +1202,7 @@ type PigBannerProps = {
 // Sits above the effect so the team knows what hit them and how long it lasts —
 // without it a darkened screen reads as a broken tablet, not as a prank.
 export function RiskQuizPigBanner({ type, fromName, secondsLeft }: PigBannerProps) {
+  const pigText = RISK_PIG_TEXT[useUiLanguage()];
   return (
     <View
       testID="risk-pig-banner"
@@ -1241,8 +1220,8 @@ export function RiskQuizPigBanner({ type, fromName, secondsLeft }: PigBannerProp
     >
       <Text className="font-extrabold uppercase tracking-widest" style={{ color: EXPEDITION_THEME.background, fontSize: 12 }}>
         {fromName
-          ? `Świnia od ${fromName}: ${RISK_PIG_LABELS[type]} · ${secondsLeft}s`
-          : `Świnia: ${RISK_PIG_LABELS[type]} · ${secondsLeft}s`}
+          ? pigText.banner(pigText.labels[type], secondsLeft, fromName)
+          : pigText.banner(pigText.labels[type], secondsLeft, null)}
       </Text>
     </View>
   );
@@ -1261,6 +1240,7 @@ type PigThrowButtonProps = {
 // Which pig is held is left to the target picker this opens — a square this size
 // has no room for the name, and the picker shows it before anything is thrown.
 export function RiskQuizPigButton({ type, onPress }: PigThrowButtonProps) {
+  const pigText = RISK_PIG_TEXT[useUiLanguage()];
   const adaptiveLayout = useAdaptiveLayout();
   const isTabletLayout = adaptiveLayout.isTablet;
   const buttonSize = adaptiveLayout.hit(isTabletLayout ? 62 : 54);
@@ -1276,7 +1256,7 @@ export function RiskQuizPigButton({ type, onPress }: PigThrowButtonProps) {
     <Pressable
       testID="risk-pig-button"
       accessibilityRole="button"
-      accessibilityLabel={`Rzuć świnię: ${RISK_PIG_LABELS[type]}`}
+      accessibilityLabel={pigText.throwAction(pigText.labels[type])}
       onPress={onPress}
       className="active:opacity-90"
       style={{ width: buttonSize, height: buttonSize }}

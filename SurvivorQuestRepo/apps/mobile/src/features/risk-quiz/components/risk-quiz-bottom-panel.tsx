@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Image, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
-import { QrScannerIcon } from "./risk-quiz-icons";
+import { QrScannerIcon, StreakFlameIcon } from "./risk-quiz-icons";
 import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
-
-// Animated flame icon shown next to the streak count while it's active.
-const STREAK_FIRE_GIF_URL = "https://cdn.pixabay.com/animation/2025/06/26/05/26/05-26-59-506_512.gif";
+import { useUiLanguage } from "../../i18n";
+import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
 
 // Scale-squish-and-release "flip", matching the memory station's card flip
 // (see memory-station-panel.tsx) — a true 3D rotateY/backfaceVisibility flip
@@ -49,7 +48,8 @@ export function RiskQuizBottomPanel({
   onCloseCard,
 }: RiskQuizBottomPanelProps) {
   const adaptiveLayout = useAdaptiveLayout();
-  const flipScaleAnimation = useRef(new Animated.Value(1)).current;
+  const text = RISK_QUIZ_TEXT[useUiLanguage()].bottomPanel;
+  const flipScaleAnimation = useState(() => new Animated.Value(1))[0];
   const wasCardOpenRef = useRef(isCardOpen);
   const [showsCloseIcon, setShowsCloseIcon] = useState(isCardOpen);
 
@@ -97,12 +97,12 @@ export function RiskQuizBottomPanel({
   const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
   const footerLabel = isCardOpen
-    ? "Zamknij kartę"
+    ? text.closeCard
     : isCompleted
-      ? "Realizacja zakończona"
+      ? text.realizationFinished
       : isScannerOpening
-        ? "Otwieranie skanera..."
-        : "Skanuj kartę";
+        ? text.openingScanner
+        : text.scanCard;
   const hasStreak = streak > 0;
 
   return (
@@ -127,7 +127,7 @@ export function RiskQuizBottomPanel({
       <View style={{ minHeight: centerColumnHeight, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <View style={{ flex: 1, height: centerColumnHeight, alignItems: "center", justifyContent: "center", position: "relative" }}>
           <Text className="uppercase tracking-widest" style={{ position: "absolute", top: sideLabelTop, color: EXPEDITION_THEME.textSubtle, fontSize: labelFontSize }}>
-            Czas
+            {text.time}
           </Text>
           <Text
             className="font-extrabold"
@@ -171,14 +171,11 @@ export function RiskQuizBottomPanel({
             numberOfLines={1}
             style={{ position: "absolute", top: sideLabelTop, color: EXPEDITION_THEME.textSubtle, fontSize: labelFontSize }}
           >
-            Seria
+            {text.streak}
           </Text>
           {hasStreak ? (
             <View style={{ flexDirection: "row", alignItems: "center", columnGap: 4 }}>
-              <Image
-                source={{ uri: STREAK_FIRE_GIF_URL }}
-                style={{ width: fireIconSize, height: fireIconSize }}
-              />
+              <StreakFlameIcon size={fireIconSize} color={EXPEDITION_THEME.accentStrong} />
               <Text className="font-extrabold" style={{ color: EXPEDITION_THEME.accentStrong, fontSize: valueFontSize }}>
                 x{multiplier}
               </Text>

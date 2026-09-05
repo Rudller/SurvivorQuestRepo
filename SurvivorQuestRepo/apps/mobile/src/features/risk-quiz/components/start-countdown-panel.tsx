@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Vibration, View } from "react-native";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 
@@ -51,7 +51,7 @@ export function StartCountdownPanel({
   goLabel: string;
 }) {
   const isReduceMotionEnabled = useReduceMotion();
-  const pop = useRef(new Animated.Value(1)).current;
+  const pop = useState(() => new Animated.Value(1))[0];
   // Both players live in one ref object rather than two refs: its identity is
   // stable, so the unmount cleanup below can close over it without reading
   // `.current` at teardown time.
