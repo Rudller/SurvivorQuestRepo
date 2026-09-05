@@ -47,9 +47,12 @@ export async function verifyGalleryPassword(realizationId: string, code: string)
 }
 
 export async function fetchGalleryPhotos(realizationId: string, accessToken: string) {
-  const response = await fetch(
-    buildBackendApiUrl(`/gallery/${realizationId}/photos?token=${encodeURIComponent(accessToken)}`),
-  );
+  // The token travels in the Authorization header, not the query string: a URL
+  // ends up in server and proxy access logs and in browser history, and this one
+  // grants access to a client's event photos.
+  const response = await fetch(buildBackendApiUrl(`/gallery/${realizationId}/photos`), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 
   if (!response.ok) {
     throw new GalleryApiError(loadErrorMessage(response.status), response.status);
