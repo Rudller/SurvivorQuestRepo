@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -13,6 +14,13 @@ export const metadata: Metadata = {
     url: "/polityka-prywatnosci",
     type: "article",
     locale: "pl_PL",
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Polityka prywatności | SurvivorQuest",
+    description: "Informacje o przetwarzaniu danych osobowych w SurvivorQuest.",
+    images: [OG_IMAGE.url],
   },
 };
 
@@ -30,7 +38,7 @@ export default function PrivacyPolicyPage() {
           Niniejsza polityka opisuje, jakie dane przetwarzamy w związku z korzystaniem z serwisu SurvivorQuest oraz
           aplikacji mobilnej SurvivorQuest (Android/iOS), i na jakich zasadach.
         </p>
-        <p className="text-xs text-[#98ad9c]">Ostatnia aktualizacja: 16 lipca 2026 r.</p>
+        <p className="text-xs text-[#98ad9c]">Ostatnia aktualizacja: 5 września 2026 r.</p>
       </header>
 
       <section className={sectionClassName}>
@@ -81,6 +89,16 @@ export default function PrivacyPolicyPage() {
         <p>
           Aplikacja mobilna SurvivorQuest nie zawiera narzędzi analitycznych ani śledzących osób trzecich (np.
           Google Analytics, Firebase, Meta Pixel) — nie profilujemy użytkowników w celach reklamowych.
+        </p>
+        <p>
+          Inaczej jest w tym serwisie internetowym: korzystamy w nim z Google Analytics 4 (Google Ireland Limited) do
+          anonimowych statystyk odwiedzin. Skrypt uruchamiamy wyłącznie po Twojej wyraźnej zgodzie wyrażonej w banerze
+          cookie, z włączoną anonimizacją adresu IP. Odmowa zgody nie ogranicza działania serwisu, a decyzję możesz
+          wycofać w każdej chwili — szczegóły w{" "}
+          <Link href="/polityka-cookies" className="text-[#f0c977] underline-offset-4 hover:underline">
+            Polityce cookies
+          </Link>
+          .
         </p>
       </section>
 

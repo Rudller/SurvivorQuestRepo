@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/site-url";
 import { LandingPage } from "@/features/landing/components/landing-page";
 import { FAQ_ITEMS } from "@/features/landing/model/content";
 
@@ -26,6 +27,14 @@ export const metadata: Metadata = {
     url: "/",
     type: "website",
     locale: "pl_PL",
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SurvivorQuest (Survivor Quest) | Gry terenowe i realizacje eventowe",
+    description:
+      "Panel admina + aplikacja mobilna do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji.",
+    images: [OG_IMAGE.url],
   },
 };
 

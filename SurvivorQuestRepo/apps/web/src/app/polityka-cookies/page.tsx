@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -13,6 +14,13 @@ export const metadata: Metadata = {
     url: "/polityka-cookies",
     type: "article",
     locale: "pl_PL",
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Polityka cookies | SurvivorQuest",
+    description: "Informacje o plikach cookie wykorzystywanych w SurvivorQuest.",
+    images: [OG_IMAGE.url],
   },
 };
 
@@ -26,6 +34,7 @@ export default function CookiesPolicyPage() {
           Korzystamy z plików cookie, aby serwis działał prawidłowo i mógł być rozwijany na podstawie anonimowych
           statystyk.
         </p>
+        <p className="text-xs text-[#98ad9c]">Ostatnia aktualizacja: 5 września 2026 r.</p>
       </header>
 
       <section className="space-y-4 rounded-2xl border border-[#446251]/70 bg-[#12221b]/85 p-5 text-sm text-[#bdcdbf] sm:text-base">
@@ -36,6 +45,46 @@ export default function CookiesPolicyPage() {
         <p>
           <span className="font-semibold text-[#f3f5ef]">Analityczne cookies</span> pomagają nam zrozumieć, jak
           użytkownicy korzystają ze strony i ulepszać doświadczenie. Te pliki uruchamiamy dopiero po akceptacji.
+        </p>
+
+        <table className="w-full border-collapse text-left text-xs sm:text-sm">
+          <caption className="sr-only">Pliki cookie wykorzystywane w serwisie</caption>
+          <thead>
+            <tr className="text-[#f3f5ef]">
+              <th scope="col" className="py-2 pr-3 font-semibold">
+                Nazwa
+              </th>
+              <th scope="col" className="py-2 pr-3 font-semibold">
+                Rola
+              </th>
+              <th scope="col" className="py-2 font-semibold">
+                Czas życia
+              </th>
+            </tr>
+          </thead>
+          <tbody className="align-top">
+            <tr>
+              <td className="py-2 pr-3 font-mono text-[#f0c977]">sq_cookie_consent</td>
+              <td className="py-2 pr-3">
+                Nasz własny plik — zapamiętuje Twoją decyzję z banera, żeby nie pytać przy każdej wizycie. Niezbędny.
+              </td>
+              <td className="py-2">1 rok</td>
+            </tr>
+            <tr>
+              <td className="py-2 pr-3 font-mono text-[#f0c977]">_ga, _ga_*</td>
+              <td className="py-2 pr-3">
+                Google Analytics 4 — anonimowe statystyki odwiedzin. Zakładane wyłącznie po zgodzie na cookies
+                analityczne.
+              </td>
+              <td className="py-2">2 lata</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>
+          Twoją decyzję zapisujemy dodatkowo w pamięci lokalnej przeglądarki pod kluczem{" "}
+          <span className="font-mono text-[#f0c977]">sq-cookie-consent-v1</span>, żeby zadziałała natychmiast po
+          wybraniu, bez przeładowania strony.
         </p>
         <p>
           Swoją decyzję możesz zmienić, czyszcząc dane strony w przeglądarce. W kolejnej wizycie baner zgód pokaże się

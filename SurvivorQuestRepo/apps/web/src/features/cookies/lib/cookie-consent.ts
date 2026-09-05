@@ -40,7 +40,14 @@ function readCookieValue(name: string): string | null {
   return match?.[1] ?? null;
 }
 
-export function readCookieConsentState(): CookieConsentState | null {
+/**
+ * Reads the stored consent without writing anything.
+ *
+ * Kept free of side effects because it feeds the `useSyncExternalStore`
+ * snapshot, which React may call during render. The cookie-to-storage promotion
+ * that used to live here is now `promoteCookieConsentToStorage`.
+ */
+export function resolveCookieConsentState(): CookieConsentState | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -55,11 +62,28 @@ export function readCookieConsentState(): CookieConsentState | null {
     return null;
   }
 
-  const fromCookie = parseCookieConsent(decodeURIComponent(cookieRaw));
+  return parseCookieConsent(decodeURIComponent(cookieRaw));
+}
+
+/**
+ * Copies a consent that survives only in the cookie back into localStorage, so
+ * later reads take the cheaper path. Safe to call repeatedly; does nothing when
+ * storage already holds a valid record.
+ */
+export function promoteCookieConsentToStorage(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (parseCookieConsent(window.localStorage.getItem(COOKIE_CONSENT_KEY))) {
+    return;
+  }
+
+  const cookieRaw = readCookieValue(COOKIE_CONSENT_COOKIE_NAME);
+  const fromCookie = cookieRaw ? parseCookieConsent(decodeURIComponent(cookieRaw)) : null;
   if (fromCookie) {
     window.localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(fromCookie));
   }
-  return fromCookie;
 }
 
 export function persistCookieConsent(analytics: boolean): CookieConsentState | null {

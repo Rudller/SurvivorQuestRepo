@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  persistCookieConsent,
-  readCookieConsentState,
-} from "@/features/cookies/lib/cookie-consent";
+import { useCookieConsentState } from "@/features/cookies/hooks/use-cookie-consent";
+import { persistCookieConsent } from "@/features/cookies/lib/cookie-consent";
 
 function CookieBadgeIcon() {
   return (
@@ -25,24 +22,17 @@ function CookieBadgeIcon() {
 }
 
 export function CookieConsentBanner() {
-  const [isVisible, setIsVisible] = useState(false);
+  const consent = useCookieConsentState();
 
-  useEffect(() => {
-    const existing = readCookieConsentState();
-    setIsVisible(!existing);
-  }, []);
+  /*
+    Only `null` opens the banner — that is "read the browser, found no answer".
+    `undefined` (not read yet) renders nothing, so a returning visitor who
+    already accepted never sees it flash during hydration.
 
-  function acceptNecessaryOnly() {
-    persistCookieConsent(false);
-    setIsVisible(false);
-  }
-
-  function acceptAnalytics() {
-    persistCookieConsent(true);
-    setIsVisible(false);
-  }
-
-  if (!isVisible) {
+    No local visibility state: persisting the choice notifies the store, which
+    re-renders this component with a consent object and closes the banner.
+  */
+  if (consent !== null) {
     return null;
   }
 
@@ -76,14 +66,14 @@ export function CookieConsentBanner() {
         <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
           <button
             type="button"
-            onClick={acceptNecessaryOnly}
+            onClick={() => persistCookieConsent(false)}
             className="inline-flex items-center justify-center rounded-xl border border-[#365546]/70 bg-[#2a4438]/92 px-4 py-2 text-xs font-medium text-[#f3f5ef] transition hover:border-[#173227] hover:bg-[#315042] sm:text-sm"
           >
             Tylko niezbędne
           </button>
           <button
             type="button"
-            onClick={acceptAnalytics}
+            onClick={() => persistCookieConsent(true)}
             className="inline-flex items-center justify-center rounded-xl bg-[#173227] px-4 py-2 text-xs font-semibold text-[#f3f5ef] transition hover:bg-[#1f3f31] sm:text-sm"
           >
             Akceptuję analityczne

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -13,6 +14,13 @@ export const metadata: Metadata = {
     url: "/download",
     type: "website",
     locale: "pl_PL",
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pobierz aplikację | SurvivorQuest",
+    description: "Pobierz aplikację mobilną SurvivorQuest na Androida i iOS.",
+    images: [OG_IMAGE.url],
   },
 };
 

@@ -1,42 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
-  COOKIE_CONSENT_KEY,
-  COOKIE_CONSENT_UPDATED_EVENT,
-  type CookieConsentState,
-  readCookieConsentState,
-} from "@/features/cookies/lib/cookie-consent";
+  type CookieConsentSnapshot,
+  getCookieConsentSnapshot,
+  getServerCookieConsentSnapshot,
+  subscribeToCookieConsent,
+} from "@/features/cookies/lib/cookie-consent-store";
 
-export function useCookieConsentState() {
-  const [state, setState] = useState<CookieConsentState | null>(null);
-
-  useEffect(() => {
-    setState(readCookieConsentState());
-
-    function syncFromStorage() {
-      setState(readCookieConsentState());
-    }
-
-    function handleStorage(event: StorageEvent) {
-      if (!event.key || event.key === COOKIE_CONSENT_KEY) {
-        syncFromStorage();
-      }
-    }
-
-    window.addEventListener(COOKIE_CONSENT_UPDATED_EVENT, syncFromStorage);
-    window.addEventListener("storage", handleStorage);
-
-    return () => {
-      window.removeEventListener(COOKIE_CONSENT_UPDATED_EVENT, syncFromStorage);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
-
-  return state;
+/**
+ * Consent as an external store rather than `useState` + `useEffect`.
+ *
+ * It genuinely is external state — it lives in localStorage and a cookie, and
+ * another tab can change it — so reading it into React state on mount both
+ * tripped `react-hooks/set-state-in-effect` and cost an extra render with a
+ * placeholder value.
+ *
+ * Returns `undefined` until the browser has been read; see CookieConsentSnapshot.
+ */
+export function useCookieConsentState(): CookieConsentSnapshot {
+  return useSyncExternalStore(
+    subscribeToCookieConsent,
+    getCookieConsentSnapshot,
+    getServerCookieConsentSnapshot,
+  );
 }
 
 export function useAnalyticsConsent() {
-  const state = useCookieConsentState();
-  return Boolean(state?.analytics);
+  return Boolean(useCookieConsentState()?.analytics);
 }

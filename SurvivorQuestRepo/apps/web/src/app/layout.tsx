@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AnalyticsGate } from "@/features/analytics/components/analytics-gate";
 import { CookieConsentBanner } from "@/features/cookies/components/cookie-consent-banner";
-import { getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
+import { OG_IMAGE, getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const inter = Inter({
@@ -59,14 +59,7 @@ export const metadata: Metadata = {
     locale: "pl_PL",
     type: "website",
     siteName: BRAND_NAME,
-    images: [
-      {
-        url: "/hero-visual.png",
-        width: 1536,
-        height: 1024,
-        alt: "SurvivorQuest — platforma do gier terenowych i realizacji eventowych",
-      },
-    ],
+    images: [OG_IMAGE],
   },
   alternates: {
     canonical: "/",
@@ -76,7 +69,7 @@ export const metadata: Metadata = {
     title: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i realizacje eventowe`,
     description:
       "Platforma eventowa do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji na żywo.",
-    images: ["/hero-visual.png"],
+    images: [OG_IMAGE.url],
   },
   ...(googleSiteVerification
     ? {
