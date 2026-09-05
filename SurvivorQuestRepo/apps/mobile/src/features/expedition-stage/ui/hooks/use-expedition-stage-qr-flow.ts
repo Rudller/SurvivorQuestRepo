@@ -184,7 +184,6 @@ export function useExpeditionStageQrFlow({
       extractStationQrToken,
       feedbackSound,
       interpolate,
-      isInteractiveQuizStationType,
       isQrResolving,
       isSessionEnded,
       locationRequired,

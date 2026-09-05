@@ -665,7 +665,7 @@ export function RiskQuizScreen({
     }, 250);
 
     return () => clearInterval(interval);
-  }, [activeDraw?.cardId, activeDraw?.station.timeLimitSeconds, answerResult]);
+  }, [activeDraw, answerResult]);
 
   const isTimerUrgent =
     remainingTaskSeconds !== null && remainingTaskSeconds <= 10 && remainingTaskSeconds > 0;

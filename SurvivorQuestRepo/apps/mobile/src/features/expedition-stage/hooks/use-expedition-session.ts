@@ -962,7 +962,7 @@ export function useExpeditionSession(
       void refreshSessionState();
       return null;
     },
-    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, sessionState.tasks, text],
+    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
   );
 
   const completeStationTask = useCallback(
@@ -1303,7 +1303,7 @@ export function useExpeditionSession(
       void refreshSessionState();
       return null;
     },
-    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, text],
+    [enqueuePendingTaskMutation, offlineMode, refreshSessionState, session.apiBaseUrl, session.sessionToken, sessionState.tasks, text],
   );
 
   const resolveStationQrToken = useCallback(

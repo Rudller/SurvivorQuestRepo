@@ -1310,7 +1310,7 @@ export function StationPreviewOverlay({
         ? null
         : displayedStation.challengeDifficulty ?? "medium",
     );
-  }, [displayedStation?.challengeDifficulty, displayedStation?.challengeDifficultyMode, displayedStation?.stationId, displayedStation?.stationType]);
+  }, [displayedStation]);
 
   useEffect(() => {
     if (!displayedStation || displayedStation.stationType !== "mini-sudoku") {
@@ -1323,7 +1323,7 @@ export function StationPreviewOverlay({
         ? null
         : displayedStation.challengeDifficulty ?? "medium",
     );
-  }, [displayedStation?.challengeDifficulty, displayedStation?.challengeDifficultyMode, displayedStation?.stationId, displayedStation?.stationType]);
+  }, [displayedStation]);
 
   useStationOverlayReset({
     displayedStation,

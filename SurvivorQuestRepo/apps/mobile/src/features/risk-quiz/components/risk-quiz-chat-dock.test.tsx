@@ -1,4 +1,5 @@
 import { fireEvent, render } from "@testing-library/react-native";
+import { Animated } from "react-native";
 
 import { TEAM_COLORS } from "../../onboarding/model/constants";
 import { RiskQuizChatDock } from "./risk-quiz-chat-dock";
@@ -153,6 +154,9 @@ describe("RiskQuizChatDock — kolor drużyny", () => {
 
 describe("RiskQuizChatDock — animacja", () => {
   it("keeps the strip on screen until the animation reaches its midpoint", async () => {
+    const timingSpy = jest.spyOn(Animated, "timing").mockReturnValue({
+      start: jest.fn(),
+    } as never);
     const props = {
       messages: [message()],
       draft: "",
@@ -178,6 +182,8 @@ describe("RiskQuizChatDock — animacja", () => {
     // halfway mark so the two can never overlap and steal each other's taps.
     expect(queryByTestId("risk-chat-strip")).toBeTruthy();
     expect(queryByTestId("risk-chat-input")).toBeNull();
+
+    timingSpy.mockRestore();
   });
 
   it("renders one dock container in both states", async () => {
