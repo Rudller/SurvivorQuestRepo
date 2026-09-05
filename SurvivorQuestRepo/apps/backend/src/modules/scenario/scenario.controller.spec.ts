@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, type ExecutionContext } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -13,7 +13,7 @@ import { ScenarioService } from './scenario.service';
 
 function createSessionGuard(role: 'admin' | 'instructor') {
   return {
-    canActivate: jest.fn((context) => {
+    canActivate: jest.fn((context: ExecutionContext) => {
       const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
       request.user = {
         id: `${role}-1`,

@@ -800,8 +800,14 @@ describe('RiskQuizService admin reads ship editable stations', () => {
 
     const scheme = await service.getRealizationScheme('realization-1');
 
-    const poolStation =
-      scheme!.schemeCategories[0].category.poolStations[0].station;
+    // Mock zwraca ksztalt, ktorego przeciecie z typem encji TypeScript redukuje
+    // do `never`; asercje dotycza pol, ktore ta projekcja realnie oddaje.
+    const poolStation = scheme!.schemeCategories[0].category.poolStations[0]
+      .station as unknown as {
+      type: string;
+      quiz?: Record<string, unknown>;
+      kind: string;
+    };
     expect(poolStation.type).toBe('quiz');
     expect(poolStation.quiz).toEqual(
       expect.objectContaining({ question: 'Q1?' }),
@@ -1315,7 +1321,7 @@ describe('RiskQuizService świnie', () => {
     pigTypesEnabled: [],
   };
 
-  function teamsWithPoints(count) {
+  function teamsWithPoints(count: number) {
     return Array.from({ length: count }, (_, index) => ({
       id: `team-${index + 1}`,
       name: `Drużyna ${index + 1}`,
@@ -1325,7 +1331,13 @@ describe('RiskQuizService świnie', () => {
     }));
   }
 
-  function arrangePigs(prisma, options = {}) {
+  function arrangePigs(
+    prisma: ReturnType<typeof createService>['prisma'],
+    options: {
+      realization?: Record<string, unknown>;
+      teams?: ReturnType<typeof teamsWithPoints>;
+    } = {},
+  ) {
     const current = { ...pigRealization, ...(options.realization ?? {}) };
     prisma.teamAssignment.findFirst.mockResolvedValue({
       ...assignment,
@@ -1479,7 +1491,11 @@ describe('RiskQuizService świnie', () => {
 
     const state = await service.getPigState({ sessionToken: 'token' });
 
-    expect(state.targets.every((target) => target.isAvailable)).toBe(true);
+    expect(
+      (state.targets as unknown as { isAvailable: boolean }[]).every(
+        (target) => target.isAvailable,
+      ),
+    ).toBe(true);
   });
 });
 

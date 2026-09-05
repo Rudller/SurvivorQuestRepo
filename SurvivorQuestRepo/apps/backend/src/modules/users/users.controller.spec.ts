@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, type ExecutionContext } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
@@ -12,7 +12,7 @@ import type { AuthenticatedRequest } from '../auth/guards/authenticated-session.
 
 function createSessionGuard(role: 'admin' | 'instructor') {
   return {
-    canActivate: jest.fn((context) => {
+    canActivate: jest.fn((context: ExecutionContext) => {
       const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
       request.user = {
         id: `${role}-1`,

@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "prisma generate && nest start --watch",
     "build": "nest build",
-    "typecheck": "tsc --noEmit -p tsconfig.build.json --incremental false",
+    "typecheck": "tsc --noEmit --incremental false",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "prisma generate && nest start --watch",
