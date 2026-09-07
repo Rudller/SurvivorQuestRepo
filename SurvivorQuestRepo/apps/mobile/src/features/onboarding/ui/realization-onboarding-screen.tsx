@@ -1197,6 +1197,9 @@ async function requestMobileApi<T>(baseUrl: string, path: string, init?: Request
   return data as T;
 }
 
+// Reactnative'owy kształt części multipart: rozumie go tylko `fetch` z React
+// Native, a nie ten, którym Expo SDK 57 podmienia globalny `fetch`. Trzyma to
+// przy życiu `EXPO_PUBLIC_USE_RN_FETCH=1` — patrz multipart-upload-transport.test.ts.
 function buildSelfieFormDataPart(fileUri: string) {
   const fileName = fileUri.split("/").pop() || "selfie.jpg";
   const extension = fileName.split(".").pop()?.toLowerCase();
