@@ -2624,6 +2624,19 @@ export function StationPreviewOverlay({
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
   const stationHeaderLabel = `${station.name} • ${station.typeLabel}`;
   const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
+  // Szerokość, jaka zostaje treści karty po naszym własnym chrome: padding
+  // panelu overlaya, ramka karty i padding kolumny — wszystkie trzy zdefiniowane
+  // niżej w tym pliku. CodeStationPanel dostaje to jako liczbę, żeby ustalić
+  // rozmiar klawiszy już na pierwszym renderze; gdyby liczył go z własnego
+  // onLayout, klawiatura pojawiałaby się w złym rozmiarze i dopiero po pomiarze
+  // zjeżdżała do właściwego.
+  const overlayCardContentWidth = isInlinePresentation
+    ? undefined
+    : Math.max(
+        0,
+        adaptiveLayout.width -
+          2 * (adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16) + 1 + adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22)),
+      );
 
   return (
     <Animated.View
@@ -3304,6 +3317,7 @@ export function StationPreviewOverlay({
             {requiresCode ? (
               <CodeStationPanel
                 minimalChrome={isInlinePresentation}
+                availableContentWidth={overlayCardContentWidth}
                 station={station}
                 isNumericCodeStation={isNumericCodeStation}
                 isCodeActionDisabled={isCodeActionDisabled}

@@ -6,6 +6,7 @@ import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { NUMERIC_PINPAD_LAYOUT, NUMERIC_PINPAD_SUBLABELS, isInvalidCompletionCodeErrorMessage } from "../puzzle-helpers";
 import type { StationTestType, StationTestViewModel } from "../types";
+import { resolveCodeStationPresentation } from "./code-station-presentation";
 import { resolveActionLabelColor, useStationPanelLayout, withAlpha } from "./shared-ui";
 
 type CodeStationText = {
@@ -125,6 +126,12 @@ const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 type CodeStationPanelProps = {
   minimalChrome?: boolean;
+  /**
+   * Szerokość, jaką overlay realnie zostawia treści tego panelu (preview.tsx
+   * liczy ją ze swoich paddingów). Pozwala ustalić rozmiar klawiszy już na
+   * pierwszym renderze, zamiast zgadywać go i korygować po pomiarze.
+   */
+  availableContentWidth?: number;
   station: StationTestViewModel;
   isNumericCodeStation: boolean;
   isCodeActionDisabled: boolean;
@@ -142,6 +149,7 @@ type CodeStationPanelProps = {
 
 export function CodeStationPanel({
   minimalChrome = false,
+  availableContentWidth,
   station,
   isNumericCodeStation,
   isCodeActionDisabled,
@@ -160,66 +168,71 @@ export function CodeStationPanel({
   const text = CODE_STATION_TEXT[uiLanguage];
   const layout = useStationPanelLayout();
   const adaptiveLayout = useAdaptiveLayout();
+  // Wszystkie liczby układu obu prezentacji siedzą w jednej tabeli obok siebie
+  // (code-station-presentation.ts). Poniżej zostają już tylko te różnice, które
+  // nie są liczbą: co rośnie, co się kurczy i skąd bierze się szerokość
+  // klawiatury.
+  const codeLayout = resolveCodeStationPresentation({
+    presentation: minimalChrome ? "inline" : "overlay",
+    isTablet: layout.isTablet,
+    viewportWidth: adaptiveLayout.width,
+    scaled: adaptiveLayout.s,
+    keyLabelFontSize: layout.keyLabelFontSize,
+    actionFontSize: layout.actionFontSize,
+  });
   // Reserve empty space below the keyboard so it never renders under the
   // absolutely-positioned timer/points footer (preview.tsx) — that footer
   // floats over the card and doesn't push this panel's layout on its own.
-  const footerClearance = minimalChrome ? 0 : adaptiveLayout.s(layout.isTablet ? 100 : 72, 60, 132);
+  const footerClearance = codeLayout.footerClearance;
   const successColor = "#34d399";
   const successSurfaceColor = withAlpha(successColor, 0.2);
   const dangerSurfaceColor = withAlpha(EXPEDITION_THEME.danger, 0.16);
-  const [keyboardBox, setKeyboardBox] = useState({ width: 0, height: 0 });
+  // Tylko szerokość, nigdy wysokość. Szerokość kontenera narzuca rodzic, więc
+  // nie zależy od klawiszy; wysokość to już same klawisze, a skalowanie ich
+  // według własnej wysokości robiło z tego pętlę, która potrafiła wyłącznie
+  // maleć — patrz code-station-panel-keyboard-sizing.test.tsx.
+  const [measuredKeyboardWidth, setMeasuredKeyboardWidth] = useState(0);
   const canAppendAlphanumericCharacter = !isCodeActionDisabled && verificationCode.length < 32;
   const canBackspaceAlphanumericCode = !isCodeActionDisabled && verificationCode.length > 0;
   const useInlineSubmitForNumericPad = station.completionCodeInputMode === "numeric" && (station.stationType === "points" || station.stationType === "time");
-  // Ryzykanci embeds the station inline (`minimalChrome`) and has enough room
-  // for a full-size pinpad. Keep the compact sizing used by the regular
-  // station overlay isolated from that presentation.
-  const numericPadScale = minimalChrome ? 1 : 0.8;
-  const numericPadMaxWidth = minimalChrome ? 320 : 256;
-  // Square keys can only get bigger by getting wider, so inline they run with
-  // a tighter gap and a higher preferred-size ceiling, letting the row's width
-  // decide their actual size.
-  const keyboardGap = minimalChrome ? 2 : layout.isTablet ? 6 : 2;
-  const desiredKeySize = minimalChrome ? (layout.isTablet ? 84 : 56) : layout.isTablet ? 62 : 46;
-  const minKeySize = layout.isTablet ? 40 : 24;
+  const numericPadScale = codeLayout.numericPadScale;
+  const numericPadMaxWidth = codeLayout.numericPadMaxWidth;
+  const keyboardGap = codeLayout.keyboardGap;
+  const desiredKeySize = codeLayout.desiredKeySize;
+  const minKeySize = codeLayout.minKeySize;
   const keyboardRows: string[][] = ALPHANUMERIC_CODE_KEYBOARD_ROWS.map((row) => [...row]);
   keyboardRows[0].push("backspace");
   const keyboardColumnCount = Math.max(...keyboardRows.map((row) => row.length));
   const keyboardRowCount = keyboardRows.length;
-  const inlineBlockScale = 0.9;
-  const inlineKeyboardWidth = Math.max(0, (adaptiveLayout.width - 24) * inlineBlockScale);
-  const alphanumericKeyLabelFontSize =
-    layout.keyLabelFontSize * (minimalChrome ? 1.15 * inlineBlockScale : 1);
+  const alphanumericKeyLabelFontSize = codeLayout.keyLabelFontSize;
   // Matches the keyboard container's `gap-2` row spacing below.
   const keyboardRowGap = 8;
-  // Inline (Ryzykanci) the card is short and the keyboard is the part worth
-  // the space, so the code row and its submit button run slimmer there than in
-  // the full-screen overlay.
-  const inlineCodeRowHeight = minimalChrome
-    ? Math.round((layout.isTablet ? 56 : 46) * inlineBlockScale)
-    : layout.isTablet
-      ? 78
-      : 57;
-  const submitButtonWidth = minimalChrome
-    ? layout.isTablet
-      ? // Narrower than the overlay's, but still wide enough to keep the label
-        // on one line at the tablet font size.
-        148 * inlineBlockScale
-      : 104 * inlineBlockScale
-    : layout.isTablet
-      ? 164
-      : 132;
+  const inlineCodeRowHeight = codeLayout.codeRowHeight;
+  const submitButtonWidth = codeLayout.submitButtonWidth;
+
+  // Szerokość pudełka klawiatury w overlayu: podana przez overlay (zna własne
+  // paddingi), więc znana już na pierwszym renderze i klawisze nie muszą
+  // najpierw pojawić się w złym rozmiarze. Pomiar zostaje tylko jako zapas dla
+  // wywołań bez tej informacji.
+  const overlayKeyboardWidth =
+    availableContentWidth != null
+      ? Math.max(0, availableContentWidth - codeLayout.horizontalPadding)
+      : measuredKeyboardWidth;
+  // Wysokość, jaką klawiatura ma prawo zająć, wyprowadzona z rozmiaru
+  // preferowanego zamiast z pomiaru. To ten sam sufit, na którym pętla i tak
+  // się zatrzymywała, tyle że osiągany od razu i bez możliwości zjechania niżej.
+  const overlayKeyboardHeightBudget = desiredKeySize * keyboardRowCount + keyboardRowGap * (keyboardRowCount - 1);
 
   const alphanumericKeySize = useMemo(
     () =>
       resolveCodeKeyboardKeySize({
         // Ryzykanci uses a stable screen-derived width. It must not rescale
         // after the keyboard measures its own rendered content.
-        containerWidth: minimalChrome ? inlineKeyboardWidth : keyboardBox.width,
+        containerWidth: minimalChrome ? codeLayout.screenDerivedKeyboardWidth : overlayKeyboardWidth,
         // Inline height is content-driven and therefore cannot be fed back
         // into its own scale calculation: doing so caused a visible cascade
         // from large keys to progressively smaller ones after opening.
-        containerHeight: minimalChrome ? 0 : keyboardBox.height,
+        containerHeight: minimalChrome ? 0 : overlayKeyboardHeightBudget,
         columnCount: keyboardColumnCount,
         rowCount: keyboardRowCount,
         keyGap: keyboardGap,
@@ -229,13 +242,13 @@ export function CodeStationPanel({
       }),
     [
       desiredKeySize,
-      keyboardBox.height,
-      keyboardBox.width,
+      overlayKeyboardHeightBudget,
+      overlayKeyboardWidth,
       keyboardGap,
       keyboardRowGap,
       keyboardColumnCount,
       keyboardRowCount,
-      inlineKeyboardWidth,
+      codeLayout.screenDerivedKeyboardWidth,
       minimalChrome,
       minKeySize,
     ],
@@ -244,7 +257,7 @@ export function CodeStationPanel({
     () =>
       resolveCodeKeyboardKeyHeight({
         keySize: alphanumericKeySize,
-        containerHeight: minimalChrome ? 0 : keyboardBox.height,
+        containerHeight: minimalChrome ? 0 : overlayKeyboardHeightBudget,
         rowCount: keyboardRowCount,
         rowGap: keyboardRowGap,
         // The wide number row still limits key width. Use spare vertical room
@@ -253,7 +266,7 @@ export function CodeStationPanel({
         maxHeightRatio: 1.5,
         minKeyHeight: minKeySize,
       }),
-    [alphanumericKeySize, keyboardBox.height, keyboardRowCount, keyboardRowGap, minimalChrome, minKeySize],
+    [alphanumericKeySize, overlayKeyboardHeightBudget, keyboardRowCount, keyboardRowGap, minimalChrome, minKeySize],
   );
 
   const codeInputShakeStyle = {
@@ -264,8 +277,8 @@ export function CodeStationPanel({
     <View
       className={`${isNumericCodeStation ? "mt-2" : "mt-3"} ${minimalChrome ? "px-0" : "px-3"} ${isNumericCodeStation ? "py-2" : "py-3"}${minimalChrome ? "" : " rounded-2xl border"}`}
       style={{
-        borderColor: minimalChrome ? "transparent" : EXPEDITION_THEME.border,
-        backgroundColor: minimalChrome ? "transparent" : EXPEDITION_THEME.panelMuted,
+        borderColor: codeLayout.borderColor,
+        backgroundColor: codeLayout.backgroundColor,
         marginBottom: footerClearance,
         // Inline this is a fixed-height final block. The media/description
         // section above owns flexGrow and absorbs changes in available height.
@@ -518,8 +531,8 @@ export function CodeStationPanel({
                   backgroundColor: isCodeInputSuccess ? successSurfaceColor : isCodeInputInvalid ? dangerSurfaceColor : EXPEDITION_THEME.panelStrong,
                   justifyContent: "center",
                   minHeight: inlineCodeRowHeight,
-                  paddingHorizontal: minimalChrome ? 14 : 16,
-                  paddingVertical: minimalChrome ? 9 : 12,
+                  paddingHorizontal: codeLayout.codeInputPaddingHorizontal,
+                  paddingVertical: codeLayout.codeInputPaddingVertical,
                 },
               ]}
             >
@@ -527,7 +540,7 @@ export function CodeStationPanel({
                 className="text-center font-semibold tracking-[0.18em]"
                 style={{
                   color: verificationCode ? EXPEDITION_THEME.textPrimary : EXPEDITION_THEME.textSubtle,
-                  fontSize: (layout.isTablet ? 26 : 20) * (minimalChrome ? inlineBlockScale : 1),
+                  fontSize: codeLayout.codeInputFontSize,
                 }}
                 numberOfLines={1}
               >
@@ -552,7 +565,7 @@ export function CodeStationPanel({
                 className="font-semibold text-center"
                 style={{
                   color: resolveActionLabelColor(isCodeActionDisabled),
-                  fontSize: layout.actionFontSize * (minimalChrome ? inlineBlockScale : 1),
+                  fontSize: codeLayout.submitLabelFontSize,
                 }}
                 numberOfLines={2}
               >
@@ -562,18 +575,19 @@ export function CodeStationPanel({
           </View>
 
           <View
+            testID="code-station-keyboard"
             className="gap-2"
             style={{
-              marginTop: minimalChrome ? (layout.isTablet ? 8 : 6) : layout.isTablet ? 16 : 12,
-              marginBottom: minimalChrome ? 0 : layout.isTablet ? 8 : 6,
+              marginTop: codeLayout.keyboardMarginTop,
+              marginBottom: codeLayout.keyboardMarginBottom,
               ...(minimalChrome ? { flexGrow: 0, flexShrink: 0 } : {}),
             }}
             onLayout={(event) => {
               if (minimalChrome) {
                 return;
               }
-              const { width, height } = event.nativeEvent.layout;
-              setKeyboardBox((current) => (current.width === width && current.height === height ? current : { width, height }));
+              const { width } = event.nativeEvent.layout;
+              setMeasuredKeyboardWidth((current) => (current === width ? current : width));
             }}
           >
             {keyboardRows.map((row, rowIndex) => (
