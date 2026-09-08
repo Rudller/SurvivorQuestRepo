@@ -14,6 +14,10 @@ export type ExpeditionThemePalette = {
   textMuted: string;
   textSubtle: string;
   danger: string;
+  // Zieleń "zaliczone". Do 2026-09-08 nie było tego tokenu i #34d399 siedziało
+  // zahardkodowane w kilku miejscach — czyli nie przełączało się na motyw jasny,
+  // gdzie na bladym panelu jest praktycznie nieczytelne.
+  success: string;
   // Overlay scrims, stored as bare "r, g, b" triplets because every call site
   // picks its own opacity: `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)`.
   // wash  = light-mode dimming over light panels
@@ -46,6 +50,7 @@ const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   textMuted: "#bdcdbf",
   textSubtle: "#98ad9c",
   danger: "#ef6f6c",
+  success: "#34d399",
   scrimWashRgb: "17, 30, 23",
   scrimDeepRgb: "15, 25, 20",
   scrimAbyssRgb: "5, 10, 8",
@@ -65,6 +70,7 @@ const EXPEDITION_THEME_LIGHT: ExpeditionThemePalette = {
   textMuted: "#4e6148",
   textSubtle: "#67795f",
   danger: "#ae5954",
+  success: "#2f7d5c",
   scrimWashRgb: "17, 30, 23",
   scrimDeepRgb: "15, 25, 20",
   scrimAbyssRgb: "5, 10, 8",
@@ -86,6 +92,7 @@ const RISK_THEME_DARK: ExpeditionThemePalette = {
   textMuted: "#a9b7c1",
   textSubtle: "#7d8d99",
   danger: "#ef6f6c",
+  success: "#34d399",
   scrimWashRgb: "7, 16, 23",
   scrimDeepRgb: "6, 14, 20",
   scrimAbyssRgb: "3, 8, 12",
@@ -107,6 +114,7 @@ const RISK_THEME_LIGHT: ExpeditionThemePalette = {
   textMuted: "#3c4c58",
   textSubtle: "#5b6c78",
   danger: "#ae5954",
+  success: "#1f7a53",
   scrimWashRgb: "7, 16, 23",
   scrimDeepRgb: "6, 14, 20",
   scrimAbyssRgb: "3, 8, 12",
@@ -192,6 +200,9 @@ export const EXPEDITION_THEME: ExpeditionThemePalette = {
   },
   get danger() {
     return resolveThemeToken("danger");
+  },
+  get success() {
+    return resolveThemeToken("success");
   },
   get scrimWashRgb() {
     return resolveThemeToken("scrimWashRgb");
