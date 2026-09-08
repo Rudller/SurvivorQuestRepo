@@ -25,13 +25,13 @@ import { createStation } from "./station-smoke.fixtures";
 const KEYBOARD_TEST_ID = "code-station-keyboard";
 const CONTENT_WIDTH = 360;
 
-function renderCodePanel() {
+function renderCodePanel(availableContentWidth: number = CONTENT_WIDTH) {
   const station = createStation({ stationType: "time", completionCodeInputMode: "alphanumeric" });
 
   return render(
     <CodeStationPanel
       station={station}
-      availableContentWidth={CONTENT_WIDTH}
+      availableContentWidth={availableContentWidth}
       isNumericCodeStation={false}
       isCodeActionDisabled={false}
       verificationCode=""
@@ -66,47 +66,44 @@ function readKeySize({ getByText }: RenderResult) {
 }
 
 /**
- * Odtwarza to, co robi RN: kontener bez zadanej wysokości mierzy się na
- * wysokość swojej treści, czyli na aktualne klawisze.
+ * Wysyła pomiar pudełka klawiatury. Rozmiar klawiszy ma być na niego całkowicie
+ * odporny — to właśnie karmienie tego pomiaru z powrotem na wejście robiło
+ * pętlę, która potrafiła iść wyłącznie w dół.
  */
-async function layoutFromCurrentKeys(result: RenderResult, height?: number) {
-  const key = readKeySize(result);
-  const rows = 4;
-  const rowGap = 8;
-
+async function reportKeyboardBox(result: RenderResult, height: number) {
   await fireEvent(result.getByTestId(KEYBOARD_TEST_ID), "layout", {
-    nativeEvent: { layout: { width: CONTENT_WIDTH, height: height ?? rows * key.height + rowGap * (rows - 1) } },
+    nativeEvent: { layout: { width: CONTENT_WIDTH, height } },
   });
 }
 
 describe("skalowanie klawiatury stanowiska kodowego", () => {
-  it("nie zmienia rozmiaru klawiszy po pierwszym pomiarze", async () => {
+  it("rozmiar klawisza jest ustalony od pierwszego renderu", async () => {
     const result = await renderCodePanel();
     const beforeLayout = readKeySize(result);
 
-    await layoutFromCurrentKeys(result);
+    await reportKeyboardBox(result, 400);
 
     expect(readKeySize(result)).toEqual(beforeLayout);
   });
 
-  it("nie kurczy się przy kolejnych pomiarach", async () => {
+  it("jest odporny na pomiar własnego pudełka, w obie strony", async () => {
     const result = await renderCodePanel();
     const initial = readKeySize(result);
 
-    for (let pass = 0; pass < 4; pass++) {
-      await layoutFromCurrentKeys(result);
-    }
+    await reportKeyboardBox(result, 140);
+    expect(readKeySize(result)).toEqual(initial);
 
+    await reportKeyboardBox(result, 900);
     expect(readKeySize(result)).toEqual(initial);
   });
 
-  it("wraca do pełnego rozmiaru, gdy miejsce wraca po chwilowym ściśnięciu", async () => {
-    const result = await renderCodePanel();
-    const initial = readKeySize(result);
+  it("na szerszej karcie klawisze są i szersze, i wyższe", async () => {
+    const waska = readKeySize(await renderCodePanel(360));
+    const szeroka = readKeySize(await renderCodePanel(900));
 
-    await layoutFromCurrentKeys(result, 140);
-    await layoutFromCurrentKeys(result);
-
-    expect(readKeySize(result)).toEqual(initial);
+    expect(szeroka.width).toBeGreaterThan(waska.width);
+    // Wysokość idzie za szerokością, bo to rząd jedenastu klawiszy ogranicza
+    // rozmiar — nie wolna wysokość karty.
+    expect(szeroka.height).toBeGreaterThan(waska.height);
   });
 });

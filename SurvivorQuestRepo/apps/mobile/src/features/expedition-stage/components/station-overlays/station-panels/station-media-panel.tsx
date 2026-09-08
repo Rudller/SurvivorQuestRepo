@@ -219,7 +219,16 @@ export function StationMediaPanel({
                 flexShrink: 1,
                 minHeight: 0,
               }
-            : { flex: 1, minHeight: Math.max(140, Math.round(viewportHeight * 0.24)) }
+            : {
+                flex: 1,
+                // Zadanie fotograficzne trzyma wyższą podłogę, bo tym oknem
+                // celuje się aparatem. Na stanowisku kodowym zdjęcie jest
+                // ilustracją i to ono ustępuje, żeby opis został czytelny, a
+                // klawiatura używalna — patrz komentarz w preview.tsx.
+                minHeight: isPhotoTaskStation
+                  ? Math.max(140, Math.round(viewportHeight * 0.24))
+                  : Math.max(90, Math.round(viewportHeight * 0.12)),
+              }
           : isMiniSudokuStation
             // Flex + minHeight (instead of a fixed height) so the grid
             // shrinks when the station description needs room, and grows

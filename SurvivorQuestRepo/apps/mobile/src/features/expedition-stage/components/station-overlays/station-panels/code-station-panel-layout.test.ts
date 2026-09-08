@@ -130,6 +130,21 @@ describe("resolveCodeKeyboardKeyHeight", () => {
     ).toBe(24);
   });
 
+  it("podnosi niski klawisz do pełnego pola dotyku w overlayu", () => {
+    // Na telefonie rząd jedenastu klawiszy schodzi do ~25 px szerokości, a
+    // 1.5x tego to wciąż mniej niż 44 px, których wymaga trafialność palcem.
+    expect(
+      resolveCodeKeyboardKeyHeight({
+        keySize: 25,
+        containerHeight: 400,
+        rowCount: 4,
+        rowGap: 8,
+        maxHeightRatio: 1.5,
+        minKeyHeight: 44,
+      }),
+    ).toBe(44);
+  });
+
   it("keeps square keys until the box has been measured", () => {
     expect(
       resolveCodeKeyboardKeyHeight({

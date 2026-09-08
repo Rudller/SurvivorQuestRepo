@@ -46,6 +46,12 @@ export type CodeStationLayout = {
   keyboardGap: number;
   desiredKeySize: number;
   minKeySize: number;
+  /**
+   * Podłoga wysokości klawisza. Overlay trzyma pełne pole dotyku, bo ma miejsce
+   * i to jego klawiatura rośnie w wolną wysokość; inline dzieli ekran z chrome
+   * gospodarza, więc schodzi do kwadratowego minimum.
+   */
+  minKeyHeight: number;
   keyLabelFontSize: number;
   codeRowHeight: number;
   submitButtonWidth: number;
@@ -89,6 +95,7 @@ export function resolveCodeStationPresentation({
       keyboardGap: 2,
       desiredKeySize: isTablet ? 84 : 56,
       minKeySize,
+      minKeyHeight: minKeySize,
       keyLabelFontSize: keyLabelFontSize * 1.15 * INLINE_BLOCK_SCALE,
       // Karta jest niska, a klawiatura jest tą częścią, która zasługuje na
       // miejsce — więc rząd kodu i przycisk idą tu szczuplej niż w overlayu.
@@ -114,6 +121,8 @@ export function resolveCodeStationPresentation({
     keyboardGap: isTablet ? 6 : 2,
     desiredKeySize: isTablet ? 62 : 46,
     minKeySize,
+    // MIN_TOUCH_TARGET z use-adaptive-layout.ts.
+    minKeyHeight: Math.max(minKeySize, 44),
     keyLabelFontSize,
     codeRowHeight: isTablet ? 78 : 57,
     submitButtonWidth: isTablet ? 164 : 132,

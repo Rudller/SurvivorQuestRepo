@@ -122,6 +122,18 @@ export function resolveCodeKeyboardKeyHeight({ keySize, containerHeight, rowCoun
   return Math.max(minKeyHeight, Math.min(Math.round(keySize * maxHeightRatio), fitByHeight));
 }
 
+// Ile razy wyższy niż szerszy wolno zrobić klawisz. Szerokość ogranicza rząd
+// jedenastu klawiszy, więc bez tego zapasu klawiatura zostawałaby pasem
+// drobnych kwadracików.
+//
+// 1.15 dobrane pod Galaxy Tab Active5 Pro (800x1280 dp), na który celuje ta gra:
+// klawisz wychodzi 58x67 zamiast 58x62, a zdjęcie nad klawiaturą zachowuje
+// ~322 px. To celowo ostrożna wartość — 1.3 dawało 58x75, co przy ocenie z
+// samych liczb wyszło za dużo. Wyżej klawisz zaczyna czytać się jak słupek.
+// Na telefonach ta stała nie robi nic: klawisz ma tam 26-29 px szerokości, więc
+// o wysokości i tak decyduje podłoga pola dotyku (44 px).
+const ALPHANUMERIC_KEY_MAX_HEIGHT_RATIO = 1.15;
+
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 type CodeStationPanelProps = {
@@ -218,10 +230,13 @@ export function CodeStationPanel({
     availableContentWidth != null
       ? Math.max(0, availableContentWidth - codeLayout.horizontalPadding)
       : measuredKeyboardWidth;
-  // Wysokość, jaką klawiatura ma prawo zająć, wyprowadzona z rozmiaru
-  // preferowanego zamiast z pomiaru. To ten sam sufit, na którym pętla i tak
-  // się zatrzymywała, tyle że osiągany od razu i bez możliwości zjechania niżej.
-  const overlayKeyboardHeightBudget = desiredKeySize * keyboardRowCount + keyboardRowGap * (keyboardRowCount - 1);
+  // Wysokość klawiatury wynika wyłącznie z szerokości klawisza i dozwolonej
+  // proporcji — nigdy z pomiaru samej klawiatury. Zdjęcie nad nią ma flexGrow i
+  // zabiera całą resztę, więc klawiatura bierze dokładnie tyle, ile klawisze
+  // potrafią zużyć, zamiast rozpychać się pustym pudełkiem.
+  const overlayKeyboardHeightBudget =
+    Math.max(codeLayout.minKeyHeight, Math.round(desiredKeySize * ALPHANUMERIC_KEY_MAX_HEIGHT_RATIO)) * keyboardRowCount +
+    keyboardRowGap * (keyboardRowCount - 1);
 
   const alphanumericKeySize = useMemo(
     () =>
@@ -263,10 +278,10 @@ export function CodeStationPanel({
         // The wide number row still limits key width. Use spare vertical room
         // to make the touch targets visibly larger instead of leaving a small
         // square keyboard at the bottom of the card.
-        maxHeightRatio: 1.5,
-        minKeyHeight: minKeySize,
+        maxHeightRatio: ALPHANUMERIC_KEY_MAX_HEIGHT_RATIO,
+        minKeyHeight: codeLayout.minKeyHeight,
       }),
-    [alphanumericKeySize, overlayKeyboardHeightBudget, keyboardRowCount, keyboardRowGap, minimalChrome, minKeySize],
+    [alphanumericKeySize, overlayKeyboardHeightBudget, keyboardRowCount, keyboardRowGap, minimalChrome, codeLayout.minKeyHeight],
   );
 
   const codeInputShakeStyle = {
@@ -280,6 +295,8 @@ export function CodeStationPanel({
         borderColor: codeLayout.borderColor,
         backgroundColor: codeLayout.backgroundColor,
         marginBottom: footerClearance,
+        // Inline this is a fixed-height final block. The media/description
+        // section above owns flexGrow and absorbs changes in available height.
         // Inline this is a fixed-height final block. The media/description
         // section above owns flexGrow and absorbs changes in available height.
         ...(minimalChrome ? { paddingBottom: 0, flexGrow: 0, flexShrink: 0 } : {}),
