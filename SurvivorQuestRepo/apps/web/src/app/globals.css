@@ -1,15 +1,44 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0f1914;
-  --foreground: #f3f5ef;
+/**
+ * Brand palette, 2026 identity ("Obsidian / Amber").
+ *
+ * Four colours come from the brand book; the rest are interpolations between
+ * Obsidian and Graphite, or dimmed Ivory. Nothing here is a new hue — the
+ * intermediate steps exist so that surfaces can stack (page → section → card →
+ * hover) without inventing colour outside the identity.
+ */
+@theme {
+  /* Surfaces, darkest to lightest. */
+  --color-obsidian: #111419;
+  --color-ink: #171b22;
+  --color-graphite: #20262e;
+  --color-graphite-hi: #2a313b;
+  --color-line: #333b47;
+
+  /* Text. */
+  --color-ivory: #f5f1e8;
+  --color-ivory-muted: #bdb9af;
+  --color-ivory-faint: #8b8880;
+
+  /* Accent. */
+  --color-amber: #f5a623;
+  --color-amber-soft: #f7bc5c;
+  --color-amber-deep: #c77f12;
+
+  /*
+   * The identity has no failure colour. This one is pushed further towards red
+   * than Amber so an error never reads as just another accent, and still clears
+   * AA on both Obsidian and Graphite.
+   */
+  --color-alert: #f07a67;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-inter);
+  --color-background: var(--color-obsidian);
+  --color-foreground: var(--color-ivory);
+  --font-sans: var(--font-montserrat);
+  --font-mono: var(--font-montserrat);
 }
 
 html {
@@ -17,17 +46,49 @@ html {
 }
 
 body {
+  /*
+   * One light source, warm, top left. The page reads as Obsidian everywhere it
+   * is not lit — an even second wash from the other corner turned the whole
+   * field grey and pulled it off the brand colour.
+   */
   background:
-    radial-gradient(circle at 8% 0%, rgba(240, 201, 119, 0.14) 0%, rgba(240, 201, 119, 0) 38%),
-    radial-gradient(circle at 90% 10%, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0) 42%),
-    linear-gradient(180deg, #111d17 0%, #0f1914 52%, #0d1612 100%);
-  color: var(--foreground);
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+    radial-gradient(circle at 6% -4%, rgba(245, 166, 35, 0.1) 0%, rgba(245, 166, 35, 0) 34%),
+    #111419;
+  color: var(--color-ivory);
+  font-family: var(--font-montserrat), Arial, Helvetica, sans-serif;
+  font-weight: 500;
   min-height: 100vh;
 }
 
 .sq-section {
   animation: sq-fade-up 340ms ease-out both;
+}
+
+/* Hero copy replays this on every slide change; the photo behind it cross-fades over 1s. */
+.sq-hero-copy {
+  animation: sq-fade-up 480ms ease-out both;
+}
+
+/*
+ * The fill on the active hero pill is the carousel's clock: the component
+ * advances on this animation's end, so pausing it pauses the carousel too.
+ * Duration comes from the component, so the interval is defined in one place.
+ */
+.sq-pill-fill {
+  animation: sq-fill var(--sq-advance-ms, 10s) linear both;
+}
+
+.sq-pill-fill[data-paused] {
+  animation-play-state: paused;
+}
+
+@keyframes sq-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .sq-card-lift {
@@ -39,7 +100,7 @@ body {
 
 .sq-card-lift:hover {
   transform: translateY(-1px);
-  border-color: rgba(240, 201, 119, 0.32);
+  border-color: rgba(245, 166, 35, 0.34);
   box-shadow: 0 18px 36px -30px rgba(0, 0, 0, 0.95);
 }
 

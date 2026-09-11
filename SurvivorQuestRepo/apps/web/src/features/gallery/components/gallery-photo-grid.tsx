@@ -5,6 +5,7 @@ import Image from "next/image";
 import type { GalleryPhoto, GalleryRealizationSummary } from "../types";
 import { groupPhotosByTeam } from "../lib/group-photos";
 import { GalleryLightbox } from "./gallery-lightbox";
+import { Wordmark } from "@/components/wordmark";
 
 type GalleryPhotoGridProps = {
   realization: GalleryRealizationSummary;
@@ -37,15 +38,17 @@ export function GalleryPhotoGrid({ realization, photos }: GalleryPhotoGridProps)
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0c977]">SurvivorQuest</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#f3f5ef] sm:text-3xl">{realization.companyName}</h1>
-        <p className="text-sm text-[#bdcdbf]">
+        <p className="text-xs font-semibold">
+          <Wordmark />
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-ivory sm:text-3xl">{realization.companyName}</h1>
+        <p className="text-sm text-ivory-muted">
           {[scheduledDate, realization.location].filter(Boolean).join(" • ")}
         </p>
       </header>
 
       {teamGroups.length === 0 ? (
-        <p className="rounded-2xl border border-[#446251]/70 bg-[#12221b]/85 p-6 text-sm text-[#bdcdbf]">
+        <p className="rounded-2xl border border-line/70 bg-graphite/85 p-6 text-sm text-ivory-muted">
           Brak zdjęć do wyświetlenia.
         </p>
       ) : (
@@ -78,7 +81,7 @@ export function GalleryPhotoGrid({ realization, photos }: GalleryPhotoGridProps)
                       aria-hidden
                     />
                   ) : null}
-                  <h2 className="text-lg font-semibold text-[#f3f5ef]">{group.teamName}</h2>
+                  <h2 className="text-lg font-semibold text-ivory">{group.teamName}</h2>
                 </div>
 
                 {group.selfie || group.taskPhotos.length > 0 ? (
@@ -91,7 +94,7 @@ export function GalleryPhotoGrid({ realization, photos }: GalleryPhotoGridProps)
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-[#bdcdbf]">Brak zdjęć tej drużyny.</p>
+                  <p className="text-sm text-ivory-muted">Brak zdjęć tej drużyny.</p>
                 )}
               </section>
             ))}
@@ -121,8 +124,8 @@ function TeamFilterPill({
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
         isActive
-          ? "border-[#f0c977]/70 bg-[#f0c977]/15 text-[#f0c977]"
-          : "border-[#446251] bg-[#12221b]/80 text-[#bdcdbf] hover:border-[#f0c977]/40 hover:text-[#f3f5ef]"
+          ? "border-amber/70 bg-amber/15 text-amber"
+          : "border-line bg-graphite/80 text-ivory-muted hover:border-amber/40 hover:text-ivory"
       }`}
     >
       {color ? <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} aria-hidden /> : null}
@@ -145,8 +148,8 @@ function PhotoThumbnail({
       type="button"
       onClick={onClick}
       className={`group relative aspect-square overflow-hidden rounded-xl border ${
-        isCover ? "border-[#f0c977]/50" : "border-[#446251]/70"
-      } bg-[#0d1612]`}
+        isCover ? "border-amber/50" : "border-line/70"
+      } bg-obsidian`}
     >
       <Image
         src={photo.url}
@@ -156,7 +159,7 @@ function PhotoThumbnail({
         className="object-cover transition duration-200 group-hover:scale-105"
       />
       {isCover ? (
-        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#12221b]/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#f0c977]">
+        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-graphite/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber">
           Selfie
         </span>
       ) : null}

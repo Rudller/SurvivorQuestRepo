@@ -30,8 +30,8 @@ export function toAbsoluteUrl(path: string) {
  * in rather than repeating the dimensions.
  */
 export const OG_IMAGE = {
-  url: "/hero-visual.png",
+  url: "/hero/survivorquest.png",
   width: 1536,
   height: 1024,
-  alt: "SurvivorQuest — platforma do gier terenowych i realizacji eventowych",
+  alt: "SurvivorQuest — gry terenowe i eventy integracyjne dla firm",
 } as const;

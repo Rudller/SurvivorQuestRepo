@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Wordmark } from "@/components/wordmark";
 import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
@@ -25,20 +26,22 @@ export const metadata: Metadata = {
 };
 
 const sectionClassName =
-  "space-y-3 rounded-2xl border border-[#446251]/70 bg-[#12221b]/85 p-5 text-sm text-[#bdcdbf] sm:text-base";
-const headingClassName = "text-lg font-semibold text-[#f3f5ef]";
+  "space-y-3 rounded-2xl border border-line/70 bg-graphite/85 p-5 text-sm text-ivory-muted sm:text-base";
+const headingClassName = "text-lg font-semibold text-ivory";
 
 export default function PrivacyPolicyPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:gap-8 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
       <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0c977]">SurvivorQuest</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#f3f5ef] sm:text-4xl">Polityka prywatności</h1>
-        <p className="text-sm text-[#bdcdbf] sm:text-base">
+        <p className="text-xs font-semibold">
+          <Wordmark />
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight text-ivory sm:text-4xl">Polityka prywatności</h1>
+        <p className="text-sm text-ivory-muted sm:text-base">
           Niniejsza polityka opisuje, jakie dane przetwarzamy w związku z korzystaniem z serwisu SurvivorQuest oraz
           aplikacji mobilnej SurvivorQuest (Android/iOS), i na jakich zasadach.
         </p>
-        <p className="text-xs text-[#98ad9c]">Ostatnia aktualizacja: 5 września 2026 r.</p>
+        <p className="text-xs text-ivory-faint">Ostatnia aktualizacja: 5 września 2026 r.</p>
       </header>
 
       <section className={sectionClassName}>
@@ -46,11 +49,11 @@ export default function PrivacyPolicyPage() {
         <p>
           Administratorem danych jest właściciel marki SurvivorQuest. W sprawach związanych z danymi osobowymi możesz
           skontaktować się mailowo na adres:{" "}
-          <a href="mailto:kontakt@survivorquest.pl" className="text-[#f0c977] underline-offset-4 hover:underline">
+          <a href="mailto:kontakt@survivorquest.pl" className="text-amber underline-offset-4 hover:underline">
             kontakt@survivorquest.pl
           </a>{" "}
           lub telefonicznie:{" "}
-          <a href="tel:+48730622029" className="text-[#f0c977] underline-offset-4 hover:underline">
+          <a href="tel:+48730622029" className="text-amber underline-offset-4 hover:underline">
             +48 730 622 029
           </a>
           .
@@ -62,27 +65,27 @@ export default function PrivacyPolicyPage() {
         <p>W zależności od tego, jak korzystasz z SurvivorQuest, możemy przetwarzać:</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <span className="text-[#f3f5ef]">Dane uczestnika gry (aplikacja mobilna):</span> kod dołączenia do
+            <span className="text-ivory">Dane uczestnika gry (aplikacja mobilna):</span> kod dołączenia do
             wydarzenia, nazwa i kolor drużyny, opcjonalne imię uczestnika, identyfikator urządzenia oraz zdjęcie
             drużyny („selfie”) służące jako identyfikator wizualny drużyny w trakcie gry.
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Zdjęcia z zadań fotograficznych:</span> jeśli scenariusz wydarzenia
+            <span className="text-ivory">Zdjęcia z zadań fotograficznych:</span> jeśli scenariusz wydarzenia
             zawiera zadanie fotograficzne, przesłane zdjęcie jest widoczne dla organizatora w celu weryfikacji
             wykonania zadania.
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Lokalizacja:</span> jeżeli organizator włączył tę funkcję dla danego
+            <span className="text-ivory">Lokalizacja:</span> jeżeli organizator włączył tę funkcję dla danego
             wydarzenia, aplikacja mobilna przesyła bieżącą lokalizację GPS drużyny w trakcie trwania gry, aby
             wyświetlić pozycję na mapie wydarzenia (widoczną dla organizatora oraz, w zależności od ustawień
             wydarzenia, dla innych drużyn).
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Dane konta organizatora (panel administracyjny):</span> adres e-mail i
+            <span className="text-ivory">Dane konta organizatora (panel administracyjny):</span> adres e-mail i
             hasło (przechowywane w formie zahaszowanej) osób zarządzających wydarzeniami.
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Dane kontaktowe:</span> jeśli piszesz do nas mailowo lub telefonicznie —
+            <span className="text-ivory">Dane kontaktowe:</span> jeśli piszesz do nas mailowo lub telefonicznie —
             treść korespondencji i podane przez Ciebie dane kontaktowe.
           </li>
         </ul>
@@ -95,7 +98,7 @@ export default function PrivacyPolicyPage() {
           anonimowych statystyk odwiedzin. Skrypt uruchamiamy wyłącznie po Twojej wyraźnej zgodzie wyrażonej w banerze
           cookie, z włączoną anonimizacją adresu IP. Odmowa zgody nie ogranicza działania serwisu, a decyzję możesz
           wycofać w każdej chwili — szczegóły w{" "}
-          <Link href="/polityka-cookies" className="text-[#f0c977] underline-offset-4 hover:underline">
+          <Link href="/polityka-cookies" className="text-amber underline-offset-4 hover:underline">
             Polityce cookies
           </Link>
           .
@@ -107,15 +110,15 @@ export default function PrivacyPolicyPage() {
         <p>Aplikacja mobilna prosi o dostęp do:</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <span className="text-[#f3f5ef]">Aparatu</span> — do skanowania kodów QR stanowisk oraz robienia zdjęć
+            <span className="text-ivory">Aparatu</span> — do skanowania kodów QR stanowisk oraz robienia zdjęć
             (selfie drużyny, zadania fotograficzne).
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Lokalizacji</span> — do wyświetlania pozycji drużyny na mapie wydarzenia
+            <span className="text-ivory">Lokalizacji</span> — do wyświetlania pozycji drużyny na mapie wydarzenia
             (tylko gdy funkcja ta jest włączona przez organizatora danego wydarzenia).
           </li>
           <li>
-            <span className="text-[#f3f5ef]">Mikrofonu</span> — wymagane technicznie przez niektóre stanowiska
+            <span className="text-ivory">Mikrofonu</span> — wymagane technicznie przez niektóre stanowiska
             audio (np. quiz dźwiękowy) do poprawnego odtwarzania nagrań w aplikacji; aplikacja nie nagrywa dźwięku z
             otoczenia.
           </li>
@@ -177,7 +180,7 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p>
           Aby skorzystać z powyższych praw, napisz do nas na adres{" "}
-          <a href="mailto:kontakt@survivorquest.pl" className="text-[#f0c977] underline-offset-4 hover:underline">
+          <a href="mailto:kontakt@survivorquest.pl" className="text-amber underline-offset-4 hover:underline">
             kontakt@survivorquest.pl
           </a>
           .
@@ -195,7 +198,7 @@ export default function PrivacyPolicyPage() {
       <div>
         <Link
           href="/"
-          className="inline-flex items-center justify-center rounded-xl border border-[#446251] bg-[#12221b]/80 px-4 py-2.5 text-sm font-medium text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977]"
+          className="inline-flex items-center justify-center rounded-xl border border-line bg-graphite/80 px-4 py-2.5 text-sm font-medium text-ivory transition hover:border-amber/60 hover:text-amber"
         >
           Wróć na stronę główną
         </Link>

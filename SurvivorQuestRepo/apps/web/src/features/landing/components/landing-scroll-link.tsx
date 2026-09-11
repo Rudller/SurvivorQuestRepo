@@ -6,12 +6,17 @@ type LandingScrollLinkProps = {
   href: string;
   className?: string;
   children: ReactNode;
+  /** Fired after the link is activated, so a container (the mobile sheet) can close itself. */
+  onNavigate?: () => void;
 };
 
-const STICKY_TOP_OFFSET = 140;
+/** Header height (64px) plus breathing room, so a section never lands under the bar. */
+const STICKY_TOP_OFFSET = 88;
 
-export function LandingScrollLink({ href, className, children }: LandingScrollLinkProps) {
+export function LandingScrollLink({ href, className, children, onNavigate }: LandingScrollLinkProps) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+    onNavigate?.();
+
     if (!href.startsWith("#")) {
       return;
     }

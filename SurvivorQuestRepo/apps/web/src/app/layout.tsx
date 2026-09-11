@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Montserrat } from "next/font/google";
 import { AnalyticsGate } from "@/features/analytics/components/analytics-gate";
 import { CookieConsentBanner } from "@/features/cookies/components/cookie-consent-banner";
 import { OG_IMAGE, getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
+/**
+ * Montserrat is the only face on the site. `latin-ext` is not optional — without
+ * it Polish diacritics drop to the fallback face and copy renders in two
+ * different fonts mid-word.
+ */
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
 });
 
 const BRAND_NAME = "SurvivorQuest";
@@ -19,42 +25,38 @@ const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i realizacje eventowe`,
+    default: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i eventy integracyjne dla firm`,
     template: "%s",
   },
   description:
-    "SurvivorQuest (Survivor Quest) to nowoczesna platforma event-tech do organizacji gier terenowych, realizacji zespołowych i angażujących wydarzeń firmowych.",
+    "SurvivorQuest (Survivor Quest) organizuje gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach, z rankingiem na żywo i scenariuszem o Waszej firmie.",
   keywords: [
     "survivor quest",
     "survivorquest",
     "survivorquest.pl",
-    "survivor quest aplikacja",
-    "survivorquest aplikacja",
-    "survivor quest platforma",
-    "gry terenowe",
-    "aplikacja do gier terenowych",
-    "system do gier terenowych",
-    "gra terenowa dla firm aplikacja",
-    "organizacja gry terenowej narzędzie",
-    "monitoring gry terenowej na żywo",
-    "eventy firmowe",
-    "platforma do eventów firmowych",
-    "aplikacja do eventów integracyjnych",
+    "gra terenowa dla firm",
+    "organizacja gry terenowej dla firm",
+    "gry terenowe integracja",
+    "integracja firmowa gra terenowa",
+    "event integracyjny dla firm",
+    "impreza integracyjna dla firm",
+    "gra hotelowa dla firm",
+    "gra integracyjna w hotelu",
+    "quiz drużynowy dla firm",
+    "Ryzykanci quiz drużynowy",
+    "atrakcja wieczorna na event firmowy",
+    "wyjazd integracyjny atrakcje",
+    "gra miejska dla firm",
     "integracja zespołu",
-    "zarządzanie zespołami podczas eventu",
-    "ranking drużyn na żywo",
-    "gry hotelowe aplikacja",
-    "warsztaty firmowe aplikacja",
-    "atrakcje wieczorne organizacja",
-    "event tech",
+    "event firmowy z rankingiem na żywo",
     BRAND_NAME,
     BRAND_ALTERNATE_NAME,
-    "organizacja wydarzeń",
+    "organizacja eventów firmowych",
   ],
   openGraph: {
     title: `${BRAND_NAME_WITH_ALTERNATE} | Eventy, które angażują od pierwszej minuty`,
     description:
-      "Poznaj SurvivorQuest (Survivor Quest): scenariusze eventowe, realizacje terenowe i nowoczesne narzędzia operacyjne dla organizatorów.",
+      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — SurvivorQuest (Survivor Quest) organizuje wszystko od scenariusza po ranking na żywo.",
     url: "/",
     locale: "pl_PL",
     type: "website",
@@ -66,9 +68,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i realizacje eventowe`,
+    title: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i eventy integracyjne dla firm`,
     description:
-      "Platforma eventowa do prowadzenia gier terenowych, zarządzania zespołami i monitoringu realizacji na żywo.",
+      "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach z rankingiem na żywo.",
     images: [OG_IMAGE.url],
   },
   ...(googleSiteVerification
@@ -94,7 +96,7 @@ export default function RootLayout({
         name: BRAND_NAME,
         alternateName: BRAND_ALTERNATE_NAME,
         url: siteUrl,
-        logo: toAbsoluteUrl("/icon.png"),
+        logo: toAbsoluteUrl("/logo-sq.png"),
         email: "kontakt@survivorquest.pl",
       },
       {
@@ -109,16 +111,15 @@ export default function RootLayout({
         },
       },
       {
-        "@type": "SoftwareApplication",
-        "@id": `${siteUrl}#app`,
-        name: BRAND_NAME,
-        alternateName: BRAND_ALTERNATE_NAME,
-        applicationCategory: "BusinessApplication",
-        operatingSystem: "Android, iOS",
+        "@type": "Service",
+        "@id": `${siteUrl}#service`,
+        name: "Gry terenowe i eventy integracyjne dla firm",
+        serviceType: "Organizacja eventów firmowych",
+        areaServed: "PL",
         url: siteUrl,
         description:
-          "Platforma event-tech do organizacji gier terenowych i realizacji eventowych — panel admina i aplikacja mobilna dla uczestników.",
-        publisher: {
+          "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach, z rankingiem na żywo i scenariuszem o firmie klienta.",
+        provider: {
           "@id": `${siteUrl}#organization`,
         },
       },
@@ -127,7 +128,7 @@ export default function RootLayout({
 
   return (
     <html lang="pl">
-      <body className={`${inter.variable} antialiased`}>
+      <body className={`${montserrat.variable} antialiased`}>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

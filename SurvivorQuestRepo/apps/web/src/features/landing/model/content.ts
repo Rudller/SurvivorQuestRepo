@@ -1,124 +1,153 @@
-export const TRUST_METRICS = [
-  { value: "1", label: "spójny ekosystem: panel admina i aplikacja mobilna" },
-  { value: "Live", label: "podgląd statusów zespołów i punktacji w czasie rzeczywistym" },
-  { value: "6", label: "typów realizacji obsługiwanych od startu" },
-] as const;
+/**
+ * Every word of landing copy lives here, so the sales story can be rewritten
+ * without touching layout. The page sells events that SurvivorQuest organises;
+ * the app shows up only as the thing that makes those events better.
+ *
+ * Group sizes, durations and reach are kept descriptive on purpose — swap them
+ * for hard numbers here once they are confirmed, nowhere else.
+ */
 
-export const BENEFITS = [
+/** `id` doubles as the anchor a hero slide's second button scrolls to. */
+export const EVENT_FORMATS = [
   {
-    title: "Panel admina do pełnej konfiguracji realizacji",
+    id: "gra-terenowa",
+    title: "Gra terenowa miejska i outdoor",
+    tagline: "Rywalizacja drużyn w terenie: miasto, park, okolice hotelu.",
     description:
-      "To platforma do eventów firmowych i system do gier terenowych: tworzysz scenariusze, konfigurujesz stanowiska i ustawiasz przebieg imprezy integracyjnej w jednym miejscu.",
+      "Drużyny z tabletami ruszają na trasę, odnajdują punkty na mapie, skanują kody QR i rozwiązują zadania: quizy, szyfry, zagadki, zadania fotograficzne. Punkty i pozycje drużyn aktualizują się na bieżąco, a koordynator na miejscu pilnuje tempa.",
     points: [
-      "Edycja scenariuszy, stanowisk i kolejności etapów",
-      "Zarządzanie zespołami podczas eventu, instruktorami i harmonogramem",
+      "Scenariusz i trasa ułożone pod Waszą lokalizację i termin",
+      "Tablety, oznaczone punkty gry i prowadzący w cenie",
+      "Ranking na żywo i podsumowanie z wynikami po grze",
     ],
   },
   {
-    title: "Aplikacja mobilna dla uczestników i instruktorów",
+    id: "gra-hotelowa",
+    title: "Gra hotelowa i w obiekcie",
+    tagline: "Integracja w hotelu lub centrum konferencyjnym, niezależna od pogody.",
     description:
-      "Aplikacja do gier terenowych i aplikacja do eventów integracyjnych obsługuje dwa modele pracy: drużyna działa samodzielnie z urządzeniem albo instruktor prowadzi grupę przez kolejne stanowiska.",
+      "Stanowiska rozstawiamy w salach, na korytarzach i wokół obiektu. Drużyny polują na kody QR, rozwiązują zadania zespołowe i zbierają punkty między częścią konferencyjną a kolacją. Dobre na wyjazdy firmowe i konferencje, gdzie czas jest policzony.",
     points: [
-      "Docelowo przygotowana pod tablety dostarczane przez organizatora",
-      "Opcjonalnie uczestnik lub instruktor może korzystać z aplikacji na telefonie",
+      "Zadania dopasowane do obiektu i harmonogramu dnia",
+      "Zero logistyki po Waszej stronie: przyjeżdżamy, rozstawiamy, prowadzimy",
+      "Wersja krótsza jako przerywnik lub dłuższa jako główna atrakcja",
     ],
   },
   {
-    title: "Monitoring i podsumowanie realizacji",
+    id: "ryzykanci",
+    title: "Ryzykanci — quiz drużynowy",
+    tagline: "Wieczorny finał integracji: karty, kategorie i ryzykowanie punktów.",
     description:
-      "Koordynator widzi monitoring gry terenowej na żywo, reaguje szybciej i kończy event czytelnym podsumowaniem.",
-    points: ["Podgląd aktywności, punktów, logów zdarzeń i ranking drużyn na żywo", "Kompletny obraz przebiegu wydarzenia po zakończeniu"],
+      "Drużyny losują karty z kategorii i poziomu trudności, dostają pytanie lub zadanie na tablecie i decydują, ile punktów stawiają. Prowadzący podkręca emocje, ranking na ekranie zmienia się po każdej karcie. Sprawdza się jako wieczorna atrakcja po grze terenowej albo samodzielny event w sali.",
+    points: [
+      "Kategorie i pytania szyte pod Waszą firmę i branżę",
+      "Prowadzący, tablety dla drużyn i ekran z rankingiem",
+      "Od kameralnych zespołów po całe działy w jednej sali",
+    ],
   },
 ] as const;
 
-export const REALIZATION_PHOTO_SPOTS = [
+export const WHY_APP = [
   {
-    title: "Gry terenowe miejskie",
-    description: "Dynamiczne kadry z punktów gry i zadań zespołowych pokazujące, jak działa aplikacja do gry terenowej dla firm.",
-    badge: "Miejsce na zdjęcie 16:10",
+    title: "Ranking na żywo, który napędza rywalizację",
+    description:
+      "Każde zadanie od razu zmienia wynik. Drużyny widzą na tablecie, kto prowadzi, a na ekranie w sali finał rozgrywa się na oczach wszystkich — bez liczenia punktów na kartce po zakończeniu.",
   },
   {
-    title: "Realizacje hotelowe",
-    description: "Sceny integracyjne w przestrzeniach konferencyjnych i premium z przykładem, jak działa aplikacja przy grach hotelowych.",
-    badge: "Miejsce na zdjęcie 16:10",
+    title: "Zadania o Waszej firmie, nie z gotowca",
+    description:
+      "Pytania o historię firmy, produkty, ludzi i wewnętrzne żarty wplatamy w scenariusz. Zespoły międzynarodowe grają w swoim języku — aplikacja obsługuje polski, angielski, ukraiński i rosyjski.",
   },
   {
-    title: "Warsztaty i aktywacje",
-    description: "Ujęcia prowadzących, materiałów i efektów pracy zespołów podczas warsztatów firmowych prowadzonych w aplikacji.",
-    badge: "Miejsce na zdjęcie 16:10",
-  },
-  {
-    title: "Atrakcje wieczorne",
-    description: "Atmosfera finału wydarzenia z akcentem na energię uczestników i sprawną organizację atrakcji wieczornych.",
-    badge: "Miejsce na zdjęcie 16:10",
+    title: "Koordynator widzi każdą drużynę",
+    description:
+      "Pozycja na mapie, postęp zadań i czas są u nas na podglądzie w trakcie gry, więc żadna grupa nie ginie w terenie ani nie utyka na stanowisku. Po evencie dostajecie czytelne podsumowanie: wyniki, zdjęcia z zadań, ranking.",
   },
 ] as const;
 
 export const PROCESS_STEPS = [
   {
-    title: "1. Konfiguracja w panelu admina",
-    description: "Tworzysz realizację, przypisujesz scenariusz i ustawiasz zespoły, stacje oraz instruktorów.",
+    title: "1. Brief",
+    description: "Rozmawiamy o okazji, liczbie osób, miejscu i terminie. Doradzamy format i czas trwania.",
   },
   {
-    title: "2. Gra uczestników w aplikacji mobilnej",
-    description: "Drużyny realizują zadania i przechodzą kolejne etapy, a wyniki są aktualizowane na bieżąco.",
+    title: "2. Scenariusz pod Was",
+    description: "Układamy trasę lub stanowiska, dobieramy zadania i wplatamy treści o Waszej firmie.",
   },
   {
-    title: "3. Monitoring live i podsumowanie",
-    description: "Koordynator śledzi przebieg wydarzenia na żywo i kończy je czytelnym podsumowaniem danych.",
+    title: "3. Dzień eventu",
+    description: "Przyjeżdżamy ze sprzętem, rozstawiamy punkty, prowadzimy grę i pilnujemy tempa. Wy gracie.",
+  },
+  {
+    title: "4. Finał i podsumowanie",
+    description: "Ogłaszamy wyniki na ekranie, a po evencie przesyłamy ranking i zdjęcia z zadań.",
   },
 ] as const;
 
 export const CASE_STUDIES = [
   {
-    title: "Gra terenowa dla 120 uczestników",
-    challenge: "Organizator potrzebował kontroli nad wieloma zespołami i stacjami w różnych lokalizacjach.",
-    outcome: "Panel pozwolił śledzić status każdej drużyny na żywo i szybko reagować na opóźnienia.",
-    photos: ["Miejsce na zrzut: widok zespołów", "Miejsce na zrzut: lista zadań", "Miejsce na zrzut: podsumowanie"],
+    title: "Gra terenowa dla ponad stu uczestników",
+    challenge:
+      "Firma chciała jednego wydarzenia dla wszystkich działów naraz: wiele drużyn w terenie, bez chaosu i bez czekania w kolejce do stanowisk.",
+    outcome:
+      "Drużyny ruszyły równolegle różnymi trasami, a ranking na żywo utrzymał rywalizację do ostatniego zadania. Finał z ogłoszeniem wyników zamknął dzień na wspólnym ekranie.",
+    photos: ["Zdjęcie: start drużyn", "Zdjęcie: zadanie w terenie", "Zdjęcie: finał i ranking"],
   },
   {
-    title: "Warsztaty hotelowe z rotacją grup",
-    challenge: "Wymagana była szybka zmiana zadań i czytelna komunikacja dla prowadzących.",
-    outcome: "Aplikacja uprościła prowadzenie etapów i utrzymała spójny przepływ pracy między grupami.",
-    photos: ["Miejsce na zrzut: scenariusz", "Miejsce na zrzut: postęp stacji", "Miejsce na zrzut: punkty"],
+    title: "Wyjazd firmowy w hotelu z wieczornymi Ryzykantami",
+    challenge:
+      "Po całym dniu konferencji goście potrzebowali atrakcji, która wciągnie wszystkich, a nie tylko najgłośniejszy stolik.",
+    outcome:
+      "Krótka gra w obiekcie między sesjami rozgrzała zespoły, a wieczorny quiz z ryzykowaniem punktów wyrównał szanse — o zwycięstwie zdecydowała ostatnia karta.",
+    photos: ["Zdjęcie: stanowisko w hotelu", "Zdjęcie: drużyna z tabletem", "Zdjęcie: Ryzykanci na scenie"],
   },
 ] as const;
 
 export const FAQ_ITEMS = [
   {
-    question: "Czy SurvivorQuest to aplikacja do gier terenowych dla firm?",
+    question: "Dla ilu osób organizujecie eventy?",
     answer:
-      "Tak. SurvivorQuest to aplikacja do gier terenowych dla firm i platforma do eventów firmowych, która łączy panel admina z aplikacją mobilną.",
+      "Od kilkunastu do kilkuset uczestników. Dzielimy grupę na drużyny, a liczbę tras, stanowisk i tabletów dobieramy do wielkości zespołu, żeby nikt nie czekał w kolejce.",
   },
   {
-    question: "Czy aplikacja jest prosta w obsłudze dla uczestników?",
+    question: "Ile trwa gra?",
     answer:
-      "Tak. Interfejs jest prosty i prowadzi uczestników krok po kroku przez zadania. W praktyce wystarcza krótkie wprowadzenie od instruktora lub organizatora przed startem.",
+      "Zwykle kilka godzin. Grę terenową i hotelową skracamy lub wydłużamy pod Wasz harmonogram, a Ryzykanci sprawdzają się jako wieczorna atrakcja po części oficjalnej.",
   },
   {
-    question: "Na jakich urządzeniach działa aplikacja mobilna?",
+    question: "Gdzie może odbyć się event?",
     answer:
-      "Aplikacja jest projektowana przede wszystkim pod tablety dostarczane przez organizatora wydarzenia, ale w razie potrzeby można ją również uruchomić na telefonie.",
+      "W mieście, w parku, w hotelu lub centrum konferencyjnym, w którym organizujecie wyjazd. Scenariusz i trasę układamy pod konkretne miejsce, więc gra działa tam, gdzie jesteście.",
   },
   {
-    question: "Kto korzysta z aplikacji podczas eventu?",
+    question: "Co zapewniacie, a co jest po naszej stronie?",
     answer:
-      "Z aplikacji korzystają uczestnicy i instruktorzy obsługujący wydarzenie. Obie role pracują na tym samym scenariuszu i harmonogramie przygotowanym przez organizatora.",
+      "Przywozimy tablety, oznaczenia punktów, prowadzących i cały scenariusz. Po Waszej stronie zostaje termin, miejsce i lista uczestników. Nie trzeba instalować niczego na prywatnych telefonach.",
   },
   {
-    question: "Czy jest leaderboard i kiedy pojawia się podczas gry?",
+    question: "Czy zadania mogą dotyczyć naszej firmy?",
     answer:
-      "Tak, w aplikacji można pokazywać leaderboard drużyn i ranking drużyn na żywo. Ranking pojawia się w trakcie realizacji po uruchomieniu punktacji, a opcję można wyłączyć.",
+      "Tak, i tak jest najlepiej. Pytania o historię firmy, produkty, zespół czy wartości wplatamy w scenariusz, a przy Ryzykantach można zbudować z nich całą kategorię.",
   },
   {
-    question: "Czy mogę modyfikować przebieg pod konkretną realizację?",
+    question: "Co, jeśli pogoda pokrzyżuje plany?",
     answer:
-      "Tak. W panelu ustawiasz scenariusz, stanowiska i kolejność etapów dla danej realizacji bez utraty danych historycznych.",
+      "Gra terenowa ma zawsze wariant zapasowy w obiekcie, a gra hotelowa i Ryzykanci są niezależne od pogody. Ustalamy to na etapie briefu, więc w dniu eventu nikt nie improwizuje.",
   },
   {
-    question: "Czy system obsługuje gry hotelowe, warsztaty firmowe i atrakcje wieczorne?",
+    question: "Czym są Ryzykanci?",
     answer:
-      "Tak. W jednym środowisku możesz przygotować gry hotelowe, warsztaty firmowe i atrakcje wieczorne, a potem monitorować realizację na żywo.",
+      "To quiz drużynowy: zespoły losują karty z kategorii i poziomu trudności, dostają pytanie lub zadanie na tablecie i stawiają punkty. Ranking na ekranie zmienia się po każdej karcie, a wynik może się odwrócić do ostatniej rundy.",
+  },
+  {
+    question: "Czy zespoły międzynarodowe mogą grać razem?",
+    answer:
+      "Tak. Każda drużyna gra w swoim języku — aplikacja prowadzi zadania po polsku, angielsku, ukraińsku i rosyjsku, a prowadzący dostosowuje przebieg do grupy.",
+  },
+  {
+    question: "Jak wygląda wycena?",
+    answer:
+      "Napisz lub zadzwoń, podaj liczbę osób, termin i miejsce. Odpowiadamy zwykle w ten sam dzień roboczy z propozycją formatu i ceną. Cena zależy od liczby uczestników, długości gry i lokalizacji.",
   },
 ] as const;
 

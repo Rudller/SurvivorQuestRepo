@@ -39,7 +39,7 @@ export function GalleryLightbox({ photo, onClose }: GalleryLightboxProps) {
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-full border border-[#446251] bg-[#12221b]/80 px-3 py-1.5 text-sm font-medium text-[#f3f5ef] transition hover:border-[#f0c977]/60 hover:text-[#f0c977]"
+        className="absolute right-4 top-4 rounded-full border border-line bg-graphite/80 px-3 py-1.5 text-sm font-medium text-ivory transition hover:border-amber/60 hover:text-amber"
       >
         Zamknij
       </button>
@@ -57,8 +57,8 @@ export function GalleryLightbox({ photo, onClose }: GalleryLightboxProps) {
         />
       </div>
 
-      <div className="text-center text-sm text-[#bdcdbf]">
-        {photo.teamName ? <span className="font-semibold text-[#f3f5ef]">{photo.teamName}</span> : null}
+      <div className="text-center text-sm text-ivory-muted">
+        {photo.teamName ? <span className="font-semibold text-ivory">{photo.teamName}</span> : null}
         {photo.stationName ? <span> • {photo.stationName}</span> : null}
       </div>
     </div>
