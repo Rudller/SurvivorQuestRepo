@@ -94,6 +94,7 @@ export function RiskQuizBottomPanel({
   const qrIconSize = adaptiveLayout.s(isTabletLayout ? 34 : 30, 28, 38);
   const qrButtonMarginHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 12, 10, 16);
   const footerMarginTop = adaptiveLayout.s(isTabletLayout ? 9 : 8, 6, 10);
+  const streakNoteFontSize = adaptiveLayout.fs(isTabletLayout ? 10 : 9, 8, 11);
   const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
   const footerLabel = isCardOpen
@@ -185,6 +186,15 @@ export function RiskQuizBottomPanel({
               x{multiplier}
             </Text>
           )}
+          {/* Pinned to the column's bottom edge so it sits level with the
+              "scan a card" caption without pushing the value off-centre. */}
+          <Text
+            className="text-center"
+            numberOfLines={2}
+            style={{ position: "absolute", bottom: 0, left: 0, right: 0, color: EXPEDITION_THEME.textSubtle, fontSize: streakNoteFontSize }}
+          >
+            {text.streakNote}
+          </Text>
         </View>
       </View>
     </ChamferedPanel>

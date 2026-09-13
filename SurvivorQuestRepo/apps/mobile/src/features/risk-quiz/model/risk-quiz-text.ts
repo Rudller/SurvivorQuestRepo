@@ -20,10 +20,10 @@ export type RiskQuizText = {
     realizationFinished: string;
     openingScanner: string;
     scanCard: string;
+    streakNote: string;
   };
   howToPlay: {
     steps: readonly [HowToPlayStep, HowToPlayStep, HowToPlayStep];
-    streakNote: string;
   };
   remainingCards: { label: string };
   targetPicker: {
@@ -63,6 +63,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       realizationFinished: "Realizacja zakończona",
       openingScanner: "Otwieranie skanera...",
       scanCard: "Skanuj kartę",
+      streakNote: "Seria bez pudła mnoży punkty za kolejne karty.",
     },
     howToPlay: {
       steps: [
@@ -70,7 +71,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
         { firstLine: "Zeskanuj", secondLine: "kod QR" },
         { firstLine: "Odpowiedz", secondLine: "na pytanie" },
       ],
-      streakNote: "Seria bez pudła mnoży punkty za kolejne karty.",
     },
     remainingCards: { label: "Zostało kart" },
     targetPicker: {
@@ -100,6 +100,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       realizationFinished: "Event finished",
       openingScanner: "Opening the scanner...",
       scanCard: "Scan a card",
+      streakNote: "A streak without a miss multiplies the points on later cards.",
     },
     howToPlay: {
       steps: [
@@ -107,7 +108,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
         { firstLine: "Scan", secondLine: "the QR code" },
         { firstLine: "Answer", secondLine: "the question" },
       ],
-      streakNote: "A streak without a miss multiplies the points on later cards.",
     },
     remainingCards: { label: "Cards left" },
     targetPicker: {
@@ -137,6 +137,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       realizationFinished: "Захід завершено",
       openingScanner: "Відкриваємо сканер...",
       scanCard: "Сканувати картку",
+      streakNote: "Серія без промаху множить бали за наступні картки.",
     },
     howToPlay: {
       steps: [
@@ -144,7 +145,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
         { firstLine: "Скануй", secondLine: "QR-код" },
         { firstLine: "Дай відповідь", secondLine: "на питання" },
       ],
-      streakNote: "Серія без промаху множить бали за наступні картки.",
     },
     remainingCards: { label: "Залишилось карток" },
     targetPicker: {
@@ -174,6 +174,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       realizationFinished: "Мероприятие завершено",
       openingScanner: "Открываем сканер...",
       scanCard: "Сканировать карточку",
+      streakNote: "Серия без промаха умножает очки за следующие карточки.",
     },
     howToPlay: {
       steps: [
@@ -181,7 +182,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
         { firstLine: "Сканируй", secondLine: "QR-код" },
         { firstLine: "Ответь", secondLine: "на вопрос" },
       ],
-      streakNote: "Серия без промаха умножает очки за следующие карточки.",
     },
     remainingCards: { label: "Осталось карточек" },
     targetPicker: {

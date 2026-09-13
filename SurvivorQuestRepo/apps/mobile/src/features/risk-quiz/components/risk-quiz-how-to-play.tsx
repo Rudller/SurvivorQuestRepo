@@ -16,9 +16,7 @@ export function RiskQuizHowToPlay() {
   const isTabletLayout = adaptiveLayout.isTablet;
   const stepIconSize = adaptiveLayout.s(isTabletLayout ? 38 : 28, 24, 44);
   const stepFontSize = adaptiveLayout.fs(isTabletLayout ? 15 : 12, 11, 17);
-  const footerFontSize = adaptiveLayout.fs(isTabletLayout ? 14 : 12, 11, 16);
   const stepIconMarginBottom = adaptiveLayout.s(isTabletLayout ? 12 : 8, 6, 14);
-  const footerMarginTop = adaptiveLayout.s(isTabletLayout ? 26 : 20, 16, 32);
   const stepPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 20 : 12, 10, 26);
 
   return (
@@ -41,13 +39,6 @@ export function RiskQuizHowToPlay() {
           );
         })}
       </View>
-
-      <Text
-        className="text-center"
-        style={{ color: EXPEDITION_THEME.textMuted, fontSize: footerFontSize, marginTop: footerMarginTop }}
-      >
-        {text.streakNote}
-      </Text>
     </View>
   );
 }
