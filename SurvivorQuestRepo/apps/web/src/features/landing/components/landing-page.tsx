@@ -88,8 +88,14 @@ export function LandingPage({
             <SectionHeading
               eyebrow="Co organizujemy"
               title="Trzy formaty, jeden zespół, który prowadzi wszystko od A do Z."
-              description="Każdy format przygotowujemy pod Waszą grupę, miejsce i okazję. Można je łączyć — gra w dzień, Ryzykanci wieczorem."
+              description="Każdy format przygotowujemy pod Waszą grupę, miejsce i okazję."
             />
+            <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ivory-muted sm:text-base">
+              Wszystkie trzy prowadzimy w tej samej autorskiej aplikacji i tak samo od strony organizacyjnej:
+              przyjeżdżamy z tabletami i prowadzącymi, rozstawiamy grę i zabieramy sprzęt po finale. Różni je miejsce
+              i rytm — event integracyjny w terenie rządzi się czym innym niż impreza integracyjna wieczorem w sali po
+              konferencji, więc format dobieramy do tego, ile macie czasu i gdzie jesteście.
+            </p>
             <div className="mt-10 grid gap-10 lg:grid-cols-3 lg:gap-8">
               {EVENT_FORMATS.map((format) => (
                 <article key={format.id} id={format.id} className="scroll-mt-22">
@@ -117,7 +123,7 @@ export function LandingPage({
               title="Własna aplikacja zmienia integrację w rozgrywkę, której nikt nie odpuszcza."
               description="Nie sprzedajemy narzędzia — prowadzimy w nim eventy. Dzięki temu gra jest szybsza, uczciwsza i wygląda lepiej niż karta z pieczątkami."
             />
-            <div className="mt-10 grid gap-10 lg:grid-cols-3 lg:gap-8">
+            <div className="mt-10 grid gap-10 sm:grid-cols-2 lg:gap-8">
               {WHY_APP.map((reason) => (
                 <article key={reason.title}>
                   <h3 className="text-lg font-semibold text-ivory">{reason.title}</h3>
@@ -163,16 +169,16 @@ export function LandingPage({
                   <p className="mt-2 text-sm leading-relaxed text-ivory-muted">
                     <span className="font-medium text-ivory">Efekt:</span> {caseStudy.outcome}
                   </p>
-                  <ul className="mt-5 grid gap-3 sm:grid-cols-3">
-                    {caseStudy.photos.map((photo) => (
-                      <li
-                        key={photo}
-                        className="rounded-xl bg-graphite px-4 py-5 text-xs leading-relaxed text-ivory-faint"
-                      >
-                        {photo}
-                      </li>
-                    ))}
-                  </ul>
+                  {caseStudy.metrics.length > 0 ? (
+                    <ul className="mt-5 grid gap-3 sm:grid-cols-3">
+                      {caseStudy.metrics.map((metric) => (
+                        <li key={metric.label} className="rounded-xl bg-graphite px-4 py-5">
+                          <p className="text-2xl font-semibold leading-tight text-ivory">{metric.value}</p>
+                          <p className="mt-1.5 text-xs leading-relaxed text-ivory-faint">{metric.label}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -182,9 +188,9 @@ export function LandingPage({
         <section className={TONE_B}>
           <div className={SECTION_INNER}>
             <SectionHeading
-              eyebrow="Zaufanie klientów"
-              title="Zaufali nam"
-              description="Organizujemy integracje dla firm, które chcą czegoś więcej niż kolacji i prezentacji."
+              eyebrow="Dla kogo pracujemy"
+              title="Firmy, które chciały czegoś więcej niż kolacji i prezentacji."
+              description="Pracujemy z zespołami, dla których integracja ma zostać w głowach dłużej niż do poniedziałku — od kilkunastoosobowych działów po całe firmy na wyjeździe."
             />
             <ul className="mx-auto mt-8 flex w-full max-w-xl flex-wrap items-center justify-center gap-10">
               {TRUST_CLIENTS.map((client) => (
@@ -216,8 +222,13 @@ export function LandingPage({
             <div className="mt-10 max-w-3xl space-y-7">
               {FAQ_ITEMS.map((item) => (
                 <details key={item.question} className="group">
-                  <summary className="flex cursor-pointer list-none items-start justify-between gap-4 text-sm font-semibold text-ivory sm:text-base [&::-webkit-details-marker]:hidden">
-                    <span>{item.question}</span>
+                  {/*
+                    The question is a real h3, not a styled span: it reads as a
+                    heading, so it should be one. `summary` accepts flow content,
+                    and the typography classes moved across unchanged.
+                  */}
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+                    <h3 className="text-sm font-semibold text-ivory sm:text-base">{item.question}</h3>
                     <span
                       aria-hidden
                       className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center text-lg text-ivory-faint transition-transform duration-300 group-open:rotate-45"
@@ -248,7 +259,8 @@ export function LandingPage({
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ivory-muted sm:text-base">
                 Doradzimy, czy lepsza będzie gra w terenie, w obiekcie czy Ryzykanci na wieczór, i przygotujemy
-                scenariusz pod Waszą firmę.
+                scenariusz pod Waszą firmę. Aplikacja, tablety i prowadzący są nasi — po Waszej stronie zostaje
+                termin i lista uczestników.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <Link

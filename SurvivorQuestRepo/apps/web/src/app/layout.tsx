@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import { AnalyticsGate } from "@/features/analytics/components/analytics-gate";
 import { CookieConsentBanner } from "@/features/cookies/components/cookie-consent-banner";
+import { EVENT_FORMATS } from "@/features/landing/model/content";
+import { getContactEmail, getContactPhone, toDialablePhone } from "@/lib/contact";
 import { OG_IMAGE, getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -18,59 +20,35 @@ const montserrat = Montserrat({
 
 const BRAND_NAME = "SurvivorQuest";
 const BRAND_ALTERNATE_NAME = "Survivor Quest";
-const BRAND_NAME_WITH_ALTERNATE = `${BRAND_NAME} (${BRAND_ALTERNATE_NAME})`;
 const siteUrl = getSiteUrl();
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 
+/**
+ * Site-wide defaults only. Every route declares its own title, description and
+ * canonical, so this object deliberately does not repeat the home page's copy —
+ * keeping a second version of it here is how the two drift apart.
+ *
+ * The title stays under ~60 characters because that is where Google truncates.
+ * The spaced-out "Survivor Quest" spelling is carried by `alternateName` in the
+ * JSON-LD below, not by the title, where it cost 16 characters and pushed the
+ * part that actually sells out of the result.
+ */
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i eventy integracyjne dla firm`,
+    default: "Gry terenowe i eventy integracyjne dla firm | SurvivorQuest",
     template: "%s",
   },
   description:
-    "SurvivorQuest (Survivor Quest) organizuje gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach, z rankingiem na żywo i scenariuszem o Waszej firmie.",
-  keywords: [
-    "survivor quest",
-    "survivorquest",
-    "survivorquest.pl",
-    "gra terenowa dla firm",
-    "organizacja gry terenowej dla firm",
-    "gry terenowe integracja",
-    "integracja firmowa gra terenowa",
-    "event integracyjny dla firm",
-    "impreza integracyjna dla firm",
-    "gra hotelowa dla firm",
-    "gra integracyjna w hotelu",
-    "quiz drużynowy dla firm",
-    "Ryzykanci quiz drużynowy",
-    "atrakcja wieczorna na event firmowy",
-    "wyjazd integracyjny atrakcje",
-    "gra miejska dla firm",
-    "integracja zespołu",
-    "event firmowy z rankingiem na żywo",
-    BRAND_NAME,
-    BRAND_ALTERNATE_NAME,
-    "organizacja eventów firmowych",
-  ],
+    "Organizujemy gry terenowe, gry hotelowe i quizy drużynowe dla firm. Drużyny grają na tabletach z naszej autorskiej aplikacji, z rankingiem na żywo.",
   openGraph: {
-    title: `${BRAND_NAME_WITH_ALTERNATE} | Eventy, które angażują od pierwszej minuty`,
-    description:
-      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — SurvivorQuest (Survivor Quest) organizuje wszystko od scenariusza po ranking na żywo.",
-    url: "/",
     locale: "pl_PL",
     type: "website",
     siteName: BRAND_NAME,
     images: [OG_IMAGE],
   },
-  alternates: {
-    canonical: "/",
-  },
   twitter: {
     card: "summary_large_image",
-    title: `${BRAND_NAME_WITH_ALTERNATE} | Gry terenowe i eventy integracyjne dla firm`,
-    description:
-      "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach z rankingiem na żywo.",
     images: [OG_IMAGE.url],
   },
   ...(googleSiteVerification
@@ -87,6 +65,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const contactEmail = getContactEmail();
+  const contactPhone = getContactPhone();
+
   const seoJsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -97,7 +78,17 @@ export default function RootLayout({
         alternateName: BRAND_ALTERNATE_NAME,
         url: siteUrl,
         logo: toAbsoluteUrl("/logo-sq.png"),
-        email: "kontakt@survivorquest.pl",
+        email: contactEmail,
+        telephone: toDialablePhone(contactPhone),
+        contactPoint: [
+          {
+            "@type": "ContactPoint",
+            contactType: "sales",
+            email: contactEmail,
+            telephone: toDialablePhone(contactPhone),
+            availableLanguage: ["pl", "en"],
+          },
+        ],
       },
       {
         "@type": "WebSite",
@@ -115,12 +106,31 @@ export default function RootLayout({
         "@id": `${siteUrl}#service`,
         name: "Gry terenowe i eventy integracyjne dla firm",
         serviceType: "Organizacja eventów firmowych",
-        areaServed: "PL",
+        areaServed: {
+          "@type": "Country",
+          name: "Polska",
+        },
         url: siteUrl,
         description:
-          "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach, z rankingiem na żywo i scenariuszem o firmie klienta.",
+          "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach, w autorskiej aplikacji SurvivorQuest, z rankingiem na żywo i scenariuszem o firmie klienta.",
         provider: {
           "@id": `${siteUrl}#organization`,
+        },
+        /* Built from the same array the offer section renders, so a renamed
+           format cannot end up described one way on screen and another in the
+           structured data. */
+        hasOfferCatalog: {
+          "@type": "OfferCatalog",
+          name: "Formaty eventów",
+          itemListElement: EVENT_FORMATS.map((format) => ({
+            "@type": "Offer",
+            itemOffered: {
+              "@type": "Service",
+              name: format.title,
+              description: format.tagline,
+              url: `${siteUrl}/#${format.id}`,
+            },
+          })),
         },
       },
     ],

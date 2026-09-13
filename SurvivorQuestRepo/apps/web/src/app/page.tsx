@@ -1,30 +1,43 @@
 import type { Metadata } from "next";
 import { OG_IMAGE } from "@/lib/site-url";
+import { getContactEmail, getContactPhone, getQuoteHrefBase } from "@/lib/contact";
 import { LandingPage } from "@/features/landing/components/landing-page";
 import { HERO_SLIDES } from "@/features/landing/lib/hero-slides";
 import { FAQ_ITEMS } from "@/features/landing/model/content";
 
+const TITLE = "Gry terenowe i eventy integracyjne dla firm | SurvivorQuest";
+const DESCRIPTION =
+  "Organizujemy gry terenowe, gry hotelowe i quizy drużynowe dla firm. Drużyny grają na tabletach z naszej autorskiej aplikacji, z rankingiem na żywo.";
+
+/**
+ * `keywords` is inert as far as Google is concerned — it has been ignored since
+ * 2009. It stays as a checklist for us: every phrase listed here has to appear
+ * in the visible copy, because that is the only place a search engine reads it.
+ * Adding a phrase here that is nowhere in the text is how the last version ended
+ * up claiming "impreza integracyjna" the page never said.
+ */
 export const metadata: Metadata = {
-  title: "SurvivorQuest (Survivor Quest) | Gry terenowe i eventy integracyjne dla firm",
-  description:
-    "SurvivorQuest (Survivor Quest) organizuje gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm. Drużyny grają na tabletach z rankingiem na żywo — my przywozimy sprzęt, scenariusz i prowadzących.",
+  title: TITLE,
+  description: DESCRIPTION,
   keywords: [
-    "survivor quest",
-    "survivorquest",
-    "organizacja gry terenowej dla firm",
-    "integracja firmowa gra terenowa",
+    "gra terenowa dla firm",
+    "gra miejska dla firm",
     "gra hotelowa dla firm",
-    "event integracyjny z aplikacją",
-    "quiz drużynowy Ryzykanci",
-    "impreza integracyjna z tabletami",
+    "event integracyjny dla firm",
+    "impreza integracyjna",
+    "wyjazd integracyjny",
+    "integracja zespołu",
+    "quiz drużynowy dla firm",
+    "SurvivorQuest",
+    "Survivor Quest",
   ],
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "SurvivorQuest (Survivor Quest) | Gry terenowe i eventy integracyjne dla firm",
+    title: "SurvivorQuest (Survivor Quest) | Eventy, które angażują od pierwszej minuty",
     description:
-      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — organizujemy od scenariusza po ranking na żywo.",
+      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — prowadzone w aplikacji, którą napisaliśmy sami.",
     url: "/",
     type: "website",
     locale: "pl_PL",
@@ -32,9 +45,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SurvivorQuest (Survivor Quest) | Gry terenowe i eventy integracyjne dla firm",
+    title: TITLE,
     description:
-      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — organizujemy od scenariusza po ranking na żywo.",
+      "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — prowadzone w aplikacji, którą napisaliśmy sami.",
     images: [OG_IMAGE.url],
   },
 };
@@ -50,10 +63,6 @@ export default function HomePage() {
     })),
   };
 
-  const quoteHrefBase = process.env.NEXT_PUBLIC_QUOTE_URL?.trim() || "mailto:kontakt@survivorquest.pl";
-  const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "kontakt@survivorquest.pl";
-  const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || "+48 730 622 029";
-
   return (
     <>
       <script
@@ -62,9 +71,9 @@ export default function HomePage() {
       />
       <LandingPage
         heroSlides={HERO_SLIDES}
-        quoteHrefBase={quoteHrefBase}
-        contactEmail={contactEmail}
-        contactPhone={contactPhone}
+        quoteHrefBase={getQuoteHrefBase()}
+        contactEmail={getContactEmail()}
+        contactPhone={getContactPhone()}
       />
     </>
   );

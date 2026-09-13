@@ -25,9 +25,11 @@ export type HeroSlide = {
  * an opening slide that frames the whole thing. The photos live in
  * `public/hero` under the same names as the formats they illustrate.
  *
- * The first slide is what the server renders, so it carries the page's
- * headline for search engines and doubles as the Open Graph image (see
- * `OG_IMAGE`) — keep it a real, landscape photo with the umbrella message.
+ * The first slide is what the server renders and it permanently owns the page's
+ * `h1`, so it carries the headline for search engines — keep it a real,
+ * landscape photo with the umbrella message. `OG_IMAGE` is cropped from this
+ * same photo but lives as its own file, so changing the hero here does not
+ * silently change what gets shared on social.
  *
  * Highlights stay on what we can stand behind: the Ryzykanci figures come from
  * the game's own poster, the rest describe how a format works rather than
@@ -39,13 +41,13 @@ export const HERO_SLIDES: readonly HeroSlide[] = [
     alt: "Drużyna przy stoliku z tabletami SurvivorQuest w hotelowym lobby.",
     label: "SurvivorQuest",
     eyebrow: "Eventy firmowe prowadzone w aplikacji",
-    title: "Gra terenowa, gra hotelowa i quiz drużynowy dla Twojej firmy — organizujemy od scenariusza po ranking na żywo.",
+    title: "Gry terenowe i eventy integracyjne dla firm — prowadzone w aplikacji, którą napisaliśmy sami.",
     lead:
-      "SurvivorQuest (Survivor Quest) to integracje, w których drużyny grają na tabletach: mapa, kody QR, zadania o Waszej firmie i wynik, który zmienia się na oczach wszystkich. Przyjeżdżamy ze sprzętem, prowadzimy grę i kończymy ją finałem z ogłoszeniem zwycięzców.",
+      "SurvivorQuest (Survivor Quest) organizuje integracje, w których drużyny grają na tabletach: mapa, kody QR, zadania o Waszej firmie i wynik zmieniający się na oczach wszystkich. Aplikacja jest nasza — piszemy ją i rozwijamy sami, więc scenariusz dopasowujemy do Was, a nie Was do gotowca. Przyjeżdżamy ze sprzętem, prowadzimy grę i kończymy ją finałem z ogłoszeniem zwycięzców.",
     highlights: [
       { value: "3", label: "formaty do wyboru: gra miejska, gra w obiekcie i quiz drużynowy Ryzykanci" },
+      { value: "19", label: "typów zadań w naszej aplikacji — od szyfrów po zadania fotograficzne" },
       { value: "Live", label: "ranking drużyn na tabletach i na ekranie przez cały event" },
-      { value: "0", label: "kartek i długopisów — zadania, mapa i punkty na tabletach, które przywozimy" },
     ],
     quoteSubject: "Wycena eventu SurvivorQuest",
     secondaryCta: { label: "Zobacz formaty", href: "#formaty" },

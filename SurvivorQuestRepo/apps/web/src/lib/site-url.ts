@@ -28,10 +28,16 @@ export function toAbsoluteUrl(path: string) {
  * merging field by field, so a page that declares its own `openGraph` and omits
  * `images` ends up with no preview picture at all. Every such route spreads this
  * in rather than repeating the dimensions.
+ *
+ * 1200x630 is the 1.91:1 ratio Facebook, LinkedIn and X crop to. This used to
+ * point at the 1536x1024 hero PNG, which meant every share cropped the photo
+ * unpredictably and pulled 2 MB to build a thumbnail; the file here is a
+ * pre-cropped 94 KB JPEG. Regenerate it from the hero photo with sharp if the
+ * hero ever changes.
  */
 export const OG_IMAGE = {
-  url: "/hero/survivorquest.png",
-  width: 1536,
-  height: 1024,
+  url: "/og-default.jpg",
+  width: 1200,
+  height: 630,
   alt: "SurvivorQuest — gry terenowe i eventy integracyjne dla firm",
 } as const;

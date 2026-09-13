@@ -16,6 +16,17 @@ COPY apps/web apps/web
 
 WORKDIR /app/apps/web
 
+# NEXT_PUBLIC_* are inlined at build time, not read at runtime, so they have to
+# arrive as build args. Without these the production image silently ships with
+# every one of them unset: no Search Console meta tag and no analytics at all,
+# however the values are configured on the host.
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ARG NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=$NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+
 RUN pnpm build
 
 ENV NODE_ENV=production

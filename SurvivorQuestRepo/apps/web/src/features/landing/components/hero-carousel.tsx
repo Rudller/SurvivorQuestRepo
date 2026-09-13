@@ -109,7 +109,15 @@ export function HeroCarousel({ slides, innerClassName, quoteHrefBase }: HeroCaro
         <div className="grid max-w-2xl flex-1 items-center">
           {slides.map((slide, index) => {
             const isActive = index === activeIndex;
-            const Heading = isActive ? "h1" : "p";
+            /*
+              The h1 belongs to the first slide and stays there. Tying it to the
+              active slide instead moved the page's only h1 every ten seconds
+              after hydration — a document whose outline depends on a timer,
+              for no gain: search engines read the server render, where slide
+              one is active anyway. The rest are headings visually, paragraphs
+              structurally.
+            */
+            const Heading = index === 0 ? "h1" : "p";
 
             return (
               <article
