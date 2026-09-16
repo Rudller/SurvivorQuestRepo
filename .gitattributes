@@ -1,0 +1,7 @@
+# Offer PDFs are served straight from apps/web/public and their byte offsets
+# matter: a PDF carries an xref table of absolute file positions, so any
+# end-of-line conversion shifts every offset and breaks the file. Git normally
+# detects binaries by their NUL bytes, but an uncompressed, ASCII-only PDF has
+# none and gets classified as text — which, with core.autocrlf=true, means a
+# fresh clone checks out a corrupted document.
+*.pdf binary
