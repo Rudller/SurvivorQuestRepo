@@ -148,6 +148,9 @@ export type RiskChatMessage = {
   content: string;
   // Event code for server-written messages, null for anything a human said.
   systemEvent: string | null;
+  // The facts behind a system message (team name, points, pig type…) so the
+  // tablet can word it in its own language; `content` is the Polish fallback.
+  payload: Record<string, unknown> | null;
   teamColor: string | null;
   teamBadgeImageUrl: string | null;
   createdAt: string;
@@ -170,6 +173,23 @@ export async function fetchRiskQuizChat(
   payload: { sessionToken: string; afterId?: string },
 ) {
   return requestMobileApi<RiskChatState>(apiBaseUrl, "/mobile/risk-quiz/chat", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type RiskFeedState = {
+  currentTeamId: string | null;
+  events: RiskChatMessage[];
+};
+
+// The room minus the teams' own chat lines: system events plus Game Master
+// announcements. Served regardless of whether the chat itself is switched on.
+export async function fetchRiskQuizEvents(
+  apiBaseUrl: string,
+  payload: { sessionToken: string; afterId?: string },
+) {
+  return requestMobileApi<RiskFeedState>(apiBaseUrl, "/mobile/risk-quiz/events", {
     method: "POST",
     body: JSON.stringify(payload),
   });

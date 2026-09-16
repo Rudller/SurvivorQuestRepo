@@ -82,7 +82,7 @@ function createService() {
     riskAttempt: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
-      create: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: 'attempt-1' }),
       update: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       delete: jest.fn(),
@@ -973,6 +973,42 @@ describe('RiskQuizService.submitAnswer', () => {
     });
   });
 
+  it('announces the scored card to the room, keyed on the attempt', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      team: { ...team, name: 'Sokoły', slotNumber: 1 },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      { isCorrect: true },
+      { isCorrect: true },
+    ]);
+    prisma.riskAttempt.create.mockResolvedValue({ id: 'attempt-9' });
+    prisma.team.update.mockResolvedValue({ ...team, points: 25 });
+
+    await service.submitAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      selectedIndex: 1,
+    });
+
+    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        authorKind: 'SYSTEM',
+        teamId: 'team-1',
+        systemEvent: 'card-scored',
+        dedupeKey: 'card-scored:attempt-9',
+        content: 'Sokoły zdobywa 15 pkt (x1.5).',
+        payload: { teamName: 'Sokoły', points: 15, multiplier: 1.5 },
+      }),
+    });
+  });
+
   it('deducts points for a wrong answer instead of awarding them', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
@@ -993,6 +1029,7 @@ describe('RiskQuizService.submitAnswer', () => {
     expect(result.pointsDelta).toBe(-5);
     expect(result.streak).toBe(0);
     expect(result.multiplier).toBe(1);
+    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
   });
 
   it('trusts the client-asserted outcome for non-quiz station types', async () => {
@@ -1482,6 +1519,23 @@ describe('RiskQuizService świnie', () => {
     expect(prisma.riskPigEffect.create).toHaveBeenCalled();
   });
 
+  it('announces the throw with the thrower masked when the realization hides names', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma, { realization: { pigShowThrowerName: false } });
+    prisma.riskPig.findUnique.mockResolvedValue({ id: 'pig-1', type: 'FOG' });
+    prisma.riskPigEffect.findMany.mockResolvedValue([]);
+
+    await service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' });
+
+    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        systemEvent: 'pig-thrown',
+        teamId: 'team-2',
+        payload: { fromName: null, targetName: 'Drużyna 2', pigType: 'FOG' },
+      }),
+    });
+  });
+
   it('marks the room as unavailable only while an effect is live', async () => {
     const { service, prisma } = createService();
     arrangePigs(prisma);
@@ -1617,6 +1671,48 @@ describe('RiskQuizService chat', () => {
       messages: [],
     });
     expect(prisma.riskChatMessage.findMany).not.toHaveBeenCalled();
+  });
+
+  it('serves the feed with the room switched off, without the teams\' own lines', async () => {
+    const { service, prisma } = createService();
+    arrangeChat(prisma, { riskChatEnabled: false });
+    prisma.riskChatMessage.findMany.mockResolvedValue([
+      {
+        id: 'message-2',
+        authorKind: 'SYSTEM',
+        teamId: 'team-2',
+        authorName: 'System',
+        content: 'Orły zdobywa 10 pkt.',
+        systemEvent: 'card-scored',
+        payload: { teamName: 'Orły', points: 10, multiplier: 1 },
+        createdAt: new Date('2026-09-13T10:00:00Z'),
+        team: { color: 'red', badgeImageUrl: null },
+      },
+    ]);
+
+    const result = await service.listFeedEvents({ sessionToken: 'token' });
+
+    expect(result.currentTeamId).toBe(team.id);
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        id: 'message-2',
+        systemEvent: 'card-scored',
+        payload: { teamName: 'Orły', points: 10, multiplier: 1 },
+        teamColor: 'red',
+      }),
+    ]);
+    // Only what the game says — never a team's chat line.
+    expect(prisma.riskChatMessage.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          authorKind: { in: ['SYSTEM', 'GAME_MASTER'] },
+        }),
+      }),
+    );
+    // The derived events still get written even though the chat is off.
+    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ systemEvent: 'game-start', payload: {} }),
+    });
   });
 
   it('announces the leader once and stays quiet while it does not change', async () => {
@@ -1906,6 +2002,15 @@ describe('RiskQuizService photo review decisions', () => {
       // Nothing was paid out while it was pending, so the whole award lands now.
       data: { points: { increment: 30 } },
     });
+    // The frozen award already carries the streak bonus, so the feed shows the
+    // amount without a multiplier of its own.
+    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        systemEvent: 'card-scored',
+        dedupeKey: 'card-scored:attempt-1',
+        payload: expect.objectContaining({ points: 30, multiplier: 1 }),
+      }),
+    });
   });
 
   it('charges the flat penalty once when the Game Master rejects', async () => {
@@ -1928,6 +2033,7 @@ describe('RiskQuizService photo review decisions', () => {
       // -10, not -40: the frozen 30 was never on the team's account.
       data: { points: { increment: -10 } },
     });
+    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
   });
 
   it('still settles a decided attempt by the difference', async () => {

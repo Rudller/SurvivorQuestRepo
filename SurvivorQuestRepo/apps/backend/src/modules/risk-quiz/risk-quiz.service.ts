@@ -49,6 +49,7 @@ import {
   RISK_CHAT_HISTORY_LIMIT,
   RISK_CHAT_MESSAGE_MAX_LENGTH,
   RISK_CHAT_SYSTEM_EVENTS,
+  RISK_FEED_HISTORY_LIMIT,
   RISK_DIFFICULTY_POINTS,
   RISK_PIG_LABELS,
   RISK_PIG_TYPES,
@@ -1009,7 +1010,7 @@ export class RiskQuizService {
       ? Math.round(scoring.correct * multiplier)
       : scoring.incorrect;
 
-    await this.prisma.riskAttempt.create({
+    const attempt = await this.prisma.riskAttempt.create({
       data: {
         realizationId: realization.id,
         teamId: team.id,
@@ -1026,6 +1027,17 @@ export class RiskQuizService {
       where: { id: team.id },
       data: { points: { increment: pointsDelta } },
     });
+
+    if (isCorrect && pointsDelta > 0) {
+      await this.announceCardScored({
+        realizationId: realization.id,
+        teamId: team.id,
+        attemptId: attempt.id,
+        teamName: resolveRiskTeamDisplayName(team),
+        points: pointsDelta,
+        multiplier,
+      });
+    }
 
     return {
       isCorrect,
@@ -1141,6 +1153,24 @@ export class RiskQuizService {
     return this.readRoom(realization, input.afterId, null);
   }
 
+  /**
+   * The event feed the tablet shows under its top bar: the room minus the
+   * teams' own lines. Independent of `riskChatEnabled` — that switch is about
+   * whether teams get a chat, not whether they get to see what is happening in
+   * the game — so the system messages are brought up to date here as well.
+   */
+  async listFeedEvents(input: { sessionToken: string; afterId?: string }) {
+    const { team, realization } = await this.requireTeamSession(
+      input.sessionToken,
+    );
+    await this.syncSystemMessages(realization.id);
+    const events = await this.readMessages(realization.id, input.afterId, {
+      authorKinds: [RiskChatAuthorKind.SYSTEM, RiskChatAuthorKind.GAME_MASTER],
+      limit: RISK_FEED_HISTORY_LIMIT,
+    });
+    return { currentTeamId: team.id, events };
+  }
+
   async postTeamChatMessage(input: { sessionToken: string; content: string }) {
     const { team, realization } = await this.requireTeamSession(
       input.sessionToken,
@@ -1207,48 +1237,77 @@ export class RiskQuizService {
 
     await this.syncSystemMessages(realization.id);
 
+    return {
+      enabled: true as const,
+      canPost: realization.riskChatTeamsCanPost,
+      currentTeamId,
+      messages: await this.readMessages(realization.id, afterId, {
+        limit: RISK_CHAT_HISTORY_LIMIT,
+      }),
+    };
+  }
+
+  private async readMessages(
+    realizationId: string,
+    afterId: string | undefined,
+    options: { authorKinds?: RiskChatAuthorKind[]; limit: number },
+  ) {
     const after = afterId
       ? await this.prisma.riskChatMessage.findUnique({
           where: { id: afterId },
           select: { createdAt: true },
         })
       : null;
+    const authorFilter = options.authorKinds
+      ? { authorKind: { in: options.authorKinds } }
+      : {};
 
     // Ordered oldest-first when returned, but the cold-open tail has to be taken
     // from the newest end — hence the descending fetch and the reverse below.
     const rows = after
       ? await this.prisma.riskChatMessage.findMany({
           where: {
-            realizationId: realization.id,
+            realizationId,
             createdAt: { gt: after.createdAt },
+            ...authorFilter,
           },
           orderBy: { createdAt: 'asc' },
           include: { team: { select: { color: true, badgeImageUrl: true } } },
         })
       : (
           await this.prisma.riskChatMessage.findMany({
-            where: { realizationId: realization.id },
+            where: { realizationId, ...authorFilter },
             orderBy: { createdAt: 'desc' },
-            take: RISK_CHAT_HISTORY_LIMIT,
+            take: options.limit,
             include: { team: { select: { color: true, badgeImageUrl: true } } },
           })
         ).reverse();
 
+    return rows.map((row) => this.mapMessageRow(row));
+  }
+
+  private mapMessageRow(row: {
+    id: string;
+    authorKind: RiskChatAuthorKind;
+    teamId: string | null;
+    authorName: string;
+    content: string;
+    systemEvent: string | null;
+    payload: Prisma.JsonValue | null;
+    createdAt: Date;
+    team: { color: string | null; badgeImageUrl: string | null } | null;
+  }) {
     return {
-      enabled: true as const,
-      canPost: realization.riskChatTeamsCanPost,
-      currentTeamId,
-      messages: rows.map((row) => ({
-        id: row.id,
-        authorKind: row.authorKind,
-        teamId: row.teamId,
-        authorName: row.authorName,
-        content: row.content,
-        systemEvent: row.systemEvent,
-        teamColor: row.team?.color ?? null,
-        teamBadgeImageUrl: row.team?.badgeImageUrl ?? null,
-        createdAt: row.createdAt.toISOString(),
-      })),
+      id: row.id,
+      authorKind: row.authorKind,
+      teamId: row.teamId,
+      authorName: row.authorName,
+      content: row.content,
+      systemEvent: row.systemEvent,
+      payload: row.payload ?? null,
+      teamColor: row.team?.color ?? null,
+      teamBadgeImageUrl: row.team?.badgeImageUrl ?? null,
+      createdAt: row.createdAt.toISOString(),
     };
   }
 
@@ -1280,17 +1339,7 @@ export class RiskQuizService {
       data,
       include: { team: { select: { color: true, badgeImageUrl: true } } },
     });
-    return {
-      id: row.id,
-      authorKind: row.authorKind,
-      teamId: row.teamId,
-      authorName: row.authorName,
-      content: row.content,
-      systemEvent: row.systemEvent,
-      teamColor: row.team?.color ?? null,
-      teamBadgeImageUrl: row.team?.badgeImageUrl ?? null,
-      createdAt: row.createdAt.toISOString(),
-    };
+    return this.mapMessageRow(row);
   }
 
   /**
@@ -1308,6 +1357,9 @@ export class RiskQuizService {
     systemEvent: string;
     dedupeKey: string;
     content: string;
+    // The facts the tablet words the event from in its own language; `content`
+    // is the Polish rendering for the admin panel and older clients.
+    payload: Prisma.InputJsonObject;
   }) {
     try {
       await this.prisma.riskChatMessage.create({
@@ -1318,6 +1370,7 @@ export class RiskQuizService {
           authorName: 'System',
           content: input.content,
           systemEvent: input.systemEvent,
+          payload: input.payload,
           dedupeKey: input.dedupeKey,
         },
       });
@@ -1348,6 +1401,31 @@ export class RiskQuizService {
       systemEvent: RISK_CHAT_SYSTEM_EVENTS.deckExhausted,
       dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.deckExhausted}:${input.teamId}:${input.categoryId}:${input.difficulty}`,
       content: `${input.teamName} wyczerpała karty w kategorii „${input.categoryName}”.`,
+      payload: { teamName: input.teamName, categoryName: input.categoryName },
+    });
+  }
+
+  // Keyed on the attempt, not the moment: a retried request or a second poll
+  // landing on the same attempt must not pay the announcement out twice.
+  private async announceCardScored(input: {
+    realizationId: string;
+    teamId: string;
+    attemptId: string;
+    teamName: string;
+    points: number;
+    multiplier: number;
+  }) {
+    await this.announceSystemMessage({
+      realizationId: input.realizationId,
+      teamId: input.teamId,
+      systemEvent: RISK_CHAT_SYSTEM_EVENTS.cardScored,
+      dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.cardScored}:${input.attemptId}`,
+      content: `${input.teamName} zdobywa ${input.points} pkt${input.multiplier > 1 ? ` (x${input.multiplier})` : ''}.`,
+      payload: {
+        teamName: input.teamName,
+        points: input.points,
+        multiplier: input.multiplier,
+      },
     });
   }
 
@@ -1372,6 +1450,7 @@ export class RiskQuizService {
         systemEvent: RISK_CHAT_SYSTEM_EVENTS.gameStart,
         dedupeKey: RISK_CHAT_SYSTEM_EVENTS.gameStart,
         content: 'Gra rozpoczęta. Powodzenia!',
+        payload: {},
       });
     }
 
@@ -1388,6 +1467,7 @@ export class RiskQuizService {
         systemEvent: RISK_CHAT_SYSTEM_EVENTS.gameEnd,
         dedupeKey: RISK_CHAT_SYSTEM_EVENTS.gameEnd,
         content: 'Koniec gry. Dziękujemy za grę!',
+        payload: {},
       });
     }
 
@@ -1428,6 +1508,7 @@ export class RiskQuizService {
       // again, while a repeated poll at the same score stays silent.
       dedupeKey: `${RISK_CHAT_SYSTEM_EVENTS.leadChange}:${leader.id}:${leader.points}`,
       content: `${leaderName} wychodzi na prowadzenie (${leader.points} pkt).`,
+      payload: { teamName: leaderName, points: leader.points },
     });
   }
 
@@ -1728,6 +1809,11 @@ export class RiskQuizService {
       content: input.showThrowerName
         ? `${input.fromName} rzuca świnię „${RISK_PIG_LABELS[input.type]}” w drużynę ${input.targetName}!`
         : `Ktoś rzuca świnię „${RISK_PIG_LABELS[input.type]}” w drużynę ${input.targetName}!`,
+      payload: {
+        fromName: input.showThrowerName ? input.fromName : null,
+        targetName: input.targetName,
+        pigType: input.type,
+      },
     });
   }
 
@@ -2635,7 +2721,7 @@ export class RiskQuizService {
         : RISK_DIFFICULTY_POINTS[poolStation.difficulty].correct
       : RISK_DIFFICULTY_POINTS[poolStation.difficulty].incorrect;
 
-    const updatedTeam = existingAttempt
+    const { attemptId, updatedTeam } = existingAttempt
       ? await this.applyCardOutcomeUpdate(
           existingAttempt,
           isCorrect,
@@ -2650,6 +2736,19 @@ export class RiskQuizService {
           isCorrect,
           pointsDelta,
         );
+
+    // Multiplier 1 even for an approved review: whatever streak bonus applied
+    // is already folded into the frozen pointsDelta and is not recoverable here.
+    if (isCorrect && pointsDelta > 0) {
+      await this.announceCardScored({
+        realizationId: realization.id,
+        teamId,
+        attemptId,
+        teamName: resolveRiskTeamDisplayName(team),
+        points: pointsDelta,
+        multiplier: 1,
+      });
+    }
 
     return {
       teamId,
@@ -2685,7 +2784,7 @@ export class RiskQuizService {
         data: { points: { increment: pointsAdjustment } },
       }),
     ]);
-    return updatedTeam;
+    return { attemptId: existingAttempt.id, updatedTeam };
   }
 
   private async applyCardOutcomeCreate(
@@ -2710,7 +2809,7 @@ export class RiskQuizService {
       );
     }
 
-    const [, updatedTeam] = await this.prisma.$transaction([
+    const [attempt, updatedTeam] = await this.prisma.$transaction([
       this.prisma.riskAttempt.create({
         data: {
           realizationId,
@@ -2726,7 +2825,7 @@ export class RiskQuizService {
         data: { points: { increment: pointsDelta } },
       }),
     ]);
-    return updatedTeam;
+    return { attemptId: attempt.id, updatedTeam };
   }
 
   async adminCompleteCard(

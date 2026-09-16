@@ -634,6 +634,11 @@ model RiskChatMessage {
   // message, kept separate from `content` so the wording can later move to the
   // client for translation without a migration.
   systemEvent   String?
+  // Structured facts behind a system message (team name, points, pig type…),
+  // null for anything a human wrote. The tablet builds its own wording from
+  // this in the realization's language; `content` stays the Polish fallback
+  // and what the admin panel shows.
+  payload       Json?
   // Idempotency key for system messages, null for human ones. Several tablets
   // poll at once and each poll re-derives the same events, so the unique index
   // below is what makes "insert and swallow the conflict" safe — no locking.

@@ -18,6 +18,7 @@ function message(overrides: Partial<RiskChatMessage> = {}): RiskChatMessage {
     authorName: "Lisy",
     content: "Idziemy po historię!",
     systemEvent: null,
+    payload: null,
     teamColor: "#ef4444",
     teamBadgeImageUrl: null,
     createdAt: "2026-08-30T10:05:00.000Z",

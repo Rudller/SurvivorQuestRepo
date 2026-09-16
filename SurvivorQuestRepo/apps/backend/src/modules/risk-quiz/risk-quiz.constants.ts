@@ -100,6 +100,11 @@ export const RISK_CHAT_MESSAGE_MAX_LENGTH = 500;
 // only bounds the cold start.
 export const RISK_CHAT_HISTORY_LIMIT = 50;
 
+// Cold-start depth of the event feed the tablet shows under its top bar. It
+// renders a handful of lines, so this only needs to cover what a tablet that
+// joins late should catch up on.
+export const RISK_FEED_HISTORY_LIMIT = 20;
+
 // Event codes carried in RiskChatMessage.systemEvent. The wording lives in
 // buildSystemMessageContent for now; keeping the code separate is what lets the
 // text move to the client for translation later without touching stored rows.
@@ -109,6 +114,7 @@ export const RISK_CHAT_SYSTEM_EVENTS = {
   leadChange: 'lead-change',
   deckExhausted: 'deck-exhausted',
   pigThrown: 'pig-thrown',
+  cardScored: 'card-scored',
 } as const;
 
 // Shown in place of a team name when a team was removed or never named.

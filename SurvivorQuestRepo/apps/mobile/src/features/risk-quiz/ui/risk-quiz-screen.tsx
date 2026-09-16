@@ -23,13 +23,12 @@ import {
   postRiskQuizPhotoTask,
 } from "../../expedition-stage/api/mobile-session.api";
 import {
-  fetchRiskQuizChat,
   fetchRiskQuizDeckStatus,
+  fetchRiskQuizEvents,
   fetchRiskQuizPigs,
   fetchRiskQuizPendingDraw,
   fetchRiskQuizTestMenu,
   postRiskQuizAnswer,
-  postRiskQuizChatMessage,
   postRiskQuizPigThrow,
   postRiskQuizReviewedAnswer,
   postRiskQuizScan,
@@ -47,7 +46,7 @@ import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { PauseIcon, PlayIcon } from "../components/risk-quiz-icons";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
-import { RiskQuizChatDock } from "../components/risk-quiz-chat-dock";
+import { RiskQuizEventFeed } from "../components/risk-quiz-event-feed";
 import {
   RiskQuizPigBanner,
   RiskQuizPigButton,
@@ -194,11 +193,14 @@ const START_POLL_INTERVAL_MS = 3000;
 // the admin panel) while idle on the scan screen — see the polling effect
 // below.
 const IDLE_POLL_INTERVAL_MS = 4000;
-// The chat has its own interval on purpose: the idle poll above is gated off
-// during the intro and while the scanner is open, and a room that goes quiet
-// exactly when somebody is scanning is worse than a slightly slower one.
-const CHAT_POLL_INTERVAL_MS = 5000;
-// Pigs ride their own interval for the same reason the chat does: an effect has
+// The event feed has its own interval on purpose: the idle poll above is gated
+// off during the intro and while the scanner is open, and a feed that goes
+// quiet exactly when somebody is scanning is worse than a slightly slower one.
+const FEED_POLL_INTERVAL_MS = 5000;
+// The feed shows three lines; this is how many it keeps behind them so the
+// list never grows for the length of a game.
+const FEED_HISTORY_LIMIT = 20;
+// Pigs ride their own interval for the same reason the feed does: an effect has
 // to land whether or not the team is mid-card, and the idle poll is gated off
 // during the intro and while the scanner is open.
 const PIG_POLL_INTERVAL_MS = 5000;
@@ -209,7 +211,7 @@ const DECK_STATUS_RETRY_MAX_MS = 10000;
 // These polls stay silent on screen on purpose — a team mid-game must not be
 // shown a network error every five seconds. They must not be silent in the log
 // too, though: a tablet that comes back from a reload without its card count,
-// chat or pigs left nothing behind to explain why.
+// feed or pigs left nothing behind to explain why.
 function logRiskQuizPollFailure(source: string, error: unknown, apiBaseUrl: string) {
   console.error(`[RiskQuiz] ${source} poll failed`, error, {
     apiBaseUrl: apiBaseUrl || "(brak)",
@@ -288,25 +290,16 @@ export function RiskQuizScreen({
   const [liveTeam, setLiveTeam] = useState<LiveTeamInfo | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isScannerVisible, setIsScannerVisible] = useState(false);
-  const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [pigState, setPigState] = useState<RiskPigState | null>(null);
   const [isPigPickerOpen, setIsPigPickerOpen] = useState(false);
   const [isThrowingPig, setIsThrowingPig] = useState(false);
   const [pigError, setPigError] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<RiskChatMessage[]>([]);
-  const [chatEnabled, setChatEnabled] = useState(false);
-  const [chatCanPost, setChatCanPost] = useState(false);
-  const [chatTeamId, setChatTeamId] = useState<string | null>(null);
-  const [chatDraft, setChatDraft] = useState("");
-  const [isSendingChat, setIsSendingChat] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  // Id of the newest message the team has actually seen. Everything after it in
-  // chatMessages is what the unread badge counts.
-  const [lastReadChatId, setLastReadChatId] = useState<string | null>(null);
-  // The poll reads the newest id without re-subscribing every time a message
-  // lands, which an effect dependency on chatMessages would force.
-  const chatMessagesRef = useRef<RiskChatMessage[]>([]);
-  chatMessagesRef.current = chatMessages;
+  const [feedEvents, setFeedEvents] = useState<RiskChatMessage[]>([]);
+  const [feedTeamId, setFeedTeamId] = useState<string | null>(null);
+  // The poll reads the newest id without re-subscribing every time an event
+  // lands, which an effect dependency on feedEvents would force.
+  const feedEventsRef = useRef<RiskChatMessage[]>([]);
+  feedEventsRef.current = feedEvents;
   const [isResolvingScan, setIsResolvingScan] = useState(false);
   const [exhaustedNotice, setExhaustedNotice] = useState<{ categoryName: string } | null>(null);
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
@@ -929,9 +922,9 @@ export function RiskQuizScreen({
     }
   }
 
-  // The room polls on its own interval, unaffected by whether a card is open or
-  // the scanner is up. Only new messages come back — `afterId` is the newest id
-  // already held — so a long game does not re-download its own history.
+  // The event feed polls on its own interval, unaffected by whether a card is
+  // open or the scanner is up. Only new events come back — `afterId` is the
+  // newest id already held — so a long game does not re-download its history.
   useEffect(() => {
     if (showIntro) {
       return;
@@ -940,30 +933,28 @@ export function RiskQuizScreen({
     let cancelled = false;
     let inFlight = false;
 
-    const pollChat = async () => {
+    const pollFeed = async () => {
       if (inFlight) {
         return;
       }
       inFlight = true;
       try {
-        const newestId = chatMessagesRef.current.at(-1)?.id;
-        const result = await fetchRiskQuizChat(apiBaseUrl, {
+        const newestId = feedEventsRef.current.at(-1)?.id;
+        const result = await fetchRiskQuizEvents(apiBaseUrl, {
           sessionToken,
           afterId: newestId,
         });
         if (cancelled) {
           return;
         }
-        setChatEnabled(result.enabled);
-        setChatCanPost(result.canPost);
-        setChatTeamId(result.currentTeamId);
-        if (result.messages.length > 0) {
-          setChatMessages((previous) =>
-            newestId ? [...previous, ...result.messages] : result.messages,
+        setFeedTeamId(result.currentTeamId);
+        if (result.events.length > 0) {
+          setFeedEvents((previous) =>
+            (newestId ? [...previous, ...result.events] : result.events).slice(-FEED_HISTORY_LIMIT),
           );
         }
       } catch (error) {
-        logRiskQuizPollFailure("chat", error, apiBaseUrl);
+        logRiskQuizPollFailure("events", error, apiBaseUrl);
         if (getMobileApiErrorStatusCode(error) === 401) {
           handleSessionInvalid();
         }
@@ -973,8 +964,8 @@ export function RiskQuizScreen({
       }
     };
 
-    void pollChat();
-    const interval = setInterval(() => void pollChat(), CHAT_POLL_INTERVAL_MS);
+    void pollFeed();
+    const interval = setInterval(() => void pollFeed(), FEED_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
@@ -1036,34 +1027,6 @@ export function RiskQuizScreen({
     return () => clearInterval(interval);
   }, [hasIncomingPig]);
 
-  // Expanding the dock marks everything currently in it as read. The collapsed
-  // strip only previews the newest line, so it does not count as having read
-  // the backlog behind it.
-  useEffect(() => {
-    if (!isChatExpanded) {
-      return;
-    }
-    setLastReadChatId(chatMessages.at(-1)?.id ?? null);
-  }, [isChatExpanded, chatMessages]);
-
-  // Drawing a card collapses the room: the dock is hidden for the duration of
-  // the task, and leaving it expanded would spring it back open on close.
-  useEffect(() => {
-    if (activeDraw) {
-      setIsChatExpanded(false);
-    }
-  }, [activeDraw]);
-
-  // Everything after the last message the team saw. Recomputed from the list
-  // rather than tracked as a counter, so it cannot drift out of step with it.
-  const unreadChatCount = (() => {
-    if (!lastReadChatId) {
-      return chatMessages.length;
-    }
-    const lastReadIndex = chatMessages.findIndex((item) => item.id === lastReadChatId);
-    return lastReadIndex < 0 ? chatMessages.length : chatMessages.length - lastReadIndex - 1;
-  })();
-
   async function throwPig(targetTeamId?: string) {
     if (isThrowingPig) {
       return;
@@ -1088,43 +1051,6 @@ export function RiskQuizScreen({
       );
     } finally {
       setIsThrowingPig(false);
-    }
-  }
-
-  async function sendChatMessage() {
-    const content = chatDraft.trim();
-    if (!content || isSendingChat || !chatCanPost) {
-      return;
-    }
-
-    setChatError(null);
-    setIsSendingChat(true);
-    try {
-      const message = await postRiskQuizChatMessage(apiBaseUrl, {
-        sessionToken,
-        content,
-      });
-      setChatDraft("");
-      // Show it straight away rather than waiting up to 5s for the next poll.
-      // The poll asks for messages after the newest id, so it will not arrive
-      // a second time — which is exactly why the response has to be stored as
-      // sent, colour included. Blanking those fields here left every message a
-      // team wrote about itself permanently uncoloured.
-      setChatMessages((previous) =>
-        previous.some((item) => item.id === message.id)
-          ? previous
-          : [...previous, message],
-      );
-    } catch (error) {
-      if (getMobileApiErrorStatusCode(error) === 401) {
-        onSessionInvalid();
-        return;
-      }
-      setChatError(
-        describeRiskQuizError(error, riskQuizText.errors.sendChat, riskQuizText.errors),
-      );
-    } finally {
-      setIsSendingChat(false);
     }
   }
 
@@ -1321,6 +1247,11 @@ export function RiskQuizScreen({
             cornerStyle="chamfered"
           />
         </Pressable>
+
+        {/* Hidden while a card is open: the task gets the screen to itself and
+            the countdown floats exactly here. The poll keeps running, so the
+            feed is current again the moment the card closes. */}
+        {!activeDraw ? <RiskQuizEventFeed events={feedEvents} currentTeamId={feedTeamId} /> : null}
 
         {remainingTaskSeconds !== null ? (
           <Animated.View
@@ -1556,10 +1487,9 @@ export function RiskQuizScreen({
           ) : null}
         </ScrollView>
 
-        {/* The keyboard gate used to wrap this whole column, which meant raising
-            the keyboard unmounted the chat dock mid-message. It now sits on the
-            two children that genuinely have to yield room, so the dock survives
-            typing and simply expands into the space they free up. */}
+        {/* The keyboard gate sits on the two children that genuinely have to
+            yield room rather than on the whole column, so anything else placed
+            here survives the keyboard. */}
         <View className="w-full items-center" style={{ rowGap: 14 }}>
           {keyboardHeight === 0 && !activeDraw ? (
               // Mirror image of the card's own reveal: same fade, same slide,
@@ -1586,30 +1516,6 @@ export function RiskQuizScreen({
                 <RiskQuizHowToPlay />
               </Animated.View>
             ) : null}
-          {/* Hidden while a card is open: the task gets the screen to itself.
-              The poll keeps running underneath, so whatever arrived meanwhile
-              is waiting on the strip — with an unread count — once the card is
-              closed. */}
-          {chatEnabled && !activeDraw ? (
-            <RiskQuizChatDock
-              messages={chatMessages}
-              draft={chatDraft}
-              canPost={chatCanPost}
-              isSending={isSendingChat}
-              errorMessage={chatError}
-              currentTeamId={chatTeamId}
-              isExpanded={isChatExpanded}
-              unreadCount={unreadChatCount}
-              keyboardHeight={keyboardHeight}
-              onToggleExpanded={() => setIsChatExpanded((previous) => !previous)}
-              onChangeDraft={(value) => {
-                setChatDraft(value);
-                setChatError(null);
-              }}
-              onSend={() => void sendChatMessage()}
-            />
-          ) : null}
-
           {keyboardHeight === 0 ? (
             <View className="w-full items-center" style={{ position: "relative" }}>
               <View

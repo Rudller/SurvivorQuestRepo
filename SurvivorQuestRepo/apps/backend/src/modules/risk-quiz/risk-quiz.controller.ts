@@ -183,6 +183,16 @@ export class RiskQuizController {
     });
   }
 
+  @Post('events')
+  @Throttle(RISK_QUIZ_POLL_THROTTLE)
+  async listFeedEvents(@Body() rawPayload: unknown) {
+    const payload = requirePayload(rawPayload);
+    return this.riskQuizService.listFeedEvents({
+      sessionToken: requireString(payload, 'sessionToken'),
+      afterId: optionalString(payload, 'afterId'),
+    });
+  }
+
   @Post('pigs')
   @Throttle(RISK_QUIZ_POLL_THROTTLE)
   async getPigState(@Body() rawPayload: unknown) {
