@@ -31,6 +31,10 @@ import { shouldShowGameRulesPopup } from "../features/onboarding/model/game-rule
 import { resolveSessionApiBaseUrl } from "../shared/api/api-base-url";
 import { applyLiveIntroText } from "../features/onboarding/model/waiting-session";
 import { resolveStartCountdown } from "../features/onboarding/model/start-countdown";
+import {
+  resolveRealizationMode,
+  resolveThemeFamily,
+} from "../features/onboarding/model/realization-mode";
 import { StartCountdownPanel } from "../features/risk-quiz/components/start-countdown-panel";
 import { RyzykanciLogoHeader } from "../features/risk-quiz/components/ryzykanci-logo-header";
 import {
@@ -435,10 +439,9 @@ export function MobileApp() {
   // other realization keeps the green expedition one. The family is global state
   // rather than a prop because station panels, the QR scanner and the top bar are
   // shared between both screens and read colours straight off EXPEDITION_THEME.
-  const activeThemeFamily: ExpeditionThemeFamily =
-    onboardingSession?.realization?.type === "risk-quiz" || isOnboardingRiskStyling
-      ? "risk"
-      : "expedition";
+  const activeThemeFamily: ExpeditionThemeFamily = isOnboardingRiskStyling
+    ? "risk"
+    : resolveThemeFamily(onboardingSession?.realization);
   setExpeditionThemeMode(activeThemeMode, activeThemeFamily);
   const activeThemePalette = getExpeditionThemePalette(activeThemeMode, activeThemeFamily);
   const uiLanguage = resolveUiLanguage(
@@ -722,7 +725,7 @@ export function MobileApp() {
           // goes straight in, as does a device that arrives after the count has
           // already run out.
           const countdownMs =
-            onboardingSession.realization?.type === "risk-quiz"
+            resolveRealizationMode(onboardingSession.realization) === "risk-quiz"
               ? (nextState.realization.startsInMs ?? 0)
               : 0;
 
@@ -885,7 +888,8 @@ export function MobileApp() {
           ];
     const hasMultipleWaitingLanguageOptions = waitingAvailableLanguageOptions.length > 1;
     const waitingLanguageFlag = getRealizationLanguageFlag(waitingSelectedLanguage);
-    const isRiskQuizWaiting = onboardingSession.realization?.type === "risk-quiz";
+    const isRiskQuizWaiting =
+      resolveRealizationMode(onboardingSession.realization) === "risk-quiz";
     const waitingCountdownState = startCountdown
       ? resolveStartCountdown(startCountdown.remainingMs, countdownElapsedMs)
       : null;
@@ -1039,7 +1043,8 @@ export function MobileApp() {
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
-          {onboardingSession && onboardingSession.realization?.type === "risk-quiz" ? (
+          {onboardingSession &&
+          resolveRealizationMode(onboardingSession.realization) === "risk-quiz" ? (
             <RiskQuizScreen
               session={onboardingSession}
               onSessionInvalid={(reason) => {
