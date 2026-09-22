@@ -1527,8 +1527,17 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       setScenarioStations(mapScenarioStations(nextScenarioId));
                       const nextScenario = scenarioById.get(nextScenarioId);
                       if (nextScenario) {
-                        setIntroText(nextScenario.introText ?? "");
-                        setGameRules(nextScenario.gameRules ?? "");
+                        // Scenariusz bez własnego tekstu nie kasuje tego, co już
+                        // stoi w polu. Inaczej wybór oprawy kryminalnej przed
+                        // scenariuszem — czyli w naturalnej kolejności klikania —
+                        // po cichu wyrzucał podstawiony briefing. Ryzykantów to
+                        // nie dotyczyło, bo oni nie mają scenariusza.
+                        if (nextScenario.introText?.trim()) {
+                          setIntroText(nextScenario.introText);
+                        }
+                        if (nextScenario.gameRules?.trim()) {
+                          setGameRules(nextScenario.gameRules);
+                        }
                         setTranslations({});
                       }
                     }}
@@ -1808,6 +1817,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </p>
                   <p>
                     <span className="text-zinc-500">Drużyny:</span> {teamCount}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Oprawa:</span>{" "}
+                    {isRiskQuizType
+                      ? "Ryzykanci (własna)"
+                      : realizationThemePackOptions.find((option) => option.value === selectedThemePack)?.label ?? "-"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Scenariusz:</span> {selectedScenario?.name ?? "-"}
