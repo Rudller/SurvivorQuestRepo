@@ -15,6 +15,12 @@ export type RealizationType =
   | 'dj'
   | 'recreation'
   | 'risk-quiz';
+
+/**
+ * Oprawa graficzna i fabularna — oś niezależna od RealizationType, który
+ * pozostaje kategorią biznesową. Patrz komentarz przy enumie w schema.prisma.
+ */
+export type RealizationThemePack = 'standard' | 'crime';
 export type RealizationLanguage =
   | 'polish'
   | 'english'
@@ -54,6 +60,7 @@ export type RealizationEntity = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;
@@ -143,6 +150,7 @@ export type ValidatedRealizationPayload = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;

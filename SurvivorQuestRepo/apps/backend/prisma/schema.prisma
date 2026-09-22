@@ -71,6 +71,18 @@ enum RealizationType {
   RISK_QUIZ
 }
 
+// Oprawa graficzna i fabularna realizacji — oś NIEZALEŻNA od RealizationType.
+//
+// RealizationType to kategoria biznesowa (gry terenowe, hotelowe, warsztaty…).
+// Wariant kryminalny może być zarówno grą terenową, jak i hotelową, więc
+// wciśnięty do tamtej listy stałby się z nimi wykluczający — to byłby błąd
+// modelowania, nie tylko bałagan. Mechanika zostaje ta sama co w ekspedycji:
+// mapa i stanowiska. Zmienia się paleta i treści.
+enum RealizationThemePack {
+  STANDARD
+  CRIME
+}
+
 enum RiskDifficulty {
   EASY
   MEDIUM
@@ -225,6 +237,7 @@ model Realization {
   instructors         Json?
   notes               String?
   type                RealizationType
+  themePack           RealizationThemePack @default(STANDARD)
   logoUrl             String?
   hideMap             Boolean            @default(false)
   mapImageUrl         String?

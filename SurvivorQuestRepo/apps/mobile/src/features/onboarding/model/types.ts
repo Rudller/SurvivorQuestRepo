@@ -129,6 +129,7 @@ export type OnboardingRealizationSummary = {
   id: string;
   companyName: string;
   type?: string;
+  themePack?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
   selectedLanguage?: RealizationLanguage;

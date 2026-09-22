@@ -1,5 +1,6 @@
 import {
   parseRealizationType,
+  parseThemePack,
   resolveRealizationMode,
   resolveThemeFamily,
 } from "./realization-mode";
@@ -58,11 +59,49 @@ describe("resolveRealizationMode", () => {
   });
 });
 
+describe("parseThemePack", () => {
+  it("accepts the packs the backend defines", () => {
+    expect(parseThemePack("standard")).toBe("standard");
+    expect(parseThemePack("crime")).toBe("crime");
+    expect(parseThemePack("  crime  ")).toBe("crime");
+  });
+
+  it.each([
+    ["unknown pack", "noir"],
+    ["wrong case", "CRIME"],
+    ["missing", undefined],
+    ["null", null],
+  ])("falls back to standard for %s", (_label, raw) => {
+    // An unknown pack must look like an ordinary realization, not break one.
+    expect(parseThemePack(raw)).toBe("standard");
+  });
+});
+
 describe("resolveThemeFamily", () => {
   it("dresses risk-quiz in its own palette and everything else in the expedition one", () => {
     expect(resolveThemeFamily({ type: "risk-quiz" })).toBe("risk");
     expect(resolveThemeFamily({ type: "outdoor-games" })).toBe("expedition");
     expect(resolveThemeFamily(undefined)).toBe("expedition");
+  });
+
+  it("dresses a crime theme pack in the noir palette while keeping the expedition engine", () => {
+    const crimeRealization = { type: "outdoor-games", themePack: "crime" };
+
+    expect(resolveThemeFamily(crimeRealization)).toBe("crime");
+    // The whole point: different dress, same engine.
+    expect(resolveRealizationMode(crimeRealization)).toBe("expedition");
+  });
+
+  it("lets a crime pack ride on any business category", () => {
+    // A crime story can be sold as an outdoor game or a hotel game alike —
+    // which is exactly why the pack is not a value of the type enum.
+    expect(resolveThemeFamily({ type: "outdoor-games", themePack: "crime" })).toBe("crime");
+    expect(resolveThemeFamily({ type: "hotel-games", themePack: "crime" })).toBe("crime");
+  });
+
+  it("keeps the Ryzykanci palette even if a theme pack is set", () => {
+    // Their navy/gold is part of the card-table mechanic, not a selectable skin.
+    expect(resolveThemeFamily({ type: "risk-quiz", themePack: "crime" })).toBe("risk");
   });
 
   it("is a separate decision from which engine runs", () => {

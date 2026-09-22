@@ -32,9 +32,11 @@ export type ExpeditionThemeMode = "dark" | "light";
 
 // Which palette set a screen draws from. "expedition" is the green field-journal
 // look every regular realization uses; "risk" is the navy/gold card-table look
-// reserved for risk-quiz ("Ryzykanci") realizations. Both families carry a full
+// reserved for risk-quiz ("Ryzykanci") realizations; "crime" is the noir
+// case-file look for realizations carrying the crime theme pack — same map and
+// station mechanics as expedition, different dress. Every family carries a full
 // dark and light variant, so the user's theme toggle keeps working either way.
-export type ExpeditionThemeFamily = "expedition" | "risk";
+export type ExpeditionThemeFamily = "expedition" | "risk" | "crime";
 
 const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   background: "#0f1914",
@@ -120,6 +122,53 @@ const RISK_THEME_LIGHT: ExpeditionThemePalette = {
   scrimAbyssRgb: "3, 8, 12",
 };
 
+// Kryminał: przygaszony atrament zamiast zieleni, akcent w kolorze pieczęci na
+// aktach sprawy. Świadomie dalej i od zieleni ekspedycji, i od granatu ze
+// złotem u Ryzykantów — na tablecie w terenie rodzina motywu jest pierwszą
+// rzeczą, po której poznaje się, w co się gra.
+const CRIME_THEME_DARK: ExpeditionThemePalette = {
+  background: "#14100f",
+  mapLine: "#332825",
+  mapNode: "#4a3a35",
+  panel: "rgba(28, 22, 21, 0.92)",
+  panelMuted: "rgba(22, 17, 16, 0.94)",
+  panelStrong: "rgba(40, 31, 29, 0.92)",
+  border: "#7a4740",
+  accent: "#b4413a",
+  accentStrong: "#cf5a4e",
+  textPrimary: "#ece7e1",
+  textMuted: "#b3a79f",
+  textSubtle: "#8a7d75",
+  danger: "#ef6f6c",
+  success: "#34d399",
+  scrimWashRgb: "20, 16, 15",
+  scrimDeepRgb: "14, 11, 10",
+  scrimAbyssRgb: "7, 5, 5",
+};
+
+// Wariant jasny idzie w papier teczki na akta. Akcent schodzi niżej niż w
+// ciemnym, bo czerwień z ciemnego wariantu na jasnym tle nie niesie kontrastu
+// tekstowego — ta sama zasada, co przy złocie Ryzykantów.
+const CRIME_THEME_LIGHT: ExpeditionThemePalette = {
+  background: "#ece5d8",
+  mapLine: "#b5a893",
+  mapNode: "#94876f",
+  panel: "rgba(250, 246, 238, 0.96)",
+  panelMuted: "rgba(242, 236, 225, 0.98)",
+  panelStrong: "rgba(231, 223, 209, 0.98)",
+  border: "#a9705f",
+  accent: "#8f2f28",
+  accentStrong: "#71231d",
+  textPrimary: "#14100f",
+  textMuted: "#4a403a",
+  textSubtle: "#6b5f57",
+  danger: "#ae5954",
+  success: "#1f7a53",
+  scrimWashRgb: "20, 16, 15",
+  scrimDeepRgb: "14, 11, 10",
+  scrimAbyssRgb: "7, 5, 5",
+};
+
 const EXPEDITION_THEMES: Record<ExpeditionThemeFamily, Record<ExpeditionThemeMode, ExpeditionThemePalette>> = {
   expedition: {
     dark: EXPEDITION_THEME_DARK,
@@ -128,6 +177,10 @@ const EXPEDITION_THEMES: Record<ExpeditionThemeFamily, Record<ExpeditionThemeMod
   risk: {
     dark: RISK_THEME_DARK,
     light: RISK_THEME_LIGHT,
+  },
+  crime: {
+    dark: CRIME_THEME_DARK,
+    light: CRIME_THEME_LIGHT,
   },
 };
 

@@ -587,6 +587,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       hideMap: asBoolean(realization.hideMap ?? realization.hide_map),
       mapImageUrl: asString(realization.mapImageUrl ?? realization.map_image_url) || undefined,
       type: asString(realization.type) || undefined,
+      themePack: asString(realization.themePack ?? realization.theme_pack) || undefined,
       language: realizationLanguage,
       customLanguage: realizationCustomLanguage,
       selectedLanguage,

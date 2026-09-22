@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { RiskPigType } from '@prisma/client';
-import { REALIZATION_TYPE_VALUES } from '../mappers/realization.mapper';
+import {
+  REALIZATION_THEME_PACK_VALUES,
+  REALIZATION_TYPE_VALUES,
+} from '../mappers/realization.mapper';
 import type {
   PointsQrCodeDraftPayload,
   RealizationLanguage,
@@ -8,6 +11,7 @@ import type {
   RealizationStatus,
   RealizationTranslation,
   RealizationTranslations,
+  RealizationThemePack,
   RealizationType,
   ScenarioStationDraftPayload,
   ValidatedRealizationPayload,
@@ -92,6 +96,7 @@ export type CreateRealizationDto = {
   instructors?: unknown;
   notes?: string;
   type?: RealizationType;
+  themePack?: RealizationThemePack;
   logoUrl?: string;
   hideMap?: boolean;
   mapImageUrl?: string;
@@ -258,6 +263,17 @@ function isValidRealizationType(value: unknown): value is RealizationType {
     typeof value === 'string' &&
     REALIZATION_TYPES.includes(value as RealizationType)
   );
+}
+
+/**
+ * Oprawa jest opcjonalna w payloadzie: starszy klient, który jej nie wysyła,
+ * ma dostać standardową, a nie błąd walidacji.
+ */
+function resolveThemePack(value: unknown): RealizationThemePack {
+  return typeof value === 'string' &&
+    REALIZATION_THEME_PACK_VALUES.includes(value as RealizationThemePack)
+    ? (value as RealizationThemePack)
+    : 'standard';
 }
 
 function isValidRealizationStatus(value: unknown): value is RealizationStatus {
@@ -429,6 +445,7 @@ export function validateRealizationPayload(
     instructors,
     notes: notes || undefined,
     type: payload.type,
+    themePack: resolveThemePack(payload.themePack),
     logoUrl: payload.logoUrl?.trim() || undefined,
     hideMap: payload.hideMap === true,
     hideTaskList: payload.hideTaskList === true,

@@ -52,6 +52,7 @@ export type ExpeditionSessionState = {
     hideMap: boolean;
     mapImageUrl?: string;
     type?: string;
+    themePack?: string;
     language?: RealizationLanguage;
     customLanguage?: string;
     selectedLanguage?: RealizationLanguage;

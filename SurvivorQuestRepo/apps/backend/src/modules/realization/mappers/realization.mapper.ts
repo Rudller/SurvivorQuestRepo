@@ -2,6 +2,7 @@ import {
   Prisma,
   RealizationLanguage as PrismaRealizationLanguage,
   RealizationStatus as PrismaRealizationStatus,
+  RealizationThemePack as PrismaRealizationThemePack,
   RealizationType as PrismaRealizationType,
   RiskPigType,
 } from '@prisma/client';
@@ -12,6 +13,7 @@ import type {
   RealizationStatus,
   RealizationTranslation,
   RealizationTranslations,
+  RealizationThemePack,
   RealizationType,
 } from '../entities/realization.entity';
 
@@ -62,6 +64,34 @@ export function toPrismaRealizationType(
   type: RealizationType,
 ): PrismaRealizationType {
   return PRISMA_BY_REALIZATION_TYPE[type];
+}
+
+/** Ta sama zasada domknięcia co przy typie realizacji. */
+const THEME_PACK_BY_PRISMA = {
+  [PrismaRealizationThemePack.STANDARD]: 'standard',
+  [PrismaRealizationThemePack.CRIME]: 'crime',
+} satisfies Record<PrismaRealizationThemePack, RealizationThemePack>;
+
+const PRISMA_BY_THEME_PACK = Object.fromEntries(
+  Object.entries(THEME_PACK_BY_PRISMA).map(([prismaPack, apiPack]) => [
+    apiPack,
+    prismaPack,
+  ]),
+) as Record<RealizationThemePack, PrismaRealizationThemePack>;
+
+export const REALIZATION_THEME_PACK_VALUES: readonly RealizationThemePack[] =
+  Object.values(THEME_PACK_BY_PRISMA);
+
+export function fromPrismaRealizationThemePack(
+  pack: PrismaRealizationThemePack,
+): RealizationThemePack {
+  return THEME_PACK_BY_PRISMA[pack];
+}
+
+export function toPrismaRealizationThemePack(
+  pack: RealizationThemePack,
+): PrismaRealizationThemePack {
+  return PRISMA_BY_THEME_PACK[pack];
 }
 
 export function fromPrismaRealizationLanguage(
@@ -254,6 +284,7 @@ export function buildRealizationEntity(input: {
     instructors: unknown;
     notes: string | null;
     type: PrismaRealizationType;
+    themePack: PrismaRealizationThemePack;
     logoUrl: string | null;
     hideMap: boolean;
     mapImageUrl: string | null;
@@ -316,6 +347,7 @@ export function buildRealizationEntity(input: {
       : [],
     notes: realization.notes || undefined,
     type: fromPrismaRealizationType(realization.type),
+    themePack: fromPrismaRealizationThemePack(realization.themePack),
     logoUrl: realization.logoUrl || undefined,
     hideMap: realization.hideMap,
     mapImageUrl: realization.mapImageUrl || undefined,

@@ -38,9 +38,27 @@ const REALIZATION_TYPES: readonly RealizationType[] = [
  */
 export type RealizationMode = "expedition" | "risk-quiz";
 
+/**
+ * Oprawa graficzna i fabularna — oś niezależna od typu realizacji. Kryminał
+ * może być zarówno grą terenową, jak i hotelową, więc nie jest wartością typu.
+ */
+export type RealizationThemePack = "standard" | "crime";
+
+const THEME_PACKS: readonly RealizationThemePack[] = ["standard", "crime"];
+
 type RealizationLike = {
   type?: string;
+  themePack?: string;
 };
+
+export function parseThemePack(raw: unknown): RealizationThemePack {
+  if (typeof raw !== "string") {
+    return "standard";
+  }
+
+  const candidate = raw.trim();
+  return THEME_PACKS.find((pack) => pack === candidate) ?? "standard";
+}
 
 export function parseRealizationType(raw: unknown): RealizationType | undefined {
   if (typeof raw !== "string") {
@@ -72,13 +90,18 @@ export function resolveRealizationMode(
  * Rodzina palety: jak to wygląda.
  *
  * Celowo osobna funkcja od `resolveRealizationMode`, choć dziś obie wynikają z
- * tego samego pola. To są dwie niezależne osie — tryb decyduje, który ekran
- * startuje, rodzina decyduje o kolorach — i zlanie ich w jedno porównanie
- * stringa jest powodem, dla którego wariant o własnej oprawie, ale zwykłej
- * mechanice, nie ma się dziś gdzie wpiąć.
+ * tego samego pola dla Ryzykantów. To są dwie niezależne osie — tryb decyduje,
+ * który ekran startuje, rodzina decyduje o kolorach — i właśnie dlatego wariant
+ * kryminalny może mieć własną paletę, jadąc na zwykłym silniku ekspedycji.
  */
 export function resolveThemeFamily(
   realization: RealizationLike | undefined | null,
 ): ExpeditionThemeFamily {
-  return resolveRealizationMode(realization) === "risk-quiz" ? "risk" : "expedition";
+  // Ryzykanci wygrywają z pakietem oprawy: ich paleta jest częścią mechaniki
+  // stołu karcianego, a nie skórką do wyboru. Poza nimi decyduje themePack.
+  if (resolveRealizationMode(realization) === "risk-quiz") {
+    return "risk";
+  }
+
+  return parseThemePack(realization?.themePack) === "crime" ? "crime" : "expedition";
 }

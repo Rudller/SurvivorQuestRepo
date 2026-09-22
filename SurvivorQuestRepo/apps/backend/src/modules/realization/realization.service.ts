@@ -29,6 +29,7 @@ import {
   toPrismaRealizationLanguage,
   toPrismaRealizationStatus,
   toPrismaRealizationTranslationsData,
+  toPrismaRealizationThemePack,
   toPrismaRealizationType,
 } from './mappers/realization.mapper';
 import {
@@ -136,6 +137,7 @@ export class RealizationService {
         instructors: validated.instructors,
         notes: validated.notes,
         type: toPrismaRealizationType(validated.type),
+        themePack: toPrismaRealizationThemePack(validated.themePack),
         logoUrl: validated.logoUrl,
         hideMap: validated.hideMap,
         mapImageUrl: validated.mapImageUrl,
@@ -367,6 +369,7 @@ export class RealizationService {
         instructors: validated.instructors,
         notes: validated.notes,
         type: toPrismaRealizationType(validated.type),
+        themePack: toPrismaRealizationThemePack(validated.themePack),
         logoUrl: validated.logoUrl,
         hideMap: validated.hideMap,
         mapImageUrl: validated.mapImageUrl,
