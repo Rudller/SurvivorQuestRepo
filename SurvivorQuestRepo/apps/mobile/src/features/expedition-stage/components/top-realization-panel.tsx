@@ -66,7 +66,7 @@ const TOP_REALIZATION_PANEL_TEXT: Record<
   },
 };
 
-function resolveCardTextColor(hexColor: string) {
+export function resolveCardTextColor(hexColor: string) {
   const normalizedHex = hexColor.replace("#", "");
 
   if (!/^[0-9a-fA-F]{6}$/.test(normalizedHex)) {
