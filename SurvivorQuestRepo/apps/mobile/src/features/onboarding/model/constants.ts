@@ -123,51 +123,72 @@ const RISK_THEME_LIGHT: ExpeditionThemePalette = {
   scrimAbyssRgb: "3, 8, 12",
 };
 
-// Kryminał: przygaszony atrament zamiast zieleni, akcent w kolorze pieczęci na
-// aktach sprawy. Świadomie dalej i od zieleni ekspedycji, i od granatu ze
-// złotem u Ryzykantów — na tablecie w terenie rodzina motywu jest pierwszą
-// rzeczą, po której poznaje się, w co się gra.
+// Corporate noir: wewnętrzny system dochodzeniowy dużej korporacji, oglądany
+// późnym wieczorem w dyskretnie oświetlonym centrum operacyjnym. Nie gra
+// policyjna, nie kasyno, nie cyberpunk.
+//
+// Proporcje, które ta paleta ma trzymać: ~70% obsydian i grafit, ~20% jasne
+// powierzchnie dokumentów, ~10% bursztyn i statusy. Bursztyn ma przypominać
+// światło starej lampy albo podświetlenie terminala — jeśli zacznie wyglądać
+// jak pomarańcz z aplikacji sportowej, znaczy, że jest go za dużo albo jest
+// za nasycony.
 const CRIME_THEME_DARK: ExpeditionThemePalette = {
-  background: "#14100f",
-  mapLine: "#332825",
-  mapNode: "#4a3a35",
-  panel: "rgba(28, 22, 21, 0.92)",
-  panelMuted: "rgba(22, 17, 16, 0.94)",
-  panelStrong: "rgba(40, 31, 29, 0.92)",
-  border: "#7a4740",
-  accent: "#b4413a",
-  accentStrong: "#cf5a4e",
-  textPrimary: "#ece7e1",
-  textMuted: "#b3a79f",
-  textSubtle: "#8a7d75",
-  danger: "#ef6f6c",
-  success: "#34d399",
-  scrimWashRgb: "20, 16, 15",
-  scrimDeepRgb: "14, 11, 10",
-  scrimAbyssRgb: "7, 5, 5",
+  background: "#0B0D10",
+  mapLine: "#262C34",
+  mapNode: "#3A414A",
+  // Panele zachowują alfę, mimo że specyfikacja mówi o płaskich
+  // powierzchniach: pod nimi leży gradient tła i scrimy overlayów, a pełna
+  // nieprzezroczystość spłaszczyłaby warstwowanie, na którym stoi cała reszta
+  // aplikacji.
+  panel: "rgba(32, 38, 46, 0.92)",
+  panelMuted: "rgba(17, 20, 25, 0.94)",
+  panelStrong: "rgba(42, 48, 56, 0.92)",
+  border: "#454B53",
+  accent: "#F5A623",
+  // NIE Burnished Amber ze specyfikacji, mimo nazwy "przygaszony akcent".
+  // `accentStrong` jest w tym kodzie kolorem TEKSTU dla podkreślenia — tytuły,
+  // wartość odliczania, spinnery. Na ciemnym tle podkreślenie musi być
+  // jaśniejsze od akcentu, inaczej hierarchia się odwraca i czytelność spada.
+  // Burnished Amber pracuje w wariancie jasnym, gdzie faktycznie niesie
+  // kontrast.
+  accentStrong: "#FFBE5C",
+  textPrimary: "#F5F1E8",
+  textMuted: "#A7ABB0",
+  textSubtle: "#7C8187",
+  // Dark Crimson ze specyfikacji to #9F3D3D, co na Deep Obsidian daje kontrast
+  // 2.97 — o włos pod progiem 3.0. Podniesione o pięć punktów na kanał: jako
+  // zmiana barwy niezauważalna, ale `danger` bywa kolorem tekstu błędu, a
+  // takiego na prawie czarnym tle nie chcemy mieć na granicy czytelności.
+  danger: "#A44242",
+  success: "#667B5A",
+  scrimWashRgb: "11, 13, 16",
+  scrimDeepRgb: "8, 10, 12",
+  scrimAbyssRgb: "4, 5, 7",
 };
 
-// Wariant jasny idzie w papier teczki na akta. Akcent schodzi niżej niż w
-// ciemnym, bo czerwień z ciemnego wariantu na jasnym tle nie niesie kontrastu
-// tekstowego — ta sama zasada, co przy złocie Ryzykantów.
+// Wariant jasny to rozłożone akta, nie rozjaśniony terminal: bazą jest Aged
+// Ivory, czyli ten sam papier, na którym w trybie ciemnym drukują się
+// dokumenty. Bursztyn schodzi do Burnished Amber i niżej, bo jasny Amber na
+// kości słoniowej nie niesie kontrastu tekstowego — ta sama zasada, co przy
+// złocie Ryzykantów.
 const CRIME_THEME_LIGHT: ExpeditionThemePalette = {
-  background: "#ece5d8",
-  mapLine: "#b5a893",
-  mapNode: "#94876f",
-  panel: "rgba(250, 246, 238, 0.96)",
-  panelMuted: "rgba(242, 236, 225, 0.98)",
-  panelStrong: "rgba(231, 223, 209, 0.98)",
-  border: "#a9705f",
-  accent: "#8f2f28",
-  accentStrong: "#71231d",
-  textPrimary: "#14100f",
-  textMuted: "#4a403a",
-  textSubtle: "#6b5f57",
-  danger: "#ae5954",
-  success: "#1f7a53",
-  scrimWashRgb: "20, 16, 15",
-  scrimDeepRgb: "14, 11, 10",
-  scrimAbyssRgb: "7, 5, 5",
+  background: "#EEE9DE",
+  mapLine: "#BCB4A4",
+  mapNode: "#9A9283",
+  panel: "rgba(250, 247, 240, 0.96)",
+  panelMuted: "rgba(243, 239, 230, 0.98)",
+  panelStrong: "rgba(232, 226, 214, 0.98)",
+  border: "#B3AA99",
+  accent: "#B97818",
+  accentStrong: "#8C5A11",
+  textPrimary: "#14171B",
+  textMuted: "#4A4F56",
+  textSubtle: "#6B7076",
+  danger: "#9F3D3D",
+  success: "#4F6146",
+  scrimWashRgb: "11, 13, 16",
+  scrimDeepRgb: "8, 10, 12",
+  scrimAbyssRgb: "4, 5, 7",
 };
 
 // Święta: nasycony świerk zamiast oliwkowej zieleni ekspedycji, z czerwienią
