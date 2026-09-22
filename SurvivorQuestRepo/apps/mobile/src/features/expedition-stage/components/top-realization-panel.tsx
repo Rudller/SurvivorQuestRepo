@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -5,7 +6,6 @@ import { EXPEDITION_THEME, type ExpeditionThemeMode } from "../../onboarding/mod
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import { useCountUpValue } from "../../../shared/ui/use-count-up-value";
 import { PanelSurface, type PanelCornerStyle } from "../../../shared/ui/chamfered-panel";
-import { PigIcon } from "../../risk-quiz/components/risk-quiz-icons";
 
 type TopRealizationPanelProps = {
   companyName: string;
@@ -17,9 +17,19 @@ type TopRealizationPanelProps = {
   teamIcon: string;
   teamBadgeImageUrl?: string | null;
   points: number;
-  // Ryzykanci only: how many pigs the team is holding. Null everywhere else,
-  // which hides the counter — the regular expedition stage has no pigs.
-  pigCount?: number | null;
+  /**
+   * Dodatkowy kafelek obok punktów — dla trybów, które mają własny zasób do
+   * pokazania (u Ryzykantów: świnie). Slot, a nie konkretny prop, bo ten panel
+   * jest współdzielony i nie powinien znać domeny żadnego z trybów: wcześniej
+   * importował PigIcon wprost z risk-quiz, tworząc cykl między features.
+   */
+  renderTeamResource?: (style: {
+    labelColor: string;
+    valueColor: string;
+    labelFontSize: number;
+    valueFontSize: number;
+    iconSize: number;
+  }) => ReactNode;
   languageFlag?: string;
   showLanguageButton?: boolean;
   onOpenLanguagePicker?: () => void;
@@ -37,32 +47,27 @@ const TOP_REALIZATION_PANEL_TEXT: Record<
     logo: string;
     team: string;
     points: string;
-    pigs: string;
   }
 > = {
   polish: {
     logo: "Logo",
     team: "Drużyna",
     points: "Punkty",
-    pigs: "Świnie",
   },
   english: {
     logo: "Logo",
     team: "Team",
     points: "Points",
-    pigs: "Pigs",
   },
   ukrainian: {
     logo: "Логотип",
     team: "Команда",
     points: "Бали",
-    pigs: "Свині",
   },
   russian: {
     logo: "Логотип",
     team: "Команда",
     points: "Очки",
-    pigs: "Свиньи",
   },
 };
 
@@ -122,7 +127,7 @@ export function TopRealizationPanel({
   teamIcon,
   teamBadgeImageUrl,
   points,
-  pigCount = null,
+  renderTeamResource,
   languageFlag,
   showLanguageButton = false,
   onOpenLanguagePicker,
@@ -254,27 +259,13 @@ export function TopRealizationPanel({
               {/* Sits next to the score rather than out on its own: a held pig
                   is a resource the team spends, so it belongs where they
                   already look for what they have. */}
-              {pigCount !== null ? (
-                <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
-                  <Text
-                    className="uppercase tracking-widest"
-                    style={{ color: cardMutedTextColor, fontSize: pointsLabelFontSize }}
-                    numberOfLines={1}
-                  >
-                    {text.pigs}
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", columnGap: 4 }}>
-                    <PigIcon size={pigIconSize} color={cardTextColor} />
-                    <Text
-                      className="font-extrabold text-right"
-                      style={{ color: cardTextColor, fontSize: pointsFontSize, includeFontPadding: false }}
-                      numberOfLines={1}
-                    >
-                      {pigCount}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
+              {renderTeamResource?.({
+                labelColor: cardMutedTextColor,
+                valueColor: cardTextColor,
+                labelFontSize: pointsLabelFontSize,
+                valueFontSize: pointsFontSize,
+                iconSize: pigIconSize,
+              }) ?? null}
 
               <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
                 <Text

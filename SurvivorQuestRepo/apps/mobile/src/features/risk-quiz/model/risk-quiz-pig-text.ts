@@ -155,3 +155,17 @@ export const RISK_PIG_TEXT: Record<UiLanguage, RiskPigText> = {
     throwAction: (label) => `Бросить свинью: ${label}`,
   },
 };
+
+/**
+ * Etykieta licznika świń w górnym panelu realizacji.
+ *
+ * Mieszkała w tekstach tego panelu, mimo że panel jest współdzielony z
+ * ekspedycją, która świń nie ma. Trafia tu razem z ikoną — panel dostaje dziś
+ * cały ten kafelek jako slot i nie wie już, czym go wypełniono.
+ */
+export const RISK_PIG_BADGE_LABEL: Record<UiLanguage, string> = {
+  polish: "Świnie",
+  english: "Pigs",
+  ukrainian: "Свині",
+  russian: "Свиньи",
+};

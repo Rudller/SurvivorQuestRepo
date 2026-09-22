@@ -43,7 +43,7 @@ import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
-import { PauseIcon, PlayIcon } from "../components/risk-quiz-icons";
+import { PauseIcon, PigIcon, PlayIcon } from "../components/risk-quiz-icons";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
 import { RiskQuizEventFeed } from "../components/risk-quiz-event-feed";
@@ -61,6 +61,7 @@ import { isRiskQuizGameOver } from "../model/risk-quiz-finish-summary";
 import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 import { TEST_MENU_TRIGGER_HOLD_MS } from "../../../shared/dev/test-menu-gesture";
+import { RISK_PIG_BADGE_LABEL } from "../model/risk-quiz-pig-text";
 
 type RiskQuizScreenProps = {
   session: OnboardingSession;
@@ -1282,7 +1283,35 @@ export function RiskQuizScreen({
             teamIcon={teamIcon}
             teamBadgeImageUrl={teamBadgeImageUrl}
             points={teamPoints}
-            pigCount={pigState?.enabled ? (pigState.held ? 1 : 0) : null}
+            renderTeamResource={
+              pigState?.enabled
+                ? (style) => (
+                    <View style={{ alignItems: "flex-end", flexShrink: 0 }}>
+                      <Text
+                        className="uppercase tracking-widest"
+                        style={{ color: style.labelColor, fontSize: style.labelFontSize }}
+                        numberOfLines={1}
+                      >
+                        {RISK_PIG_BADGE_LABEL[resolveUiLanguage(selectedLanguage)]}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", columnGap: 4 }}>
+                        <PigIcon size={style.iconSize} color={style.valueColor} />
+                        <Text
+                          className="font-extrabold text-right"
+                          style={{
+                            color: style.valueColor,
+                            fontSize: style.valueFontSize,
+                            includeFontPadding: false,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {pigState.held ? 1 : 0}
+                        </Text>
+                      </View>
+                    </View>
+                  )
+                : undefined
+            }
             languageFlag={currentLanguageFlag}
             showLanguageButton={hasMultipleLanguageOptions}
             onOpenLanguagePicker={handleLanguageButtonPress}
