@@ -32,6 +32,25 @@ export const realizationTypeOptions: {
   { value: "risk-quiz", label: "Ryzykanci" },
 ];
 
+/**
+ * Oprawa graficzna i fabularna realizacji — oś niezależna od typu.
+ *
+ * Kryminał celowo NIE jest wartością `RealizationType`: może być zarówno grą
+ * terenową, jak i hotelową, więc wciśnięty do tamtej listy wykluczałby się z
+ * nimi. Mechanika pozostaje ta sama co w zwykłej ekspedycji — mapa i
+ * stanowiska. Zmienia się paleta w aplikacji i treści realizacji.
+ */
+export type RealizationThemePack = "standard" | "crime";
+
+export const realizationThemePackOptions: {
+  value: RealizationThemePack;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "standard", label: "Standardowa", hint: "Zielona oprawa ekspedycyjna" },
+  { value: "crime", label: "Kryminalna", hint: "Oprawa noir — akta sprawy, śledztwo" },
+];
+
 export const realizationLanguageOptions: {
   value: RealizationLanguage;
   label: string;
@@ -248,6 +267,7 @@ export type Realization = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;
@@ -329,6 +349,7 @@ export type RealizationExportRealizationData = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack?: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;

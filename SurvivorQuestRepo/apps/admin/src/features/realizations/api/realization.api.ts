@@ -16,6 +16,7 @@ import type {
   RealizationStationDraft,
   RealizationTranslations,
   RealizationType,
+  RealizationThemePack,
 } from "../types/realization";
 
 type StationDto = {
@@ -86,6 +87,7 @@ type RealizationDto = {
   instructors?: string[];
   notes?: string;
   type?: RealizationType;
+  themePack?: RealizationThemePack;
   logoUrl?: string;
   hideMap?: boolean;
   mapImageUrl?: string;
@@ -140,6 +142,7 @@ type CreateRealizationPayload = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;
@@ -192,6 +195,7 @@ type UpdateRealizationPayload = {
   instructors: string[];
   notes?: string;
   type: RealizationType;
+  themePack: RealizationThemePack;
   logoUrl?: string;
   hideMap: boolean;
   mapImageUrl?: string;
@@ -389,6 +393,9 @@ function normalizeRealization(dto: RealizationDto): Realization {
     instructors,
     notes: dto.notes?.trim() || undefined,
     type: dto.type ?? "outdoor-games",
+    // Starszy backend bez tego pola ma wyglądać jak standardowa oprawa,
+    // a nie wywracać normalizację.
+    themePack: dto.themePack ?? "standard",
     logoUrl: dto.logoUrl,
     hideMap: dto.hideMap === true,
     mapImageUrl: dto.mapImageUrl,

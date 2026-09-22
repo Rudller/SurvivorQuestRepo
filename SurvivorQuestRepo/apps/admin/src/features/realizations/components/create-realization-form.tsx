@@ -9,6 +9,7 @@ import type {
   RealizationStatus,
   RealizationTranslations,
   RealizationType,
+  RealizationThemePack,
 } from "../types/realization";
 import { buildRealizationExport, parseRealizationExportFile } from "../realization-export";
 import { RYZYKANCI_DEFAULT_INTRO_TEXT } from "../realization-default-texts";
@@ -22,6 +23,7 @@ import {
   parseRealizationLanguageSelection,
   realizationLanguageOptions,
   toRealizationLanguagePayload,
+  realizationThemePackOptions,
   realizationTypeOptions,
 } from "../types/realization";
 import type { Scenario } from "@/features/scenario/types/scenario";
@@ -128,6 +130,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [instructorInput, setInstructorInput] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedType, setSelectedType] = useState<RealizationType>("outdoor-games");
+  const [selectedThemePack, setSelectedThemePack] = useState<RealizationThemePack>("standard");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [logoInputMode, setLogoInputMode] = useState<"upload" | "existing">("upload");
@@ -788,6 +791,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 instructors,
                 notes: notes.trim() || undefined,
                 type: selectedType,
+                // Ryzykanci mają oprawę wpisaną w mechanikę — pakiet ich nie dotyczy.
+                themePack: isRiskQuizType ? "standard" : selectedThemePack,
                 logoUrl: finalLogoUrl,
                 hideMap,
                 mapImageUrl: finalMapImageUrl,
@@ -959,6 +964,27 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                         </option>
                       ))}
                     </select>
+                  </label>
+
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Oprawa</span>
+                    <select
+                      value={selectedThemePack}
+                      onChange={(event) => setSelectedThemePack(event.target.value as RealizationThemePack)}
+                      disabled={isRiskQuizType}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-50"
+                    >
+                      {realizationThemePackOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-zinc-500">
+                      {isRiskQuizType
+                        ? "Ryzykanci mają własną oprawę wynikającą z mechaniki — nie da się jej podmienić."
+                        : realizationThemePackOptions.find((option) => option.value === selectedThemePack)?.hint}
+                    </p>
                   </label>
 
                   <label className="block space-y-1.5">

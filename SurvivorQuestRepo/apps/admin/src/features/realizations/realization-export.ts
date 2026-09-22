@@ -22,6 +22,9 @@ const realizationExportDataSchema = z.object({
   instructors: z.array(z.string()),
   notes: z.string().optional(),
   type: z.enum(["outdoor-games", "hotel-games", "workshops", "evening-attractions", "dj", "recreation", "risk-quiz"]),
+  // Opcjonalne: pliki wyeksportowane przed wprowadzeniem oprawy nadal muszą
+  // dać się zaimportować i wtedy dostają standardową.
+  themePack: z.enum(["standard", "crime"]).optional(),
   logoUrl: z.string().optional(),
   hideMap: z.boolean(),
   mapImageUrl: z.string().optional(),
@@ -108,6 +111,7 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       instructors: realization.instructors,
       notes: realization.notes,
       type: realization.type,
+      themePack: realization.themePack,
       logoUrl: realization.logoUrl,
       hideMap: realization.hideMap,
       mapImageUrl: realization.mapImageUrl,

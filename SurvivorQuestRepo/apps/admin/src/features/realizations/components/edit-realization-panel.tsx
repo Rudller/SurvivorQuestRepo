@@ -7,6 +7,7 @@ import type {
   RealizationStationDraft,
   RealizationStatus,
   RealizationType,
+  RealizationThemePack,
 } from "../types/realization";
 import {
   formatRealizationLanguageSummary,
@@ -17,6 +18,7 @@ import {
   parseRealizationLanguageSelection,
   realizationLanguageOptions,
   toRealizationLanguagePayload,
+  realizationThemePackOptions,
   realizationTypeOptions,
 } from "../types/realization";
 import {
@@ -213,6 +215,7 @@ export function EditRealizationPanel({
     instructors: realization.instructors ?? [],
     notes: realization.notes ?? "",
     type: realization.type as RealizationType,
+    themePack: (realization.themePack ?? "standard") as RealizationThemePack,
     logoUrl: realization.logoUrl,
     hideMap: realization.hideMap ?? false,
     mapImageUrl: realization.mapImageUrl,
@@ -904,6 +907,8 @@ export function EditRealizationPanel({
                 instructors: editValues.instructors,
                 notes: editValues.notes.trim() || undefined,
                 type: editValues.type,
+                // Ryzykanci mają oprawę wpisaną w mechanikę — pakiet ich nie dotyczy.
+                themePack: isRiskQuizType ? "standard" : editValues.themePack,
                 logoUrl: nextLogoUrl,
                 hideMap: editValues.hideMap,
                 mapImageUrl: nextMapImageUrl,
@@ -1095,6 +1100,32 @@ export function EditRealizationPanel({
                         </option>
                       ))}
                     </select>
+                  </label>
+
+                  <label className="block space-y-1.5">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400">Oprawa</span>
+                    <select
+                      value={editValues.themePack}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          themePack: event.target.value as RealizationThemePack,
+                        }))
+                      }
+                      disabled={isRiskQuizType}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-50"
+                    >
+                      {realizationThemePackOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-zinc-500">
+                      {isRiskQuizType
+                        ? "Ryzykanci mają własną oprawę wynikającą z mechaniki — nie da się jej podmienić."
+                        : realizationThemePackOptions.find((option) => option.value === editValues.themePack)?.hint}
+                    </p>
                   </label>
 
                   <label className="block space-y-1.5">
