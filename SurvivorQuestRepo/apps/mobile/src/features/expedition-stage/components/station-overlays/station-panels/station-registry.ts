@@ -11,7 +11,8 @@ import type { StationTestType } from "../types";
  * dopisanie się w każdym z nich, a pominięcie któregokolwiek nie dawało żadnego
  * sygnału.
  *
- * `Record`, nie `Partial<Record>`: brak wpisu ma być błędem kompilacji.
+ * Jawna adnotacja `Record<StationTestType, StationDefinition>`, nie
+ * `Partial<Record<…>>`: brak wpisu ma być błędem kompilacji.
  * Dzisiejsze `Partial<Record<…>>` w station-renderers.tsx tego nie dawało i
  * dlatego typ bez renderera po prostu nic nie rysował.
  *
@@ -27,7 +28,26 @@ type StationOutcomeTextKey = {
 }[keyof StationPreviewText] &
   string;
 
+/**
+ * Rodzina stanowiska — po czym poznaje się, jak wygląda i czego wymaga
+ * ukończenie. Zastępuje isQuizStationType (osiemnastoczłonowa alternatywa),
+ * requiresCode, requiresPhotoUpload i requiresQrScan.
+ */
+export type StationFamily = "quiz" | "code" | "photo" | "qr";
+
 export type StationDefinition = {
+  family: StationFamily;
+  /**
+   * Typ, którego przepływ stanowisko prowadzi w całości. Ustawiony tylko tam,
+   * gdzie to naprawdę ten sam przepływ, a nie podobny — dziś wyłącznie
+   * fill-blank, czyli pytanie otwarte z luką narysowaną w treści: identyczny
+   * zapis, identyczne sprawdzanie.
+   *
+   * Wcześniej ta równość żyła jako `stationType === "open-quiz" ||
+   * stationType === "fill-blank"` powtórzone w kilku miejscach, więc dołożenie
+   * kolejnego wariantu wymagało znalezienia ich wszystkich.
+   */
+  behavesAs?: StationTestType;
   /**
    * Komunikaty pokazywane w popupie wyniku. Przeniesione 1:1 z drabin
    * resolveSuccessOutcomeMessage / resolveFailureOutcomeMessage, razem z ich
@@ -42,34 +62,46 @@ export type StationDefinition = {
   };
 };
 
-export const STATION_DEFINITIONS = {
-  quiz: { outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
-  "audio-quiz": { outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
-  time: { outcome: { success: "codeApproved", failure: "outcomeFailed" } },
-  points: { outcome: { success: "codeApproved", failure: "outcomeFailed" } },
-  wordle: { outcome: { success: "wordleSolvedPopup", failure: "wordleFailedPopup" } },
-  hangman: { outcome: { success: "hangmanSolvedPopup", failure: "hangmanFailedPopup" } },
-  mastermind: { outcome: { success: "mastermindSolvedPopup", failure: "mastermindFailedPopup" } },
-  anagram: { outcome: { success: "anagramSolvedPopup", failure: "anagramFailedPopup" } },
-  "caesar-cipher": { outcome: { success: "caesarSolvedPopup", failure: "caesarFailedPopup" } },
-  memory: { outcome: { success: "memorySolvedPopup", failure: "memoryFailedPopup" } },
-  simon: { outcome: { success: "simonSolvedPopup", failure: "simonFailedPopup" } },
-  rebus: { outcome: { success: "rebusSolvedPopup", failure: "rebusFailedPopup" } },
-  boggle: { outcome: { success: "boggleSolvedPopup", failure: "boggleFailedPopup" } },
-  "mini-sudoku": { outcome: { success: "miniSudokuSolvedPopup", failure: "miniSudokuFailedPopup" } },
-  matching: { outcome: { success: "matchingSolvedPopup", failure: "matchingFailedPopup" } },
-  "strong-password": { outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
-  "photo-task": { outcome: { success: "quizSuccessPopup", failure: "photoTaskRejectedPopup" } },
-  "qr-hunt": { outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
-  "open-quiz": { outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" } },
-  "reviewed-answer": { outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
-  "true-false": { outcome: { success: "trueFalseSolvedPopup", failure: "trueFalseFailedPopup" } },
+export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
+  quiz: { family: "quiz", outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
+  "audio-quiz": { family: "quiz", outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
+  time: { family: "code", outcome: { success: "codeApproved", failure: "outcomeFailed" } },
+  points: { family: "code", outcome: { success: "codeApproved", failure: "outcomeFailed" } },
+  wordle: { family: "quiz", outcome: { success: "wordleSolvedPopup", failure: "wordleFailedPopup" } },
+  hangman: { family: "quiz", outcome: { success: "hangmanSolvedPopup", failure: "hangmanFailedPopup" } },
+  mastermind: { family: "quiz", outcome: { success: "mastermindSolvedPopup", failure: "mastermindFailedPopup" } },
+  anagram: { family: "quiz", outcome: { success: "anagramSolvedPopup", failure: "anagramFailedPopup" } },
+  "caesar-cipher": { family: "quiz", outcome: { success: "caesarSolvedPopup", failure: "caesarFailedPopup" } },
+  memory: { family: "quiz", outcome: { success: "memorySolvedPopup", failure: "memoryFailedPopup" } },
+  simon: { family: "quiz", outcome: { success: "simonSolvedPopup", failure: "simonFailedPopup" } },
+  rebus: { family: "quiz", outcome: { success: "rebusSolvedPopup", failure: "rebusFailedPopup" } },
+  boggle: { family: "quiz", outcome: { success: "boggleSolvedPopup", failure: "boggleFailedPopup" } },
+  "mini-sudoku": { family: "quiz", outcome: { success: "miniSudokuSolvedPopup", failure: "miniSudokuFailedPopup" } },
+  matching: { family: "quiz", outcome: { success: "matchingSolvedPopup", failure: "matchingFailedPopup" } },
+  "strong-password": { family: "quiz", outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
+  "photo-task": { family: "photo", outcome: { success: "quizSuccessPopup", failure: "photoTaskRejectedPopup" } },
+  "qr-hunt": { family: "qr", outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
+  "open-quiz": { family: "quiz", outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" } },
+  "reviewed-answer": { family: "quiz", outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" } },
+  "true-false": { family: "quiz", outcome: { success: "trueFalseSolvedPopup", failure: "trueFalseFailedPopup" } },
   // fill-blank prowadzi przepływ open-quiz od początku do końca, więc raportuje
   // tym samym słownictwem. To jedyne miejsce, w którym ta równość jest teraz
   // zapisana — wcześniej wynikała z `||` powtórzonego w obu drabinach.
-  "fill-blank": { outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" } },
-} satisfies Record<StationTestType, StationDefinition>;
+  "fill-blank": { family: "quiz", behavesAs: "open-quiz", outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" } },
+};
 
 export function resolveStationDefinition(stationType: StationTestType): StationDefinition {
   return STATION_DEFINITIONS[stationType];
+}
+
+/**
+ * Typ, którego przepływem stanowisko faktycznie jedzie. Dla wszystkiego poza
+ * fill-blank to ten sam typ, którym jest.
+ */
+export function resolveEffectiveStationType(stationType: StationTestType): StationTestType {
+  return STATION_DEFINITIONS[stationType].behavesAs ?? stationType;
+}
+
+export function resolveStationFamily(stationType: StationTestType): StationFamily {
+  return STATION_DEFINITIONS[stationType].family;
 }

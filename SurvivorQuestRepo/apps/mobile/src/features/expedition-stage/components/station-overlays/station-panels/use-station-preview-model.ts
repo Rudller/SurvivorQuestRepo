@@ -2,7 +2,7 @@ import { Animated } from "react-native";
 
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import type { UiLanguage } from "../../../../i18n";
-import type { StationTestType, StationTestViewModel } from "../types";
+import type { StationTestViewModel } from "../types";
 import {
   HANGMAN_MAX_MISSES,
   MEMORY_MAX_MISTAKES,
@@ -36,31 +36,13 @@ import {
 import type { MastermindAttempt } from "./mastermind-station-panel";
 import { QR_HUNT_DESCRIPTION_RESERVE, QR_HUNT_PROGRESS_DOTS_RESERVE } from "./qr-hunt-station-panel";
 import type { WordleAttempt } from "./wordle-station-panel";
+import {
+  resolveEffectiveStationType,
+  resolveStationFamily,
+} from "./station-registry";
 
 type MiniSudokuPuzzle = ReturnType<typeof resolveMiniSudokuPuzzle>;
 
-function isQuizStationType(stationType: StationTestType) {
-  return (
-    stationType === "quiz" ||
-    stationType === "audio-quiz" ||
-    stationType === "wordle" ||
-    stationType === "hangman" ||
-    stationType === "mastermind" ||
-    stationType === "anagram" ||
-    stationType === "caesar-cipher" ||
-    stationType === "memory" ||
-    stationType === "simon" ||
-    stationType === "rebus" ||
-    stationType === "boggle" ||
-    stationType === "mini-sudoku" ||
-    stationType === "matching" ||
-    stationType === "strong-password" ||
-    stationType === "open-quiz" ||
-    stationType === "reviewed-answer" ||
-    stationType === "true-false" ||
-    stationType === "fill-blank"
-  );
-}
 
 function resolveMiniSudokuGridMeta(solutionLength: number) {
   const side = Math.round(Math.sqrt(solutionLength));
@@ -254,6 +236,7 @@ export function buildStationPreviewModel({
   hasAudioPlaybackStarted,
   text,
 }: UseStationPreviewModelArgs) {
+  const stationFamily = resolveStationFamily(station.stationType);
   const isClassicQuizStation = station.stationType === "quiz";
   const isTrueFalseStation = station.stationType === "true-false";
   const isAudioQuizStation = station.stationType === "audio-quiz";
@@ -267,17 +250,18 @@ export function buildStationPreviewModel({
   const isRebusStation = station.stationType === "rebus";
   // fill-blank is an open question with a gap drawn in the prompt: identical
   // storage, identical checking, so it rides the open-quiz path wholesale.
-  const isOpenQuizStation =
-    station.stationType === "open-quiz" || station.stationType === "fill-blank";
+  // fill-blank prowadzi przepływ open-quiz w całości — rejestr zapisuje to
+  // jako behavesAs, więc nie trzeba tu powtarzać alternatywy.
+  const isOpenQuizStation = resolveEffectiveStationType(station.stationType) === "open-quiz";
   const isFillBlankStation = station.stationType === "fill-blank";
   const isBoggleStation = station.stationType === "boggle";
   const isMiniSudokuStation = station.stationType === "mini-sudoku";
   const isMatchingStation = station.stationType === "matching";
   const isStrongPasswordStation = station.stationType === "strong-password";
-  const isQuizStation = isQuizStationType(station.stationType);
-  const requiresCode = station.stationType === "time" || station.stationType === "points";
-  const requiresPhotoUpload = station.stationType === "photo-task";
-  const requiresQrScan = station.stationType === "qr-hunt";
+  const isQuizStation = stationFamily === "quiz";
+  const requiresCode = stationFamily === "code";
+  const requiresPhotoUpload = stationFamily === "photo";
+  const requiresQrScan = stationFamily === "qr";
   const isNumericCodeStation = requiresCode && station.completionCodeInputMode === "numeric";
   const normalizedImageUrl = station.imageUrl?.trim() || "";
   const isDicebearFallback = normalizedImageUrl.includes("api.dicebear.com/9.x/shapes/svg");
