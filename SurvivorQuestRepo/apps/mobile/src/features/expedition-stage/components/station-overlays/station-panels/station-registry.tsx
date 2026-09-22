@@ -1,4 +1,4 @@
-import type { StationPreviewText } from "../preview";
+import type { StationPreviewText } from "../station-preview-text";
 import type { StationTestType } from "../types";
 import { QR_HUNT_DESCRIPTION_RESERVE, QR_HUNT_PROGRESS_DOTS_RESERVE } from "./qr-hunt-station-panel";
 import type { ComponentProps, ReactNode } from "react";
