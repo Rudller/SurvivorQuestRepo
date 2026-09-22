@@ -153,6 +153,7 @@ export class MobileService {
           id: realization.id,
           companyName: realization.companyName,
           type: realization.type,
+          themePack: realization.themePack,
           language: languageContext.baseLanguage,
           customLanguage: languageContext.customLanguage,
           selectedLanguage: languageContext.selectedLanguage,
@@ -466,6 +467,7 @@ export class MobileService {
         hideMap: realization.hideMap,
         mapImageUrl: realization.mapImageUrl,
         type: realization.type,
+        themePack: realization.themePack,
         teamCount: realization.teamCount,
         peopleCount: realization.peopleCount,
         positionsCount: realization.positionsCount,
@@ -2566,6 +2568,7 @@ export class MobileService {
         joinCode: realization.joinCode,
         teamCount: realization.teamCount,
         type: realization.type,
+        themePack: realization.themePack,
         riskSchemeId: realization.riskSchemeId ?? null,
         stationIds: realization.stationIds,
         stations: await Promise.all(
