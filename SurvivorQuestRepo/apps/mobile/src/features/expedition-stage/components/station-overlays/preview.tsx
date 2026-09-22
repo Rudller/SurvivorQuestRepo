@@ -22,6 +22,7 @@ import { MemoryPairsRow } from "./station-panels/memory-station-panel";
 import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/quiz-outcome-popup-panel";
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper, useStationPanelLayout } from "./station-panels/shared-ui";
+import { resolveStationPresentationProfile } from "./station-panels/station-presentation-profile";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
@@ -2624,32 +2625,26 @@ export function StationPreviewOverlay({
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
   const stationHeaderLabel = `${station.name} • ${station.typeLabel}`;
   const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
-  // Szerokość, jaka zostaje treści karty po naszym własnym chrome: padding
-  // panelu overlaya, ramka karty i padding kolumny — wszystkie trzy zdefiniowane
-  // niżej w tym pliku. CodeStationPanel dostaje to jako liczbę, żeby ustalić
-  // rozmiar klawiszy już na pierwszym renderze; gdyby liczył go z własnego
-  // onLayout, klawiatura pojawiałaby się w złym rozmiarze i dopiero po pomiarze
-  // zjeżdżała do właściwego.
-  const overlayCardContentWidth = isInlinePresentation
-    ? undefined
-    : Math.max(
-        0,
-        adaptiveLayout.width -
-          2 * (adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16) + 1 + adaptiveLayout.s(isTabletOverlay ? 16 : 10, 8, 22)),
-      );
+  // Całe chrome podglądu — przyciemnienie, ramka, karta, nagłówek — czytane z
+  // jednego profilu zamiast z kilkudziesięciu `isInlinePresentation ? … : …`
+  // rozsypanych po tym pliku. Zwykły const, nie useMemo: to czysta funkcja
+  // liczona raz na render, dokładnie jak liczone tu były te ternary.
+  const presentationProfile = resolveStationPresentationProfile({
+    mode: presentation,
+    isTablet: isTabletOverlay,
+    isLightTheme,
+    viewportWidth: adaptiveLayout.width,
+    keyboardHeight,
+    scaled: adaptiveLayout.s,
+  });
+  const overlayCardContentWidth = presentationProfile.card.contentWidth;
 
   return (
     <Animated.View
-      className={isInlinePresentation ? "flex-1" : "absolute inset-0 z-50"}
+      className={presentationProfile.root.className}
       style={[
-        isInlinePresentation ? { flex: 1, minHeight: 0 } : null,
-        {
-          backgroundColor: isInlinePresentation
-            ? "transparent"
-            : isLightTheme
-              ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)`
-              : `rgba(${EXPEDITION_THEME.scrimDeepRgb}, 0.9)`,
-        },
+        presentationProfile.root.fillsParent ? { flex: 1, minHeight: 0 } : null,
+        { backgroundColor: presentationProfile.root.backgroundColor },
         overlayBackdropStyle,
       ]}
     >
@@ -2659,24 +2654,15 @@ export function StationPreviewOverlay({
           {
             flex: 1,
             minHeight: 0,
-            paddingHorizontal: isInlinePresentation
-              ? 0
-              : adaptiveLayout.s(isTabletOverlay ? 12 : 8, 6, 16),
-            // In inline mode the host (Ryzykanci) already provides the gap
-            // above this component via its own rowGap between siblings —
-            // this panel's own top padding would stack on top of that and
-            // make the gap after the timer visibly bigger than the gap
-            // before it.
-            paddingTop: isInlinePresentation ? 0 : adaptiveLayout.s(isTabletOverlay ? 36 : 20, 16, 44),
-            paddingBottom: isInlinePresentation
-              ? 0
-              : adaptiveLayout.s(isTabletOverlay ? 20 : 12, 10, 28),
+            paddingHorizontal: presentationProfile.frame.paddingHorizontal,
+            paddingTop: presentationProfile.frame.paddingTop,
+            paddingBottom: presentationProfile.frame.paddingBottom,
           },
           overlayPanelStyle,
         ]}
       >
         <View
-          className={isInlinePresentation ? "flex-1" : "flex-1 border"}
+          className={presentationProfile.card.className}
           onTouchEnd={() => {
             // Tapping empty space anywhere in the card dismisses the
             // keyboard; nested Pressables/TextInputs still claim their own
@@ -2690,17 +2676,13 @@ export function StationPreviewOverlay({
             Keyboard.dismiss();
           }}
           style={{
-            borderColor: isInlinePresentation ? "transparent" : EXPEDITION_THEME.border,
-            backgroundColor: isInlinePresentation ? "transparent" : EXPEDITION_THEME.panel,
-            borderRadius: isInlinePresentation ? 0 : adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 30),
-            // In inline mode the host screen (e.g. Ryzykanci) wraps this in
-            // its own KeyboardAvoidingView, which already shrinks the space
-            // available here — adding this panel's own keyboard padding on
-            // top would double-compensate and shift content too far.
-            paddingBottom: isInlinePresentation ? 0 : keyboardHeight,
+            borderColor: presentationProfile.card.borderColor,
+            backgroundColor: presentationProfile.card.backgroundColor,
+            borderRadius: presentationProfile.card.borderRadius,
+            paddingBottom: presentationProfile.card.paddingBottom,
           }}
         >
-          {!isInlinePresentation ? (
+          {presentationProfile.chrome.showHeader ? (
           <View
             className="flex-row items-start justify-between"
             style={{
@@ -3350,7 +3332,7 @@ export function StationPreviewOverlay({
 
           </View>
 
-          {!isInlinePresentation ? (
+          {presentationProfile.chrome.showFooterBar ? (
           <View
             pointerEvents="box-none"
             style={{
