@@ -23,6 +23,9 @@ import {
   getExpeditionThemeMode,
   getTeamColors,
 } from "../model/constants";
+import type { ExpeditionThemeFamily } from "../model/constants";
+import { resolveThemeFamily } from "../model/realization-mode";
+import { buildSessionRealization } from "../model/session-realization";
 import { RiskQuizBackground } from "../../risk-quiz/components/risk-quiz-background";
 import { RyzykanciLogoHeader } from "../../risk-quiz/components/ryzykanci-logo-header";
 import { isTeamColor, shouldSkipTeamStepAfterJoin } from "../model/recovery-join";
@@ -76,6 +79,7 @@ type MobileBootstrapRealization = {
   id: string;
   companyName: string;
   type?: string;
+  themePack?: string;
   language?: RealizationLanguage;
   customLanguage?: string;
   selectedLanguage?: RealizationLanguage;
@@ -877,7 +881,13 @@ type RealizationOnboardingScreenProps = {
    * `mobile-app.tsx`, which cannot see the realization yet — the onboarding
    * session it reads only exists once onboarding finishes.
    */
-  onRiskQuizStylingChange?: (isActive: boolean) => void;
+  /**
+   * Rodzina palety, jaką onboarding ma nosić na kroku personalizacji — albo
+   * null, gdy ma zostać domyślna. Wcześniej był to bool niosący wyłącznie
+   * "czy Ryzykanci", przez co oprawa kryminalna i świąteczna nie miały jak
+   * dojść do edytora baneru.
+   */
+  onThemeFamilyChange?: (family: ExpeditionThemeFamily | null) => void;
 };
 
 function getErrorMessage(error: unknown, text: OnboardingUiText) {
@@ -1324,7 +1334,7 @@ export function RealizationOnboardingScreen({
   onComplete,
   recoveryIntent,
   onRecoveryConsumed,
-  onRiskQuizStylingChange,
+  onThemeFamilyChange,
 }: RealizationOnboardingScreenProps) {
   const routePulse = useAnimatedValue(0);
   const adaptiveLayout = useAdaptiveLayout();
@@ -1741,37 +1751,16 @@ export function RealizationOnboardingScreen({
       apiBaseUrl: effectiveApiBaseUrl,
       selectedLanguage: effectiveSelectedLanguage,
       realization: effectiveRealization
-        ? {
-            id: effectiveRealization.id,
-            companyName: effectiveRealization.companyName,
-            type: effectiveRealization.type,
-            language: effectiveRealization.language,
-            customLanguage: effectiveRealization.customLanguage?.trim() || undefined,
-            selectedLanguage: effectiveSelectedLanguage,
-            availableLanguages: effectiveRealization.availableLanguages ?? [],
+        ? buildSessionRealization({
+            realization: effectiveRealization,
             status: normalizedStatus,
-            scheduledAt: effectiveRealization.scheduledAt,
-            durationMinutes: normalizeDurationMinutes(effectiveRealization.durationMinutes),
+            selectedLanguage: effectiveSelectedLanguage,
             joinCode: effectiveRealizationCode,
-            teamCount: effectiveRealization.teamCount,
-            stationIds: effectiveRealization.stationIds,
-            locationRequired: effectiveRealization.locationRequired,
-            showLeaderboard: effectiveRealization.showLeaderboard !== false,
-            showLeaderboardDuringGame:
-              effectiveRealization.showLeaderboardDuringGame ??
-              effectiveRealization.showLeaderboard !== false,
-            showLeaderboardOnFinish:
-              effectiveRealization.showLeaderboardOnFinish ??
-              effectiveRealization.showLeaderboard !== false,
+            durationMinutes: normalizeDurationMinutes(effectiveRealization.durationMinutes),
             hideLeaderboardMinutesBeforeEnd: normalizeHideLeaderboardMinutesBeforeEnd(
               effectiveRealization.hideLeaderboardMinutesBeforeEnd,
             ),
-            timedStationPointsDecayEnabled:
-              effectiveRealization.timedStationPointsDecayEnabled ?? false,
-            hideTaskList: effectiveRealization.hideTaskList ?? false,
-            introText: effectiveRealization.introText?.trim() || undefined,
-            gameRules: effectiveRealization.gameRules?.trim() || undefined,
-          }
+          })
         : null,
       awaitingAdminStart,
       showGameRulesAfterStart:
@@ -2437,11 +2426,17 @@ export function RealizationOnboardingScreen({
   // Only the editor step wears the Ryzykanci skin; the code and team steps stay
   // on the expedition look, so the switch is keyed on the step, not just on the
   // realization type.
-  const isRiskQuizStyling = activeRealization?.type === "risk-quiz" && screen === "customization";
+  // Oprawa wchodzi dopiero na kroku edytora baneru — wcześniejsze ekrany
+  // (kod, wybór drużyny) zostają na domyślnej palecie, tak jak dotąd.
+  const onboardingThemeFamily: ExpeditionThemeFamily | null =
+    screen === "customization" && activeRealization ? resolveThemeFamily(activeRealization) : null;
+  // Kształt obudowy (ścięte rogi, poświata, logo) należy wyłącznie do
+  // Ryzykantów — to osobna oś od kolorów.
+  const isRiskQuizStyling = onboardingThemeFamily === "risk";
 
   useEffect(() => {
-    onRiskQuizStylingChange?.(isRiskQuizStyling);
-  }, [isRiskQuizStyling, onRiskQuizStylingChange]);
+    onThemeFamilyChange?.(onboardingThemeFamily);
+  }, [onboardingThemeFamily, onThemeFamilyChange]);
 
   return (
     <View className="relative flex-1 overflow-hidden" style={{ backgroundColor: EXPEDITION_THEME.background }}>

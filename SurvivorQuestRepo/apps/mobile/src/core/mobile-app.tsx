@@ -433,15 +433,14 @@ export function MobileApp() {
   // Set by the onboarding screen when its editor step belongs to a Ryzykanci
   // realization. Onboarding runs before `onboardingSession` exists, so that
   // session cannot answer which palette the editor should wear.
-  const [isOnboardingRiskStyling, setIsOnboardingRiskStyling] = useState(false);
+  const [onboardingThemeFamily, setOnboardingThemeFamily] = useState<ExpeditionThemeFamily | null>(null);
   const activeThemeMode = themePreference;
   // Risk-quiz ("Ryzykanci") realizations run on their own navy/gold palette; every
   // other realization keeps the green expedition one. The family is global state
   // rather than a prop because station panels, the QR scanner and the top bar are
   // shared between both screens and read colours straight off EXPEDITION_THEME.
-  const activeThemeFamily: ExpeditionThemeFamily = isOnboardingRiskStyling
-    ? "risk"
-    : resolveThemeFamily(onboardingSession?.realization);
+  const activeThemeFamily: ExpeditionThemeFamily =
+    onboardingThemeFamily ?? resolveThemeFamily(onboardingSession?.realization);
   setExpeditionThemeMode(activeThemeMode, activeThemeFamily);
   const activeThemePalette = getExpeditionThemePalette(activeThemeMode, activeThemeFamily);
   const uiLanguage = resolveUiLanguage(
@@ -1083,7 +1082,7 @@ export function MobileApp() {
               onComplete={(session) => void handleComplete(session)}
               recoveryIntent={recoveryIntent}
               onRecoveryConsumed={() => setRecoveryIntent(null)}
-              onRiskQuizStylingChange={setIsOnboardingRiskStyling}
+              onThemeFamilyChange={setOnboardingThemeFamily}
             />
           )}
           {shouldShowGlobalThemeButton ? themeSwitchButton : null}
