@@ -13,7 +13,8 @@
     "lint": "eslint . --max-warnings=0",
     "test": "jest --ci --runInBand",
     "test:smoke": "jest --ci --runInBand --testPathPattern=smoke",
-    "build:smoke": "cross-env EXPO_NO_DOCTOR=1 expo export --platform web --output-dir .expo-test-bundle-ci --clear"
+    "build:smoke": "cross-env EXPO_NO_DOCTOR=1 expo export --platform web --output-dir .expo-test-bundle-ci --clear",
+    "check:typeface": "node scripts/check-typeface.cjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
@@ -23,6 +24,7 @@
     "expo-audio": "~57.0.4",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.17",
+    "expo-font": "^57.0.4",
     "expo-location": "~57.0.15",
     "expo-navigation-bar": "~57.0.2",
     "expo-sensors": "~57.0.2",
@@ -53,6 +55,7 @@
     "eslint-config-expo": "^57.0.2",
     "jest": "^29.7.0",
     "jest-expo": "~57.0.5",
+    "postcss": "^8.5.28",
     "typescript": "~6.0.3"
   },
   "private": true

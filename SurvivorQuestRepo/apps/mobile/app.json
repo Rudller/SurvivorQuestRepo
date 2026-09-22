@@ -38,6 +38,49 @@
       "expo-sensors",
       "expo-asset",
       [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Montserrat",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/Montserrat_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/Montserrat_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/Montserrat_700Bold.ttf",
+                    "weight": 700
+                  }
+                ]
+              },
+              {
+                "fontFamily": "PlayfairDisplay",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/PlayfairDisplay_400Regular.ttf",
+                    "weight": 400
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./assets/fonts/Montserrat_500Medium.ttf",
+              "./assets/fonts/Montserrat_600SemiBold.ttf",
+              "./assets/fonts/Montserrat_700Bold.ttf",
+              "./assets/fonts/PlayfairDisplay_400Regular.ttf"
+            ]
+          }
+        }
+      ],
+      [
         "expo-navigation-bar",
         {
           "hidden": true
