@@ -26,6 +26,13 @@ export type RiskQuizText = {
     steps: readonly [HowToPlayStep, HowToPlayStep, HowToPlayStep];
   };
   remainingCards: { label: string };
+  finish: {
+    title: string;
+    subtitle: string;
+    points: string;
+    handBackTablets: string;
+    thanks: string;
+  };
   targetPicker: {
     cancel: string;
     alreadyHit: string;
@@ -73,6 +80,13 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Zostało kart" },
+    finish: {
+      title: "Koniec gry",
+      subtitle: "Talia zamknięta. Oto jak poszło drużynom.",
+      points: "pkt",
+      handBackTablets: "Oddajcie tablety organizatorowi.",
+      thanks: "Dziękujemy za grę 💚",
+    },
     targetPicker: {
       cancel: "Anuluj",
       alreadyHit: "już oświniona",
@@ -110,6 +124,13 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Cards left" },
+    finish: {
+      title: "Game over",
+      subtitle: "The deck is closed. Here is how the teams did.",
+      points: "pts",
+      handBackTablets: "Please hand the tablets back to the organiser.",
+      thanks: "Thanks for playing 💚",
+    },
     targetPicker: {
       cancel: "Cancel",
       alreadyHit: "already hit",
@@ -147,6 +168,13 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Залишилось карток" },
+    finish: {
+      title: "Гру завершено",
+      subtitle: "Колоду закрито. Ось як упоралися команди.",
+      points: "очк.",
+      handBackTablets: "Поверніть планшети організатору.",
+      thanks: "Дякуємо за гру 💚",
+    },
     targetPicker: {
       cancel: "Скасувати",
       alreadyHit: "уже під свинею",
@@ -184,6 +212,13 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Осталось карточек" },
+    finish: {
+      title: "Игра окончена",
+      subtitle: "Колода закрыта. Вот как справились команды.",
+      points: "очк.",
+      handBackTablets: "Верните планшеты организатору.",
+      thanks: "Спасибо за игру 💚",
+    },
     targetPicker: {
       cancel: "Отмена",
       alreadyHit: "уже под свиньёй",

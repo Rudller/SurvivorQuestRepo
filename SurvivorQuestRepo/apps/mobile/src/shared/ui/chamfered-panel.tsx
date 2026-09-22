@@ -33,6 +33,7 @@ type ChamferedPanelProps = {
   textureOpacity?: number;
   textureScale?: number;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
   children?: ReactNode;
 };
 
@@ -96,6 +97,7 @@ export function ChamferedPanel({
   textureOpacity = 0.09,
   textureScale = 1,
   style,
+  testID,
   children,
 }: ChamferedPanelProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -153,7 +155,7 @@ export function ChamferedPanel({
   const texturePaths = hasTexture ? buildTexturePaths(texture, tile) : [];
 
   return (
-    <View style={[{ position: "relative" }, style]} onLayout={handleLayout}>
+    <View testID={testID} style={[{ position: "relative" }, style]} onLayout={handleLayout}>
       {size.width > 0 && size.height > 0 ? (
         <>
           {glowColor ? (

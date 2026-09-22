@@ -173,6 +173,7 @@ model Station {
   riskPoolMemberships RiskPoolStation[]
   riskAttempts     RiskAttempt[]
   riskPendingDraws RiskPendingDraw[]
+  riskOpenDraws    RiskOpenDraw[]
   pendingStationLaunches PendingStationLaunch[]
 
   @@unique([realizationId, qrEntryCode])
@@ -323,6 +324,7 @@ model Team {
   thrownPigEffects   RiskPigEffect[]         @relation("RiskPigEffectSource")
   riskPigGrants      RiskPigGrant[]
   riskPendingDraw    RiskPendingDraw?
+  riskOpenDraw       RiskOpenDraw?
   pendingStationLaunch PendingStationLaunch?
 
   @@unique([realizationId, slotNumber])
@@ -534,6 +536,7 @@ model RiskCard {
   category      RiskCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   attempts      RiskAttempt[]
   pendingDraws  RiskPendingDraw[]
+  openDraws     RiskOpenDraw[]
 
   @@unique([realizationId, code])
   @@index([categoryId, difficulty])
@@ -573,6 +576,25 @@ model RiskAttempt {
 // can only have one such draw in flight at a time, which doubles as the
 // collision check on the admin trigger endpoint.
 model RiskPendingDraw {
+  id        String   @id @default(uuid())
+  teamId    String   @unique
+  cardId    String
+  stationId String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  card      RiskCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  station   Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+}
+
+// The card a team currently has on screen.
+//
+// Deliberately NOT RiskPendingDraw: that one is a remote-launch command and
+// pollPendingDraw() deletes it the moment the tablet picks it up, so it cannot
+// double as a lock. This row is the opposite -- held until the team answers,
+// which is the only moment a RiskAttempt appears to keep the station out of the
+// pool. Without it, closing a card without answering and scanning again
+// re-enters the same pool and can deal the same station a second time.
+model RiskOpenDraw {
   id        String   @id @default(uuid())
   teamId    String   @unique
   cardId    String

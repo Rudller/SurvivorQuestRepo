@@ -55,6 +55,10 @@ import {
 import { RiskQuizPigTargetPicker } from "../components/risk-quiz-pig-target-picker";
 import { RiskQuizBackground } from "../components/risk-quiz-background";
 import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
+import { getRiskQuizSessionPollDelayMs } from "../model/session-poll-delay";
+import { RiskQuizFinishScreen } from "../components/risk-quiz-finish-screen";
+import { isRiskQuizGameOver } from "../model/risk-quiz-finish-summary";
+import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 
 type RiskQuizScreenProps = {
@@ -79,10 +83,19 @@ type LiveRealizationInfo = {
 };
 
 type LiveTeamInfo = {
+  id: string;
   name: string | null;
   slotNumber: number;
   color: string | null;
   badgeImageUrl: string | null;
+};
+
+// Everything the end screen needs, collected by the session poll. Kept apart
+// from LiveRealizationInfo because it is read exactly once, at the end.
+type LiveFinishInfo = {
+  isEnded: boolean;
+  showLeaderboard: boolean;
+  leaderboardEntries: ExpeditionLeaderboardEntry[];
 };
 
 // Both directions of the deck-view <-> card swap run the same two halves: the
@@ -188,7 +201,6 @@ const STATION_TYPE_LABELS: Record<StationTestType, string> = {
 // players whenever the admin leaves the "Tekst wstępu" field empty.
 const INTRO_FALLBACK_TEXT =
   "Witajcie w grze! Za chwilę zaczynamy — skanujcie karty, podejmujcie wyzwania i zdobywajcie punkty dla swojej drużyny. Powodzenia!";
-const START_POLL_INTERVAL_MS = 3000;
 // How often to check for a remote-launched draw ("Uruchom na tablecie" in
 // the admin panel) while idle on the scan screen — see the polling effect
 // below.
@@ -288,6 +300,7 @@ export function RiskQuizScreen({
   const [deckStatus, setDeckStatus] = useState<RiskDeckStatus | null>(null);
   const [liveRealization, setLiveRealization] = useState<LiveRealizationInfo | null>(null);
   const [liveTeam, setLiveTeam] = useState<LiveTeamInfo | null>(null);
+  const [liveFinish, setLiveFinish] = useState<LiveFinishInfo | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [pigState, setPigState] = useState<RiskPigState | null>(null);
@@ -336,16 +349,21 @@ export function RiskQuizScreen({
   const submittedCardIdRef = useRef<string | null>(null);
   const contentScrollViewRef = useRef<ScrollView>(null);
 
-  // Mirrors the normal realization's "waiting for admin start" poll: while the
-  // intro screen is showing, keep checking realization status and reveal the
-  // scan UI as soon as the game is actually in progress, instead of a manual
-  // dismiss button. Also hydrates the top bar's live realization/team info
-  // (logo, badge, points) for the main screen that follows.
+  // Mirrors the normal realization's session poll. Before the start it watches
+  // the realization status and reveals the scan UI as soon as the game is in
+  // progress, instead of a manual dismiss button. After the start it stays
+  // alive at a slower cadence, because it is also the only source of the top
+  // bar's live realization/team info — company name, logo, badge and points —
+  // and the expedition keeps those current for the whole session too.
   useEffect(() => {
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    // Slows down once the game is open; the poll itself never stops, because
+    // it is what keeps the top bar's company name, logo, badge and points in
+    // step with the admin panel for the rest of the session.
+    let nextDelayMs = getRiskQuizSessionPollDelayMs(undefined);
 
-    const pollUntilStarted = async () => {
+    const pollSession = async () => {
       try {
         const state = await fetchMobileSessionState(apiBaseUrl, sessionToken, session.selectedLanguage);
         if (cancelled) {
@@ -363,19 +381,27 @@ export function RiskQuizScreen({
           durationMinutes: state.realization.durationMinutes,
         });
         setLiveTeam({
+          id: state.team.id,
           name: state.team.name,
           slotNumber: state.team.slotNumber,
           color: state.team.color,
           badgeImageUrl: state.team.badgeImageUrl,
+        });
+        setLiveFinish({
+          isEnded: isRiskQuizGameOver(state.endState),
+          // Same gate the expedition applies, so one admin setting governs the
+          // results table in both game modes.
+          showLeaderboard:
+            state.realization.showLeaderboardOnFinish &&
+            state.realization.hideLeaderboardMinutesBeforeEnd === 0,
+          leaderboardEntries: state.leaderboard.entries,
         });
 
         // Also the only place the top bar's live info is filled in, so it runs
         // whether or not the intro card is up — a started session still needs
         // one pass through here before the scan screen has a logo to show.
         setShowIntro(shouldShowRiskQuizIntro(state.realization.status));
-        if (state.realization.status === "in-progress") {
-          return;
-        }
+        nextDelayMs = getRiskQuizSessionPollDelayMs(state.realization.status);
       } catch (error) {
         if (cancelled) {
           return;
@@ -388,11 +414,11 @@ export function RiskQuizScreen({
       }
 
       timeoutId = setTimeout(() => {
-        void pollUntilStarted();
-      }, START_POLL_INTERVAL_MS);
+        void pollSession();
+      }, nextDelayMs);
     };
 
-    void pollUntilStarted();
+    void pollSession();
 
     return () => {
       cancelled = true;
@@ -1166,6 +1192,26 @@ export function RiskQuizScreen({
       audioPlayFailed: "Nie udało się odtworzyć nagrania.",
     },
   });
+
+  // Ahead of the intro card on purpose: `shouldShowRiskQuizIntro` reads "done"
+  // as "not started yet", so without this a finished game sends the tablet back
+  // to the briefing it opened with.
+  if (liveFinish?.isEnded) {
+    return (
+      <RiskQuizFinishScreen
+        language={resolveUiLanguage(selectedLanguage)}
+        isLightTheme={isLightTheme}
+        currentTeamId={liveTeam?.id ?? ""}
+        teamPoints={teamPoints}
+        leaderboardEntries={liveFinish.leaderboardEntries}
+        // Last read of the idle poll; the deck's value does not move mid-game,
+        // and 0 simply falls back to scaling against the winner.
+        maxPoints={deckStatus?.maxPoints ?? 0}
+        showLeaderboard={liveFinish.showLeaderboard}
+        onExitRealization={onExitRealization}
+      />
+    );
+  }
 
   if (showIntro) {
     return (

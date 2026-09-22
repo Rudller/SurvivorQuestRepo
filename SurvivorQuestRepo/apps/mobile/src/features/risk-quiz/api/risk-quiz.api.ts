@@ -64,6 +64,9 @@ export type RiskDeckStatus = {
   // notices points that changed without the team doing anything — a photo card
   // approved (or rejected) by the Game Master.
   teamPoints?: number;
+  // What the whole pool pays out at the flat difficulty rate — the scale the
+  // end screen draws its bars against.
+  maxPoints?: number;
   // The team's photo cards and their verdicts; isCorrect stays null until the
   // Game Master decides.
   photoReviews?: {

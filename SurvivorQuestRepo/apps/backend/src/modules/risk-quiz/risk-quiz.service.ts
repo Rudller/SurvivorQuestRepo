@@ -248,6 +248,11 @@ export class RiskQuizService {
       await this.prisma.riskPendingDraw.deleteMany({
         where: { teamId: { in: teams.map((team) => team.id) } },
       });
+      // An open draw points at a card from the scheme being replaced, and those
+      // stop being scannable the moment the swap lands.
+      await this.prisma.riskOpenDraw.deleteMany({
+        where: { teamId: { in: teams.map((team) => team.id) } },
+      });
     }
 
     return clonedScheme.id;
@@ -438,6 +443,28 @@ export class RiskQuizService {
       throw new NotFoundException('Card not found');
     }
 
+    // A task already on this team's screen wins over whatever was just scanned.
+    // RiskAttempt -- the row that keeps a station out of the pool below -- is
+    // only written when an answer is submitted, so without this a team could
+    // close a card unanswered, scan again and be dealt the very same station a
+    // second time. Rescanning now returns the identical card instead.
+    const openDraw = await this.prisma.riskOpenDraw.findUnique({
+      where: { teamId: team.id },
+      include: { card: { include: { category: true } }, station: true },
+    });
+    if (openDraw) {
+      return {
+        exhausted: false as const,
+        cardId: openDraw.cardId,
+        categoryName: openDraw.card.category.name,
+        difficulty: openDraw.card.difficulty,
+        station: this.toRiskStationPayload(
+          openDraw.station,
+          this.resolveRiskLanguageContext(realization, input.selectedLanguage),
+        ),
+      };
+    }
+
     const poolStations = await this.prisma.riskPoolStation.findMany({
       where: { categoryId: card.categoryId, difficulty: card.difficulty },
       include: { station: true },
@@ -479,6 +506,48 @@ export class RiskQuizService {
     }
 
     const chosen = available[Math.floor(Math.random() * available.length)];
+
+    // create(), not upsert(): two scans landing at once both read no open draw
+    // and both pick a station, and an upsert would let each one return its own
+    // — two tablets on the same team, two different tasks. The unique teamId
+    // makes the database pick the winner, and the loser re-reads it and serves
+    // the same card instead of its own.
+    try {
+      await this.prisma.riskOpenDraw.create({
+        data: {
+          teamId: team.id,
+          cardId: card.id,
+          stationId: chosen.stationId,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const winner = await this.prisma.riskOpenDraw.findUnique({
+          where: { teamId: team.id },
+          include: { card: { include: { category: true } }, station: true },
+        });
+        if (winner) {
+          return {
+            exhausted: false as const,
+            cardId: winner.cardId,
+            categoryName: winner.card.category.name,
+            difficulty: winner.card.difficulty,
+            station: this.toRiskStationPayload(
+              winner.station,
+              this.resolveRiskLanguageContext(
+                realization,
+                input.selectedLanguage,
+              ),
+            ),
+          };
+        }
+      } else {
+        throw error;
+      }
+    }
 
     return {
       exhausted: false as const,
@@ -560,7 +629,12 @@ export class RiskQuizService {
     // the scan screen polls while idle, and a photo card approved by the Game
     // Master changes a team's score with nothing else to announce it.
     if (!realization.riskSchemeId) {
-      return { categoryCount: 0, remainingCards: 0, teamPoints: team.points };
+      return {
+        categoryCount: 0,
+        remainingCards: 0,
+        teamPoints: team.points,
+        maxPoints: 0,
+      };
     }
 
     const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
@@ -570,12 +644,17 @@ export class RiskQuizService {
     const categoryIds = schemeCategories.map((item) => item.categoryId);
 
     if (categoryIds.length === 0) {
-      return { categoryCount: 0, remainingCards: 0, teamPoints: team.points };
+      return {
+        categoryCount: 0,
+        remainingCards: 0,
+        teamPoints: team.points,
+        maxPoints: 0,
+      };
     }
 
     const poolStations = await this.prisma.riskPoolStation.findMany({
       where: { categoryId: { in: categoryIds } },
-      select: { stationId: true },
+      select: { stationId: true, difficulty: true },
     });
 
     const attempted = await this.prisma.riskAttempt.findMany({
@@ -593,10 +672,23 @@ export class RiskQuizService {
       (item) => !attemptedStationIds.has(item.stationId),
     ).length;
 
+    // What the whole pool pays out at the flat difficulty rate, so the tablet's
+    // end screen can draw each team's score as a share of what was on the table
+    // rather than as a share of whoever won. Streak multipliers are left out on
+    // purpose: they are a property of how a team played, not of the deck, and
+    // including them would make the ceiling move per team. A team on a long
+    // streak can therefore finish above this number — the tablet caps its bar.
+    const maxPoints = poolStations.reduce(
+      (total, station) =>
+        total + RISK_DIFFICULTY_POINTS[station.difficulty].correct,
+      0,
+    );
+
     return {
       categoryCount: categoryIds.length,
       remainingCards,
       teamPoints: team.points,
+      maxPoints,
       photoReviews: await this.listTeamPhotoReviews(team.id),
     };
   }
@@ -665,6 +757,22 @@ export class RiskQuizService {
     if (consumed.count === 0) {
       return { draw: null };
     }
+
+    // The remote-launch row is gone the instant it is delivered, so without
+    // this the card now on the team's screen would have nothing holding it and
+    // a physical scan could stack a second task on top of it.
+    await this.prisma.riskOpenDraw.upsert({
+      where: { teamId: team.id },
+      create: {
+        teamId: team.id,
+        cardId: pendingDraw.cardId,
+        stationId: pendingDraw.stationId,
+      },
+      update: {
+        cardId: pendingDraw.cardId,
+        stationId: pendingDraw.stationId,
+      },
+    });
 
     return {
       draw: {
@@ -807,6 +915,7 @@ export class RiskQuizService {
           url: uploaded.url,
         },
       }),
+      this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } }),
       this.prisma.riskAttempt.create({
         data: {
           realizationId: realization.id,
@@ -872,6 +981,8 @@ export class RiskQuizService {
       RISK_DIFFICULTY_POINTS[card.difficulty].correct *
         this.resolveStreakMultiplier(streak),
     );
+
+    await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
 
     await this.prisma.riskAttempt.create({
       data: {
@@ -1009,6 +1120,10 @@ export class RiskQuizService {
     const pointsDelta = isCorrect
       ? Math.round(scoring.correct * multiplier)
       : scoring.incorrect;
+
+    // The card is done with; releasing it here is what lets the next scan deal
+    // a new one instead of replaying this task.
+    await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
 
     const attempt = await this.prisma.riskAttempt.create({
       data: {
@@ -2530,6 +2645,7 @@ export class RiskQuizService {
 
     if (attempts.length === 0) {
       await this.prisma.riskPendingDraw.deleteMany({ where: { teamId } });
+      await this.prisma.riskOpenDraw.deleteMany({ where: { teamId } });
       return { teamId, resetCount: 0, pointsAdjusted: 0 };
     }
 
@@ -2544,6 +2660,7 @@ export class RiskQuizService {
 
     await this.prisma.$transaction([
       this.prisma.riskPendingDraw.deleteMany({ where: { teamId } }),
+      this.prisma.riskOpenDraw.deleteMany({ where: { teamId } }),
       this.prisma.riskAttempt.deleteMany({
         where: { realizationId: realization.id, teamId },
       }),
