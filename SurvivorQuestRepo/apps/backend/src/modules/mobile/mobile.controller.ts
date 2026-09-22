@@ -331,6 +331,13 @@ export class MobileController {
     return this.mobileService.resetMobileAdminRealization('current');
   }
 
+  @Post('admin/realizations/current/force-device-exit')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async forceMobileAdminCurrentRealizationDeviceExit() {
+    return this.mobileService.forceMobileAdminDeviceExit('current');
+  }
+
   @Get('admin/realizations/current/locations')
   @AdminOrInstructor()
   @UseGuards(AuthenticatedSessionGuard, RolesGuard)
@@ -496,6 +503,15 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.resetMobileAdminRealization(realizationId);
+  }
+
+  @Post('admin/realizations/:realizationId/force-device-exit')
+  @AdminOnly()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async forceMobileAdminRealizationDeviceExit(
+    @Param('realizationId') realizationId: string,
+  ) {
+    return this.mobileService.forceMobileAdminDeviceExit(realizationId);
   }
 
   @Get('admin/realizations/:realizationId/locations')

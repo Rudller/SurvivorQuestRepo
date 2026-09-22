@@ -16,7 +16,16 @@ import {
 } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { resolveUiLanguage, type UiLanguage } from "../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS, TEAM_ICONS, getTeamColors } from "../model/constants";
+import {
+  EXPEDITION_THEME,
+  TEAM_COLORS,
+  TEAM_ICONS,
+  getExpeditionThemeMode,
+  getTeamColors,
+} from "../model/constants";
+import { RiskQuizBackground } from "../../risk-quiz/components/risk-quiz-background";
+import { RyzykanciLogoHeader } from "../../risk-quiz/components/ryzykanci-logo-header";
+import { isTeamColor, shouldSkipTeamStepAfterJoin } from "../model/recovery-join";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -862,6 +871,13 @@ type RealizationOnboardingScreenProps = {
     notice: string;
   } | null;
   onRecoveryConsumed?: () => void;
+  /**
+   * Fires when the editor step of a Ryzykanci realization opens (and again with
+   * `false` when it closes). The theme family is global state owned by
+   * `mobile-app.tsx`, which cannot see the realization yet — the onboarding
+   * session it reads only exists once onboarding finishes.
+   */
+  onRiskQuizStylingChange?: (isActive: boolean) => void;
 };
 
 function getErrorMessage(error: unknown, text: OnboardingUiText) {
@@ -1255,10 +1271,6 @@ async function requestMobileApiUploadSelfie(baseUrl: string, sessionToken: strin
   return data;
 }
 
-function isTeamColor(value: string | null): value is TeamColor {
-  return TEAM_COLORS.some((color) => color.key === value);
-}
-
 const DEFAULT_TEAM_COLOR: TeamColor = "amber";
 const DEFAULT_TEAM_COLOR_INDEX = Math.max(
   TEAM_COLORS.findIndex((color) => color.key === DEFAULT_TEAM_COLOR),
@@ -1275,19 +1287,6 @@ function getDefaultTeamCustomization(slotNumber: number | null | undefined) {
     // at once do not both land on the first emoji and immediately collide.
     icon: TEAM_ICONS[slotOffset % TEAM_ICONS.length],
   };
-}
-
-// An avatar counts as chosen whether it is a photo or an emoji. Requiring the
-// photo specifically would send every team that picked an emoji back into the
-// editor on each rejoin.
-function hasCompleteTeamCustomization<
-  T extends { name: string | null; color: string | null; badgeImageUrl: string | null; badgeKey?: string | null },
->(team: T): team is T & { name: string; color: TeamColor } {
-  const hasAvatar =
-    (typeof team.badgeImageUrl === "string" && team.badgeImageUrl.trim().length > 0) ||
-    (typeof team.badgeKey === "string" && team.badgeKey.trim().length > 0);
-
-  return Boolean(team.name?.trim() && isTeamColor(team.color) && hasAvatar);
 }
 
 function normalizeOccupancyMap(
@@ -1325,6 +1324,7 @@ export function RealizationOnboardingScreen({
   onComplete,
   recoveryIntent,
   onRecoveryConsumed,
+  onRiskQuizStylingChange,
 }: RealizationOnboardingScreenProps) {
   const routePulse = useAnimatedValue(0);
   const adaptiveLayout = useAdaptiveLayout();
@@ -1566,7 +1566,9 @@ export function RealizationOnboardingScreen({
       return;
     }
 
-    void onSubmitCode(recoveryIntent.realizationCode, recoveryIntent.apiBaseUrl).finally(() => {
+    void onSubmitCode(recoveryIntent.realizationCode, recoveryIntent.apiBaseUrl, {
+      isRecoveryJoin: true,
+    }).finally(() => {
       onRecoveryConsumed?.();
     });
   }, [deviceId, onRecoveryConsumed, recoveryIntent]);
@@ -1841,7 +1843,9 @@ export function RealizationOnboardingScreen({
   async function onSubmitCode(
     overrideCode?: string,
     preferredApiBaseUrl?: string | null,
+    options?: { isRecoveryJoin?: boolean },
   ) {
+    const isRecoveryJoin = options?.isRecoveryJoin ?? false;
     const normalizedCode = (overrideCode ?? realizationCode).trim().toUpperCase();
 
     if (!normalizedCode) {
@@ -2001,7 +2005,7 @@ export function RealizationOnboardingScreen({
           : null,
       );
 
-      if (hasCompleteTeamCustomization(join.team)) {
+      if (shouldSkipTeamStepAfterJoin(join.team, isRecoveryJoin)) {
         completeOnboarding(join.sessionToken, join.team.name.trim(), {
           apiBaseUrl: resolvedBaseUrl,
           realization: normalizedRealization,
@@ -2430,44 +2434,62 @@ export function RealizationOnboardingScreen({
     }
   }
 
+  // Only the editor step wears the Ryzykanci skin; the code and team steps stay
+  // on the expedition look, so the switch is keyed on the step, not just on the
+  // realization type.
+  const isRiskQuizStyling = activeRealization?.type === "risk-quiz" && screen === "customization";
+
+  useEffect(() => {
+    onRiskQuizStylingChange?.(isRiskQuizStyling);
+  }, [isRiskQuizStyling, onRiskQuizStylingChange]);
+
   return (
     <View className="relative flex-1 overflow-hidden" style={{ backgroundColor: EXPEDITION_THEME.background }}>
-      <View pointerEvents="none" className="absolute inset-0">
-        <Svg width="100%" height="100%" viewBox="0 0 430 932" preserveAspectRatio="xMidYMid slice">
-          <Rect x="0" y="0" width="430" height="932" fill={EXPEDITION_THEME.background} />
-          <Path
-            d="M48 130 C128 170 164 236 150 330 C136 428 205 486 228 590 C254 704 328 736 362 846"
-            fill="none"
-            stroke={EXPEDITION_THEME.mapLine}
-            strokeDasharray="8 11"
-            strokeWidth={2}
-            opacity={0.7}
-          />
-          <Path
-            d="M76 454 C154 424 198 478 274 520"
-            fill="none"
-            stroke={EXPEDITION_THEME.mapLine}
-            strokeDasharray="5 10"
-            strokeWidth={1.5}
-            opacity={0.5}
-          />
-          <Circle cx="48" cy="130" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
-          <Circle cx="150" cy="330" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
-          <Circle cx="228" cy="590" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
-          <Circle cx="362" cy="846" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
-        </Svg>
-      </View>
+      {isRiskQuizStyling ? (
+        // Ryzykanci swap the expedition's dashed map route for the card-suit
+        // watermarks, glow and falling cards the rest of that game runs on.
+        <RiskQuizBackground isLightTheme={getExpeditionThemeMode() === "light"} />
+      ) : (
+        <>
+        <View pointerEvents="none" className="absolute inset-0">
+          <Svg width="100%" height="100%" viewBox="0 0 430 932" preserveAspectRatio="xMidYMid slice">
+            <Rect x="0" y="0" width="430" height="932" fill={EXPEDITION_THEME.background} />
+            <Path
+              d="M48 130 C128 170 164 236 150 330 C136 428 205 486 228 590 C254 704 328 736 362 846"
+              fill="none"
+              stroke={EXPEDITION_THEME.mapLine}
+              strokeDasharray="8 11"
+              strokeWidth={2}
+              opacity={0.7}
+            />
+            <Path
+              d="M76 454 C154 424 198 478 274 520"
+              fill="none"
+              stroke={EXPEDITION_THEME.mapLine}
+              strokeDasharray="5 10"
+              strokeWidth={1.5}
+              opacity={0.5}
+            />
+            <Circle cx="48" cy="130" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
+            <Circle cx="150" cy="330" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
+            <Circle cx="228" cy="590" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
+            <Circle cx="362" cy="846" r="4" fill={EXPEDITION_THEME.mapNode} opacity={0.9} />
+          </Svg>
+        </View>
 
-      <Animated.View
-        pointerEvents="none"
-        className="absolute h-4 w-4 rounded-full"
-        style={[{ left: "11%", top: "14%", backgroundColor: EXPEDITION_THEME.accent }, firstMarkerPulse]}
-      />
-      <Animated.View
-        pointerEvents="none"
-        className="absolute h-4 w-4 rounded-full"
-        style={[{ right: "16%", top: "61%", backgroundColor: EXPEDITION_THEME.accentStrong }, secondMarkerPulse]}
-      />
+        <Animated.View
+          pointerEvents="none"
+          className="absolute h-4 w-4 rounded-full"
+          style={[{ left: "11%", top: "14%", backgroundColor: EXPEDITION_THEME.accent }, firstMarkerPulse]}
+        />
+        <Animated.View
+          pointerEvents="none"
+          className="absolute h-4 w-4 rounded-full"
+          style={[{ right: "16%", top: "61%", backgroundColor: EXPEDITION_THEME.accentStrong }, secondMarkerPulse]}
+        />
+
+        </>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -2935,8 +2957,17 @@ export function RealizationOnboardingScreen({
             </View>
           )}
 
+          {screen === "customization" && isRiskQuizStyling && (
+            // Capped low on purpose: this step carries a name field, a colour
+            // grid, an avatar row and the start button, so the wordmark gets
+            // a fifth of the height rather than the third the waiting screen
+            // can afford.
+            <RyzykanciLogoHeader maxHeightRatio={0.2} contentPadding={contentHorizontalPadding} />
+          )}
+
           {screen === "customization" && (
             <TeamCustomizationStep
+              variant={isRiskQuizStyling ? "risk" : "expedition"}
               isTabletLayout={isTabletLayout}
               selectedTeam={selectedTeam}
               teamName={teamName}

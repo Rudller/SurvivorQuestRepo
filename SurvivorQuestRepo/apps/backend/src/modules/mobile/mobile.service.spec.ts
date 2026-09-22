@@ -2520,3 +2520,92 @@ describe('MobileService.listPendingPhotoReviews', () => {
     expect(reviews.map((review) => review.kind)).toEqual(['text', 'photo']);
   });
 });
+
+describe('MobileService forceMobileAdminDeviceExit', () => {
+  function createService() {
+    const prisma = {
+      teamAssignment: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'assignment-1' }, { id: 'assignment-2' }]),
+        update: jest.fn().mockResolvedValue(undefined),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      team: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      teamTaskProgress: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      realization: { update: jest.fn().mockResolvedValue(undefined) },
+      eventLog: { create: jest.fn().mockResolvedValue(undefined) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+
+    const service = buildMobileService(prisma);
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminRealizationOrThrow',
+    ).mockResolvedValue({
+      id: 'realization-1',
+      status: 'in-progress',
+      scheduledAt: new Date().toISOString(),
+      durationMinutes: 120,
+    });
+
+    return { service, prisma };
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('rotates every session token so the tablets drop back to onboarding', async () => {
+    const { service, prisma } = createService();
+    const emitEvent = spyOnPrivate(service, 'emitEvent').mockResolvedValue(
+      undefined,
+    );
+
+    const result = await service.forceMobileAdminDeviceExit('realization-1');
+
+    expect(prisma.teamAssignment.update).toHaveBeenCalledTimes(2);
+
+    const calls = prisma.teamAssignment.update.mock.calls as [
+      { where: { id: string }; data: { sessionToken: string } },
+    ][];
+    const ids = calls.map(([call]) => call.where.id);
+    const tokens = calls.map(([call]) => call.data.sessionToken);
+
+    expect(ids).toEqual(['assignment-1', 'assignment-2']);
+    // Each row needs its own value because `sessionToken` is unique.
+    expect(new Set(tokens).size).toBe(2);
+    expect(tokens.every((token) => token.length > 0)).toBe(true);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        realizationId: 'realization-1',
+        revokedSessions: 2,
+      }),
+    );
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'realization_device_exit_forced' }),
+    );
+  });
+
+  it('keeps the assignments, the teams, the progress and the status intact', async () => {
+    const { service, prisma } = createService();
+    spyOnPrivate(service, 'emitEvent').mockResolvedValue(undefined);
+
+    await service.forceMobileAdminDeviceExit('realization-1');
+
+    // Unlike a reset, nothing is deleted or downgraded — the device has to be
+    // able to rejoin its own team with its points and task progress untouched.
+    expect(prisma.teamAssignment.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.teamTaskProgress.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.team.updateMany).not.toHaveBeenCalled();
+    expect(prisma.realization.update).not.toHaveBeenCalled();
+
+    const [[{ data }]] = prisma.teamAssignment.update.mock.calls as [
+      [{ data: Record<string, unknown> }],
+    ];
+    expect(Object.keys(data)).toEqual(['sessionToken']);
+  });
+});

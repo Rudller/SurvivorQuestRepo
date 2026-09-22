@@ -3118,6 +3118,54 @@ export class MobileService {
     };
   }
 
+  // Rotating every session token kicks the tablets out of the play screen the
+  // same way a realization reset does — the device's stored token stops
+  // matching, `requireSession` answers 401 and the app falls back to the
+  // onboarding screen. Unlike a reset, the `TeamAssignment` rows survive
+  // untouched, so the rejoin lands on the *same* team (see `joinRealization`,
+  // which reuses a live assignment) and no task progress or points are lost.
+  async forceMobileAdminDeviceExit(realizationId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const forcedAt = new Date();
+
+    const assignments = await this.prisma.teamAssignment.findMany({
+      where: { realizationId: realization.id },
+      select: { id: true },
+    });
+
+    // `sessionToken` is unique, so each row needs its own value — `updateMany`
+    // cannot do that. A realization holds a handful of assignments at most.
+    await this.prisma.$transaction(
+      assignments.map((assignment) =>
+        this.prisma.teamAssignment.update({
+          where: { id: assignment.id },
+          data: {
+            sessionToken: hashOpaqueToken(this.generateSessionToken()),
+          },
+        }),
+      ),
+    );
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: null,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'realization_device_exit_forced',
+      payload: {
+        forcedAt: forcedAt.toISOString(),
+        revokedSessions: assignments.length,
+      },
+    });
+
+    return {
+      realizationId: realization.id,
+      forcedAt: forcedAt.toISOString(),
+      revokedSessions: assignments.length,
+    };
+  }
+
   async getMobileAdminRealizationLocations(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);

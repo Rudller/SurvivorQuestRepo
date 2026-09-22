@@ -1,9 +1,10 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { EXPEDITION_THEME } from "../model/constants";
 import type { TeamColor, TeamColorOption } from "../model/types";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
+import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 
 export type TeamCustomizationStepText = {
   editorTitle: string;
@@ -60,6 +61,14 @@ type TeamCustomizationStepProps = {
   languageName?: string;
   showLanguagePicker?: boolean;
   onOpenLanguagePicker?: () => void;
+  /**
+   * Ryzykanci ("risk") run every panel on chamfered corners, so the editor has
+   * to match or it reads as a screen from a different game. Only the outer
+   * shell changes shape: the blocks inside stay rounded, because five nested
+   * ChamferedPanels mean five more SVG surfaces measured by onLayout, and the
+   * shape language already reads off the outer edge.
+   */
+  variant?: "expedition" | "risk";
 };
 
 type ColorOptionButtonProps = {
@@ -149,6 +158,7 @@ export function TeamCustomizationStep({
   languageName,
   showLanguagePicker = false,
   onOpenLanguagePicker,
+  variant = "expedition",
 }: TeamCustomizationStepProps) {
   const [isTeamNameFocused, setIsTeamNameFocused] = useState(false);
   // No separate mode state: the avatar in play *is* the mode. A photo always
@@ -157,13 +167,7 @@ export function TeamCustomizationStep({
   const isPhotoActive = Boolean(selfiePreviewUri);
 
   return (
-    <View
-      className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
-      style={{
-        borderColor: EXPEDITION_THEME.border,
-        backgroundColor: EXPEDITION_THEME.panel,
-      }}
-    >
+    <CustomizationShell variant={variant} isTabletLayout={isTabletLayout}>
       <View className="px-1">
         <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
           {text.editorTitle}
@@ -416,6 +420,55 @@ export function TeamCustomizationStep({
       {blockMessage && (
         <MobileFeedbackBanner message={blockMessage} tone="error" style={{ marginTop: 12 }} />
       )}
+    </CustomizationShell>
+  );
+}
+
+/** Length of the 45-degree corner cut, matched to the Ryzykanci bottom panel. */
+const RISK_PANEL_CUT = 18;
+const RISK_PANEL_BORDER_WIDTH = 1.5;
+const RISK_PANEL_GLOW_RADIUS = 14;
+
+function CustomizationShell({
+  variant,
+  isTabletLayout,
+  children,
+}: {
+  variant: "expedition" | "risk";
+  isTabletLayout: boolean;
+  children: ReactNode;
+}) {
+  if (variant === "risk") {
+    return (
+      <ChamferedPanel
+        testID="team-customization-chamfer"
+        cut={RISK_PANEL_CUT}
+        backgroundColor={EXPEDITION_THEME.panel}
+        borderColor={EXPEDITION_THEME.border}
+        borderWidth={RISK_PANEL_BORDER_WIDTH}
+        glowColor={EXPEDITION_THEME.accent}
+        glowRadius={RISK_PANEL_GLOW_RADIUS}
+        glowOpacity={0.55}
+        texture="cross-hatch"
+        textureColor={EXPEDITION_THEME.accent}
+        textureOpacity={0.08}
+        textureScale={1.3}
+        style={{ padding: isTabletLayout ? 28 : 20 }}
+      >
+        {children}
+      </ChamferedPanel>
+    );
+  }
+
+  return (
+    <View
+      className={`rounded-3xl border ${isTabletLayout ? "p-7" : "p-5"}`}
+      style={{
+        borderColor: EXPEDITION_THEME.border,
+        backgroundColor: EXPEDITION_THEME.panel,
+      }}
+    >
+      {children}
     </View>
   );
 }

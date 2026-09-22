@@ -5,10 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   AppState,
-  Easing,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -16,9 +13,8 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
-  useAnimatedValue,
 } from "react-native";
-import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpeditionStageScreen } from "../features/expedition-stage/ui/expedition-stage-screen";
 import { RiskQuizScreen } from "../features/risk-quiz/ui/risk-quiz-screen";
@@ -36,6 +32,7 @@ import { resolveSessionApiBaseUrl } from "../shared/api/api-base-url";
 import { applyLiveIntroText } from "../features/onboarding/model/waiting-session";
 import { resolveStartCountdown } from "../features/onboarding/model/start-countdown";
 import { StartCountdownPanel } from "../features/risk-quiz/components/start-countdown-panel";
+import { RyzykanciLogoHeader } from "../features/risk-quiz/components/ryzykanci-logo-header";
 import {
   EXPEDITION_THEME,
   getExpeditionThemeMode,
@@ -55,13 +52,7 @@ import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 import { AutoScrollingIntroBox, parseInlineRules, parseRulesBlocks } from "../shared/ui/intro-text-preview";
 import { LanguagePickerModal } from "../shared/ui/language-picker-modal";
 import { HiddenResetOnHold } from "../shared/ui/hidden-reset-on-hold";
-import { useReduceMotion } from "../shared/a11y/use-reduce-motion";
 
-const RYZYKANCI_LOGO = require("../../assets/ryzykanci-logo.png");
-// Intrinsic 1599x984 of that file — used to size the box the logo is drawn
-// into, since the <Image> itself is stretched to fill that box.
-const RYZYKANCI_LOGO_ASPECT_RATIO = 1599 / 984;
-const RYZYKANCI_GLOW_COLOR = "#f59e0b";
 // One half-breath. Slow enough to read as ambient rather than as a pulse
 // demanding attention — the screen it sits on is pure waiting.
 const RYZYKANCI_GLOW_BREATH_MS = 2800;
@@ -98,60 +89,6 @@ function HorizontalSafeArea({ children, className, style }: HorizontalSafeAreaPr
 // radial gradient rather than a shadow: `shadowColor` is iOS-only for a blurred
 // halo and Android's `elevation` can't be tinted, so a coloured soft falloff
 // has to be painted by hand.
-function BreathingLogoGlow({ boxHeight }: { boxHeight: number }) {
-  const breath = useAnimatedValue(0);
-  const isReduceMotionEnabled = useReduceMotion();
-
-  useEffect(() => {
-    if (isReduceMotionEnabled) {
-      // Park it mid-breath: the halo still reads as a deliberate glow rather
-      // than vanishing, it just stops pulsing.
-      breath.setValue(0.5);
-      return;
-    }
-
-    const halfBreath = (toValue: number) =>
-      Animated.timing(breath, {
-        toValue,
-        duration: RYZYKANCI_GLOW_BREATH_MS,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      });
-    const loop = Animated.loop(Animated.sequence([halfBreath(1), halfBreath(0)]));
-    loop.start();
-
-    return () => loop.stop();
-  }, [breath, isReduceMotionEnabled]);
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        // Bleeds past the logo box on every side so the gradient reaches zero
-        // off-frame instead of ending on a visible rectangle edge.
-        top: -boxHeight * 0.22,
-        bottom: -boxHeight * 0.22,
-        left: -WAITING_CONTENT_PADDING,
-        right: -WAITING_CONTENT_PADDING,
-        opacity: breath.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.95] }),
-        transform: [{ scale: breath.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.06] }) }],
-      }}
-    >
-      <Svg width="100%" height="100%">
-        <Defs>
-          <RadialGradient id="ryzykanciLogoGlow" cx="50%" cy="50%" rx="50%" ry="50%">
-            <Stop offset="0%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0.42} />
-            <Stop offset="45%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0.18} />
-            <Stop offset="100%" stopColor={RYZYKANCI_GLOW_COLOR} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Ellipse cx="50%" cy="50%" rx="50%" ry="50%" fill="url(#ryzykanciLogoGlow)" />
-      </Svg>
-    </Animated.View>
-  );
-}
-
 type OnboardingRecoveryIntent = {
   realizationCode: string;
   apiBaseUrl: string | null;
@@ -489,13 +426,19 @@ export function MobileApp() {
   const consecutivePollFailuresRef = useRef(0);
   const [recoveryIntent, setRecoveryIntent] = useState<OnboardingRecoveryIntent | null>(null);
   const [themePreference, setThemePreference] = useState<MobileThemePreference>("dark");
+  // Set by the onboarding screen when its editor step belongs to a Ryzykanci
+  // realization. Onboarding runs before `onboardingSession` exists, so that
+  // session cannot answer which palette the editor should wear.
+  const [isOnboardingRiskStyling, setIsOnboardingRiskStyling] = useState(false);
   const activeThemeMode = themePreference;
   // Risk-quiz ("Ryzykanci") realizations run on their own navy/gold palette; every
   // other realization keeps the green expedition one. The family is global state
   // rather than a prop because station panels, the QR scanner and the top bar are
   // shared between both screens and read colours straight off EXPEDITION_THEME.
   const activeThemeFamily: ExpeditionThemeFamily =
-    onboardingSession?.realization?.type === "risk-quiz" ? "risk" : "expedition";
+    onboardingSession?.realization?.type === "risk-quiz" || isOnboardingRiskStyling
+      ? "risk"
+      : "expedition";
   setExpeditionThemeMode(activeThemeMode, activeThemeFamily);
   const activeThemePalette = getExpeditionThemePalette(activeThemeMode, activeThemeFamily);
   const uiLanguage = resolveUiLanguage(
@@ -946,13 +889,6 @@ export function MobileApp() {
     const waitingCountdownState = startCountdown
       ? resolveStartCountdown(startCountdown.remainingMs, countdownElapsedMs)
       : null;
-    // Window width minus the `px-6` padding on both sides. A safe-area inset
-    // would make the real box narrower still, which only adds letter-boxing —
-    // `contain` never crops, so an over-estimate here is harmless.
-    const waitingLogoHeight = Math.min(
-      (adaptiveLayout.width - 48) / RYZYKANCI_LOGO_ASPECT_RATIO,
-      adaptiveLayout.height * 0.33,
-    );
     const waitingStatusRow = (
       <HiddenResetOnHold
         language={uiLanguage}
@@ -1016,21 +952,7 @@ export function MobileApp() {
               className="flex-1 px-6"
               style={{ paddingBottom: adaptiveLayout.s(isTabletLayout ? 28 : 18, 14, 36), minHeight: 0 }}
             >
-              {/* Fixed box, `contain` inside it. `aspectRatio` on the <Image>
-                  itself cropped the logo on device, so the height is computed
-                  here instead: the box never exceeds the content width or a
-                  third of the screen (landscape would otherwise hand the logo
-                  the whole viewport), and `contain` letter-boxes within it. */}
-              <View style={{ width: "100%", height: waitingLogoHeight }}>
-                <BreathingLogoGlow boxHeight={waitingLogoHeight} />
-                <Image
-                  source={RYZYKANCI_LOGO}
-                  accessibilityRole="image"
-                  accessibilityLabel="Ryzykanci"
-                  resizeMode="contain"
-                  style={{ width: "100%", height: "100%" }}
-                />
-              </View>
+              <RyzykanciLogoHeader contentPadding={WAITING_CONTENT_PADDING} />
               {waitingCountdownState ? (
                 // The briefing has had its time; what matters now is the count.
                 // Logo and halo stay put, so the screen reads as the same one
@@ -1156,6 +1078,7 @@ export function MobileApp() {
               onComplete={(session) => void handleComplete(session)}
               recoveryIntent={recoveryIntent}
               onRecoveryConsumed={() => setRecoveryIntent(null)}
+              onRiskQuizStylingChange={setIsOnboardingRiskStyling}
             />
           )}
           {shouldShowGlobalThemeButton ? themeSwitchButton : null}
