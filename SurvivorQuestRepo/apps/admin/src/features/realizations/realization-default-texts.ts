@@ -33,3 +33,29 @@ export const RYZYKANCI_DEFAULT_INTRO_TEXT = `Gra polega na tym, że sami decyduj
 - Wygrywa drużyna z największą liczbą punktów na koniec gry.
 
 Powodzenia.`;
+
+// Oprawa kryminalna nie zmienia mechaniki — to wciąż ekspedycja z mapą i
+// stanowiskami. Zmienia ramę fabularną, więc domyślny tekst wstępny mówi o
+// śledztwie zamiast o wyprawie, ale nie obiecuje żadnych nowych zasad.
+//
+// Świadomie bez konkretnej sprawy, nazwisk i miejsc: to jest szkielet do
+// nadpisania przez prowadzącego, a nie gotowy scenariusz. Zasady gry zostają
+// w osobnym polu, tak jak w każdej innej realizacji poza Ryzykantami.
+export const KRYMINALNY_DEFAULT_INTRO_TEXT = `Sprawa nie została zamknięta. Akta trafiły do was, bo nikt inny nie chciał ich tknąć.
+
+**CO MACIE**
+- Teren, po którym poruszał się podejrzany.
+- Zestaw tropów rozrzuconych po mapie — każdy zamknięty na zadaniu.
+- Ograniczony czas, zanim trop się wyziębi.
+
+**JAK PRACUJECIE**
+- Docieracie do kolejnych punktów na mapie i rozwiązujecie to, co tam zastaniecie.
+- Każde rozwiązane zadanie to fragment materiału dowodowego.
+- Zebrane fragmenty układają się w obraz tego, co naprawdę się wydarzyło.
+
+**ZASADY**
+- Pracujecie zespołowo — pojedynczy trop rzadko wystarcza.
+- Nie ma jednej właściwej kolejności. Sami decydujecie, którym śladem idziecie najpierw.
+- Liczy się i skuteczność, i czas.
+
+Powodzenia, detektywi.`;

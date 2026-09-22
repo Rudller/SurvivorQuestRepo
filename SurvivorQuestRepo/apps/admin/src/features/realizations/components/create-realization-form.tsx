@@ -12,7 +12,7 @@ import type {
   RealizationThemePack,
 } from "../types/realization";
 import { buildRealizationExport, parseRealizationExportFile } from "../realization-export";
-import { RYZYKANCI_DEFAULT_INTRO_TEXT } from "../realization-default-texts";
+import { KRYMINALNY_DEFAULT_INTRO_TEXT, RYZYKANCI_DEFAULT_INTRO_TEXT } from "../realization-default-texts";
 import { geocodeLocation } from "../realization-geocoding";
 import {
   formatRealizationLanguageSummary,
@@ -342,6 +342,22 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     }
 
     if (nextType !== "risk-quiz" && introText.trim() === RYZYKANCI_DEFAULT_INTRO_TEXT.trim()) {
+      setIntroText("");
+    }
+  }
+
+  // Ta sama zasada co przy typie: podstaw domyślny briefing tylko wtedy, gdy
+  // pole jest puste albo wciąż trzyma nietknięty domyślny tekst drugiej oprawy.
+  // Przełączanie oprawy w tę i z powrotem nigdy nie zje niczyjego tekstu.
+  function handleThemePackChange(nextPack: RealizationThemePack) {
+    setSelectedThemePack(nextPack);
+
+    if (nextPack === "crime" && !introText.trim()) {
+      setIntroText(KRYMINALNY_DEFAULT_INTRO_TEXT);
+      return;
+    }
+
+    if (nextPack !== "crime" && introText.trim() === KRYMINALNY_DEFAULT_INTRO_TEXT.trim()) {
       setIntroText("");
     }
   }
@@ -970,7 +986,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Oprawa</span>
                     <select
                       value={selectedThemePack}
-                      onChange={(event) => setSelectedThemePack(event.target.value as RealizationThemePack)}
+                      onChange={(event) => handleThemePackChange(event.target.value as RealizationThemePack)}
                       disabled={isRiskQuizType}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-50"
                     >
