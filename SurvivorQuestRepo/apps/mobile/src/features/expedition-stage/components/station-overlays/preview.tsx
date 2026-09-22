@@ -23,7 +23,11 @@ import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/q
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper, useStationPanelLayout } from "./station-panels/shared-ui";
 import { resolveStationPresentationProfile } from "./station-panels/station-presentation-profile";
-import { resolveStationDefinition } from "./station-panels/station-registry";
+import {
+  buildStationInteractionContext,
+  buildStationMediaContext,
+  resolveStationDefinition,
+} from "./station-panels/station-registry";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
@@ -33,7 +37,6 @@ import { createStationPreviewActions } from "./station-panels/use-station-previe
 import { useStationOverlayReset } from "./station-panels/use-station-overlay-reset";
 import { buildStationPreviewModel } from "./station-panels/use-station-preview-model";
 import { useStationTimeoutOutcome } from "./station-panels/use-station-timeout-outcome";
-import { buildQuizStationRendererByType, buildStationMediaRendererByType } from "./station-panels/station-renderers";
 import type { WordleAttempt } from "./station-panels/wordle-station-panel";
 import type {
   StationPreviewOverlayProps,
@@ -2161,7 +2164,7 @@ export function StationPreviewOverlay({
   // Ryzykanci: aparat wyżej jest ograniczony, więc reszta karty należy do
   // treści zadania — weź ją i scrolluj w środku zamiast wychodzić poza krawędź.
   const shouldScrollPhotoPromptInline = isInlinePresentation;
-  const stationMediaRendererByType = buildStationMediaRendererByType({
+  const stationMediaContext = buildStationMediaContext({
     wordleMediaBoardProps: {
       stationId: station.stationId,
       displayLength: wordleDisplayLength,
@@ -2286,7 +2289,8 @@ export function StationPreviewOverlay({
       },
     },
   });
-  const renderedStationMedia = stationMediaRendererByType[station.stationType]?.() ?? null;
+  const renderedStationMedia =
+    resolveStationDefinition(station.stationType).renderMedia?.(stationMediaContext) ?? null;
   const miniSudokuKeypadSectionProps = {
     stationId: station.stationId,
     miniSudokuPuzzle,
@@ -2381,7 +2385,7 @@ export function StationPreviewOverlay({
     }
   }
 
-  const quizStationRendererByType = buildQuizStationRendererByType({
+  const stationInteractionContext = buildStationInteractionContext({
     quizAudioPanelSharedProps: {
       station,
       quizOptions,
@@ -2601,7 +2605,9 @@ export function StationPreviewOverlay({
       },
     },
   });
-  const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
+  const renderedQuizStation =
+    resolveStationDefinition(station.stationType).renderInteraction?.(stationInteractionContext) ??
+    null;
   const stationHeaderLabel = `${station.name} • ${station.typeLabel}`;
   const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
   const overlayCardContentWidth = presentationProfile.card.contentWidth;
