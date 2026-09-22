@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import type { ExpeditionStationType, ExpeditionTask, PlayerLocation } from "../../model/types";
 import type { AlreadyCompletedNotice, ChallengeDifficulty, StationTestViewModel } from "../../components/station-overlays";
 import { QR_SCAN_ALREADY_SCANNED, QR_SCAN_SILENT_FAILURE } from "../../api/mobile-session.api";
+import { TEST_MENU_TRIGGER_HOLD_MS } from "../../../../shared/dev/test-menu-gesture";
 
-const TEST_MENU_TRIGGER_HOLD_MS = 5_000;
 
 // qr-hunt-station-panel.tsx already shows its own in-panel feedback (silent
 // buzzer / neutral "already scanned" toast) for these — surfacing them again

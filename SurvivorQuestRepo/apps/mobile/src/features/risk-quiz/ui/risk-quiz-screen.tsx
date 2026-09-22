@@ -60,6 +60,7 @@ import { RiskQuizFinishScreen } from "../components/risk-quiz-finish-screen";
 import { isRiskQuizGameOver } from "../model/risk-quiz-finish-summary";
 import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
+import { TEST_MENU_TRIGGER_HOLD_MS } from "../../../shared/dev/test-menu-gesture";
 
 type RiskQuizScreenProps = {
   session: OnboardingSession;
@@ -230,9 +231,6 @@ function logRiskQuizPollFailure(source: string, error: unknown, apiBaseUrl: stri
     statusCode: getMobileApiErrorStatusCode(error),
   });
 }
-// Matches TEST_MENU_TRIGGER_HOLD_MS in use-expedition-stage-overlay-flow.ts —
-// same hold-the-team-banner gesture as normal gameplay's station test menu.
-const TEST_MENU_TRIGGER_HOLD_MS = 5000;
 // Must match the screen container's own `px-3 py-3` / rowGap below — the
 // always-visible timer is positioned absolutely against that box, so it has
 // to re-derive where the in-flow content actually starts.
