@@ -21,8 +21,6 @@ type AdminNavItem = {
 
 const navItems: AdminNavItem[] = [
   { href: "/", label: "Panel główny" },
-  { href: "/calendar", label: "Kalendarz" },
-  { href: "/tasks", label: "Lista zadań", roles: ["admin"] },
   { href: "/current-realization", label: "Aktualna realizacja" },
   { href: "/users", label: "Użytkownicy", roles: ["admin"] },
   { href: "/realizations", label: "Realizacje" },
@@ -30,7 +28,6 @@ const navItems: AdminNavItem[] = [
   { href: "/scenario", label: "Scenariusz", roles: ["admin"] },
   { href: "/risk-quiz", label: "Ryzykanci", roles: ["admin"] },
   { href: "/media-library", label: "Biblioteka plików", roles: ["admin"] },
-  { href: "/chat", label: "Czat" },
 ];
 
 function normalizeAdminPath(pathname: string | null) {

@@ -1,15 +1,32 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMeQuery, useLogoutMutation } from "@/features/auth/api/auth.api";
 import { isUnauthorizedError } from "@/features/auth/auth-error";
 import { DashboardCalendar } from "@/features/dashboard/components/dashboard-calendar";
-import { useGetStationsQuery } from "@/features/games/api/station.api";
+import { DashboardStatusBar } from "@/features/dashboard/components/dashboard-status-bar";
+import { DashboardKpiRow, type KpiTile } from "@/features/dashboard/components/dashboard-kpi-row";
+import { DashboardTeamRanking } from "@/features/dashboard/components/dashboard-team-ranking";
+import { DashboardStationProgress } from "@/features/dashboard/components/dashboard-station-progress";
+import { DashboardRecentEvents } from "@/features/dashboard/components/dashboard-recent-events";
+import { DashboardUpcomingList } from "@/features/dashboard/components/dashboard-upcoming-list";
+import { DashboardBusinessOverview } from "@/features/dashboard/components/dashboard-business-overview";
+import { resolveDashboardMode } from "@/features/dashboard/model/dashboard-mode";
+import { buildLiveSummary, getMinutesLeft } from "@/features/dashboard/model/live-summary";
+import { buildBusinessSummary } from "@/features/dashboard/model/business-summary";
+import {
+  useGetCurrentRealizationOverviewQuery,
+  useGetPendingPhotoReviewsQuery,
+} from "@/features/current-realization/api/current-realization.api";
 import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
-import { getTaskCounts } from "@/features/tasks/lib/tasks.data";
 import { AdminShell } from "@/shared/components/admin-shell";
+
+const RECENT_EVENTS_SHOWN = 8;
+const UPCOMING_SHOWN = 4;
+
+/** Odświeżanie zegara „zostało X”, żeby licznik nie czekał na kolejny poll. */
+const CLOCK_TICK_MS = 30_000;
 
 export default function HomePage() {
   const router = useRouter();
@@ -22,54 +39,129 @@ export default function HomePage() {
   } = useMeQuery();
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
-  const canManageAdminTasks = meData?.user.role === "admin";
-  const { data: stations } = useGetStationsQuery(undefined, { skip: !canManageAdminTasks });
+  const isAdmin = meData?.user.role === "admin";
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  const {
+    data: overview,
+    isLoading: isOverviewLoading,
+    isError: isOverviewError,
+    refetch: refetchOverview,
+  } = useGetCurrentRealizationOverviewQuery(undefined, {
+    skip: !meData,
+    // Podgląd, nie sterowanie — rzadziej niż 10 s w /current-realization, bo
+    // ten endpoint przy każdym wywołaniu czyta drużyny, urządzenia, postępy
+    // i log zdarzeń realizacji.
+    pollingInterval: 15_000,
+  });
+
+  const mode = resolveDashboardMode(overview, now);
+  const isLive = mode === "live";
+
+  const { data: pendingReviews } = useGetPendingPhotoReviewsQuery(undefined, {
+    skip: !meData || !isLive,
+    pollingInterval: 15_000,
+  });
+
   const {
     data: realizations,
     isLoading: isRealizationsLoading,
     isError: isRealizationsError,
     refetch: refetchRealizations,
-  } = useGetRealizationsQuery(undefined, {
-    skip: !meData,
-  });
-  const taskCounts = getTaskCounts();
-  const [nowTimestamp] = useState(() => Date.now());
+  } = useGetRealizationsQuery(undefined, { skip: !meData, pollingInterval: 60_000 });
 
-  const nearestRealization = useMemo(() => {
+  const liveSummary = useMemo(
+    () => (overview ? buildLiveSummary(overview) : null),
+    [overview],
+  );
+
+  const businessSummary = useMemo(
+    () => (isAdmin && realizations ? buildBusinessSummary(realizations, now) : null),
+    [isAdmin, realizations, now],
+  );
+
+  /**
+   * `durationMinutes` nie przychodzi z `/mobile/admin/realizations/current`,
+   * więc długość bierzemy z listy realizacji po tym samym id.
+   */
+  const currentRealizationRecord = overview
+    ? realizations?.find((realization) => realization.id === overview.realization.id)
+    : undefined;
+
+  const minutesLeft = overview
+    ? getMinutesLeft(
+        overview.realization.scheduledAt,
+        currentRealizationRecord?.durationMinutes,
+        now,
+      )
+    : null;
+
+  const daysUntil = overview
+    ? Math.ceil((new Date(overview.realization.scheduledAt).getTime() - now) / 86_400_000)
+    : null;
+
+  const upcomingRealizations = useMemo(() => {
     if (!realizations?.length) {
-      return null;
+      return [];
     }
 
-    const sortedByDate = [...realizations].sort(
-      (left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
-    );
+    return [...realizations]
+      .filter((realization) => new Date(realization.scheduledAt).getTime() >= now)
+      .sort(
+        (left, right) =>
+          new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime(),
+      )
+      .slice(0, UPCOMING_SHOWN);
+  }, [realizations, now]);
 
-    return (
-      sortedByDate.find((realization) => new Date(realization.scheduledAt).getTime() >= nowTimestamp) ||
-      sortedByDate[0]
-    );
-  }, [realizations, nowTimestamp]);
+  const kpiTiles: KpiTile[] = useMemo(() => {
+    if (isLive && liveSummary) {
+      const pendingCount = pendingReviews?.length ?? 0;
 
-  const nearestStations = nearestRealization
-    ? nearestRealization.scenarioStations.length > 0
-      ? nearestRealization.scenarioStations
-      : nearestRealization.stationIds
-          .map((stationId) => stations?.find((station) => station.id === stationId))
-          .filter((station): station is NonNullable<typeof station> => Boolean(station))
-    : [];
+      return [
+        {
+          label: "Drużyny w grze",
+          value: `${liveSummary.teamsActive}/${liveSummary.teamsTotal}`,
+          hint: "aktywne / dołączone",
+        },
+        {
+          label: "Postęp stanowisk",
+          value: `${liveSummary.tasksDone}/${liveSummary.tasksTotal}`,
+          hint: `${liveSummary.tasksPercent}% zadań`,
+        },
+        {
+          label: "Do akceptacji",
+          value: String(pendingCount),
+          hint: pendingCount > 0 ? "czeka na Mistrza Gry" : "nic nie czeka",
+          tone: pendingCount > 0 ? "alert" : "default",
+          href: "/current-realization",
+        },
+        {
+          label: "Punkty łącznie",
+          value: String(liveSummary.pointsTotal),
+        },
+      ];
+    }
 
-  const nearestStationNames = nearestRealization
-    ? nearestStations.map((station) => station.name).join(", ") || "-"
-    : "-";
+    if (!overview) {
+      return [];
+    }
 
-  const nearestTotalPoints = nearestStations.reduce((sum, station) => sum + station.points, 0);
-
-  const nearestStatusBadgeClassName =
-    nearestRealization?.status === "done"
-      ? "bg-emerald-500/20 text-emerald-300"
-      : nearestRealization?.status === "planned"
-        ? "bg-sky-500/20 text-sky-300"
-        : "bg-rose-500/20 text-rose-300";
+    return [
+      {
+        label: mode === "upcoming" ? "Do startu" : "Termin",
+        value: daysUntil !== null && daysUntil >= 0 ? `${daysUntil} dni` : "minął",
+      },
+      { label: "Drużyn zaplanowanych", value: String(overview.realization.teamCount) },
+      { label: "Stanowisk", value: String(overview.realization.stations.length) },
+      { label: "Kod dołączenia", value: overview.realization.joinCode },
+    ];
+  }, [isLive, liveSummary, pendingReviews, overview, mode, daysUntil]);
 
   useEffect(() => {
     if (isMeError && isUnauthorizedError(meError)) {
@@ -85,6 +177,8 @@ export default function HomePage() {
     return <main className="p-8">Nie udało się sprawdzić sesji. Spróbuj odświeżyć stronę.</main>;
   }
 
+  const hasLoadError = isOverviewError && isRealizationsError;
+
   return (
     <AdminShell
       userEmail={meData?.user.email}
@@ -96,133 +190,62 @@ export default function HomePage() {
       }}
       contentClassName="space-y-6 p-4 sm:p-6 lg:p-8"
     >
-      {canManageAdminTasks ? (
-        <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Podgląd listy zadań</h1>
-            <Link
-              href="/tasks"
-              className="text-sm font-medium text-amber-300 transition hover:text-amber-200"
-            >
-              Otwórz tablicę →
-            </Link>
-          </div>
+      <h1 className="sr-only">Panel główny</h1>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Do zrobienia</p>
-              <p className="mt-2 text-2xl font-semibold text-amber-300">{taskCounts.todo}</p>
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs uppercase tracking-wider text-zinc-500">W trakcie</p>
-              <p className="mt-2 text-2xl font-semibold text-sky-300">{taskCounts["in-progress"]}</p>
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Zrobione</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-300">{taskCounts.done}</p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
-          <div className="mb-4">
-            <h1 className="text-xl font-semibold tracking-tight">Panel instruktora</h1>
-            <p className="mt-1 text-sm text-zinc-400">
-              Szybki dostęp do realizacji, drużyn, kalendarza i czatu bez sekcji administracyjnych.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Link
-              href="/current-realization"
-              className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 transition hover:border-amber-300/60 hover:bg-amber-500/15"
-            >
-              <p className="text-sm font-semibold text-amber-200">Aktualna realizacja</p>
-              <p className="mt-1 text-xs text-zinc-400">Drużyny, mapa, zadania i QR.</p>
-            </Link>
-            <Link
-              href="/realizations"
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
-            >
-              <p className="text-sm font-semibold text-zinc-100">Realizacje</p>
-              <p className="mt-1 text-xs text-zinc-400">Lista i kody QR wybranych eventów.</p>
-            </Link>
-            <Link
-              href="/calendar"
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
-            >
-              <p className="text-sm font-semibold text-zinc-100">Kalendarz</p>
-              <p className="mt-1 text-xs text-zinc-400">Terminy zaplanowanych realizacji.</p>
-            </Link>
-            <Link
-              href="/chat"
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition hover:border-zinc-600"
-            >
-              <p className="text-sm font-semibold text-zinc-100">Czat</p>
-              <p className="mt-1 text-xs text-zinc-400">Komunikacja zespołu.</p>
-            </Link>
-          </div>
+      {hasLoadError && (
+        <div className="sq-error-banner flex flex-wrap items-center justify-between gap-2">
+          <span>Nie udało się pobrać danych panelu.</span>
+          <button
+            type="button"
+            onClick={() => {
+              refetchOverview();
+              refetchRealizations();
+            }}
+            className="rounded-lg border border-zinc-700 px-3 py-1 text-sm hover:border-amber-400/40"
+          >
+            Spróbuj ponownie
+          </button>
         </div>
       )}
 
-      <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold tracking-tight">Najbliższa realizacja</h2>
-          <Link href="/realizations" className="text-sm font-medium text-amber-300 hover:text-amber-200">
-            Zobacz wszystkie →
-          </Link>
-        </div>
+      {isOverviewLoading ? (
+        <div className="h-28 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/60" />
+      ) : (
+        <DashboardStatusBar
+          mode={mode}
+          realization={overview?.realization ?? null}
+          minutesLeft={minutesLeft}
+          daysUntil={daysUntil}
+        />
+      )}
 
-        {isRealizationsLoading && <p className="text-sm text-zinc-400">Ładowanie realizacji...</p>}
+      {kpiTiles.length > 0 && <DashboardKpiRow tiles={kpiTiles} />}
 
-        {!isRealizationsLoading && !nearestRealization && (
-          <p className="text-sm text-zinc-400">Brak realizacji do wyświetlenia.</p>
-        )}
-
-        {!isRealizationsLoading && nearestRealization && (
-          <div className="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Firma</p>
-              <p className="mt-1 text-base font-medium text-zinc-100">{nearestRealization.companyName}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Stanowiska</p>
-              <p className="mt-1 text-base font-medium text-zinc-100">{nearestStationNames}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Status</p>
-              <span
-                className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${nearestStatusBadgeClassName}`}
-              >
-                {nearestRealization.status}
-              </span>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Termin</p>
-              <p className="mt-1 text-base font-medium text-zinc-100">
-                {new Date(nearestRealization.scheduledAt).toLocaleDateString("pl-PL", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Skala</p>
-              <p className="mt-1 text-base font-medium text-zinc-100">
-                {nearestRealization.peopleCount} osób • {nearestRealization.positionsCount} stanowiska
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-zinc-500">Punkty</p>
-              <p className="mt-1 text-base font-medium text-amber-300">{nearestTotalPoints}</p>
-            </div>
+      {isLive && liveSummary && (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            <DashboardTeamRanking teams={liveSummary.ranking} />
+            <DashboardStationProgress stations={liveSummary.stations} />
           </div>
-        )}
-      </div>
+
+          <DashboardRecentEvents
+            logs={(overview?.logs ?? []).slice(0, RECENT_EVENTS_SHOWN)}
+            stations={overview?.realization.stations ?? []}
+          />
+        </>
+      )}
+
+      {!isLive &&
+        (isRealizationsLoading ? (
+          <div className="h-40 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900/60" />
+        ) : (
+          <DashboardUpcomingList realizations={upcomingRealizations} />
+        ))}
+
+      {businessSummary && <DashboardBusinessOverview summary={businessSummary} />}
 
       <DashboardCalendar
-        realizations={realizations}
+        realizations={realizations ?? []}
         isLoading={isRealizationsLoading}
         isError={isRealizationsError}
         onRetry={refetchRealizations}
@@ -230,5 +253,3 @@ export default function HomePage() {
     </AdminShell>
   );
 }
-
-

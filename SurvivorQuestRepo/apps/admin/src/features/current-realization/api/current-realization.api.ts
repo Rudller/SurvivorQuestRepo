@@ -456,6 +456,23 @@ export const currentRealizationApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Realization"],
     }),
+    forceCurrentRealizationDeviceExit: build.mutation<
+      {
+        realizationId: string;
+        forcedAt: string;
+        revokedSessions: number;
+      },
+      { realizationId?: string } | void
+    >({
+      query: (arg) => ({
+        url: toMobileAdminRealizationPath(
+          arg?.realizationId,
+          "/force-device-exit",
+        ),
+        method: "POST",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
     getCurrentRealizationStationQrs: build.query<
       CurrentRealizationStationQrResponse,
       { realizationId?: string } | void
@@ -593,6 +610,7 @@ export const {
   useStartCurrentRealizationMutation,
   useFinishCurrentRealizationMutation,
   useResetCurrentRealizationMutation,
+  useForceCurrentRealizationDeviceExitMutation,
   useGetCurrentRealizationStationQrsQuery,
   useGetCurrentRealizationPointsQrCodesQuery,
   useCreateCurrentRealizationPointsQrCodeMutation,

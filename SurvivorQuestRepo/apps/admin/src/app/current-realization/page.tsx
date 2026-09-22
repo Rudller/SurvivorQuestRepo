@@ -17,10 +17,14 @@ import {
   useGetCurrentRealizationOverviewQuery,
   useFinishCurrentRealizationMutation,
   useResetCurrentRealizationMutation,
+  useForceCurrentRealizationDeviceExitMutation,
   useResetCurrentRealizationCompletedTasksMutation,
   useStartCurrentRealizationMutation,
 } from "@/features/current-realization/api/current-realization.api";
-import type { CurrentRealizationOverview } from "@/features/current-realization/types/current-realization-overview";
+import {
+  renderLogDescription,
+  renderLogTitle,
+} from "@/features/current-realization/lib/event-log-labels";
 import { CurrentRealizationStationQrPanel } from "@/features/current-realization/components/current-realization-station-qr-panel";
 import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization/components/current-realization-team-tasks-panel";
 import { CurrentRealizationRiskChatPanel } from "@/features/current-realization/components/current-realization-risk-chat-panel";
@@ -61,169 +65,6 @@ function renderTeamStatusLabel(status: "unassigned" | "ready" | "active" | "offl
   return "Nieprzypisana";
 }
 
-function renderTaskFailedReason(payload: Record<string, unknown>) {
-  const reasonLabel = typeof payload.reasonLabel === "string" ? payload.reasonLabel.trim() : "";
-  if (reasonLabel) {
-    return reasonLabel;
-  }
-
-  const reason = typeof payload.reason === "string" ? payload.reason.trim() : "";
-  if (!reason) {
-    return "";
-  }
-
-  if (reason === "quiz_incorrect_answer") {
-    return "Błędna odpowiedź quizu";
-  }
-
-  if (reason === "time_limit_expired") {
-    return "Przekroczony limit czasu";
-  }
-
-  if (reason === "task_closed_before_completion") {
-    return "Zamknięto zadanie przed ukończeniem";
-  }
-
-  return reason;
-}
-
-function renderQrRejectedReason(reason: string) {
-  if (reason === "invalid_token") {
-    return "Nieprawidłowy kod QR";
-  }
-
-  if (reason === "expired_token") {
-    return "Kod QR wygasł";
-  }
-
-  if (reason === "realization_mismatch") {
-    return "Kod QR z innej realizacji";
-  }
-
-  if (reason === "station_not_in_realization") {
-    return "Stanowisko nie należy do tej realizacji";
-  }
-
-  if (reason === "station_not_found") {
-    return "Nie znaleziono stanowiska dla kodu QR";
-  }
-
-  return "Kod QR został odrzucony";
-}
-
-function renderLogTitle(log: CurrentRealizationOverview["logs"][number], stationName: string | null) {
-  if (log.eventType === "task_started") {
-    return `Start zadania${stationName ? ` - ${stationName}` : ""}`;
-  }
-
-  if (log.eventType === "task_completed") {
-    return `Zadanie ukończone${stationName ? ` - ${stationName}` : ""}`;
-  }
-
-  if (log.eventType === "task_failed") {
-    return `Nieudane zadanie${stationName ? ` - ${stationName}` : ""}`;
-  }
-
-  if (log.eventType === "team_profile_updated" || log.eventType === "team_customization_updated") {
-    return "Personalizacja zakończona";
-  }
-
-  if (log.eventType === "team_joined") {
-    return "Drużyna dołączyła";
-  }
-
-  if (log.eventType === "team_name_randomized") {
-    return "Wylosowano nazwę drużyny";
-  }
-
-  if (log.eventType === "team_ready_for_start") {
-    return "Drużyna gotowa do startu";
-  }
-
-  if (log.eventType === "station_qr_resolved") {
-    return `Skan QR zaakceptowany${stationName ? ` - ${stationName}` : ""}`;
-  }
-
-  if (log.eventType === "station_qr_rejected") {
-    return "Skan QR odrzucony";
-  }
-
-  if (log.eventType === "realization_started") {
-    return "Rozpoczęto realizację";
-  }
-
-  if (log.eventType === "realization_finished") {
-    return "Zakończono realizację";
-  }
-
-  if (log.eventType === "realization_reset") {
-    return "Zresetowano realizację";
-  }
-
-  if (log.eventType === "completed_tasks_reset") {
-    return "Zresetowano ukończone zadania";
-  }
-
-  if (log.eventType === "task_reset_by_admin") {
-    return `Zresetowano zadanie (admin)${stationName ? ` - ${stationName}` : ""}`;
-  }
-
-  if (log.eventType === "points_recalculated") {
-    return "Przeliczono punkty drużyny";
-  }
-
-  if (log.eventType === "team_location_updated") {
-    return "Zaktualizowano lokalizację drużyny";
-  }
-
-  return log.eventType.replaceAll("_", " ");
-}
-
-function renderLogDescription(log: CurrentRealizationOverview["logs"][number], stationName: string | null) {
-  if (log.eventType === "task_failed") {
-    return `Powód: ${renderTaskFailedReason(log.payload) || "nieznany"}`;
-  }
-
-  if (log.eventType === "task_completed") {
-    const pointsAwarded = typeof log.payload.pointsAwarded === "number" ? log.payload.pointsAwarded : null;
-    return pointsAwarded !== null ? `Zdobyte punkty: ${pointsAwarded}` : null;
-  }
-
-  if (log.eventType === "task_reset_by_admin") {
-    return "Stan zadania ustawiono na „do zrobienia”.";
-  }
-
-  if (log.eventType === "station_qr_rejected") {
-    const reason = typeof log.payload.reason === "string" ? log.payload.reason : "";
-    return renderQrRejectedReason(reason);
-  }
-
-  if (log.eventType === "station_qr_resolved" && stationName) {
-    return `Zeskanowano poprawny kod QR dla stanowiska ${stationName}.`;
-  }
-
-  if (log.eventType === "team_profile_updated" || log.eventType === "team_customization_updated") {
-    const changedFields = Array.isArray(log.payload.changedFields)
-      ? log.payload.changedFields.filter((value): value is string => typeof value === "string")
-      : [];
-
-    if (changedFields.length === 0) {
-      return null;
-    }
-
-    const translated = changedFields.map((field) => {
-      if (field === "name") return "nazwa";
-      if (field === "color") return "kolor";
-      if (field === "badge") return "odznaka";
-      return field;
-    });
-
-    return `Zmieniono: ${translated.join(", ")}.`;
-  }
-
-  return null;
-}
-
 const AUTO_CURRENT_REALIZATION_VALUE = "__auto-current-realization__";
 
 export default function CurrentRealizationPage() {
@@ -241,10 +82,12 @@ export default function CurrentRealizationPage() {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const canManageCurrentRealization = meData?.user.role === "admin";
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [resetCompletedTasks, { isLoading: isResettingTasks }] = useResetCurrentRealizationCompletedTasksMutation();
   const [startCurrentRealization, { isLoading: isStartingRealization }] = useStartCurrentRealizationMutation();
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
   const [resetCurrentRealization, { isLoading: isResettingRealization }] = useResetCurrentRealizationMutation();
+  const [forceDeviceExit, { isLoading: isForcingDeviceExit }] = useForceCurrentRealizationDeviceExitMutation();
   const { data: realizations, isLoading: isRealizationsLoading } = useGetRealizationsQuery(undefined, {
     skip: !meData,
     pollingInterval: 30_000,
@@ -570,8 +413,51 @@ export default function CurrentRealizationPage() {
                         ? "Realizacja zakończona"
                         : "Zakończ realizację"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (
+                        !window.confirm(
+                          "Wyrzucić wszystkie urządzenia z ekranu gry do panelu konfiguracji? Postęp zadań, punkty i drużyny zostaną zachowane. Tablety wrócą na Etap 3 w ciągu ok. 15 sekund; urządzenie bez internetu zareaguje dopiero po powrocie online.",
+                        )
+                      ) {
+                        return;
+                      }
+
+                      setActionError(null);
+                      setActionNotice(null);
+                      try {
+                        // Explicitly the realization on screen, never "current":
+                        // the current-realization resolver skips finished ones,
+                        // so a finished game — the very case this button is for —
+                        // would silently clear a different realization instead.
+                        const result = await forceDeviceExit({
+                          realizationId: overview.realization.id,
+                        }).unwrap();
+
+                        if (result.revokedSessions === 0) {
+                          setActionError(
+                            `Brak podłączonych urządzeń w realizacji "${overview.realization.companyName}" — nic nie zostało wyrzucone. Sprawdź, czy wybrana jest właściwa realizacja.`,
+                          );
+                        } else {
+                          setActionNotice(
+                            `Wyrzucono urządzenia (${result.revokedSessions}) z realizacji "${overview.realization.companyName}". Tablety wrócą na Etap 3 w ciągu ok. 15 sekund.`,
+                          );
+                        }
+                      } catch (error) {
+                        setActionError(
+                          resolveApiErrorMessage(error) ?? "Nie udało się wyrzucić urządzeń do konfiguracji.",
+                        );
+                      }
+                    }}
+                    disabled={isForcingDeviceExit}
+                    className={`${actionButtonBaseClassName} ${actionButtonAmberClassName}`}
+                  >
+                    {isForcingDeviceExit ? "Wyrzucanie..." : "Wyrzuć urządzenia do konfiguracji"}
+                  </button>
                 </div>
                 {actionError && <p className="mt-3 text-xs text-red-300">{actionError}</p>}
+                {actionNotice && <p className="mt-3 text-xs text-emerald-300">{actionNotice}</p>}
               </div>
             ) : null}
 
