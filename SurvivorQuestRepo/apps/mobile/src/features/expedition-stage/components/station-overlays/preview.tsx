@@ -23,6 +23,7 @@ import { QuizOutcomePopupPanel, type QuizOutcomePopup } from "./station-panels/q
 import { resolveStationQuizPrompt } from "./station-panels/quiz-audio-station-panel";
 import { StationQuizTaskWrapper, useStationPanelLayout } from "./station-panels/shared-ui";
 import { resolveStationPresentationProfile } from "./station-panels/station-presentation-profile";
+import { resolveStationDefinition } from "./station-panels/station-registry";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
 import { useStationCountdownPulse } from "./station-panels/use-station-countdown-pulse";
@@ -75,102 +76,22 @@ const SIMON_TONE_ASSET_BY_BUTTON: Record<string, number> = {
   "9": require("./assets/simon-tones/9.wav"),
 };
 
-export function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
-  if (station.stationType === "wordle") {
-    return text.wordleSolvedPopup;
-  }
-  if (station.stationType === "hangman") {
-    return text.hangmanSolvedPopup;
-  }
-  if (station.stationType === "mastermind") {
-    return text.mastermindSolvedPopup;
-  }
-  if (station.stationType === "anagram") {
-    return text.anagramSolvedPopup;
-  }
-  if (station.stationType === "caesar-cipher") {
-    return text.caesarSolvedPopup;
-  }
-  if (station.stationType === "memory") {
-    return text.memorySolvedPopup;
-  }
-  if (station.stationType === "simon") {
-    return text.simonSolvedPopup;
-  }
-  if (station.stationType === "rebus") {
-    return text.rebusSolvedPopup;
-  }
-  // fill-blank runs the open-quiz flow end to end, so it reports with the same
-  // wording.
-  if (station.stationType === "open-quiz" || station.stationType === "fill-blank") {
-    return text.openQuizSolvedPopup;
-  }
-  if (station.stationType === "true-false") {
-    return text.trueFalseSolvedPopup;
-  }
-  if (station.stationType === "boggle") {
-    return text.boggleSolvedPopup;
-  }
-  if (station.stationType === "mini-sudoku") {
-    return text.miniSudokuSolvedPopup;
-  }
-  if (station.stationType === "matching") {
-    return text.matchingSolvedPopup;
-  }
-  if (station.stationType === "time" || station.stationType === "points") {
-    return text.codeApproved;
-  }
-  return text.quizSuccessPopup;
+export function resolveSuccessOutcomeMessage(
+  station: StationTestViewModel,
+  text: StationPreviewText,
+) {
+  return text[resolveStationDefinition(station.stationType).outcome.success];
 }
 
-export function resolveFailureOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
-  if (station.stationType === "wordle") {
-    return text.wordleFailedPopup;
-  }
-  if (station.stationType === "hangman") {
-    return text.hangmanFailedPopup;
-  }
-  if (station.stationType === "mastermind") {
-    return text.mastermindFailedPopup;
-  }
-  if (station.stationType === "anagram") {
-    return text.anagramFailedPopup;
-  }
-  if (station.stationType === "caesar-cipher") {
-    return text.caesarFailedPopup;
-  }
-  if (station.stationType === "memory") {
-    return text.memoryFailedPopup;
-  }
-  if (station.stationType === "simon") {
-    return text.simonFailedPopup;
-  }
-  if (station.stationType === "rebus") {
-    return text.rebusFailedPopup;
-  }
-  if (station.stationType === "open-quiz" || station.stationType === "fill-blank") {
-    return text.openQuizFailedPopup;
-  }
-  if (station.stationType === "true-false") {
-    return text.trueFalseFailedPopup;
-  }
-  if (station.stationType === "boggle") {
-    return text.boggleFailedPopup;
-  }
-  if (station.stationType === "mini-sudoku") {
-    return text.miniSudokuFailedPopup;
-  }
-  if (station.stationType === "matching") {
-    return text.matchingFailedPopup;
-  }
-  if (station.stationType === "photo-task") {
-    return text.photoTaskRejectedPopup;
-  }
-  return text.outcomeFailed;
+export function resolveFailureOutcomeMessage(
+  station: StationTestViewModel,
+  text: StationPreviewText,
+) {
+  return text[resolveStationDefinition(station.stationType).outcome.failure];
 }
 
 
-type StationPreviewText = {
+export type StationPreviewText = {
   fallbackQuizOptions: string[];
   audioSourceMissing: string;
   audioLoadFailed: string;
