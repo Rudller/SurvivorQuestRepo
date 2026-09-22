@@ -70,6 +70,7 @@ export function toPrismaRealizationType(
 const THEME_PACK_BY_PRISMA = {
   [PrismaRealizationThemePack.STANDARD]: 'standard',
   [PrismaRealizationThemePack.CRIME]: 'crime',
+  [PrismaRealizationThemePack.CHRISTMAS]: 'christmas',
 } satisfies Record<PrismaRealizationThemePack, RealizationThemePack>;
 
 const PRISMA_BY_THEME_PACK = Object.fromEntries(

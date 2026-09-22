@@ -24,7 +24,7 @@ const realizationExportDataSchema = z.object({
   type: z.enum(["outdoor-games", "hotel-games", "workshops", "evening-attractions", "dj", "recreation", "risk-quiz"]),
   // Opcjonalne: pliki wyeksportowane przed wprowadzeniem oprawy nadal muszą
   // dać się zaimportować i wtedy dostają standardową.
-  themePack: z.enum(["standard", "crime"]).optional(),
+  themePack: z.enum(["standard", "crime", "christmas"]).optional(),
   logoUrl: z.string().optional(),
   hideMap: z.boolean(),
   mapImageUrl: z.string().optional(),

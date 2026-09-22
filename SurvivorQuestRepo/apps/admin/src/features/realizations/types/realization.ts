@@ -40,7 +40,7 @@ export const realizationTypeOptions: {
  * nimi. Mechanika pozostaje ta sama co w zwykłej ekspedycji — mapa i
  * stanowiska. Zmienia się paleta w aplikacji i treści realizacji.
  */
-export type RealizationThemePack = "standard" | "crime";
+export type RealizationThemePack = "standard" | "crime" | "christmas";
 
 export const realizationThemePackOptions: {
   value: RealizationThemePack;
@@ -49,6 +49,7 @@ export const realizationThemePackOptions: {
 }[] = [
   { value: "standard", label: "Standardowa", hint: "Zielona oprawa ekspedycyjna" },
   { value: "crime", label: "Kryminalna", hint: "Oprawa noir — akta sprawy, śledztwo" },
+  { value: "christmas", label: "Świąteczna", hint: "Oprawa świąteczna — zieleń, czerwień, śnieg" },
 ];
 
 export const realizationLanguageOptions: {

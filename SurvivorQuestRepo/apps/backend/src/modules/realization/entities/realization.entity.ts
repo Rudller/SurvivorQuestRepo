@@ -20,7 +20,7 @@ export type RealizationType =
  * Oprawa graficzna i fabularna — oś niezależna od RealizationType, który
  * pozostaje kategorią biznesową. Patrz komentarz przy enumie w schema.prisma.
  */
-export type RealizationThemePack = 'standard' | 'crime';
+export type RealizationThemePack = 'standard' | 'crime' | 'christmas';
 export type RealizationLanguage =
   | 'polish'
   | 'english'

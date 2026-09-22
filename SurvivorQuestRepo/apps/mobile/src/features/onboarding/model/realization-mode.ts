@@ -40,11 +40,13 @@ export type RealizationMode = "expedition" | "risk-quiz";
 
 /**
  * Oprawa graficzna i fabularna — oś niezależna od typu realizacji. Kryminał
- * może być zarówno grą terenową, jak i hotelową, więc nie jest wartością typu.
+ * może być zarówno grą terenową, jak i hotelową, więc nie jest wartością typu;
+ * to samo dotyczy oprawy świątecznej, która jest sezonową skórką na dowolną
+ * kategorię.
  */
-export type RealizationThemePack = "standard" | "crime";
+export type RealizationThemePack = "standard" | "crime" | "christmas";
 
-const THEME_PACKS: readonly RealizationThemePack[] = ["standard", "crime"];
+const THEME_PACKS: readonly RealizationThemePack[] = ["standard", "crime", "christmas"];
 
 type RealizationLike = {
   type?: string;
@@ -87,6 +89,20 @@ export function resolveRealizationMode(
 }
 
 /**
+ * Pakiet oprawy wprost na rodzinę palety. `Record` wymusza wpis dla każdego
+ * pakietu — nowa oprawa bez palety nie przejdzie kompilacji, zamiast po cichu
+ * wyglądać jak standardowa.
+ *
+ * Rodziny `risk` tu nie ma celowo: Ryzykanci nie wybierają oprawy, ich paleta
+ * wynika z typu realizacji i jest obsłużona wyjątkiem w resolveThemeFamily.
+ */
+const THEME_FAMILY_BY_PACK: Record<RealizationThemePack, ExpeditionThemeFamily> = {
+  standard: "expedition",
+  crime: "crime",
+  christmas: "christmas",
+};
+
+/**
  * Rodzina palety: jak to wygląda.
  *
  * Celowo osobna funkcja od `resolveRealizationMode`, choć dziś obie wynikają z
@@ -103,5 +119,5 @@ export function resolveThemeFamily(
     return "risk";
   }
 
-  return parseThemePack(realization?.themePack) === "crime" ? "crime" : "expedition";
+  return THEME_FAMILY_BY_PACK[parseThemePack(realization?.themePack)];
 }

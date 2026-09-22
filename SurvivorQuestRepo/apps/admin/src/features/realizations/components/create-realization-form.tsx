@@ -105,6 +105,14 @@ function CalendarInputIcon() {
   );
 }
 
+/**
+ * Domyślny tekst wstępu podstawiany przy wyborze oprawy. Wpis jest opcjonalny —
+ * oprawa świąteczna go nie ma, bo jest skórką, a nie ramą fabularną.
+ */
+const THEME_PACK_DEFAULT_INTRO_TEXTS: Partial<Record<RealizationThemePack, string>> = {
+  crime: KRYMINALNY_DEFAULT_INTRO_TEXT,
+};
+
 export function CreateRealizationForm({ scenarios, stations, realizations, userEmail, onClose, onSaved }: CreateRealizationFormProps) {
   const [createRealization, { isLoading: isCreating }] = useCreateRealizationMutation();
   const [uploadRealizationLogo, { isLoading: isUploadingLogo }] = useUploadRealizationLogoMutation();
@@ -347,17 +355,27 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   }
 
   // Ta sama zasada co przy typie: podstaw domyślny briefing tylko wtedy, gdy
-  // pole jest puste albo wciąż trzyma nietknięty domyślny tekst drugiej oprawy.
+  // pole jest puste albo wciąż trzyma nietknięty domyślny tekst innej oprawy.
   // Przełączanie oprawy w tę i z powrotem nigdy nie zje niczyjego tekstu.
+  //
+  // Mapa, a nie łańcuch `if`-ów: oprawa bez własnego briefingu (dziś
+  // świąteczna, bo to skórka, a nie rama fabularna) po prostu nie ma wpisu, a
+  // dopisanie go później jest jedną linijką.
   function handleThemePackChange(nextPack: RealizationThemePack) {
     setSelectedThemePack(nextPack);
 
-    if (nextPack === "crime" && !introText.trim()) {
-      setIntroText(KRYMINALNY_DEFAULT_INTRO_TEXT);
+    const currentText = introText.trim();
+    const isUntouchedDefault = Object.values(THEME_PACK_DEFAULT_INTRO_TEXTS).some(
+      (defaultText) => currentText === defaultText.trim(),
+    );
+    const nextDefault = THEME_PACK_DEFAULT_INTRO_TEXTS[nextPack];
+
+    if (nextDefault && (!currentText || isUntouchedDefault)) {
+      setIntroText(nextDefault);
       return;
     }
 
-    if (nextPack !== "crime" && introText.trim() === KRYMINALNY_DEFAULT_INTRO_TEXT.trim()) {
+    if (!nextDefault && isUntouchedDefault) {
       setIntroText("");
     }
   }

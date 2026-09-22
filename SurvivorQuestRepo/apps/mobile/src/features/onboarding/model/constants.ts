@@ -33,10 +33,11 @@ export type ExpeditionThemeMode = "dark" | "light";
 // Which palette set a screen draws from. "expedition" is the green field-journal
 // look every regular realization uses; "risk" is the navy/gold card-table look
 // reserved for risk-quiz ("Ryzykanci") realizations; "crime" is the noir
-// case-file look for realizations carrying the crime theme pack — same map and
-// station mechanics as expedition, different dress. Every family carries a full
-// dark and light variant, so the user's theme toggle keeps working either way.
-export type ExpeditionThemeFamily = "expedition" | "risk" | "crime";
+// case-file look for realizations carrying the crime theme pack; "christmas" is
+// the seasonal one. All three of those run the same map and station mechanics as
+// expedition and differ only in dress. Every family carries a full dark and
+// light variant, so the user's theme toggle keeps working either way.
+export type ExpeditionThemeFamily = "expedition" | "risk" | "crime" | "christmas";
 
 const EXPEDITION_THEME_DARK: ExpeditionThemePalette = {
   background: "#0f1914",
@@ -169,6 +170,53 @@ const CRIME_THEME_LIGHT: ExpeditionThemePalette = {
   scrimAbyssRgb: "7, 5, 5",
 };
 
+// Święta: nasycony świerk zamiast oliwkowej zieleni ekspedycji, z czerwienią
+// ostrokrzewu na ramkach i akcentach. Zieleń z czerwienią to para, po której
+// oprawę widać z drugiego końca sali — i to odróżnia ją od ekspedycji, która
+// jest zielona, ale z piaskowym akcentem.
+const CHRISTMAS_THEME_DARK: ExpeditionThemePalette = {
+  background: "#0b1f17",
+  mapLine: "#1f4436",
+  mapNode: "#2f5f4a",
+  panel: "rgba(16, 45, 34, 0.92)",
+  panelMuted: "rgba(11, 35, 26, 0.94)",
+  panelStrong: "rgba(24, 61, 46, 0.92)",
+  border: "#8c2f33",
+  accent: "#e05a55",
+  accentStrong: "#f2827c",
+  textPrimary: "#f4f7f3",
+  textMuted: "#b7c7bd",
+  textSubtle: "#8aa096",
+  danger: "#ef6f6c",
+  success: "#34d399",
+  scrimWashRgb: "11, 31, 23",
+  scrimDeepRgb: "8, 22, 17",
+  scrimAbyssRgb: "4, 12, 9",
+};
+
+// Wariant jasny idzie w śnieg. Czerwień schodzi do głębokiej, bo jasna z
+// ciemnego wariantu nie niesie kontrastu tekstowego na bladym tle — ta sama
+// zasada, co przy złocie Ryzykantów i czerwieni kryminału.
+const CHRISTMAS_THEME_LIGHT: ExpeditionThemePalette = {
+  background: "#eef3ee",
+  mapLine: "#a8bdaf",
+  mapNode: "#87a292",
+  panel: "rgba(250, 252, 249, 0.96)",
+  panelMuted: "rgba(240, 245, 240, 0.98)",
+  panelStrong: "rgba(228, 236, 229, 0.98)",
+  border: "#a8474a",
+  accent: "#a32a2e",
+  accentStrong: "#851f23",
+  textPrimary: "#0b1f17",
+  textMuted: "#3b4f44",
+  textSubtle: "#5c7065",
+  danger: "#ae5954",
+  success: "#1f7a53",
+  scrimWashRgb: "11, 31, 23",
+  scrimDeepRgb: "8, 22, 17",
+  scrimAbyssRgb: "4, 12, 9",
+};
+
 const EXPEDITION_THEMES: Record<ExpeditionThemeFamily, Record<ExpeditionThemeMode, ExpeditionThemePalette>> = {
   expedition: {
     dark: EXPEDITION_THEME_DARK,
@@ -181,6 +229,10 @@ const EXPEDITION_THEMES: Record<ExpeditionThemeFamily, Record<ExpeditionThemeMod
   crime: {
     dark: CRIME_THEME_DARK,
     light: CRIME_THEME_LIGHT,
+  },
+  christmas: {
+    dark: CHRISTMAS_THEME_DARK,
+    light: CHRISTMAS_THEME_LIGHT,
   },
 };
 

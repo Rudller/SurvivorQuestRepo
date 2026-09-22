@@ -63,6 +63,7 @@ describe("parseThemePack", () => {
   it("accepts the packs the backend defines", () => {
     expect(parseThemePack("standard")).toBe("standard");
     expect(parseThemePack("crime")).toBe("crime");
+    expect(parseThemePack("christmas")).toBe("christmas");
     expect(parseThemePack("  crime  ")).toBe("crime");
   });
 
@@ -99,9 +100,28 @@ describe("resolveThemeFamily", () => {
     expect(resolveThemeFamily({ type: "hotel-games", themePack: "crime" })).toBe("crime");
   });
 
+  it("dresses a christmas theme pack in the seasonal palette, still on the expedition engine", () => {
+    const christmasRealization = { type: "hotel-games", themePack: "christmas" };
+
+    expect(resolveThemeFamily(christmasRealization)).toBe("christmas");
+    expect(resolveRealizationMode(christmasRealization)).toBe("expedition");
+  });
+
+  it("maps every theme pack to a palette family", () => {
+    // Guards the pack -> family map against a pack added without a palette,
+    // which would silently render as the standard expedition look.
+    for (const pack of ["standard", "crime", "christmas"]) {
+      const family = resolveThemeFamily({ type: "outdoor-games", themePack: pack });
+      expect(family).not.toBeUndefined();
+    }
+
+    expect(resolveThemeFamily({ type: "outdoor-games", themePack: "standard" })).toBe("expedition");
+  });
+
   it("keeps the Ryzykanci palette even if a theme pack is set", () => {
     // Their navy/gold is part of the card-table mechanic, not a selectable skin.
     expect(resolveThemeFamily({ type: "risk-quiz", themePack: "crime" })).toBe("risk");
+    expect(resolveThemeFamily({ type: "risk-quiz", themePack: "christmas" })).toBe("risk");
   });
 
   it("is a separate decision from which engine runs", () => {
