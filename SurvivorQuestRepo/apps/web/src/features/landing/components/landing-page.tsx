@@ -22,6 +22,8 @@ type LandingPageProps = {
   quoteHrefBase: string;
   contactEmail: string;
   contactPhone: string;
+  /** Panel admina — bezwzględny w dev, względny na produkcji. */
+  adminHref: string;
 };
 
 const LANDING_NAV_ITEMS = [
@@ -54,6 +56,7 @@ export function LandingPage({
   quoteHrefBase,
   contactEmail,
   contactPhone,
+  adminHref,
 }: LandingPageProps) {
   const currentYear = new Date().getFullYear();
   const quoteHref = withQuoteSubject(quoteHrefBase, "Wycena eventu SurvivorQuest");
@@ -343,6 +346,9 @@ export function LandingPage({
               </Link>
               <Link href="/polityka-cookies" className="underline-offset-4 hover:text-amber hover:underline">
                 Polityka cookies
+              </Link>
+              <Link href={adminHref} className="mt-2 underline-offset-4 hover:text-amber hover:underline">
+                Panel admina
               </Link>
             </nav>
           </div>

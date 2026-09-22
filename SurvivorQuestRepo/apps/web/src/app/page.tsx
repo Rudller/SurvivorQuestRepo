@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { OG_IMAGE } from "@/lib/site-url";
 import { getContactEmail, getContactPhone, getQuoteHrefBase } from "@/lib/contact";
+import { getAdminHref } from "@/lib/admin-url";
 import { LandingPage } from "@/features/landing/components/landing-page";
 import { HERO_SLIDES } from "@/features/landing/lib/hero-slides";
 import { FAQ_ITEMS } from "@/features/landing/model/content";
@@ -74,6 +75,7 @@ export default function HomePage() {
         quoteHrefBase={getQuoteHrefBase()}
         contactEmail={getContactEmail()}
         contactPhone={getContactPhone()}
+        adminHref={getAdminHref()}
       />
     </>
   );
