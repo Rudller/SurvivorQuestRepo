@@ -1,5 +1,6 @@
 import type { StationPreviewText } from "../preview";
 import type { StationTestType } from "../types";
+import { QR_HUNT_DESCRIPTION_RESERVE, QR_HUNT_PROGRESS_DOTS_RESERVE } from "./qr-hunt-station-panel";
 import type { ComponentProps, ReactNode } from "react";
 import { View } from "react-native";
 
@@ -125,7 +126,38 @@ export type StationDefinition = {
   renderMedia?: (context: StationMediaContext) => ReactNode;
   /** Część interaktywna pod mediami. Typy kodowe i QR mają własne ścieżki. */
   renderInteraction?: (context: StationInteractionContext) => ReactNode;
+  /**
+   * Wysokość ramki mediów. Brak wpisu oznacza wartość domyślną
+   * (DEFAULT_STATION_MEDIA_HEIGHT) — tak jest dla typów, których ramka flexuje
+   * zamiast dostawać wysokość z góry: wordle i mini-sudoku kurczą się, gdy opis
+   * stanowiska potrzebuje miejsca.
+   *
+   * Wcześniej była to drabina kilkunastu `if` w use-station-preview-model.ts,
+   * gdzie kolejność gałęzi była nośnikiem informacji: warunek kodu numerycznego
+   * musiał stać przed ogólnym warunkiem typów kodowych. Tutaj ta zależność
+   * mieszka wewnątrz jednego wpisu i widać ją na miejscu.
+   */
+  mediaHeight?: (context: StationMediaHeightContext) => number;
 };
+
+export type StationMediaHeightContext = {
+  viewportHeight: number;
+  /** Wysokość po odjęciu chrome karty — patrz use-station-preview-model.ts. */
+  availableMediaHeight: number;
+  isTablet: boolean;
+  /** Stanowisko kodowe z klawiaturą numeryczną zamiast alfanumerycznej. */
+  isNumericCode: boolean;
+};
+
+/** Wysokość dla typów bez własnego wpisu. */
+export function resolveDefaultStationMediaHeight({
+  viewportHeight,
+  isTablet,
+}: StationMediaHeightContext) {
+  return isTablet
+    ? Math.max(190, Math.round(viewportHeight * 0.33))
+    : Math.max(128, Math.round(viewportHeight * 0.22));
+}
 
 export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
   quiz: {
@@ -141,10 +173,26 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
   time: {
     family: "code",
     outcome: { success: "codeApproved", failure: "outcomeFailed" },
+    mediaHeight: (c) =>
+      c.isNumericCode
+        ? c.isTablet
+          ? Math.max(104, Math.round(c.viewportHeight * 0.14))
+          : Math.max(72, Math.round(c.viewportHeight * 0.1))
+        : c.isTablet
+          ? Math.max(128, Math.round(c.viewportHeight * 0.2))
+          : Math.max(92, Math.round(c.viewportHeight * 0.14)),
   },
   points: {
     family: "code",
     outcome: { success: "codeApproved", failure: "outcomeFailed" },
+    mediaHeight: (c) =>
+      c.isNumericCode
+        ? c.isTablet
+          ? Math.max(104, Math.round(c.viewportHeight * 0.14))
+          : Math.max(72, Math.round(c.viewportHeight * 0.1))
+        : c.isTablet
+          ? Math.max(128, Math.round(c.viewportHeight * 0.2))
+          : Math.max(92, Math.round(c.viewportHeight * 0.14)),
   },
   wordle: {
     family: "quiz",
@@ -162,11 +210,19 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     outcome: { success: "mastermindSolvedPopup", failure: "mastermindFailedPopup" },
     renderMedia: (c) => <MastermindMediaSection {...c.mastermindMediaSectionProps} />,
     renderInteraction: (c) => <MastermindStationPanel {...c.mastermindStationPanelProps} />,
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(340, Math.round(c.availableMediaHeight * 0.56))
+        : Math.max(180, Math.round(c.availableMediaHeight * 0.28)),
   },
   anagram: {
     family: "quiz",
     outcome: { success: "anagramSolvedPopup", failure: "anagramFailedPopup" },
     renderInteraction: (c) => <AnagramStationPanel {...c.anagramStationPanelProps} />,
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(210, Math.round(c.availableMediaHeight * 0.34))
+        : Math.max(100, Math.round(c.availableMediaHeight * 0.16)),
   },
   "caesar-cipher": {
     family: "quiz",
@@ -177,6 +233,12 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     family: "quiz",
     outcome: { success: "memorySolvedPopup", failure: "memoryFailedPopup" },
     renderMedia: (c) => <MemoryMediaSection {...c.memoryMediaSectionProps} />,
+    mediaHeight: (c) =>
+      // Treść polecenia i licznik par renderują się dziś nad i pod ramką —
+      // zostaje sama siatka kart.
+      c.isTablet
+        ? Math.max(460, Math.round(c.availableMediaHeight * 0.66))
+        : Math.max(150, Math.round(c.availableMediaHeight * 0.22)),
   },
   simon: {
     family: "quiz",
@@ -186,6 +248,12 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
         <SimonStationPanel {...c.simonPanelProps} />
       </View>
     ),
+    mediaHeight: (c) =>
+      // Kropki błędów, status i rząd postępu renderują się dziś pod ramką, nie
+      // w niej — zostaje sama siatka 3x3, więc potrzeba mniej wysokości.
+      c.isTablet
+        ? Math.max(300, Math.round(c.availableMediaHeight * 0.65))
+        : Math.max(220, Math.round(c.availableMediaHeight * 0.55)),
   },
   rebus: {
     family: "quiz",
@@ -196,6 +264,10 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     family: "quiz",
     outcome: { success: "boggleSolvedPopup", failure: "boggleFailedPopup" },
     renderMedia: (c) => <BoggleMediaSection {...c.boggleMediaSectionProps} />,
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(400, Math.round(c.availableMediaHeight * 0.64))
+        : Math.max(160, Math.round(c.availableMediaHeight * 0.26)),
   },
   "mini-sudoku": {
     family: "quiz",
@@ -206,19 +278,46 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     family: "quiz",
     outcome: { success: "matchingSolvedPopup", failure: "matchingFailedPopup" },
     renderMedia: (c) => <MatchingMediaSection {...c.matchingMediaSectionProps} />,
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(430, Math.round(c.availableMediaHeight * 0.7))
+        : Math.max(160, Math.round(c.availableMediaHeight * 0.26)),
   },
   "strong-password": {
     family: "quiz",
     outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" },
     renderInteraction: (c) => <StrongPasswordStationPanel {...c.strongPasswordStationPanelProps} />,
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(280, Math.round(c.viewportHeight * 0.42))
+        : Math.max(180, Math.round(c.viewportHeight * 0.28)),
   },
   "photo-task": {
     family: "photo",
     outcome: { success: "quizSuccessPopup", failure: "photoTaskRejectedPopup" },
+    mediaHeight: (c) =>
+      c.isTablet
+        ? Math.max(128, Math.round(c.viewportHeight * 0.2))
+        : Math.max(92, Math.round(c.viewportHeight * 0.14)),
   },
   "qr-hunt": {
     family: "qr",
     outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" },
+    mediaHeight: (c) => {
+      // Budżet liczony przez jawne odjęcie rodzeństwa: rzędu kropek postępu nad
+      // skanerem i opisu pod nim. Wcześniej było to płaskie 0.75 dostępnej
+      // wysokości i na realnych ekranach oba te elementy się przycinały.
+      const siblingReserve = c.isTablet
+        ? QR_HUNT_PROGRESS_DOTS_RESERVE.tablet + QR_HUNT_DESCRIPTION_RESERVE.tablet
+        : QR_HUNT_PROGRESS_DOTS_RESERVE.phone + QR_HUNT_DESCRIPTION_RESERVE.phone;
+      const scannerBudget = Math.max(0, c.availableMediaHeight - siblingReserve);
+
+      // Kafelek skanera ma być na tyle wysoki, żeby wygodnie się w niego
+      // celowało — nie musi wypełnić całego pozostałego budżetu.
+      return c.isTablet
+        ? Math.max(220, Math.round(scannerBudget * 0.65))
+        : Math.max(170, Math.round(scannerBudget * 0.65));
+    },
   },
   "open-quiz": {
     family: "quiz",

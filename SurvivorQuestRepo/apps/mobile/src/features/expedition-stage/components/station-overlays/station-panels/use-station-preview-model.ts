@@ -34,11 +34,12 @@ import {
   shuffleDeterministic,
 } from "../puzzle-helpers";
 import type { MastermindAttempt } from "./mastermind-station-panel";
-import { QR_HUNT_DESCRIPTION_RESERVE, QR_HUNT_PROGRESS_DOTS_RESERVE } from "./qr-hunt-station-panel";
 import type { WordleAttempt } from "./wordle-station-panel";
 import {
+  resolveDefaultStationMediaHeight,
   resolveEffectiveStationType,
   resolveStationFamily,
+  STATION_DEFINITIONS,
 } from "./station-registry";
 
 type MiniSudokuPuzzle = ReturnType<typeof resolveMiniSudokuPuzzle>;
@@ -257,7 +258,6 @@ export function buildStationPreviewModel({
   const isBoggleStation = station.stationType === "boggle";
   const isMiniSudokuStation = station.stationType === "mini-sudoku";
   const isMatchingStation = station.stationType === "matching";
-  const isStrongPasswordStation = station.stationType === "strong-password";
   const isQuizStation = stationFamily === "quiz";
   const requiresCode = stationFamily === "code";
   const requiresPhotoUpload = stationFamily === "photo";
@@ -281,88 +281,15 @@ export function buildStationPreviewModel({
   // preview.tsx) and no longer competes for this space.
   const stationMediaChromeReserve = isTabletOverlay ? 180 : 120;
   const availableMediaHeight = Math.max(160, viewportHeight - stationMediaChromeReserve);
-  const stationMediaHeight = (() => {
-    if (isNumericCodeStation) {
-      return isTabletOverlay
-        ? Math.max(104, Math.round(viewportHeight * 0.14))
-        : Math.max(72, Math.round(viewportHeight * 0.1));
-    }
-    if (requiresQrScan) {
-      // Was a flat 0.75 of availableMediaHeight, sized without accounting for
-      // its siblings — on real screens that left the card's outer flex-1
-      // (overflow: hidden, see preview.tsx) with no room for the progress dots
-      // row above it and the task description below it, so both got clipped
-      // off (or squeezed to a sliver) instead of just looking cramped.
-      // Explicitly subtracting their reserved heights (same constants preview.tsx
-      // caps those boxes at) guarantees the budget actually adds up.
-      const qrHuntSiblingReserve = isTabletOverlay
-        ? QR_HUNT_PROGRESS_DOTS_RESERVE.tablet + QR_HUNT_DESCRIPTION_RESERVE.tablet
-        : QR_HUNT_PROGRESS_DOTS_RESERVE.phone + QR_HUNT_DESCRIPTION_RESERVE.phone;
-      const qrHuntScannerBudget = Math.max(0, availableMediaHeight - qrHuntSiblingReserve);
-      // The scanner tile only needs to be tall enough for a comfortably
-      // tappable viewfinder, not to fill the whole leftover budget.
-      return isTabletOverlay
-        ? Math.max(220, Math.round(qrHuntScannerBudget * 0.65))
-        : Math.max(170, Math.round(qrHuntScannerBudget * 0.65));
-    }
-    if (requiresCode || requiresPhotoUpload) {
-      return isTabletOverlay
-        ? Math.max(128, Math.round(viewportHeight * 0.2))
-        : Math.max(92, Math.round(viewportHeight * 0.14));
-    }
-    // isWordleStation has no branch here: its media box now flexes
-    // (station-media-panel.tsx) instead of using a fixed height computed
-    // from the viewport, so the guess grid shrinks when the station
-    // description needs room, same treatment as mini-sudoku.
-    if (isAnagramStation) {
-      return isTabletOverlay
-        ? Math.max(210, Math.round(availableMediaHeight * 0.34))
-        : Math.max(100, Math.round(availableMediaHeight * 0.16));
-    }
-    if (isSimonStation) {
-      // The mistake dots, status, and progress row that used to live in this
-      // box now render below it (preview.tsx) — only the 3x3 button grid is
-      // left in here, so it needs much less height than before.
-      return isTabletOverlay
-        ? Math.max(300, Math.round(availableMediaHeight * 0.65))
-        : Math.max(220, Math.round(availableMediaHeight * 0.55));
-    }
-    if (isMemoryStation) {
-      // The prompt and pairs-found indicator that used to live in this box
-      // now render above/below it (preview.tsx) — only the card grid is
-      // left in here, so it needs less height than before.
-      return isTabletOverlay
-        ? Math.max(460, Math.round(availableMediaHeight * 0.66))
-        : Math.max(150, Math.round(availableMediaHeight * 0.22));
-    }
-    // isMiniSudokuStation has no branch here: its media box now flexes
-    // (station-media-panel.tsx) and its grid self-sizes off the box's
-    // measured layout (mini-sudoku-station-panel.tsx), instead of using a
-    // fixed height computed from the viewport.
-    if (isMastermindStation) {
-      return isTabletOverlay
-        ? Math.max(340, Math.round(availableMediaHeight * 0.56))
-        : Math.max(180, Math.round(availableMediaHeight * 0.28));
-    }
-    if (isMatchingStation) {
-      return isTabletOverlay
-        ? Math.max(430, Math.round(availableMediaHeight * 0.7))
-        : Math.max(160, Math.round(availableMediaHeight * 0.26));
-    }
-    if (isBoggleStation) {
-      return isTabletOverlay
-        ? Math.max(400, Math.round(availableMediaHeight * 0.64))
-        : Math.max(160, Math.round(availableMediaHeight * 0.26));
-    }
-    if (isStrongPasswordStation) {
-      return isTabletOverlay
-        ? Math.max(280, Math.round(viewportHeight * 0.42))
-        : Math.max(180, Math.round(viewportHeight * 0.28));
-    }
-    return isTabletOverlay
-      ? Math.max(190, Math.round(viewportHeight * 0.33))
-      : Math.max(128, Math.round(viewportHeight * 0.22));
-  })();
+  const stationMediaHeightContext = {
+    viewportHeight,
+    availableMediaHeight,
+    isTablet: isTabletOverlay,
+    isNumericCode: isNumericCodeStation,
+  };
+  const stationMediaHeight =
+    STATION_DEFINITIONS[station.stationType].mediaHeight?.(stationMediaHeightContext) ??
+    resolveDefaultStationMediaHeight(stationMediaHeightContext);
   const hasTimerStarted = Boolean(station.startedAt);
   const hasQuizAnswer = selectedQuizOption !== null;
   const wordleSecret = isWordleStation ? resolvePuzzleSecret(station, "wordle") : "";
