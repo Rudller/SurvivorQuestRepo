@@ -74,7 +74,7 @@ const SIMON_TONE_ASSET_BY_BUTTON: Record<string, number> = {
   "9": require("./assets/simon-tones/9.wav"),
 };
 
-function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
+export function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
   if (station.stationType === "wordle") {
     return text.wordleSolvedPopup;
   }
@@ -122,7 +122,7 @@ function resolveSuccessOutcomeMessage(station: StationTestViewModel, text: Stati
   return text.quizSuccessPopup;
 }
 
-function resolveFailureOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
+export function resolveFailureOutcomeMessage(station: StationTestViewModel, text: StationPreviewText) {
   if (station.stationType === "wordle") {
     return text.wordleFailedPopup;
   }
