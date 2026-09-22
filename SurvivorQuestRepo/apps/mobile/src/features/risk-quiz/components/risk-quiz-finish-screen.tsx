@@ -3,7 +3,7 @@ import { Animated, Easing, Image, ScrollView, Text, View, useAnimatedValue } fro
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 import type { UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, TEAM_COLORS } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";

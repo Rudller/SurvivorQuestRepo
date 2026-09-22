@@ -58,7 +58,7 @@ import { shouldShowRiskQuizIntro } from "../model/intro-visibility";
 import { getRiskQuizSessionPollDelayMs } from "../model/session-poll-delay";
 import { RiskQuizFinishScreen } from "../components/risk-quiz-finish-screen";
 import { isRiskQuizGameOver } from "../model/risk-quiz-finish-summary";
-import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 import { TEST_MENU_TRIGGER_HOLD_MS } from "../../../shared/dev/test-menu-gesture";
 import { RISK_PIG_BADGE_LABEL } from "../model/risk-quiz-pig-text";

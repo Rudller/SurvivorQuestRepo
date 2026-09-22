@@ -4,7 +4,7 @@ import {
   resolveRiskQuizBarColors,
   summariseRiskQuizFinish,
 } from "./risk-quiz-finish-summary";
-import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 
 function fullEntry(
   teamId: string,

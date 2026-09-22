@@ -1,3 +1,4 @@
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 import type {
   OnboardingSession,
   RealizationLanguage,
@@ -5,6 +6,10 @@ import type {
 } from "../../onboarding/model/types";
 import { getRealizationLanguageLabel } from "../../onboarding/model/types";
 import { resolveUiLanguage, type UiLanguage } from "../../i18n/ui-language";
+
+// Reeksport, bo typ jest używany także lokalnie w tym pliku, a sam
+// `export ... from` nie wprowadziłby nazwy do zasięgu modułu.
+export type { ExpeditionLeaderboardEntry };
 
 export type ExpeditionTaskStatus = "todo" | "in-progress" | "done" | "failed";
 
@@ -25,19 +30,6 @@ export type ExpeditionSessionEndReason =
   | "all-tasks-completed"
   | "realization-finished";
 
-export type ExpeditionLeaderboardEntry = {
-  position: number;
-  teamId: string;
-  slotNumber: number;
-  name: string;
-  color: string | null;
-  badgeKey: string | null;
-  badgeImageUrl: string | null;
-  points: number;
-  progressDone: number;
-  progressTotal: number;
-  progressPercent: number;
-};
 
 export type ExpeditionSessionState = {
   realization: {

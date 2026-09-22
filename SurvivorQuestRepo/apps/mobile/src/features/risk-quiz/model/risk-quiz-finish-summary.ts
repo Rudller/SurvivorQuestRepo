@@ -1,4 +1,4 @@
-import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 
 /** Only the columns the end screen reads; the poll hands over full entries. */
 export type RiskQuizFinishEntry = Pick<ExpeditionLeaderboardEntry, "teamId" | "position" | "points">;

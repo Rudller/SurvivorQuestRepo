@@ -2,7 +2,7 @@ import { render, within } from "@testing-library/react-native";
 
 import { RiskQuizFinishScreen } from "./risk-quiz-finish-screen";
 import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
-import type { ExpeditionLeaderboardEntry } from "../../expedition-stage/model/types";
+import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
 
 // The screen a Ryzykanci tablet sits on after the organiser ends the game. It
 // used to be the "Tekst wstępu" briefing card, because the screen only knew
