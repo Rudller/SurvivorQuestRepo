@@ -17,7 +17,9 @@ jest.mock("expo-audio", () => ({
 // a wall of errors; the icons are irrelevant to the chrome under test.
 jest.mock("react-native-svg", () => {
   const actual = jest.requireActual("react-native-svg");
-  return { ...actual, SvgUri: () => null };
+  // __esModule musi zostać: bez niego interop uznaje cały obiekt modułu za
+  // domyślny eksport i `<Svg>` staje się obiektem zamiast komponentem.
+  return { __esModule: true, ...actual, SvgUri: () => null };
 });
 
 // Characterization test for the `presentation` prop, written BEFORE the
