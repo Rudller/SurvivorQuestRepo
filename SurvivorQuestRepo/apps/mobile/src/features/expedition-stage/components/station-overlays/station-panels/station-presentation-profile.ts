@@ -20,6 +20,7 @@
  * w komponencie jako nazwane stałe — nieliczne i właśnie je warto widzieć.
  */
 
+import type { PanelCornerStyle } from "../../../../../shared/ui/chamfered-panel";
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 
 export type StationPresentationMode = "overlay" | "inline";
@@ -80,6 +81,43 @@ export type StationPresentationProfile = {
      */
     contentWidth: number | undefined;
   };
+  /** Kolumna treści między nagłówkiem a stopką. */
+  content: {
+    /**
+     * Overlay przycina to, co nie mieści się w karcie — ma ekran dla siebie.
+     * Inline dzieli ekran z chrome gospodarza, więc nadmiar musi dać się
+     * doscrollować jego własnym kontenerem zamiast zostać uciętym tutaj.
+     */
+    overflow: "visible" | "hidden";
+  };
+  /**
+   * Wartości podawane wprost panelom stanowisk. Panele nie znają prezentacji —
+   * przyjmują semantyczne propsy i to jest jedyne miejsce, które tłumaczy
+   * prezentację na te propsy.
+   */
+  panels: {
+    /** Panel mediów bez własnej ramki i tła — rysuje je gospodarz. */
+    minimalChrome: boolean;
+    /** Ciaśniejszy wskaźnik prób tam, gdzie karta jest niska. */
+    compactAttempts: boolean;
+    /** Wskaźnik prób ukryty zupełnie — gospodarz pokazuje go po swojemu. */
+    hideAttempts: boolean;
+    /** Ścięte narożniki to język wizualny Ryzykantów, zaokrąglone — ekspedycji. */
+    cornerStyle: PanelCornerStyle;
+  };
+  /**
+   * Jedyne miejsce, gdzie prezentacja zmienia ZACHOWANIE, a nie wygląd. Warto,
+   * żeby ta sekcja została jednomieszkaniowa — gdyby zaczęła rosnąć, znaczyłoby
+   * to, że prezentacja przestaje być decyzją o wyglądzie.
+   */
+  behavior: {
+    /**
+     * Inline otwiera aparat od razu po wejściu na stanowisko foto: gospodarz
+     * (Ryzykanci) wszedł tu jednym tapnięciem w kartę i dodatkowy przycisk
+     * "zrób zdjęcie" byłby drugim tapnięciem w to samo.
+     */
+    autoOpenPhotoCapture: boolean;
+  };
 };
 
 /** Poziomy padding kolumny treści — ta sama wartość w obu prezentacjach. */
@@ -125,6 +163,14 @@ export function resolveStationPresentationProfile(
         paddingBottom: 0,
         contentWidth: undefined,
       },
+      content: { overflow: "visible" },
+      panels: {
+        minimalChrome: true,
+        compactAttempts: true,
+        hideAttempts: true,
+        cornerStyle: "chamfered",
+      },
+      behavior: { autoOpenPhotoCapture: true },
     };
   }
 
@@ -156,5 +202,13 @@ export function resolveStationPresentationProfile(
       paddingBottom: keyboardHeight,
       contentWidth: Math.max(0, viewportWidth - cardChromeWidth),
     },
+    content: { overflow: "hidden" },
+    panels: {
+      minimalChrome: false,
+      compactAttempts: false,
+      hideAttempts: false,
+      cornerStyle: "rounded",
+    },
+    behavior: { autoOpenPhotoCapture: false },
   };
 }

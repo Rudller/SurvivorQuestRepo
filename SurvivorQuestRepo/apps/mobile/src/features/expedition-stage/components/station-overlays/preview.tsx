@@ -912,6 +912,18 @@ export function StationPreviewOverlay({
   const isTabletOverlay = adaptiveLayout.isTablet;
   const isLightTheme = getExpeditionThemeMode() === "light";
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Całe chrome podglądu — przyciemnienie, ramka, karta, nagłówek — czytane z
+  // jednego profilu zamiast z kilkudziesięciu `isInlinePresentation ? … : …`
+  // rozsypanych po tym pliku. Zwykły const, nie useMemo: to czysta funkcja
+  // liczona raz na render, dokładnie jak liczone tu były te ternary.
+  const presentationProfile = resolveStationPresentationProfile({
+    mode: presentation,
+    isTablet: isTabletOverlay,
+    isLightTheme,
+    viewportWidth: adaptiveLayout.width,
+    keyboardHeight,
+    scaled: adaptiveLayout.s,
+  });
   useEffect(() => {
     // KeyboardAvoidingView measures its own on-screen position to compute
     // its padding, but that measurement breaks under an animated ancestor
@@ -1603,7 +1615,7 @@ export function StationPreviewOverlay({
       showQuizOutcomePopup("pending", text.pendingReviewPopupMessage);
     },
     // Ryzykanci (inline): the viewfinder is live as soon as the card opens.
-    { autoOpenCapture: isInlinePresentation },
+    { autoOpenCapture: presentationProfile.behavior.autoOpenPhotoCapture },
   );
   const qrHuntScan = useQrHuntScan(displayedStation, onSubmitQrScan);
 
@@ -2210,7 +2222,7 @@ export function StationPreviewOverlay({
     },
     mastermindMediaSectionProps: {
       stationId: station.stationId,
-      minimalChrome: isInlinePresentation,
+      minimalChrome: presentationProfile.panels.minimalChrome,
       prompt: stationQuizPrompt,
       mastermindAttempts,
       mastermindAttemptsLeft,
@@ -2463,7 +2475,7 @@ export function StationPreviewOverlay({
       hangmanMisses,
       hangmanAttemptsLeft,
       guessedHangmanSet,
-      compactAttempts: isInlinePresentation,
+      compactAttempts: presentationProfile.panels.compactAttempts,
       isGuessDisabled: hangmanIsGuessDisabled,
       isSubmittingHangmanGuess,
       onSubmitLetter: (letter) => {
@@ -2566,7 +2578,7 @@ export function StationPreviewOverlay({
         },
       },
     openQuizStationPanelProps: {
-      hideAttempts: isInlinePresentation,
+      hideAttempts: presentationProfile.panels.hideAttempts,
       openQuizAttemptsLeft,
       openQuizInput,
       openQuizResult,
@@ -2625,18 +2637,6 @@ export function StationPreviewOverlay({
   const renderedQuizStation = quizStationRendererByType[station.stationType]?.() ?? null;
   const stationHeaderLabel = `${station.name} • ${station.typeLabel}`;
   const closeButtonDiameter = adaptiveLayout.s(isTabletOverlay ? 48 : 30, 28, 56);
-  // Całe chrome podglądu — przyciemnienie, ramka, karta, nagłówek — czytane z
-  // jednego profilu zamiast z kilkudziesięciu `isInlinePresentation ? … : …`
-  // rozsypanych po tym pliku. Zwykły const, nie useMemo: to czysta funkcja
-  // liczona raz na render, dokładnie jak liczone tu były te ternary.
-  const presentationProfile = resolveStationPresentationProfile({
-    mode: presentation,
-    isTablet: isTabletOverlay,
-    isLightTheme,
-    viewportWidth: adaptiveLayout.width,
-    keyboardHeight,
-    scaled: adaptiveLayout.s,
-  });
   const overlayCardContentWidth = presentationProfile.card.contentWidth;
 
   return (
@@ -2784,7 +2784,7 @@ export function StationPreviewOverlay({
                 // full screen like the overlay does, so content that doesn't
                 // fit must be reachable by scrolling the host's own container
                 // rather than clipped here.
-                overflow: isInlinePresentation ? "visible" : "hidden",
+                overflow: presentationProfile.content.overflow,
               }}
             >
               <View
@@ -2852,7 +2852,7 @@ export function StationPreviewOverlay({
                 !(requiresCode && !hasRealStationImage) &&
                 !(isOpenQuizStation && isInlinePresentation && !hasRealStationImage) ? (
                   <StationMediaPanel
-                    minimalChrome={isInlinePresentation}
+                    minimalChrome={presentationProfile.panels.minimalChrome}
                     stationId={station.stationId}
                     stationType={station.stationType}
                     viewportHeight={viewportHeight}
@@ -3298,7 +3298,7 @@ export function StationPreviewOverlay({
 
             {requiresCode ? (
               <CodeStationPanel
-                minimalChrome={isInlinePresentation}
+                minimalChrome={presentationProfile.panels.minimalChrome}
                 availableContentWidth={overlayCardContentWidth}
                 station={station}
                 isNumericCodeStation={isNumericCodeStation}
@@ -3419,7 +3419,7 @@ export function StationPreviewOverlay({
         timeoutSecondsLeft={timeoutPopupSecondsLeft}
         isLightTheme={isLightTheme}
         // Ryzykanci: dressed like that screen's bottom bar.
-        cornerStyle={isInlinePresentation ? "chamfered" : "rounded"}
+        cornerStyle={presentationProfile.panels.cornerStyle}
         onClose={closeQuizOutcomePopup}
         text={{
           outcomePassed: text.outcomePassed,
