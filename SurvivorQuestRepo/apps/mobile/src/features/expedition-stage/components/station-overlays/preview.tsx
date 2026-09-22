@@ -2194,6 +2194,52 @@ export function StationPreviewOverlay({
   const isChromelessInlineTask =
     isInlinePresentation &&
     (isWordleStation || isHangmanStation || isAnagramStation || isCaesarStation);
+
+  // Krzyżówki prezentacji z typem stanowiska albo ze stanem danych. Celowo NIE
+  // trafiają do profilu prezentacji: profil odpowiada na pytanie "jak wygląda
+  // ta prezentacja", a poniższe na "jak wygląda TEN typ w TEJ prezentacji przy
+  // TYCH danych". Wciągnięte do profilu zmusiłyby go do poznania typu
+  // stanowiska i przestałby być jedną decyzją. Stoją tutaj razem, żeby dało się
+  // je policzyć i przeczytać naraz, zamiast wyławiać z JSX-a niżej.
+
+  // Anagram to jeden mały obiekt (rząd kafelków nad jednoliniowym opisem) —
+  // przy schowanej klawiaturze wisiałby u góry wysokiej karty z pustką pod
+  // spodem. Wyśrodkuj zamiast tego kolumnę.
+  const shouldCentreInlineAnagramColumn = isInlinePresentation && isAnagramStation && !compactMedia;
+
+  // flex-1 tego wrappera zagarnia całą pozostałą wysokość — w pełnoekranowym
+  // overlayu to w porządku, ale w układzie dzielonym z gospodarzem nie zostaje
+  // nic dla treści zadania pod spodem, dla typów o stałej wysokości mediów.
+  const shouldMediaWrapperHugContent =
+    isInlinePresentation && (isOpenQuizStation || isAnagramStation);
+
+  // Media i opis wchłaniają całą wysokość, jaka zostaje po stałym bloku
+  // input/klawiatura u Ryzykantów.
+  const shouldMediaWrapperAbsorbHeight = isInlinePresentation && requiresCode;
+
+  // Zapas, żeby treść nigdy nie renderowała się pod pływającą stopką z
+  // timerem i punktami. Inline stopki nie rysuje, a pozostałe typy rezerwują
+  // ten zapas u siebie.
+  const shouldReserveFooterClearance =
+    !isInlinePresentation && !requiresCode && !isMiniSudokuStation && !isOpenQuizStation;
+
+  // Pusta ramka mediów przy open-quiz bez zdjęcia rysowałaby u Ryzykantów
+  // pudełko wokół niczego.
+  const shouldHideEmptyInlineMediaBox =
+    isOpenQuizStation && isInlinePresentation && !hasRealStationImage;
+
+  // Bez zdjęcia opis jest jedyną treścią górnej części karty, więc zamiast
+  // stałego sufitu wysokości dostaje tyle miejsca, ile zostało.
+  const shouldDescriptionAbsorbHeight = isInlinePresentation && !hasRealStationImage;
+
+  // Własna obramowana karta open-quiz jest ostatnia w przepływie stanowiska —
+  // zapas idzie po niej, nie w środku, gdzie tylko rozciągnąłby ramkę wokół
+  // pustki.
+  const shouldReserveFooterClearanceAfterOpenQuiz = isOpenQuizStation && !isInlinePresentation;
+
+  // Ryzykanci: aparat wyżej jest ograniczony, więc reszta karty należy do
+  // treści zadania — weź ją i scrolluj w środku zamiast wychodzić poza krawędź.
+  const shouldScrollPhotoPromptInline = isInlinePresentation;
   const stationMediaRendererByType = buildStationMediaRendererByType({
     wordleMediaBoardProps: {
       stationId: station.stationId,
@@ -2776,9 +2822,7 @@ export function StationPreviewOverlay({
                 // over a one-line description), so with the keyboard down it
                 // would otherwise hang from the top edge of a tall card with
                 // all the empty space below it. Centre the column instead.
-                ...(isInlinePresentation && isAnagramStation && !compactMedia
-                  ? { justifyContent: "center" as const }
-                  : {}),
+                ...(shouldCentreInlineAnagramColumn ? { justifyContent: "center" as const } : {}),
                 // Inline presentation shares screen space with a host's own
                 // chrome (top bar, timer, bottom panel) instead of owning the
                 // full screen like the overlay does, so content that doesn't
@@ -2796,12 +2840,12 @@ export function StationPreviewOverlay({
                 // for types whose media box has a fixed (not flex-filled)
                 // height. Let it size to its own content instead for those.
                 className={
-                  isInlinePresentation && (isOpenQuizStation || isAnagramStation) ? undefined : "flex-1"
+                  shouldMediaWrapperHugContent ? undefined : "flex-1"
                 }
                 style={{
                   // The media and description absorb all height left after the
                   // fixed input/keyboard block in Ryzykanci.
-                  ...(isInlinePresentation && requiresCode
+                  ...(shouldMediaWrapperAbsorbHeight
                     ? {
                         overflow: "hidden" as const,
                         flexGrow: 1,
@@ -2814,9 +2858,9 @@ export function StationPreviewOverlay({
                   // used to be duplicated per-panel in code-station-panel.tsx
                   // and wordle-station-panel.tsx — centralized here instead).
                   marginBottom:
-                    isInlinePresentation || requiresCode || isMiniSudokuStation || isOpenQuizStation
-                      ? 0
-                      : adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132),
+                    shouldReserveFooterClearance
+                      ? adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132)
+                      : 0,
                 }}
               >
                 {isMemoryStation ? (
@@ -2850,7 +2894,7 @@ export function StationPreviewOverlay({
                 !isAnagramStation &&
                 !(station.stationType === "quiz" && !hasRealStationImage) &&
                 !(requiresCode && !hasRealStationImage) &&
-                !(isOpenQuizStation && isInlinePresentation && !hasRealStationImage) ? (
+                !shouldHideEmptyInlineMediaBox ? (
                   <StationMediaPanel
                     minimalChrome={presentationProfile.panels.minimalChrome}
                     stationId={station.stationId}
@@ -2946,7 +2990,7 @@ export function StationPreviewOverlay({
                     // Ryzykanci: the camera above is capped, so whatever is
                     // left of the card belongs to the task text — take it, and
                     // scroll inside instead of pushing past the card's edge.
-                    ...(isInlinePresentation
+                    ...(shouldScrollPhotoPromptInline
                       ? {
                           flexGrow: 1,
                           flexShrink: 1,
@@ -2958,7 +3002,7 @@ export function StationPreviewOverlay({
                       : {}),
                   }}
                 >
-                  {isInlinePresentation ? (
+                  {shouldScrollPhotoPromptInline ? (
                     <AutoScrollingBox className="w-full" style={{ flexShrink: 1, minHeight: 0 }}>
                       <Text
                         className="text-center"
@@ -3191,19 +3235,15 @@ export function StationPreviewOverlay({
                     // auto-scroll cycle look jumpy right from station start.
                     // A fixed maxHeight is stable from the very first layout pass.
                     maxHeight:
-                      isInlinePresentation && !hasRealStationImage
+                      shouldDescriptionAbsorbHeight
                         ? undefined
                         : adaptiveLayout.s(isTabletOverlay ? 160 : 110, 80, 260),
-                    ...(isInlinePresentation && !hasRealStationImage
-                      ? { flexGrow: 1, minHeight: 0 }
-                      : {}),
+                    ...(shouldDescriptionAbsorbHeight ? { flexGrow: 1, minHeight: 0 } : {}),
                   }}
                 >
                   <AutoScrollingBox
                     style={
-                      isInlinePresentation && !hasRealStationImage
-                        ? { flexGrow: 1 }
-                        : undefined
+                      shouldDescriptionAbsorbHeight ? { flexGrow: 1 } : undefined
                     }
                     autoScrollEnabled={false}
                     showsBottomFadeWhenScrollable
@@ -3274,7 +3314,7 @@ export function StationPreviewOverlay({
                     // positioned timer/points footer below, same treatment as
                     // code-station-panel.tsx / mini-sudoku's keypad section.
                     marginBottom:
-                      isOpenQuizStation && !isInlinePresentation
+                      shouldReserveFooterClearanceAfterOpenQuiz
                         ? adaptiveLayout.s(isTabletOverlay ? 100 : 72, 60, 132)
                         : 0,
                   }}
