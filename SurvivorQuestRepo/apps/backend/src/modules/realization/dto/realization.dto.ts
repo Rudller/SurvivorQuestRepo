@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { RiskPigType } from '@prisma/client';
+import { REALIZATION_TYPE_VALUES } from '../mappers/realization.mapper';
 import type {
   PointsQrCodeDraftPayload,
   RealizationLanguage,
@@ -59,15 +60,9 @@ function ensureRealizationTranslations(
   return Object.keys(translations).length > 0 ? translations : undefined;
 }
 
-const REALIZATION_TYPES: RealizationType[] = [
-  'outdoor-games',
-  'hotel-games',
-  'workshops',
-  'evening-attractions',
-  'dj',
-  'recreation',
-  'risk-quiz',
-];
+// Lista wyprowadzona z mapy w realization.mapper.ts, a nie powtórzona tutaj:
+// druga kopia rozjeżdżała się po cichu z pierwszą przy każdej nowej wartości.
+const REALIZATION_TYPES: readonly RealizationType[] = REALIZATION_TYPE_VALUES;
 
 const REALIZATION_STATUSES: RealizationStatus[] = [
   'planned',

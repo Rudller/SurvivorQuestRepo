@@ -18,28 +18,50 @@ import type {
 const MINUTES_TO_MS = 60_000;
 const DAY_TO_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Jedyne miejsce, które zna odwzorowanie enuma Prismy na kontrakt API.
+ *
+ * Wcześniej były to dwie drabiny `if`, obie zakończone `return 'recreation'` /
+ * `RECREATION`. Nowa wartość enuma bez dopisania gałęzi mapowała się po cichu
+ * na rekreację — realizacja zakładana jako nowy typ wracała z API jako
+ * rekreacja i nic nigdzie nie protestowało.
+ *
+ * `satisfies Record<PrismaRealizationType, RealizationType>` zamienia to
+ * przeoczenie w błąd kompilacji: dodanie wartości do enuma w schema.prisma bez
+ * dopisania jej tutaj nie przejdzie builda.
+ */
+const REALIZATION_TYPE_BY_PRISMA = {
+  [PrismaRealizationType.OUTDOOR_GAMES]: 'outdoor-games',
+  [PrismaRealizationType.HOTEL_GAMES]: 'hotel-games',
+  [PrismaRealizationType.WORKSHOPS]: 'workshops',
+  [PrismaRealizationType.EVENING_ATTRACTIONS]: 'evening-attractions',
+  [PrismaRealizationType.DJ]: 'dj',
+  [PrismaRealizationType.RECREATION]: 'recreation',
+  [PrismaRealizationType.RISK_QUIZ]: 'risk-quiz',
+} satisfies Record<PrismaRealizationType, RealizationType>;
+
+const PRISMA_BY_REALIZATION_TYPE = Object.fromEntries(
+  Object.entries(REALIZATION_TYPE_BY_PRISMA).map(([prismaType, apiType]) => [
+    apiType,
+    prismaType,
+  ]),
+) as Record<RealizationType, PrismaRealizationType>;
+
+/** Wszystkie wartości kontraktu API, wyprowadzone z mapy powyżej. */
+export const REALIZATION_TYPE_VALUES: readonly RealizationType[] = Object.values(
+  REALIZATION_TYPE_BY_PRISMA,
+);
+
 export function fromPrismaRealizationType(
   type: PrismaRealizationType,
 ): RealizationType {
-  if (type === PrismaRealizationType.OUTDOOR_GAMES) return 'outdoor-games';
-  if (type === PrismaRealizationType.HOTEL_GAMES) return 'hotel-games';
-  if (type === PrismaRealizationType.WORKSHOPS) return 'workshops';
-  if (type === PrismaRealizationType.EVENING_ATTRACTIONS)
-    return 'evening-attractions';
-  if (type === PrismaRealizationType.DJ) return 'dj';
-  if (type === PrismaRealizationType.RISK_QUIZ) return 'risk-quiz';
-  return 'recreation';
+  return REALIZATION_TYPE_BY_PRISMA[type];
 }
 
-export function toPrismaRealizationType(type: RealizationType) {
-  if (type === 'outdoor-games') return PrismaRealizationType.OUTDOOR_GAMES;
-  if (type === 'hotel-games') return PrismaRealizationType.HOTEL_GAMES;
-  if (type === 'workshops') return PrismaRealizationType.WORKSHOPS;
-  if (type === 'evening-attractions')
-    return PrismaRealizationType.EVENING_ATTRACTIONS;
-  if (type === 'dj') return PrismaRealizationType.DJ;
-  if (type === 'risk-quiz') return PrismaRealizationType.RISK_QUIZ;
-  return PrismaRealizationType.RECREATION;
+export function toPrismaRealizationType(
+  type: RealizationType,
+): PrismaRealizationType {
+  return PRISMA_BY_REALIZATION_TYPE[type];
 }
 
 export function fromPrismaRealizationLanguage(
