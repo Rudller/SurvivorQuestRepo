@@ -4,7 +4,7 @@
     "slug": "survivorquest",
     "version": "1.1.4",
     "orientation": "portrait",
-    "icon": "./assets/survivor_icon_1024.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -16,10 +16,10 @@
     },
     "android": {
       "package": "com.survivorquest.app",
-      "icon": "./assets/survivor_icon_512.png",
+      "icon": "./assets/app-icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/survivor_icon_512.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#111419"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -31,7 +31,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/survivor_icon_192.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-audio",
@@ -91,7 +91,7 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#111419"
         }
       ]
     ],

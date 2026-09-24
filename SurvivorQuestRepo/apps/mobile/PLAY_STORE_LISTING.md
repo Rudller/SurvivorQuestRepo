@@ -75,7 +75,7 @@ Aplikacja wymaga aktywnej realizacji utworzonej przez organizatora — nie dzia�
 
 | Zasób | Wymagany rozmiar | Status w repo |
 |---|---|---|
-| Ikona aplikacji | 512×512 PNG (32-bit z alfa) | `assets/survivor_icon_512.png` — do weryfikacji wymiarów |
+| Ikona aplikacji | 512×512 PNG (32-bit z alfa) | `assets/app-icon.png` (1024×1024, trzeba zmniejszyć do 512) |
 | Grafika polecana (feature graphic) | 1024×500 PNG/JPG | brak — do przygotowania |
 | Zrzuty ekranu telefonu | min. 2, max 8; 16:9 lub 9:16, min. 320px | brak — zrób ze zrzutów: mapa realizacji, panel stacji (np. quiz), skaner QR |
 

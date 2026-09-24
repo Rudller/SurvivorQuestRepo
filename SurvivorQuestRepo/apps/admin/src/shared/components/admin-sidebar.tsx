@@ -53,8 +53,14 @@ export function AdminSidebar({ userEmail, userRole, isLoggingOut, onLogout, onNa
 
   return (
     <div className="flex h-full flex-col p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">SurvivorQuest</p>
-      <h2 className="mt-2 text-lg font-semibold text-zinc-100">Admin Panel</h2>
+      <div className="flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/admin/logo-sq.svg" alt="Logo SurvivorQuest" width={40} height={40} className="size-10 shrink-0" />
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">SurvivorQuest</p>
+          <h2 className="mt-0.5 text-lg font-semibold text-zinc-100">Admin Panel</h2>
+        </div>
+      </div>
 
       <nav className="mt-6 space-y-0.5 border-l border-zinc-800/80">
         {visibleNavItems.map((item) => {
