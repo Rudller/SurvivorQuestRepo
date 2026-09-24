@@ -26,6 +26,8 @@ export type RiskQuizText = {
     steps: readonly [HowToPlayStep, HowToPlayStep, HowToPlayStep];
   };
   remainingCards: { label: string };
+  // Zastępuje licznik, gdy zadanie przepadło po czasie.
+  taskTimeUp: string;
   finish: {
     title: string;
     subtitle: string;
@@ -80,6 +82,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Zostało kart" },
+    taskTimeUp: "Czas minął!",
     finish: {
       title: "Koniec gry",
       subtitle: "Talia zamknięta. Oto jak poszło drużynom.",
@@ -124,6 +127,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Cards left" },
+    taskTimeUp: "Time's up!",
     finish: {
       title: "Game over",
       subtitle: "The deck is closed. Here is how the teams did.",
@@ -168,6 +172,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Залишилось карток" },
+    taskTimeUp: "Час вийшов!",
     finish: {
       title: "Гру завершено",
       subtitle: "Колоду закрито. Ось як упоралися команди.",
@@ -212,6 +217,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       ],
     },
     remainingCards: { label: "Осталось карточек" },
+    taskTimeUp: "Время вышло!",
     finish: {
       title: "Игра окончена",
       subtitle: "Колода закрыта. Вот как справились команды.",

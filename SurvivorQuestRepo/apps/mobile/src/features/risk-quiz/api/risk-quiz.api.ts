@@ -33,6 +33,10 @@ export type RiskScanResult =
       cardId: string;
       categoryName: string;
       difficulty: RiskDifficulty;
+      // Ile zostało czasu na zadanie, liczone przez serwer od pierwszego
+      // wylosowania — ponowny skan tej samej karty go nie odnawia. null = bez
+      // limitu. Brak pola = starszy backend, wtedy pełny timeLimitSeconds.
+      remainingSeconds?: number | null;
       station: RiskDrawnStation;
     };
 
@@ -274,6 +278,7 @@ export type RiskPendingDraw = {
   cardId: string;
   categoryName: string;
   difficulty: RiskDifficulty;
+  remainingSeconds?: number | null;
   station: RiskDrawnStation;
 };
 

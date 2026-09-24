@@ -217,6 +217,8 @@ describe('RiskQuizService.scanCard', () => {
       cardId: 'card-1',
       categoryName: 'Historia',
       difficulty: 'EASY',
+      // Stacja bez limitu czasu.
+      remainingSeconds: null,
       station: {
         id: 'station-1',
         type: 'quiz',
@@ -301,6 +303,31 @@ describe('RiskQuizService.scanCard', () => {
         station: expect.objectContaining({ id: 'station-1' }),
       }),
     );
+  });
+
+  it('keeps the task clock running across a rescan of the open card', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    // Wylosowane 50 s temu, limit 60 s — ponowny skan nie odnawia czasu.
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: quizStation.id,
+      createdAt: new Date(Date.now() - 50_000),
+      card: { ...card, category: { name: 'Historia' } },
+      station: { ...quizStation, timeLimitSeconds: 60 },
+    });
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ remainingSeconds: 10 }));
   });
 
   it('hands back the card already open instead of drawing a second task', async () => {
@@ -499,9 +526,9 @@ describe('RiskQuizService.getDeckStatus', () => {
       categoryCount: 2,
       remainingCards: 3,
       teamPoints: team.points,
-      // 10 + 10 + 20 + 20 + 30: what the whole pool pays out at the flat
+      // 10 + 10 + 20 + 20 + 40: what the whole pool pays out at the flat
       // difficulty rate. The tablet scales its end-screen bars against it.
-      maxPoints: 90,
+      maxPoints: 100,
       photoReviews: [
         {
           stationId: 'station-photo',
@@ -565,8 +592,8 @@ describe('RiskQuizService.getDeckStatus', () => {
     expect(result).toEqual(
       expect.objectContaining({
         remainingCards: 150,
-        // 5 kategorii x 10 kart x (10 + 20 + 30)
-        maxPoints: 3000,
+        // 5 kategorii x 10 kart x (10 + 20 + 40)
+        maxPoints: 3500,
       }),
     );
   });
@@ -1419,6 +1446,33 @@ describe('RiskQuizService.submitAnswer', () => {
     });
   });
 
+  it('scores a quiz the team ran out of time on as a wrong answer, without an answer index', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+
+    const result = await service.submitAnswer({
+      sessionToken: 'token',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      completed: false,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        isCorrect: false,
+        pointsDelta: -2,
+        streak: 0,
+        // Tablet podświetla dobrą odpowiedź zamiast gasić wszystkie.
+        correctIndex: 1,
+      }),
+    );
+  });
+
   it('awards the correct-answer points for the difficulty and updates the team total', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
@@ -1492,7 +1546,7 @@ describe('RiskQuizService.submitAnswer', () => {
     prisma.station.findUnique.mockResolvedValue(quizStation);
     prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
     prisma.riskAttempt.findFirst.mockResolvedValue(null);
-    prisma.team.update.mockResolvedValue({ ...team, points: -5 });
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
 
     const result = await service.submitAnswer({
       sessionToken: 'token',
@@ -1502,7 +1556,7 @@ describe('RiskQuizService.submitAnswer', () => {
     });
 
     expect(result.isCorrect).toBe(false);
-    expect(result.pointsDelta).toBe(-5);
+    expect(result.pointsDelta).toBe(-2);
     expect(result.streak).toBe(0);
     expect(result.multiplier).toBe(1);
     expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
@@ -1603,7 +1657,7 @@ describe('RiskQuizService.submitAnswer', () => {
       { isCorrect: true },
       { isCorrect: true },
     ]);
-    prisma.team.update.mockResolvedValue({ ...team, points: -5 });
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
 
     const result = await service.submitAnswer({
       sessionToken: 'token',
@@ -1615,7 +1669,7 @@ describe('RiskQuizService.submitAnswer', () => {
     expect(result.isCorrect).toBe(false);
     expect(result.streak).toBe(0);
     expect(result.multiplier).toBe(1);
-    expect(result.pointsDelta).toBe(-5);
+    expect(result.pointsDelta).toBe(-2);
   });
 
   it('accepts a code-protected card only with the right completion code', async () => {
@@ -2914,6 +2968,7 @@ describe('RiskQuizService.pollPendingDraw', () => {
     });
     expect(result).toEqual({
       draw: {
+        remainingSeconds: null,
         cardId: 'card-1',
         categoryName: 'Historia',
         difficulty: 'EASY',
@@ -3024,7 +3079,7 @@ describe('RiskQuizService.adminCompleteCard / adminFailCard', () => {
     prisma.riskAttempt.findFirst.mockResolvedValue(null);
     prisma.riskCard.findFirst.mockResolvedValue({ id: 'card-1' });
     prisma.riskAttempt.create.mockResolvedValue({});
-    prisma.team.update.mockResolvedValue({ id: 'team-1', points: -15 });
+    prisma.team.update.mockResolvedValue({ id: 'team-1', points: -30 });
 
     const result = await service.adminFailCard(
       'realization-1',
@@ -3034,10 +3089,10 @@ describe('RiskQuizService.adminCompleteCard / adminFailCard', () => {
 
     expect(prisma.riskAttempt.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ isCorrect: false, pointsDelta: -15 }),
+        data: expect.objectContaining({ isCorrect: false, pointsDelta: -30 }),
       }),
     );
-    expect(result).toMatchObject({ taskStatus: 'failed', pointsAwarded: -15 });
+    expect(result).toMatchObject({ taskStatus: 'failed', pointsAwarded: -30 });
   });
 
   it("overwrites an existing attempt's outcome and adjusts the team's points by the delta", async () => {

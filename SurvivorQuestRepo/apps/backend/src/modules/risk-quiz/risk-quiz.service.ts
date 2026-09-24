@@ -41,6 +41,7 @@ import {
   fromPrismaStationType,
   mapStation,
 } from '../station/mappers/station.mapper';
+import { resolveRiskRemainingSeconds } from './risk-task-timer';
 import {
   buildRiskPoolCapacities,
   riskPoolCapacity,
@@ -502,6 +503,11 @@ export class RiskQuizService {
         cardId: openDraw.cardId,
         categoryName: openDraw.card.category.name,
         difficulty: openDraw.card.difficulty,
+        // Ponowny skan nie odnawia czasu — liczy się od pierwszego losowania.
+        remainingSeconds: resolveRiskRemainingSeconds(
+          openDraw.station.timeLimitSeconds,
+          openDraw.createdAt,
+        ),
         station: this.toRiskStationPayload(
           openDraw.station,
           this.resolveRiskLanguageContext(realization, input.selectedLanguage),
@@ -592,6 +598,10 @@ export class RiskQuizService {
             cardId: winner.cardId,
             categoryName: winner.card.category.name,
             difficulty: winner.card.difficulty,
+            remainingSeconds: resolveRiskRemainingSeconds(
+              winner.station.timeLimitSeconds,
+              winner.createdAt,
+            ),
             station: this.toRiskStationPayload(
               winner.station,
               this.resolveRiskLanguageContext(
@@ -611,6 +621,10 @@ export class RiskQuizService {
       cardId: card.id,
       categoryName: card.category.name,
       difficulty: card.difficulty,
+      remainingSeconds: resolveRiskRemainingSeconds(
+        chosen.station.timeLimitSeconds,
+        null,
+      ),
       station: this.toRiskStationPayload(
         chosen.station,
         this.resolveRiskLanguageContext(realization, input.selectedLanguage),
@@ -871,6 +885,9 @@ export class RiskQuizService {
       update: {
         cardId: pendingDraw.cardId,
         stationId: pendingDraw.stationId,
+        // Nowe zadanie na miejscu starego — czas zadania liczy się od teraz,
+        // nie od chwili, w której wylosowano poprzednie.
+        createdAt: new Date(),
       },
     });
 
@@ -879,6 +896,10 @@ export class RiskQuizService {
         cardId: pendingDraw.cardId,
         categoryName: pendingDraw.card.category.name,
         difficulty: pendingDraw.card.difficulty,
+        remainingSeconds: resolveRiskRemainingSeconds(
+          pendingDraw.station.timeLimitSeconds,
+          null,
+        ),
         station: this.toRiskStationPayload(
           pendingDraw.station,
           this.resolveRiskLanguageContext(realization, selectedLanguage),
@@ -1321,6 +1342,21 @@ export class RiskQuizService {
         mapStation(station),
         languageContext,
       ).quiz;
+      // Koniec czasu (albo pas) na quizie: drużyna nie wybrała żadnej odpowiedzi,
+      // więc nie ma indeksu do oceny — to po prostu błędna odpowiedź. Dobra
+      // odpowiedź i tak wraca, żeby tablet mógł ją pokazać.
+      if (
+        input.completed === false &&
+        typeof input.selectedIndex !== 'number'
+      ) {
+        return {
+          isCorrect: false,
+          correctIndex:
+            typeof quiz?.correctAnswerIndex === 'number'
+              ? quiz.correctAnswerIndex
+              : undefined,
+        };
+      }
       if (
         typeof input.selectedIndex !== 'number' ||
         !quiz ||

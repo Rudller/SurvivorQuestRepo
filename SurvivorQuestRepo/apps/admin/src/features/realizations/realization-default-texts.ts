@@ -17,10 +17,11 @@ export const RYZYKANCI_DEFAULT_INTRO_TEXT = `Gra polega na tym, że sami decyduj
 - Odpowiadacie albo pasujecie, a potem wracacie po kolejną kartę.
 
 **PUNKTY**
-- Łatwe: **+10** za poprawną odpowiedź, **−5** za błędną
+- Łatwe: **+10** za poprawną odpowiedź, **−2** za błędną
 - Średnie: **+20** / **−10**
-- Trudne: **+30** / **−15**
+- Trudne: **+40** / **−30**
 - Pas liczy się dokładnie tak samo jak błędna odpowiedź.
+- Koniec czasu na zadanie liczy się tak samo jak błędna odpowiedź. Czas biegnie od zeskanowania karty — ponowny skan go nie odnawia.
 
 **SERIA**
 - Druga poprawna odpowiedź z rzędu to **×1,25**, trzecia **×1,5**, czwarta **×1,75**, piąta i każda kolejna **×2**.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Rect } from "react-native-svg";
 import { useAudioQuizPlayback } from "../../expedition-stage/components/station-overlays/station-panels/use-audio-quiz-playback";
@@ -9,6 +9,7 @@ import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../..
 import { resolveUiLanguage } from "../../i18n";
 import { describeRiskQuizError } from "../model/risk-quiz-error-text";
 import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
+import { resolveRiskTaskStartSeconds, shouldExpireRiskTask } from "../model/risk-task-timer";
 import { isInvalidCompletionCodeErrorMessage } from "../../expedition-stage/components/station-overlays/puzzle-helpers";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
@@ -247,6 +248,8 @@ const PIG_BUTTON_GAP = 10;
 // mid-reveal. `lineHeight` pins the digits to exactly this height, so the
 // reserved space and the real space always agree on the first frame.
 const TASK_TIMER_FONT_SIZE = 72;
+// Odstęp między próbami wysłania porażki po czasie, gdy poprzednia się nie udała.
+const TASK_TIMEOUT_RETRY_MS = 3000;
 const TASK_TIMER_BLOCK_HEIGHT = 86;
 
 export function RiskQuizScreen({
@@ -325,6 +328,14 @@ export function RiskQuizScreen({
   // can be capped to it (see the card wrapper below).
   const [contentViewportHeight, setContentViewportHeight] = useState(0);
   const [remainingTaskSeconds, setRemainingTaskSeconds] = useState<number | null>(null);
+  // Karta, która przepadła po czasie — licznik pokazuje wtedy "Czas minął!".
+  const [timedOutCardId, setTimedOutCardId] = useState<string | null>(null);
+  // Przełącznik z menu testowego. Celowo tylko w pamięci: po restarcie aplikacji
+  // limit czasu znów działa, więc tablet nie pojedzie na grę z wyłączonym.
+  const [disableTaskTimeouts, setDisableTaskTimeouts] = useState(false);
+  // Karta, dla której już raz próbowano wysłać porażkę po czasie — kolejna
+  // próba (po błędzie sieci) idzie z opóźnieniem.
+  const expireAttemptedCardIdRef = useRef<string | null>(null);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [answerResult, setAnswerResult] = useState<RiskAnswerResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -527,8 +538,8 @@ export function RiskQuizScreen({
         // the countdown effect below: that effect only runs after the card has
         // already been painted, so the content area's timer margin appeared a
         // frame late and shoved the freshly revealed card downward.
-        const timeLimitSeconds = draw.station.timeLimitSeconds ?? 0;
-        setRemainingTaskSeconds(timeLimitSeconds > 0 ? timeLimitSeconds : null);
+        setRemainingTaskSeconds(resolveRiskTaskStartSeconds(draw));
+        setTimedOutCardId(null);
         // Hidden before the card is mounted, not in the reveal effect below:
         // effects run after the first paint, so a card drawn while the reveal
         // value still sat at 1 (drawing a card straight from the test menu
@@ -581,6 +592,7 @@ export function RiskQuizScreen({
           cardId: result.draw.cardId,
           categoryName: result.draw.categoryName,
           difficulty: result.draw.difficulty,
+          remainingSeconds: result.draw.remainingSeconds,
           station: result.draw.station,
         });
       } catch (error) {
@@ -669,14 +681,16 @@ export function RiskQuizScreen({
   // Countdown for the current card's time-to-answer, shown under the top
   // panel — stops updating once the card has been answered.
   useEffect(() => {
-    const timeLimitSeconds = activeDraw?.station.timeLimitSeconds ?? 0;
-    if (!activeDraw || timeLimitSeconds <= 0 || answerResult) {
+    // Od tego, ile zostało według serwera — ponowny skan otwartej karty nie
+    // odnawia czasu (patrz resolveRiskTaskStartSeconds).
+    const startSeconds = activeDraw ? resolveRiskTaskStartSeconds(activeDraw) : null;
+    if (!activeDraw || startSeconds === null || answerResult) {
       setRemainingTaskSeconds(null);
       return;
     }
 
-    const endsAtMs = Date.now() + timeLimitSeconds * 1000;
-    setRemainingTaskSeconds(timeLimitSeconds);
+    const endsAtMs = Date.now() + startSeconds * 1000;
+    setRemainingTaskSeconds(startSeconds);
 
     const interval = setInterval(() => {
       setRemainingTaskSeconds(Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000)));
@@ -684,6 +698,44 @@ export function RiskQuizScreen({
 
     return () => clearInterval(interval);
   }, [activeDraw, answerResult]);
+
+  // Koniec czasu = błędna odpowiedź: ta sama ścieżka co "Źle!" (kara poziomu,
+  // seria do zera, auto-zamknięcie karty). completed:false bez indeksu działa
+  // też dla quizu — serwer traktuje to jako brak odpowiedzi.
+  //
+  // Nieudane wysłanie (np. zerwane połączenie) zwalnia kartę w submitOutcome,
+  // a spadek isSubmittingAnswer odpala ten efekt ponownie — kolejna próba
+  // idzie po 3 s, żeby tablet bez sieci nie strzelał zapytaniami bez przerwy.
+  useEffect(() => {
+    if (
+      !activeDraw ||
+      isSubmittingAnswer ||
+      !shouldExpireRiskTask({
+        remainingSeconds: remainingTaskSeconds,
+        hasActiveDraw: true,
+        hasAnswerResult: answerResult !== null,
+        alreadySubmitted: submittedCardIdRef.current === activeDraw.cardId,
+        timeoutsDisabled: disableTaskTimeouts,
+      })
+    ) {
+      return;
+    }
+    const cardId = activeDraw.cardId;
+    const isRetry = expireAttemptedCardIdRef.current === cardId;
+    const timeout = setTimeout(
+      () => {
+        expireAttemptedCardIdRef.current = cardId;
+        setTimedOutCardId(cardId);
+        Keyboard.dismiss();
+        void submitOutcome({ completed: false });
+      },
+      isRetry ? TASK_TIMEOUT_RETRY_MS : 0,
+    );
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingTaskSeconds, activeDraw, answerResult, disableTaskTimeouts, isSubmittingAnswer]);
+
+  const isTaskTimedOut = activeDraw !== null && timedOutCardId === activeDraw.cardId;
 
   const isTimerUrgent =
     remainingTaskSeconds !== null && remainingTaskSeconds <= 10 && remainingTaskSeconds > 0;
@@ -1326,7 +1378,7 @@ export function RiskQuizScreen({
             feed is current again the moment the card closes. */}
         {!activeDraw ? <RiskQuizEventFeed events={feedEvents} currentTeamId={feedTeamId} /> : null}
 
-        {remainingTaskSeconds !== null ? (
+        {remainingTaskSeconds !== null || isTaskTimedOut ? (
           <Animated.View
             className="items-center"
             pointerEvents="none"
@@ -1368,14 +1420,18 @@ export function RiskQuizScreen({
           >
             <Text
               style={{
-                color: remainingTaskSeconds <= 10 ? "#ef4444" : EXPEDITION_THEME.accentStrong,
-                fontSize: TASK_TIMER_FONT_SIZE,
+                color: isTaskTimedOut || (remainingTaskSeconds ?? 0) <= 10 ? "#ef4444" : EXPEDITION_THEME.accentStrong,
+                // Napis jest dłuższy niż "0:42", więc mniejszy, żeby zmieścił się
+                // w tej samej wysokości bloku.
+                fontSize: isTaskTimedOut ? Math.round(TASK_TIMER_FONT_SIZE * 0.6) : TASK_TIMER_FONT_SIZE,
                 lineHeight: TASK_TIMER_BLOCK_HEIGHT,
                 includeFontPadding: false,
                 fontWeight: "900",
               }}
             >
-              {`${Math.floor(remainingTaskSeconds / 60)}:${String(remainingTaskSeconds % 60).padStart(2, "0")}`}
+              {isTaskTimedOut
+                ? riskQuizText.taskTimeUp
+                : `${Math.floor((remainingTaskSeconds ?? 0) / 60)}:${String((remainingTaskSeconds ?? 0) % 60).padStart(2, "0")}`}
             </Text>
           </Animated.View>
         ) : null}
@@ -1390,7 +1446,8 @@ export function RiskQuizScreen({
             // in the roomy (no keyboard) state. While typing, space is scarce
             // and the content is bottom-aligned anyway, so it can slide under
             // the timer instead of being pushed off-screen.
-            marginTop: remainingTaskSeconds !== null && keyboardHeight === 0 ? TASK_TIMER_BLOCK_HEIGHT : 0,
+            marginTop:
+              (remainingTaskSeconds !== null || isTaskTimedOut) && keyboardHeight === 0 ? TASK_TIMER_BLOCK_HEIGHT : 0,
           }}
           contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
           keyboardShouldPersistTaps="handled"
@@ -1826,6 +1883,26 @@ export function RiskQuizScreen({
             <Text className="mt-1" style={{ color: EXPEDITION_THEME.textMuted, fontSize: 13 }}>
               Losuje kartę z wybranej puli tak samo jak prawdziwy skan — zużywa realną kartę z talii.
             </Text>
+
+            <View
+              className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3"
+              style={{ columnGap: 12, borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  Wyłącz zamykanie się zadań po upływie czasu
+                </Text>
+                <Text className="mt-0.5" style={{ color: EXPEDITION_THEME.textMuted, fontSize: 12 }}>
+                  Tylko do testów. Resetuje się po ponownym uruchomieniu aplikacji.
+                </Text>
+              </View>
+              <Switch
+                value={disableTaskTimeouts}
+                onValueChange={setDisableTaskTimeouts}
+                trackColor={{ false: EXPEDITION_THEME.border, true: EXPEDITION_THEME.accent }}
+                thumbColor={disableTaskTimeouts ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.panel}
+              />
+            </View>
 
             {isLoadingTestMenu ? (
               <View className="mt-5 items-center">

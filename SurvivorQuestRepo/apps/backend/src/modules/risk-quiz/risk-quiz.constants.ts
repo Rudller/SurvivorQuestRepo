@@ -10,9 +10,9 @@ export const RISK_DIFFICULTY_POINTS: Record<
   RiskDifficulty,
   { correct: number; incorrect: number }
 > = {
-  EASY: { correct: 10, incorrect: -5 },
+  EASY: { correct: 10, incorrect: -2 },
   MEDIUM: { correct: 20, incorrect: -10 },
-  HARD: { correct: 30, incorrect: -15 },
+  HARD: { correct: 40, incorrect: -30 },
 };
 
 export const RISK_DIFFICULTY_SLUG: Record<RiskDifficulty, string> = {
