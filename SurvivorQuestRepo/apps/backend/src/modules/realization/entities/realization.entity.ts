@@ -87,6 +87,7 @@ export type RealizationEntity = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  showCaseFiles: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -169,6 +170,7 @@ export type ValidatedRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  showCaseFiles: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;

@@ -38,6 +38,7 @@ export type SessionRealizationSource = {
   hideLeaderboardMinutesBeforeEnd?: number;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  showCaseFiles?: boolean;
   teamCount: number;
   stationIds: string[];
 };
@@ -83,6 +84,7 @@ export function buildSessionRealization({
     hideLeaderboardMinutesBeforeEnd,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled ?? false,
     hideTaskList: realization.hideTaskList ?? false,
+    showCaseFiles: realization.showCaseFiles ?? false,
     introText: realization.introText?.trim() || undefined,
     gameRules: realization.gameRules?.trim() || undefined,
   };

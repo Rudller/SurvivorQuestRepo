@@ -168,6 +168,7 @@ export class RealizationService {
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
         hideTaskList: validated.hideTaskList,
+        showCaseFiles: validated.showCaseFiles,
         riskChatEnabled: validated.riskChatEnabled,
         riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
         pigsEnabled: validated.pigsEnabled,
@@ -391,6 +392,7 @@ export class RealizationService {
         timedStationPointsDecayEnabled:
           validated.timedStationPointsDecayEnabled,
         hideTaskList: validated.hideTaskList,
+        showCaseFiles: validated.showCaseFiles,
         riskChatEnabled: validated.riskChatEnabled,
         riskChatTeamsCanPost: validated.riskChatTeamsCanPost,
         pigsEnabled: validated.pigsEnabled,

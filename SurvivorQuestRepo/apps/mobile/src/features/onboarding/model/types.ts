@@ -147,6 +147,7 @@ export type OnboardingRealizationSummary = {
   hideLeaderboardMinutesBeforeEnd?: number;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  showCaseFiles?: boolean;
   introText?: string;
   gameRules?: string;
 };

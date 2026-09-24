@@ -42,6 +42,7 @@ function createSessionState(): ExpeditionSessionState {
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: true,
       hideTaskList: false,
+      showCaseFiles: false,
       scheduledAt: "2026-05-10T00:00:00.000Z",
       durationMinutes: 120,
       stations: [
@@ -75,6 +76,7 @@ function createSessionState(): ExpeditionSessionState {
         finishedAt: null,
       },
     ],
+    caseFiles: [],
     endState: {
       isEnded: false,
       reason: null,

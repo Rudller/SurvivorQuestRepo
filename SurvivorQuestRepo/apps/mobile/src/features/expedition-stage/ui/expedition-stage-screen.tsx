@@ -19,6 +19,9 @@ import {
 import { LanguagePickerModal } from "../../../shared/ui/language-picker-modal";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
+import { HiddenMapBackdrop } from "../components/hidden-map-backdrop";
+import { CaseFilesModal } from "../components/case-files-modal";
+import { countUnlockedCaseFiles } from "../components/case-files.model";
 import {
   type StationTestType,
   type StationTestViewModel,
@@ -27,6 +30,7 @@ import { TopRealizationPanel } from "../components/top-realization-panel";
 import { TopLeaderboardStrip } from "../components/top-leaderboard-strip";
 import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
+import { resolveStageBackdropKind } from "../model/stage-backdrop-kind";
 import {
   DEFAULT_STATION_PIN_CUSTOMIZATION,
   type ExpeditionTask,
@@ -57,6 +61,24 @@ function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
       <Path d="M12 18V21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
       <Path d="M2.5 12H6" stroke={color} strokeWidth="2" strokeLinecap="round" />
       <Path d="M18 12H21.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/**
+ * Teczka z zakładką. Świadomie NIE lupa — lupa w każdej innej aplikacji znaczy
+ * „szukaj", więc gracz kliknąłby ją, szukając stanowiska, a nie akt.
+ */
+function CaseFilesIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3.5 6.5C3.5 5.67 4.17 5 5 5h4l1.6 2H19c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5H5c-.83 0-1.5-.67-1.5-1.5v-11Z"
+        stroke={color}
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <Path d="M7.5 12.5h9" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
     </Svg>
   );
 }
@@ -132,6 +154,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: string;
     realizationPrefix: string;
     tasks: string;
+    caseFiles: string;
     testMenu: string;
     teamDefaultName: string;
     qrScanCanceled: string;
@@ -184,6 +207,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Mapa wydarzenia",
     realizationPrefix: "Realizacja",
     tasks: "Zadania",
+    caseFiles: "Akta sprawy",
     testMenu: "Menu testowe",
     teamDefaultName: "Drużyna",
     qrScanCanceled: "Skanowanie QR anulowane.",
@@ -235,6 +259,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Event map",
     realizationPrefix: "Realization",
     tasks: "Tasks",
+    caseFiles: "Case files",
     testMenu: "Test menu",
     teamDefaultName: "Team",
     qrScanCanceled: "QR scanning canceled.",
@@ -286,6 +311,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Мапа події",
     realizationPrefix: "Реалізація",
     tasks: "Завдання",
+    caseFiles: "Матеріали справи",
     testMenu: "Тестове меню",
     teamDefaultName: "Команда",
     qrScanCanceled: "Сканування QR скасовано.",
@@ -337,6 +363,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Карта события",
     realizationPrefix: "Реализация",
     tasks: "Задания",
+    caseFiles: "Материалы дела",
     testMenu: "Тестовое меню",
     teamDefaultName: "Команда",
     qrScanCanceled: "Сканирование QR отменено.",
@@ -875,6 +902,8 @@ export function ExpeditionStageScreen({
     actionMessage,
   });
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
+  const [isCaseFilesOpen, setIsCaseFilesOpen] = useState(false);
+  const unlockedCaseFilesCount = countUnlockedCaseFiles(sessionState.caseFiles);
   const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(false);
   const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
   const hasAutoSelectedStationRef = useRef(false);
@@ -1495,26 +1524,33 @@ export function ExpeditionStageScreen({
     setSelectedStationId(stationId);
   }
 
+  const backdropKind = resolveStageBackdropKind({
+    isLoading,
+    hideMap: sessionState.realization.hideMap,
+    mapImageUrl: sessionState.realization.mapImageUrl,
+  });
+
   return (
     <ExpeditionStageSessionProvider value={sessionContextValue}>
       <ExpeditionStageOverlayProvider value={overlayContextValue}>
     <View className="flex-1" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       <View className="absolute inset-0">
-        {isLoading ? (
+        {backdropKind === "loading" ? (
           <View className="flex-1 items-center justify-center gap-3" style={{ backgroundColor: EXPEDITION_THEME.panelMuted }}>
             <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
             <Text className="text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
               {text.loadingMap}
             </Text>
           </View>
-        ) : sessionState.realization.hideMap ? (
+        ) : backdropKind === "backdrop" ? (
+          // Wcześniej stała tu ikona aplikacji 512 px rozciągnięta `cover` na
+          // cały ekran — na tablecie zamazany upscale. Teraz warstwa rysowana
+          // do rozmiaru ekranu, z motywem zależnym od oprawy.
+          <HiddenMapBackdrop />
+        ) : backdropKind === "image" ? (
           <View style={StyleSheet.absoluteFill}>
             <Image
-              source={
-                sessionState.realization.mapImageUrl
-                  ? { uri: sessionState.realization.mapImageUrl }
-                  : require("../../../../assets/survivor_icon_512.png")
-              }
+              source={{ uri: sessionState.realization.mapImageUrl }}
               resizeMode="cover"
               style={{ width: "100%", height: "100%" }}
               accessibilityLabel={text.mapImageAccessibilityLabel}
@@ -1555,6 +1591,55 @@ export function ExpeditionStageScreen({
       )}
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
+      {/* Akta stoją przy lewej krawędzi, pod przyciskiem centrowania mapy.
+          Przy ukrytej mapie tamten się nie renderuje, więc akta wskakują
+          dokładnie w jego miejsce. Przycisk siedzi WEWNĄTRZ warstwy chrome, bo
+          ma gasnąć razem z nią przy otwartym stanowisku — inaczej unosiłby się
+          nad pełnoekranowym panelem zadania. */}
+      {sessionState.realization.showCaseFiles && sessionState.caseFiles.length > 0 ? (
+        <View
+          className="absolute left-3"
+          style={{
+            top:
+              insets.top +
+              mapControlTopOffset +
+              (sessionState.realization.hideMap ? 0 : mapControlButtonSize + 10),
+          }}
+        >
+          <Pressable
+            testID="case-files-button"
+            accessibilityRole="button"
+            accessibilityLabel={text.caseFiles}
+            className="items-center justify-center rounded-full border active:opacity-90"
+            style={{
+              width: mapControlButtonSize,
+              height: mapControlButtonSize,
+              borderColor: EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={() => setIsCaseFilesOpen(true)}
+          >
+            <CaseFilesIcon
+              color={EXPEDITION_THEME.accentStrong}
+              size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)}
+            />
+          </Pressable>
+          {unlockedCaseFilesCount > 0 ? (
+            <View
+              className="absolute -right-1 -top-1 items-center justify-center rounded-full px-1.5"
+              style={{ minWidth: 18, height: 18, backgroundColor: EXPEDITION_THEME.accent }}
+            >
+              <Text
+                className="text-[10px] font-bold"
+                style={{ color: EXPEDITION_THEME.background }}
+              >
+                {unlockedCaseFilesCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <Pressable onPressIn={overlayFlow.handleTestMenuHoldStart} onPressOut={overlayFlow.handleTestMenuHoldEnd}>
           <TopRealizationPanel
@@ -1770,6 +1855,15 @@ export function ExpeditionStageScreen({
         isLightTheme={isLightTheme}
         onClose={dismissCurrentGlobalTaskOutcome}
         text={globalOutcomePanelText}
+      />
+
+      <CaseFilesModal
+        visible={isCaseFilesOpen}
+        caseFiles={sessionState.caseFiles}
+        tasks={sessionState.tasks}
+        isTabletLayout={isTabletLayout}
+        isLightTheme={themeMode === "light"}
+        onRequestClose={() => setIsCaseFilesOpen(false)}
       />
 
       <LanguagePickerModal

@@ -310,6 +310,7 @@ export function buildRealizationEntity(input: {
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
     hideTaskList: boolean;
+    showCaseFiles: boolean;
     riskChatEnabled: boolean;
     riskChatTeamsCanPost: boolean;
     pigsEnabled: boolean;
@@ -376,6 +377,7 @@ export function buildRealizationEntity(input: {
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList,
+    showCaseFiles: realization.showCaseFiles,
     riskChatEnabled: realization.riskChatEnabled,
     riskChatTeamsCanPost: realization.riskChatTeamsCanPost,
     pigsEnabled: realization.pigsEnabled,

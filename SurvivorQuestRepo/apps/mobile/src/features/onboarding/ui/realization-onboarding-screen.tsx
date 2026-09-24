@@ -96,6 +96,7 @@ type MobileBootstrapRealization = {
   hideLeaderboardMinutesBeforeEnd?: number;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  showCaseFiles?: boolean;
   teamCount: number;
   stationIds: string[];
 };

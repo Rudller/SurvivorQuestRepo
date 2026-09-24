@@ -84,7 +84,12 @@ const assetInputModeOptions = [
   { value: "existing", label: "Wybierz z już użytych" },
 ] as const;
 
-const CREATE_FORM_TAB_ORDER = REALIZATION_FORM_TAB_ORDER.filter((id) => id !== "history");
+// Dowody wymagają zapisanej realizacji: ich upload potrzebuje realizationId w
+// kluczu R2, a przypisanie do stanowiska — stanowisk, które przed zapisem nie
+// mają jeszcze identyfikatorów.
+const CREATE_FORM_TAB_ORDER = REALIZATION_FORM_TAB_ORDER.filter(
+  (id) => id !== "history" && id !== "caseFiles",
+);
 
 function isPdfFile(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -160,6 +165,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [teamStationNumberingEnabled, setTeamStationNumberingEnabled] = useState(true);
   const [timedStationPointsDecayEnabled, setTimedStationPointsDecayEnabled] = useState(false);
   const [hideTaskList, setHideTaskList] = useState(false);
+  const [showCaseFiles, setShowCaseFiles] = useState(false);
   const [riskChatEnabled, setRiskChatEnabled] = useState(true);
   const [riskChatTeamsCanPost, setRiskChatTeamsCanPost] = useState(true);
   const [pigsEnabled, setPigsEnabled] = useState(true);
@@ -574,6 +580,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setTeamStationNumberingEnabled(data.realization.teamStationNumberingEnabled);
     setTimedStationPointsDecayEnabled(data.realization.timedStationPointsDecayEnabled);
     setHideTaskList(data.realization.hideTaskList);
+    setShowCaseFiles(data.realization.showCaseFiles);
     setRiskChatEnabled(data.realization.riskChatEnabled);
     setRiskChatTeamsCanPost(data.realization.riskChatTeamsCanPost);
     setPigsEnabled(data.realization.pigsEnabled);
@@ -693,6 +700,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     teamStationNumberingEnabled,
     timedStationPointsDecayEnabled,
     hideTaskList,
+    showCaseFiles,
     riskChatEnabled,
     riskChatTeamsCanPost,
     pigsEnabled,
@@ -845,6 +853,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled,
                 hideTaskList,
+                showCaseFiles,
                 riskChatEnabled,
                 riskChatTeamsCanPost,
                 pigsEnabled,
@@ -1315,7 +1324,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
             {activeTab === "gameplay" && (
               <>
-                <FormSection title="Ustawienia rozgrywki">
+                <FormSection title="Tablica wyników">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1354,6 +1363,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </p>
                   </label>
 
+                </FormSection>
+
+                <FormSection title="Przebieg gry">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1387,6 +1399,22 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
+                      checked={showCaseFiles}
+                      onChange={(event) => setShowCaseFiles(event.target.checked)}
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż akta — scenariusz kryminalny
+                  </label>
+                  <p className="text-xs text-zinc-500">
+                    Dowody dodasz po zapisaniu realizacji, w zakładce Akta.
+                  </p>
+
+                </FormSection>
+
+                <FormSection title="Czat w Ryzykantach">
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
                       checked={riskChatEnabled}
                       onChange={(event) => setRiskChatEnabled(event.target.checked)}
                       className="h-4 w-4 accent-amber-400"
@@ -1405,6 +1433,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     Drużyny mogą pisać — odznacz, by zostawić sam kanał ogłoszeń
                   </label>
 
+                </FormSection>
+
+                <FormSection title="Świnie">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1869,6 +1900,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </p>
                   <p>
                     <span className="text-zinc-500">Lista zadań (mobile):</span> {hideTaskList ? "Ukryta" : "Widoczna"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Akta:</span> {showCaseFiles ? "Włączone" : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Mapa:</span>{" "}

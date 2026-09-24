@@ -4,6 +4,7 @@ import { RiskQuizModule } from '../risk-quiz/risk-quiz.module';
 import { ScenarioModule } from '../scenario/scenario.module';
 import { StationModule } from '../station/station.module';
 import { TranslationModule } from '../translation/translation.module';
+import { CaseFileService } from './case-file.service';
 import { RealizationController } from './realization.controller';
 import { RealizationService } from './realization.service';
 
@@ -16,7 +17,7 @@ import { RealizationService } from './realization.service';
     RiskQuizModule,
   ],
   controllers: [RealizationController],
-  providers: [RealizationService],
+  providers: [RealizationService, CaseFileService],
   exports: [RealizationService],
 })
 export class RealizationModule {}

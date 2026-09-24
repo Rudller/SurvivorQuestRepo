@@ -124,6 +124,46 @@ export class StationStorageService {
     };
   }
 
+  /**
+   * Dowody do akt sprawy. Prefiks hierarchiczny, nie płaski jak przy logo —
+   * logo i mapy są reużywalne między realizacjami (stąd biblioteka mediów),
+   * a dowód to jednorazowa treść fabularna jednej realizacji.
+   */
+  async uploadCaseFileImage(
+    file: Express.Multer.File,
+    options: { realizationId: string },
+  ) {
+    const extension = IMAGE_EXTENSION_BY_MIME_TYPE[file.mimetype];
+    const objectKey = this.buildObjectKey(
+      `realizations/${options.realizationId}/case-files`,
+      extension,
+    );
+
+    await this.uploadObject(file, objectKey);
+
+    return { key: objectKey, url: `${this.getPublicBaseUrl()}/${objectKey}` };
+  }
+
+  async uploadCaseFileAudio(
+    file: Express.Multer.File,
+    options: { realizationId: string },
+  ) {
+    const extension = AUDIO_EXTENSION_BY_MIME_TYPE[file.mimetype];
+
+    if (!extension) {
+      throw new InternalServerErrorException('Unsupported audio type');
+    }
+
+    const objectKey = this.buildObjectKey(
+      `realizations/${options.realizationId}/case-files/audio`,
+      extension,
+    );
+
+    await this.uploadObject(file, objectKey);
+
+    return { key: objectKey, url: `${this.getPublicBaseUrl()}/${objectKey}` };
+  }
+
   async uploadTeamTaskPhoto(
     file: Express.Multer.File,
     {

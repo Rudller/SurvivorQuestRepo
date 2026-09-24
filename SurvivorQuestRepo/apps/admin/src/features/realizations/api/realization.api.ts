@@ -114,6 +114,7 @@ type RealizationDto = {
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  showCaseFiles?: boolean;
   riskChatEnabled?: boolean;
   riskChatTeamsCanPost?: boolean;
   pigsEnabled?: boolean;
@@ -161,6 +162,7 @@ type CreateRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  showCaseFiles: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -214,6 +216,7 @@ type UpdateRealizationPayload = {
   teamStationNumberingEnabled: boolean;
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
+  showCaseFiles: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -230,6 +233,37 @@ type UpdateRealizationPayload = {
 type DeleteRealizationPayload = {
   id: string;
   confirmName: string;
+};
+
+export type CaseFileKind = "text" | "image" | "audio" | "dossier";
+export type CaseFileUnlockMode = "from-start" | "after-station";
+export type CaseFileField = { label: string; value: string };
+
+export type CaseFileEntry = {
+  id: string;
+  kind: CaseFileKind;
+  unlockMode: CaseFileUnlockMode;
+  stationId: string | null;
+  stationName: string | null;
+  order: number;
+  title: string;
+  body: string | null;
+  url: string | null;
+  objectKey: string | null;
+  fields: CaseFileField[] | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CaseFilePayload = {
+  kind: CaseFileKind;
+  title: string;
+  unlockMode: CaseFileUnlockMode;
+  stationId?: string | null;
+  body?: string;
+  url?: string;
+  objectKey?: string | null;
+  fields?: CaseFileField[];
 };
 
 type UploadRealizationAssetResponse = {
@@ -455,6 +489,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
         ? dto.timedStationPointsDecayEnabled
         : false,
     hideTaskList: dto.hideTaskList === true,
+    showCaseFiles: dto.showCaseFiles === true,
     // Both default to on when absent, matching the backend DTO — a response
     // from an older server must not read as "chat off".
     riskChatEnabled: dto.riskChatEnabled !== false,
@@ -745,6 +780,85 @@ export const realizationApi = baseApi.injectEndpoints({
       query: ({ realizationId }) =>
         buildApiPath(`/mobile/admin/realizations/${realizationId}/station-qr`),
     }),
+    getCaseFiles: build.query<
+      { realizationId: string; entries: CaseFileEntry[] },
+      { realizationId: string }
+    >({
+      query: ({ realizationId }) =>
+        buildApiPath(`/realizations/${realizationId}/case-files`),
+      providesTags: ["Realization"],
+    }),
+    createCaseFile: build.mutation<
+      CaseFileEntry,
+      { realizationId: string; payload: CaseFilePayload }
+    >({
+      query: ({ realizationId, payload }) => ({
+        url: buildApiPath(`/realizations/${realizationId}/case-files`),
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    updateCaseFile: build.mutation<
+      CaseFileEntry,
+      { realizationId: string; caseFileId: string; payload: CaseFilePayload }
+    >({
+      query: ({ realizationId, caseFileId, payload }) => ({
+        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}`),
+        method: "PUT",
+        body: payload,
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    moveCaseFile: build.mutation<
+      { id: string; order: number },
+      { realizationId: string; caseFileId: string; direction: "up" | "down" }
+    >({
+      query: ({ realizationId, caseFileId, direction }) => ({
+        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}/move`),
+        method: "PUT",
+        body: { direction },
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    deleteCaseFile: build.mutation<
+      { id: string },
+      { realizationId: string; caseFileId: string }
+    >({
+      query: ({ realizationId, caseFileId }) => ({
+        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}`),
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Realization"],
+    }),
+    uploadCaseFileImage: build.mutation<
+      UploadRealizationAssetResponse,
+      { realizationId: string; file: File }
+    >({
+      query: ({ realizationId, file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath(`/realizations/${realizationId}/case-files/upload-image`),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
+    uploadCaseFileAudio: build.mutation<
+      UploadRealizationAssetResponse,
+      { realizationId: string; file: File }
+    >({
+      query: ({ realizationId, file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath(`/realizations/${realizationId}/case-files/upload-audio`),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
     translateRealizationTexts: build.mutation<
       { texts: string[] },
       {
@@ -775,4 +889,11 @@ export const {
   useGetMobileAdminRealizationOverviewQuery,
   useGetRealizationStationQrsQuery,
   useTranslateRealizationTextsMutation,
+  useGetCaseFilesQuery,
+  useCreateCaseFileMutation,
+  useUpdateCaseFileMutation,
+  useMoveCaseFileMutation,
+  useDeleteCaseFileMutation,
+  useUploadCaseFileImageMutation,
+  useUploadCaseFileAudioMutation,
 } = realizationApi;

@@ -59,6 +59,7 @@ import {
 import { StyledMarkdownEditor } from "./styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesManager } from "./points-qr-codes-manager";
+import { CaseFilesManager } from "./case-files-manager";
 import { RiskQuizManager } from "@/features/risk-quiz/components/risk-quiz-manager";
 import { RealizationRiskDeckEditor } from "@/features/risk-quiz/components/realization-risk-deck-editor";
 import { RiskDeckPreview } from "@/features/risk-quiz/components/risk-deck-preview";
@@ -240,6 +241,7 @@ export function EditRealizationPanel({
     teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList ?? false,
+    showCaseFiles: realization.showCaseFiles ?? false,
     riskChatEnabled: realization.riskChatEnabled ?? true,
     riskChatTeamsCanPost: realization.riskChatTeamsCanPost ?? true,
     pigsEnabled: realization.pigsEnabled ?? true,
@@ -580,6 +582,10 @@ export function EditRealizationPanel({
     // text — and that text is their entire briefing, so the tab holding it has
     // to stay reachable. It just drops the scenario picker and renames itself.
     if (id === "stations" || id === "pointsQr") return !isRiskQuizType;
+    // Zakładka reaguje na editValues, nie na zapisaną realizację — zaznaczenie
+    // checkboxa odsłania ją od razu. Endpointy dowodów używają realization.id,
+    // które w edycji zawsze istnieje, więc zapis nie jest potrzebny.
+    if (id === "caseFiles") return editValues.showCaseFiles;
     return true;
   }).map((id) => ({
     id,
@@ -596,6 +602,16 @@ export function EditRealizationPanel({
             ? stationsTabHasError
             : false,
   }));
+  // Aktywna zakładka potrafi wypaść z listy — przy zmianie typu na Ryzykantów
+  // znikają „Stanowiska", a przy odznaczeniu akt znika „Akta". Bez tego panel
+  // zostawał pusty, bo żaden warunek `activeTab === ...` nie trafiał. Usterka
+  // była tu przed aktami; naprawiona przy okazji.
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab("gameplay");
+    }
+  }, [tabs, activeTab]);
+
   const pendingLogoPreviewUrl = useMemo(
     () => (pendingLogoFile ? URL.createObjectURL(pendingLogoFile) : undefined),
     [pendingLogoFile],
@@ -947,6 +963,7 @@ export function EditRealizationPanel({
                 timedStationPointsDecayEnabled:
                   editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
+                showCaseFiles: editValues.showCaseFiles,
                 riskChatEnabled: editValues.riskChatEnabled,
                 riskChatTeamsCanPost: editValues.riskChatTeamsCanPost,
                 pigsEnabled: editValues.pigsEnabled,
@@ -1640,7 +1657,7 @@ export function EditRealizationPanel({
 
             {activeTab === "gameplay" && (
               <>
-                <FormSection title="Ustawienia rozgrywki">
+                <FormSection title="Tablica wyników">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1697,6 +1714,9 @@ export function EditRealizationPanel({
                     </p>
                   </label>
 
+                </FormSection>
+
+                <FormSection title="Przebieg gry">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1745,6 +1765,24 @@ export function EditRealizationPanel({
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
+                      checked={editValues.showCaseFiles}
+                      onChange={(event) =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          showCaseFiles: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 accent-amber-400"
+                    />
+                    Pokaż akta — scenariusz kryminalny
+                  </label>
+
+                </FormSection>
+
+                <FormSection title="Czat w Ryzykantach">
+                  <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
                       checked={editValues.riskChatEnabled}
                       onChange={(event) =>
                         setEditValues((prev) => ({
@@ -1773,6 +1811,9 @@ export function EditRealizationPanel({
                     Drużyny mogą pisać — odznacz, by zostawić sam kanał ogłoszeń
                   </label>
 
+                </FormSection>
+
+                <FormSection title="Świnie">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -2178,6 +2219,15 @@ export function EditRealizationPanel({
               </FormSection>
             )}
 
+            {activeTab === "caseFiles" && (
+              <CaseFilesManager
+                realizationId={realization.id}
+                stations={scenarioStations.flatMap((station) =>
+                  station.id ? [{ id: station.id, name: station.name }] : [],
+                )}
+              />
+            )}
+
             {activeTab === "stations" && (
               <div className="space-y-2">
                 <p className="text-xs text-zinc-500">
@@ -2339,6 +2389,10 @@ export function EditRealizationPanel({
                   <p>
                     <span className="text-zinc-500">Lista zadań (mobile):</span>{" "}
                     {editValues.hideTaskList ? "Ukryta" : "Widoczna"}
+                  </p>
+                  <p>
+                    <span className="text-zinc-500">Akta:</span>{" "}
+                    {editValues.showCaseFiles ? "Włączone" : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Mapa:</span>{" "}

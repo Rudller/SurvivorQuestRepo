@@ -188,6 +188,7 @@ model Station {
   riskPendingDraws RiskPendingDraw[]
   riskOpenDraws    RiskOpenDraw[]
   pendingStationLaunches PendingStationLaunch[]
+  caseFiles        CaseFile[]
 
   @@unique([realizationId, qrEntryCode])
 }
@@ -265,6 +266,7 @@ model Realization {
   teamStationNumberingEnabled Boolean    @default(true)
   timedStationPointsDecayEnabled Boolean @default(false)
   hideTaskList        Boolean            @default(false)
+  showCaseFiles       Boolean            @default(false)
   // Ryzykanci chat room. Disabled entirely, or kept as an announcements-only
   // channel by letting the Game Master post while teams can only read.
   riskChatEnabled     Boolean            @default(true)
@@ -304,6 +306,7 @@ model Realization {
   riskPigs            RiskPig[]
   riskPigEffects      RiskPigEffect[]
   riskPigGrants       RiskPigGrant[]
+  caseFiles           CaseFile[]
 }
 
 model Team {
@@ -759,4 +762,52 @@ model RiskPigGrant {
 
   @@unique([realizationId, teamId, tickKey])
   @@index([realizationId, teamId])
+}
+
+enum CaseFileKind {
+  TEXT
+  IMAGE
+  AUDIO
+  DOSSIER
+}
+
+enum CaseFileUnlockMode {
+  FROM_START
+  AFTER_STATION
+}
+
+/// Dowód w aktach sprawy. Jedna tabela z kolumnami nullowalnymi per typ, tak samo
+/// jak Station trzyma typowane kolumny obok quizData Json? — po tych polach nigdy
+/// nie filtrujemy, więc cztery tabele dałyby cztery CRUD-y bez żadnego zysku.
+///
+/// `stationId` MUSI być SetNull, nigdy Cascade: podmiana scenariusza w
+/// updateRealization kasuje stanowiska przez removeStationsByIds, a kaskada
+/// zabrałaby ze sobą dowody.
+///
+/// `unlockMode` istnieje właśnie dlatego, że SetNull zostawia `stationId = null`.
+/// Bez tej kolumny nie dałoby się odróżnić „admin chciał od startu" od
+/// „stanowisko zniknęło" — a to drugie po cichu odsłoniłoby zablokowaną treść.
+model CaseFile {
+  id            String             @id @default(uuid())
+  realizationId String
+  stationId     String?
+  kind          CaseFileKind
+  unlockMode    CaseFileUnlockMode @default(FROM_START)
+  order         Int                @default(0)
+  title         String
+  /// TEXT
+  body          String?
+  /// IMAGE | AUDIO — klucz obiektu w R2, potrzebny do sprzątania
+  objectKey     String?
+  /// IMAGE | AUDIO — publiczny URL
+  url           String?
+  /// DOSSIER — [{ label, value }]
+  fields        Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  realization   Realization        @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  station       Station?           @relation(fields: [stationId], references: [id], onDelete: SetNull)
+
+  @@index([realizationId, order])
+  @@index([stationId])
 }

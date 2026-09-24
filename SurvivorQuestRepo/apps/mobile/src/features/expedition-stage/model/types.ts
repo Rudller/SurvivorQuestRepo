@@ -69,6 +69,7 @@ export type ExpeditionSessionState = {
     teamStationNumberingEnabled: boolean;
     timedStationPointsDecayEnabled: boolean;
     hideTaskList: boolean;
+    showCaseFiles: boolean;
     scheduledAt: string;
     durationMinutes: number;
     stations: ExpeditionRealizationStation[];
@@ -84,6 +85,7 @@ export type ExpeditionSessionState = {
     lastLocation: PlayerLocation | null;
   };
   tasks: ExpeditionTask[];
+  caseFiles: ExpeditionCaseFile[];
   endState: {
     isEnded: boolean;
     reason: ExpeditionSessionEndReason | null;
@@ -97,6 +99,28 @@ export type ExpeditionSessionState = {
     sessionExpiresAt: string;
     eventLogCount: number;
   };
+};
+
+/**
+ * Dowód w aktach sprawy.
+ *
+ * Dwa kształty w jednym typie, rozróżniane przez `locked`. Serwer dla
+ * zablokowanego NIE wysyła ani tytułu, ani treści — stąd wszystko poza
+ * `id`, `kind`, `locked`, `order` i `unlockStationId` jest opcjonalne.
+ * Aplikacja rysuje wtedy pustą teczkę z numerem.
+ */
+export type ExpeditionCaseFileKind = "text" | "image" | "audio" | "dossier";
+
+export type ExpeditionCaseFile = {
+  id: string;
+  kind: ExpeditionCaseFileKind;
+  locked: boolean;
+  order: number;
+  unlockStationId: string | null;
+  title?: string;
+  body?: string;
+  url?: string;
+  fields?: { label: string; value: string }[];
 };
 
 export type ExpeditionTask = {
@@ -299,6 +323,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       teamStationNumberingEnabled: true,
       timedStationPointsDecayEnabled: session.realization?.timedStationPointsDecayEnabled ?? false,
       hideTaskList: session.realization?.hideTaskList ?? false,
+      showCaseFiles: session.realization?.showCaseFiles ?? false,
       scheduledAt: session.realization?.scheduledAt ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
       durationMinutes:
         typeof session.realization?.durationMinutes === "number" &&
@@ -336,6 +361,8 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       startedAt: null,
       finishedAt: null,
     })),
+    // Stan zastępczy budowany bez połączenia — akt nie ma skąd wziąć.
+    caseFiles: [],
     endState: {
       isEnded: false,
       reason: null,

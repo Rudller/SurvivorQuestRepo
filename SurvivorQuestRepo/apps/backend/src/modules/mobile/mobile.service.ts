@@ -24,6 +24,10 @@ import {
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
 import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
+import {
+  isCaseFileUnlocked,
+  toMobileCaseFilePayload,
+} from './domain/case-file-payload';
 import { generateRandomCode } from '../../shared/lib/random-code';
 import {
   RealizationService,
@@ -177,6 +181,7 @@ export class MobileService {
           timedStationPointsDecayEnabled:
             realization.timedStationPointsDecayEnabled,
           hideTaskList: realization.hideTaskList,
+          showCaseFiles: realization.showCaseFiles,
           teamCount: realization.teamCount,
           stationIds: realization.stationIds,
           createdAt: realization.createdAt,
@@ -423,6 +428,8 @@ export class MobileService {
       };
     });
 
+    const caseFiles = await this.resolveMobileCaseFiles(realization);
+
     const eventLogCount = await this.prisma.eventLog.count({
       where: { realizationId: realization.id },
     });
@@ -493,6 +500,7 @@ export class MobileService {
         timedStationPointsDecayEnabled:
           realization.timedStationPointsDecayEnabled,
         hideTaskList: realization.hideTaskList,
+        showCaseFiles: realization.showCaseFiles,
         scheduledAt: realization.scheduledAt,
         durationMinutes: realization.durationMinutes,
         stations: realization.scenarioStations.map((station) =>
@@ -511,6 +519,7 @@ export class MobileService {
       },
       customizationOccupancy,
       tasks,
+      caseFiles,
       endState: sessionEndState,
       leaderboard,
       meta: {
@@ -3423,6 +3432,7 @@ export class MobileService {
         teamStationNumberingEnabled: true,
         timedStationPointsDecayEnabled: true,
         hideTaskList: true,
+        showCaseFiles: true,
       },
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
@@ -3470,6 +3480,8 @@ export class MobileService {
         false,
       hideTaskList:
         rowById.get(item.id)?.hideTaskList ?? item.hideTaskList ?? false,
+      showCaseFiles:
+        rowById.get(item.id)?.showCaseFiles ?? item.showCaseFiles ?? false,
       joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
@@ -3633,6 +3645,64 @@ export class MobileService {
       team: assignment.team,
       realization,
     };
+  }
+
+  /**
+   * Akta sprawy dla tabletu.
+   *
+   * Oba zapytania są bramkowane flagą realizacji, więc realizacje bez akt nie
+   * płacą za tę funkcję ani jednym odpytaniem — a session/state jest wołane
+   * przez każdy tablet w pętli.
+   *
+   * Zapytanie o postęp NIE filtruje po drużynie i to jest cała implementacja
+   * reguły „akta wspólne": liczy się, czy KTÓRAKOLWIEK drużyna zaliczyła
+   * stanowisko. Istniejące zapytanie o postęp tej drużyny (wyżej w tej metodzie)
+   * świadomie zostaje nietknięte — poszerzenie go o wszystkie drużyny
+   * obciążyłoby każdą realizację, także te bez akt.
+   */
+  private async resolveMobileCaseFiles(realization: { id: string; showCaseFiles?: boolean }) {
+    if (!realization.showCaseFiles) {
+      return [];
+    }
+
+    const rows = await this.prisma.caseFile.findMany({
+      where: { realizationId: realization.id },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const gatedStationIds = [
+      ...new Set(
+        rows
+          .filter((row) => row.unlockMode === 'AFTER_STATION' && row.stationId)
+          .map((row) => row.stationId as string),
+      ),
+    ];
+
+    const unlockedStationIds = new Set(
+      gatedStationIds.length === 0
+        ? []
+        : (
+            await this.prisma.teamTaskProgress.findMany({
+              where: {
+                realizationId: realization.id,
+                stationId: { in: gatedStationIds },
+                status: TaskStatus.DONE,
+              },
+              distinct: ['stationId'],
+              select: { stationId: true },
+            })
+          ).map((row) => row.stationId),
+    );
+
+    return rows.map((row) =>
+      toMobileCaseFilePayload(row, {
+        isUnlocked: isCaseFileUnlocked(row, unlockedStationIds),
+      }),
+    );
   }
 
   private toMobileStationPayload(

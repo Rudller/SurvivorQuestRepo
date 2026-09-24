@@ -117,6 +117,7 @@ export type CreateRealizationDto = {
   teamStationNumberingEnabled?: boolean;
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
+  showCaseFiles?: boolean;
   riskChatEnabled?: boolean;
   riskChatTeamsCanPost?: boolean;
   pigsEnabled?: boolean;
@@ -324,6 +325,7 @@ export function validateRealizationPayload(
     payload.hideLeaderboardMinutesBeforeEnd;
   const teamStationNumberingEnabled = payload.teamStationNumberingEnabled;
   const timedStationPointsDecayEnabled = payload.timedStationPointsDecayEnabled;
+  const showCaseFiles = payload.showCaseFiles;
   const scheduledAtDate = payload.scheduledAt
     ? new Date(payload.scheduledAt)
     : null;
@@ -391,6 +393,9 @@ export function validateRealizationPayload(
   ) {
     throw new BadRequestException('Invalid payload');
   }
+  if (typeof showCaseFiles !== 'undefined' && typeof showCaseFiles !== 'boolean') {
+    throw new BadRequestException('Invalid payload');
+  }
 
   if (payload.language === 'other' && !customLanguage) {
     throw new BadRequestException('Invalid payload');
@@ -449,6 +454,7 @@ export function validateRealizationPayload(
     logoUrl: payload.logoUrl?.trim() || undefined,
     hideMap: payload.hideMap === true,
     hideTaskList: payload.hideTaskList === true,
+    showCaseFiles: payload.showCaseFiles === true,
     // Both default to on when the field is absent, unlike hideTaskList above —
     // an older client that does not send them must not silently switch the chat
     // off for a realization that had it.

@@ -3,6 +3,7 @@ export type RealizationFormTabId =
   | "gameplay"
   | "scenario"
   | "stations"
+  | "caseFiles"
   | "pointsQr"
   | "riskQuiz"
   | "summary"
@@ -13,6 +14,7 @@ export const REALIZATION_FORM_TAB_ORDER: RealizationFormTabId[] = [
   "gameplay",
   "scenario",
   "stations",
+  "caseFiles",
   "pointsQr",
   "riskQuiz",
   "summary",
@@ -24,6 +26,7 @@ export const REALIZATION_FORM_TAB_LABELS: Record<RealizationFormTabId, string> =
   gameplay: "Ustawienia rozgrywki",
   scenario: "Scenariusz i treści",
   stations: "Stanowiska",
+  caseFiles: "Akta",
   pointsQr: "Kody punktowe",
   riskQuiz: "Ryzykanci",
   summary: "Podsumowanie",

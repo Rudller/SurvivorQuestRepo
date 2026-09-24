@@ -1,4 +1,6 @@
 import type {
+  ExpeditionCaseFile,
+  ExpeditionCaseFileKind,
   ExpeditionRealizationStation,
   ExpeditionSessionState,
   ExpeditionStationType,
@@ -344,6 +346,59 @@ function normalizeStationQuiz(value: unknown): ExpeditionRealizationStation["qui
   };
 }
 
+const CASE_FILE_KINDS: ExpeditionCaseFileKind[] = ["text", "image", "audio", "dossier"];
+
+/**
+ * Akta z odpowiedzi serwera.
+ *
+ * Wiersz bez identyfikatora albo o nieznanym typie jest ODRZUCANY, nie
+ * naprawiany domyślną wartością: pusta karta w teczce wygląda jak usterka gry,
+ * a starszy tablet nie powinien udawać, że rozumie typ dowodu, którego jeszcze
+ * nie umie narysować.
+ */
+function normalizeCaseFiles(value: unknown): ExpeditionCaseFile[] {
+  return asArray(value).flatMap((item) => {
+    const row = asRecord(item);
+    const id = asString(row.id).trim();
+    const kind = asString(row.kind).trim() as ExpeditionCaseFileKind;
+
+    if (!id || !CASE_FILE_KINDS.includes(kind)) {
+      return [];
+    }
+
+    const locked = asBoolean(row.locked, true);
+    const base: ExpeditionCaseFile = {
+      id,
+      kind,
+      locked,
+      order: Math.round(asNumber(row.order, 0)),
+      unlockStationId:
+        asString(row.unlockStationId ?? row.unlock_station_id).trim() || null,
+    };
+
+    if (locked) {
+      return [base];
+    }
+
+    return [
+      {
+        ...base,
+        title: asString(row.title).trim() || undefined,
+        body: typeof row.body === "string" ? row.body : undefined,
+        url: asString(row.url).trim() || undefined,
+        fields: Array.isArray(row.fields)
+          ? asArray(row.fields).flatMap((fieldItem) => {
+              const field = asRecord(fieldItem);
+              const label = asString(field.label).trim();
+              const fieldValue = asString(field.value).trim();
+              return label && fieldValue ? [{ label, value: fieldValue }] : [];
+            })
+          : undefined,
+      },
+    ];
+  });
+}
+
 function normalizePlayerLocation(value: unknown): PlayerLocation | null {
   if (!value) {
     return null;
@@ -481,6 +536,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       stationById.set(station.id, station);
     }
   });
+  const caseFiles = normalizeCaseFiles(source.caseFiles ?? source.case_files);
   const taskRowsFromPayload = [...asArray(source.tasks), ...asArray(realization.tasks)];
   const tasksFromApi = taskRowsFromPayload
     .map((taskItem) => {
@@ -615,6 +671,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
         false,
       ),
       hideTaskList: asBoolean(realization.hideTaskList ?? realization.hide_task_list),
+      showCaseFiles: asBoolean(realization.showCaseFiles ?? realization.show_case_files),
       scheduledAt: asString(realization.scheduledAt ?? realization.scheduled_at, new Date().toISOString()),
        durationMinutes:
          Math.max(0, Math.round(asNumber(realization.durationMinutes ?? realization.duration_minutes, 0))) || 120,
@@ -634,6 +691,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       lastLocation: normalizePlayerLocation(team.lastLocation ?? team.last_location),
     },
     tasks: mergedTasks,
+    caseFiles,
     endState: {
       isEnded: asBoolean(endState.isEnded ?? endState.is_ended, false),
       reason: normalizeEndReason(endState.reason),
