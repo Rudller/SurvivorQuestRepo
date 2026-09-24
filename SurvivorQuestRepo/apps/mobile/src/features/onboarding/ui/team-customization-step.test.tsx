@@ -1,7 +1,8 @@
+import { StyleSheet } from "react-native";
 import { render } from "@testing-library/react-native";
 
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
-import { TEAM_COLORS } from "../model/constants";
+import { setExpeditionThemeMode, TEAM_COLORS } from "../model/constants";
 
 // Ryzykanci realizations run the whole game on chamfered panels; the team
 // editor was the one screen still wearing the expedition's rounded card, so it
@@ -77,5 +78,46 @@ describe("TeamCustomizationStep", () => {
     // The shape changes, the contents do not.
     expect(getByText(text.editorTitle)).toBeTruthy();
     expect(getByText(text.startAction)).toBeTruthy();
+  });
+
+  describe("krój ozdobny per oprawa", () => {
+    // Oprawa siedzi w module, nie w propsach, więc każdy test ustawia ją jawnie
+    // i sprząta po sobie — inaczej kolejność plików decydowałaby o wyniku.
+    afterEach(() => {
+      setExpeditionThemeMode("dark", "expedition");
+    });
+
+    it("daje tytuł ekranu kroju ozdobnego w oprawie kryminalnej", async () => {
+      setExpeditionThemeMode("dark", "crime");
+
+      const { getByText } = await renderStep();
+      const title = StyleSheet.flatten(getByText(text.editorTitle).props.style);
+
+      expect(title.fontFamily).toBe("PlayfairDisplay");
+      // Playfair jest wgrany wyłącznie w wadze 400; cokolwiek grubszego system
+      // podstawiłby syntetycznie i na szeryfach wyglądałoby źle.
+      expect(title.fontWeight).toBe("400");
+    });
+
+    it("zostawia tytuł na kroju produktu w pozostałych oprawach", async () => {
+      setExpeditionThemeMode("dark", "expedition");
+
+      const { getByText } = await renderStep();
+      const title = StyleSheet.flatten(getByText(text.editorTitle).props.style);
+
+      expect(title.fontFamily).toBe("Montserrat");
+    });
+
+    it("trzyma etykiety sekcji na kroju produktu nawet w kryminalnej", async () => {
+      // Krój ozdobny jest OSOBNĄ osią od kroju produktu: kryminalna zmienia
+      // tytuły i cytaty, a nie cały interfejs. Gdyby Playfair wyciekł na
+      // etykiety, zmieniłaby się metryka tekstu i przeliczyłby się layout.
+      setExpeditionThemeMode("dark", "crime");
+
+      const { getByText } = await renderStep();
+      const label = StyleSheet.flatten(getByText(text.customizationLabel).props.style);
+
+      expect(label.fontFamily).toBe("Montserrat");
+    });
   });
 });

@@ -5,6 +5,7 @@ import type { TeamColor, TeamColorOption } from "../model/types";
 import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
+import { textRole } from "../../../shared/ui/typography";
 
 export type TeamCustomizationStepText = {
   editorTitle: string;
@@ -169,10 +170,15 @@ export function TeamCustomizationStep({
   return (
     <CustomizationShell variant={variant} isTabletLayout={isTabletLayout}>
       <View className="px-1">
-        <Text className="text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+        {/* Rola zamiast klas kroju: `caseTitle` jest jedyną rzeczą na tym
+            ekranie, która zmienia się z oprawą — w kryminalnej schodzi na
+            Playfaira, w pozostałych zostaje na Montserracie. Wagę i
+            rozstrzelenie niesie rola, rozmiar zostaje w klasie, bo to on jest
+            skalowany adaptacyjnie. */}
+        <Text className="text-base" style={[textRole("caseTitle"), { color: EXPEDITION_THEME.textPrimary }]}>
           {text.editorTitle}
         </Text>
-        <Text className="mt-1 text-sm" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className="mt-1 text-sm" style={[textRole("body"), { color: EXPEDITION_THEME.textMuted }]}>
           {text.editorHint}
         </Text>
       </View>
@@ -184,7 +190,7 @@ export function TeamCustomizationStep({
           backgroundColor: EXPEDITION_THEME.panelStrong,
         }}
         >
-          <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+          <Text className="text-xs uppercase" style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle }]}>
             {text.bannerPreviewLabel}
           </Text>
         <View
@@ -206,6 +212,12 @@ export function TeamCustomizationStep({
                 <Text className={isTabletLayout ? "text-4xl" : "text-3xl"}>{teamIcon}</Text>
               )}
             </View>
+            {/* Baner celowo zostaje poza rolami typograficznymi. To podgląd
+                WYDRUKOWANEJ plakietki drużyny, nie tekst interfejsu: jego kolory
+                liczą się względem barwy drużyny, nie palety oprawy, a na karcie
+                dostępu będącej referencją kryminału nazwa też jest ciężkim
+                groteskiem, nie szeryfem. Dodatkowo `font-extrabold` niesie wagę
+                800, której żadna rola nie ma. */}
             <View className="flex-1">
               <Text
                 className={isTabletLayout ? "text-2xl font-extrabold" : "text-xl font-extrabold"}
@@ -240,17 +252,20 @@ export function TeamCustomizationStep({
           backgroundColor: EXPEDITION_THEME.panelMuted,
         }}
       >
-        <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+        <Text className="text-xs uppercase" style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle }]}>
           {text.customizationLabel}
         </Text>
 
         <TextInput
-          className="mt-2 rounded-2xl border px-4 py-3 text-sm font-semibold"
-          style={{
-            borderColor: isTeamNameFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
-            backgroundColor: EXPEDITION_THEME.panel,
-            color: EXPEDITION_THEME.textPrimary,
-          }}
+          className="mt-2 rounded-2xl border px-4 py-3 text-sm"
+          style={[
+            textRole("bodyStrong"),
+            {
+              borderColor: isTeamNameFocused ? EXPEDITION_THEME.accentStrong : EXPEDITION_THEME.border,
+              backgroundColor: EXPEDITION_THEME.panel,
+              color: EXPEDITION_THEME.textPrimary,
+            },
+          ]}
           value={teamName}
           onChangeText={onTeamNameChange}
           onFocus={() => setIsTeamNameFocused(true)}
@@ -260,7 +275,7 @@ export function TeamCustomizationStep({
           maxLength={40}
         />
 
-        <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+        <Text className="mt-3 text-xs uppercase" style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle }]}>
           {text.teamColorLabel}
         </Text>
         <View className="mt-2 flex-row flex-wrap gap-3">
@@ -276,10 +291,10 @@ export function TeamCustomizationStep({
           ))}
         </View>
 
-        <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+        <Text className="mt-3 text-xs uppercase" style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle }]}>
           {text.avatarLabel}
         </Text>
-        <Text className="mt-1 text-xs" style={{ color: EXPEDITION_THEME.textMuted }}>
+        <Text className="mt-1 text-xs" style={[textRole("body"), { color: EXPEDITION_THEME.textMuted }]}>
           {text.avatarHint}
         </Text>
 
@@ -360,13 +375,13 @@ export function TeamCustomizationStep({
         </View>
 
         {selfieUploadError ? (
-          <Text className="mt-2 text-xs" style={{ color: EXPEDITION_THEME.danger }}>
+          <Text className="mt-2 text-xs" style={[textRole("body"), { color: EXPEDITION_THEME.danger }]}>
             {selfieUploadError}
           </Text>
         ) : null}
         {showLanguagePicker ? (
           <>
-            <Text className="mt-3 text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.textSubtle }}>
+            <Text className="mt-3 text-xs uppercase" style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle }]}>
               {text.languageLabel}
             </Text>
             <Pressable
@@ -380,7 +395,7 @@ export function TeamCustomizationStep({
             >
               <View className="flex-row items-center gap-3">
                 <Text style={{ fontSize: 22 }}>{languageFlag}</Text>
-                <Text className="text-sm font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                <Text className="text-sm" style={[textRole("bodyStrong"), { color: EXPEDITION_THEME.textPrimary }]}>
                   {languageName}
                 </Text>
               </View>

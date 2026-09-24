@@ -123,72 +123,91 @@ const RISK_THEME_LIGHT: ExpeditionThemePalette = {
   scrimAbyssRgb: "3, 8, 12",
 };
 
-// Corporate noir: wewnętrzny system dochodzeniowy dużej korporacji, oglądany
-// późnym wieczorem w dyskretnie oświetlonym centrum operacyjnym. Nie gra
-// policyjna, nie kasyno, nie cyberpunk.
+// Corporate noir: wewnętrzny system bezpieczeństwa dużej korporacji, oglądany
+// na terminalu w centrum operacyjnym. Nie gra policyjna, nie kasyno, nie
+// cyberpunk — i nie archiwum akt, jak zakładał poprzedni dobór.
 //
-// Proporcje, które ta paleta ma trzymać: ~70% obsydian i grafit, ~20% jasne
-// powierzchnie dokumentów, ~10% bursztyn i statusy. Bursztyn ma przypominać
-// światło starej lampy albo podświetlenie terminala — jeśli zacznie wyglądać
-// jak pomarańcz z aplikacji sportowej, znaczy, że jest go za dużo albo jest
-// za nasycony.
+// Wartości zmierzone z karty dostępu, która jest referencją tej oprawy, a nie
+// dobrane na oko. Udziały powierzchni na tej karcie: 60,6% tła, 6,9% grafitu,
+// 5,6% bieli, 1,6% szarości etykiet i 0,51% czerwieni — dwa elementy w całym
+// projekcie, pasek przy etykiecie i kreska pod kodem.
+//
+// Ten ostatni udział decyduje, na który token idzie czerwień. `accent` ma w
+// src/ ponad sto wywołań, `danger` niecałe czterdzieści i tylko w momentach
+// porażki. Czerwień na akcencie objęłaby naraz wszystkie ramki i stany
+// aktywne, czyli powierzchnię kilkadziesiąt razy większą niż na wzorcu — ten
+// sam błąd, przed którym ostrzegał komentarz przy bursztynie, tylko w innej
+// barwie. Dlatego hierarchię niosą tu biel i stal, a czerwień jest
+// zarezerwowana dla błędu i wtedy sama trzyma proporcję z karty.
 const CRIME_THEME_DARK: ExpeditionThemePalette = {
-  background: "#0B0D10",
-  mapLine: "#262C34",
-  mapNode: "#3A414A",
-  // Panele zachowują alfę, mimo że specyfikacja mówi o płaskich
-  // powierzchniach: pod nimi leży gradient tła i scrimy overlayów, a pełna
-  // nieprzezroczystość spłaszczyłaby warstwowanie, na którym stoi cała reszta
-  // aplikacji.
-  panel: "rgba(32, 38, 46, 0.92)",
-  panelMuted: "rgba(17, 20, 25, 0.94)",
-  panelStrong: "rgba(42, 48, 56, 0.92)",
-  border: "#454B53",
-  accent: "#F5A623",
-  // NIE Burnished Amber ze specyfikacji, mimo nazwy "przygaszony akcent".
-  // `accentStrong` jest w tym kodzie kolorem TEKSTU dla podkreślenia — tytuły,
-  // wartość odliczania, spinnery. Na ciemnym tle podkreślenie musi być
-  // jaśniejsze od akcentu, inaczej hierarchia się odwraca i czytelność spada.
-  // Burnished Amber pracuje w wariancie jasnym, gdzie faktycznie niesie
-  // kontrast.
-  accentStrong: "#FFBE5C",
-  textPrimary: "#F5F1E8",
-  textMuted: "#A7ABB0",
-  textSubtle: "#7C8187",
-  // Dark Crimson ze specyfikacji to #9F3D3D, co na Deep Obsidian daje kontrast
-  // 2.97 — o włos pod progiem 3.0. Podniesione o pięć punktów na kanał: jako
-  // zmiana barwy niezauważalna, ale `danger` bywa kolorem tekstu błędu, a
-  // takiego na prawie czarnym tle nie chcemy mieć na granicy czytelności.
-  danger: "#A44242",
-  success: "#667B5A",
-  scrimWashRgb: "11, 13, 16",
-  scrimDeepRgb: "8, 10, 12",
-  scrimAbyssRgb: "4, 5, 7",
+  background: "#0F1214",
+  mapLine: "#252B2F",
+  mapNode: "#3A424B",
+  // Grafit karty (#272C33) wprost jako powierzchnia panelu. Alfa zostaje, bo
+  // pod panelami leżą scrimy overlayów — pełna nieprzezroczystość spłaszczyłaby
+  // warstwowanie, na którym stoi reszta aplikacji.
+  panel: "rgba(39, 44, 51, 0.92)",
+  panelMuted: "rgba(20, 23, 27, 0.94)",
+  panelStrong: "rgba(52, 58, 66, 0.92)",
+  border: "#2F353D",
+  // Czerwień strukturalna. Stal z pierwszego podejścia była wierniejsza karcie,
+  // ale na urządzeniu zlewała się z grafitem paneli i oprawa traciła charakter.
+  //
+  // Wartość jest wciśnięta między dwa ograniczenia i nie ma tu swobody: niżej
+  // (#A31E34 daje 2,50) akcent nie przechodzi progu 3,0, wyżej zaczyna gonić
+  // `danger`. #BC2840 daje 3,15, czyli zapas nad progiem bez wchodzenia w
+  // jasność alarmu.
+  accent: "#BC2840",
+  // Na karcie to, co ma wybijać, jest BIAŁE, nie kolorowe. `accentStrong` jest
+  // w tym kodzie kolorem tekstu dla podkreślenia, więc bierze tę biel wprost.
+  accentStrong: "#F2F5F8",
+  // Ciut przygaszona względem accentStrong, żeby podkreślenie miało nad czym
+  // górować. Na karcie tę różnicę robi rozmiar, tutaj takiej swobody nie ma.
+  textPrimary: "#DCE1E7",
+  textMuted: "#8B939D",
+  textSubtle: "#6B7480",
+  // Odkąd akcent jest czerwony, błąd nie może być po prostu „czerwony" — musi
+  // się od niego odciąć. Dwie czerwienie na prawie czarnym tle rozdziela
+  // wyłącznie jasność: 7,51 na tle przy 3,15 akcentu, czyli krok 2,39.
+  //
+  // Różnica odcienia to tylko ~4°, więc to ŚWIADOMIE słaby sygnał — wybrany
+  // zamiast bursztynu, żeby czerwony dalej znaczył „źle". Jeśli w terenie
+  // okaże się nieczytelny, właściwą poprawką jest danie błędowi wypełnienia
+  // zamiast dalszego rozjaśniania tej czerwieni.
+  danger: "#FF7A87",
+  success: "#4FA96B",
+  scrimWashRgb: "15, 18, 20",
+  scrimDeepRgb: "10, 12, 14",
+  scrimAbyssRgb: "5, 6, 7",
 };
 
-// Wariant jasny to rozłożone akta, nie rozjaśniony terminal: bazą jest Aged
-// Ivory, czyli ten sam papier, na którym w trybie ciemnym drukują się
-// dokumenty. Bursztyn schodzi do Burnished Amber i niżej, bo jasny Amber na
-// kości słoniowej nie niesie kontrastu tekstowego — ta sama zasada, co przy
-// złocie Ryzykantów.
+// Karta dostępu istnieje tylko w wersji ciemnej, więc dla wariantu jasnego nie
+// ma czego zmierzyć. Konsekwentne przedłużenie tej samej fikcji to WYDRUK z
+// tego samego systemu: chłodny papier biurowy, nie ciepła kość słoniowa
+// archiwum. Stal i czerwień schodzą, bo wartości z wariantu ciemnego nie niosą
+// kontrastu na bladym tle — ta sama zasada, co przy złocie Ryzykantów.
 const CRIME_THEME_LIGHT: ExpeditionThemePalette = {
-  background: "#EEE9DE",
-  mapLine: "#BCB4A4",
-  mapNode: "#9A9283",
-  panel: "rgba(250, 247, 240, 0.96)",
-  panelMuted: "rgba(243, 239, 230, 0.98)",
-  panelStrong: "rgba(232, 226, 214, 0.98)",
-  border: "#B3AA99",
-  accent: "#B97818",
-  accentStrong: "#8C5A11",
+  background: "#E9EBEE",
+  mapLine: "#B6BCC4",
+  mapNode: "#8F97A1",
+  panel: "rgba(247, 248, 250, 0.96)",
+  panelMuted: "rgba(238, 240, 243, 0.98)",
+  panelStrong: "rgba(226, 229, 234, 0.98)",
+  border: "#AEB4BC",
+  // Ta sama zasada co w ciemnym: czerwień strukturalna jest głęboka.
+  accent: "#8C1224",
+  accentStrong: "#2B323B",
   textPrimary: "#14171B",
-  textMuted: "#4A4F56",
-  textSubtle: "#6B7076",
-  danger: "#9F3D3D",
-  success: "#4F6146",
-  scrimWashRgb: "11, 13, 16",
-  scrimDeepRgb: "8, 10, 12",
-  scrimAbyssRgb: "4, 5, 7",
+  textMuted: "#4C545E",
+  textSubtle: "#666F7A",
+  // Na jasnym tle jasność działa odwrotnie, więc alarm musi zejść niżej niż
+  // #FF7A87 z ciemnego wariantu, żeby w ogóle nieść kontrast: 3,71 na papierze
+  // przy 7,89 akcentu.
+  danger: "#E03349",
+  success: "#2E7D4F",
+  scrimWashRgb: "15, 18, 20",
+  scrimDeepRgb: "10, 12, 14",
+  scrimAbyssRgb: "5, 6, 7",
 };
 
 // Święta: nasycony świerk zamiast oliwkowej zieleni ekspedycji, z czerwienią
