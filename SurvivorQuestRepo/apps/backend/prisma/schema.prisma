@@ -509,6 +509,11 @@ model RiskCategory {
   // what keeps one printed QR sticker valid across every realization built from
   // the same template deck.
   codeSlug     String?
+  // Nadpisane prefiksy kodów kart per poziom, np. { "MEDIUM": "RYZYKANCI-HISTORIA-SREDNE" }
+  // (numer -1…-10 dopisuje się sam). Brak klucza = format domyślny z codeSlug.
+  // Istnieje, bo wydrukowane karty nie zawsze trzymają się naszego formatu.
+  // Klon realizacji kopiuje je razem z codeSlug.
+  cardCodePrefixes Json?
   // Set => realization-owned clone. See RiskScheme above.
   realizationId String?
   sourceTemplateId String?

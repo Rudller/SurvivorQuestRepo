@@ -15,6 +15,7 @@ import { CategoryListRow } from "./risk-category-card";
 import { EditCategoryModal } from "./edit-category-modal";
 import type { RiskCategory, RiskScheme } from "../types/risk-quiz";
 import { RiskSchemeQrPanel } from "./risk-scheme-qr-panel";
+import { RiskCategoryPoolCounts, RiskDeckSummary } from "./risk-deck-summary";
 import { TabStrip, type TabItem } from "@/shared/components/tab-strip";
 
 type SchemeCardProps = {
@@ -69,6 +70,8 @@ export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: Schem
         ) : null}
       </div>
 
+      <RiskDeckSummary scheme={scheme} />
+
       <div className="space-y-2">
         {scheme.schemeCategories.length === 0 ? (
           <p className="text-xs text-zinc-500">Brak przypisanych kategorii.</p>
@@ -80,7 +83,7 @@ export function SchemeCard({ scheme, allowDelete = true, onEditCategory }: Schem
             >
               <div>
                 <p className="text-sm text-zinc-100">{item.category.name}</p>
-                <p className="text-xs text-zinc-500">{item.category.poolStations.length} zadań w puli</p>
+                <RiskCategoryPoolCounts category={item.category} />
               </div>
               <div className="flex shrink-0 gap-2">
                 {onEditCategory ? (

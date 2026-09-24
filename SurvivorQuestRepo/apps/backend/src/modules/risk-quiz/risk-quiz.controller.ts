@@ -93,6 +93,32 @@ function requireDifficulty(payload: Payload, key: string) {
   return value as RiskDifficulty;
 }
 
+// Mapa poziom -> prefiks kodu kart. Brak pola = bez zmian w kodach; pusty
+// string przy poziomie = powrót do formatu domyślnego (zdecyduje serwis).
+function optionalCardCodePrefixes(
+  payload: Payload,
+  key: string,
+): Partial<Record<RiskDifficulty, string>> | undefined {
+  const value = payload[key];
+  if (typeof value === 'undefined' || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+  const result: Partial<Record<RiskDifficulty, string>> = {};
+  for (const [difficulty, prefix] of Object.entries(value)) {
+    if (
+      !Object.values(RiskDifficulty).includes(difficulty as RiskDifficulty) ||
+      typeof prefix !== 'string'
+    ) {
+      throw new BadRequestException('Invalid payload');
+    }
+    result[difficulty as RiskDifficulty] = prefix;
+  }
+  return result;
+}
+
 @Controller(['mobile/risk-quiz', 'api/mobile/risk-quiz'])
 export class RiskQuizController {
   constructor(private readonly riskQuizService: RiskQuizService) {}
@@ -339,6 +365,7 @@ export class RiskQuizController {
     return this.riskQuizService.updateCategory(
       categoryId,
       requireString(payload, 'name'),
+      optionalCardCodePrefixes(payload, 'cardCodePrefixes'),
     );
   }
 

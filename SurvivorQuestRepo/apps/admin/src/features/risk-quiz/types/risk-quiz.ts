@@ -30,6 +30,19 @@ export type RiskCategory = {
   id: string;
   name: string;
   poolStations: RiskPoolStation[];
+  // Kody kart liczy backend (jedyne miejsce formatu). Brak pola tylko w
+  // odpowiedziach mutacji, które zwracają surowy wiersz.
+  cardCodes?: RiskCategoryCardCodes;
+  // Faktyczna liczba kart per poziom — tylko w talii realizacji, która ma
+  // prawdziwe wiersze RiskCard. Szablon z biblioteki ma zawsze cardsPerPool.
+  cardCounts?: Record<RiskDifficulty, number>;
+};
+
+export type RiskCategoryCardCodes = {
+  cardsPerPool: number;
+  // Obowiązujący prefiks poziomu (nadpisany albo domyślny), bez numeru karty.
+  prefixes: Record<RiskDifficulty, string>;
+  overridden: RiskDifficulty[];
 };
 
 // A category assigned into a scheme ("talia") — the join row, not a copy.

@@ -28,6 +28,20 @@ export const RISK_DIFFICULTY_SLUG: Record<RiskDifficulty, string> = {
 export const RISK_CARD_CODE_PREFIX = 'RYZYKANCI';
 
 /**
+ * Kod karty bez numeru — to, co pula ma zanim dopisze się `-1…-10`.
+ * Kategoria może go nadpisać per poziom (RiskCategory.cardCodePrefixes), bo
+ * wydrukowane karty nie zawsze trzymają się naszego formatu: pierwszy nakład
+ * miał na średnich kartach "SREDNE", a przedruk 12 kompletów po 150 kart
+ * kosztuje więcej niż jedno pole w adminie.
+ */
+export function defaultRiskCardCodePrefix(
+  categorySlug: string,
+  difficulty: RiskDifficulty,
+): string {
+  return `${RISK_CARD_CODE_PREFIX}-${categorySlug}-${RISK_DIFFICULTY_SLUG[difficulty]}`.toUpperCase();
+}
+
+/**
  * The one place the printed card code format is defined. Codes are
  * deterministic from (category slug, difficulty, index) so the same physical
  * sticker stays valid across every realization reusing that category — which
@@ -40,8 +54,53 @@ export function buildRiskCardCode(
   categorySlug: string,
   difficulty: RiskDifficulty,
   index: number,
+  prefixOverride?: string | null,
 ): string {
-  return `${RISK_CARD_CODE_PREFIX}-${categorySlug}-${RISK_DIFFICULTY_SLUG[difficulty]}-${index}`.toUpperCase();
+  const prefix =
+    prefixOverride || defaultRiskCardCodePrefix(categorySlug, difficulty);
+  return `${prefix}-${index}`.toUpperCase();
+}
+
+export type RiskCardCodePrefixes = Partial<Record<RiskDifficulty, string>>;
+
+// Litery, cyfry i pojedyncze myślniki między nimi — to samo, co daje
+// defaultRiskCardCodePrefix, więc nadpisanie nie wprowadza znaków, których
+// skaner albo drukarnia wcześniej nie widziały.
+const RISK_CARD_CODE_PREFIX_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
+
+/**
+ * Normalizuje prefiks wpisany w adminie. Pusty oznacza powrót do formatu
+ * domyślnego (null), niepoprawny — null z flagą, żeby wywołujący mógł
+ * odróżnić "wyczyść" od "odrzuć".
+ */
+export function normalizeRiskCardCodePrefix(
+  raw: string,
+): { ok: true; value: string | null } | { ok: false } {
+  const value = raw.trim().toUpperCase().replace(/-+$/, '');
+  if (!value) {
+    return { ok: true, value: null };
+  }
+  return RISK_CARD_CODE_PREFIX_PATTERN.test(value)
+    ? { ok: true, value }
+    : { ok: false };
+}
+
+/** Odczyt kolumny JSON — wszystko, co nie jest poprawnym prefiksem, odpada. */
+export function readRiskCardCodePrefixes(raw: unknown): RiskCardCodePrefixes {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const source = raw as Record<string, unknown>;
+  const result: RiskCardCodePrefixes = {};
+  for (const difficulty of RISK_DIFFICULTY_ORDER) {
+    const value = source[difficulty];
+    if (typeof value !== 'string') continue;
+    const normalized = normalizeRiskCardCodePrefix(value);
+    if (normalized.ok && normalized.value) {
+      result[difficulty] = normalized.value;
+    }
+  }
+  return result;
 }
 
 // Duplicate physical QR cards generated per (category, difficulty) pool, so

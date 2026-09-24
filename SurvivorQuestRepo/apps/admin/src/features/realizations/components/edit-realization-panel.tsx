@@ -61,6 +61,7 @@ import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesManager } from "./points-qr-codes-manager";
 import { RiskQuizManager } from "@/features/risk-quiz/components/risk-quiz-manager";
 import { RealizationRiskDeckEditor } from "@/features/risk-quiz/components/realization-risk-deck-editor";
+import { RiskDeckPreview } from "@/features/risk-quiz/components/risk-deck-preview";
 import { useGetRiskSchemesQuery } from "@/features/risk-quiz/api/risk-quiz.api";
 import { geocodeLocation } from "../realization-geocoding";
 import {
@@ -561,6 +562,18 @@ export function EditRealizationPanel({
     useGetRiskSchemesQuery(undefined, {
       skip: !isRiskQuizType,
     });
+  // Dropdown pokazuje szablony, a zapisana realizacja gra na własnej kopii —
+  // dopóki wybór nie zostanie zapisany, sekcja pod nim pokazuje podgląd
+  // wybranego szablonu zamiast starej talii.
+  const savedRiskSchemeTemplateId =
+    realization.riskSchemeTemplateId ?? realization.riskSchemeId ?? "";
+  const selectedRiskSchemePreview =
+    editValues.riskSchemeId &&
+    editValues.riskSchemeId !== savedRiskSchemeTemplateId
+      ? (riskSchemes ?? []).find(
+          (scheme) => scheme.id === editValues.riskSchemeId,
+        )
+      : undefined;
   const tabs: TabItem[] = REALIZATION_FORM_TAB_ORDER.filter((id) => {
     if (id === "riskQuiz") return isRiskQuizType;
     // Ryzykanci have no scenario and no stations, but they do have the intro
@@ -2227,7 +2240,11 @@ export function EditRealizationPanel({
                   </p>
                 </div>
 
-                <RealizationRiskDeckEditor realizationId={realization.id} />
+                {selectedRiskSchemePreview ? (
+                  <RiskDeckPreview scheme={selectedRiskSchemePreview} />
+                ) : (
+                  <RealizationRiskDeckEditor realizationId={realization.id} />
+                )}
                 <StyledMarkdownEditor
                   label="Tekst wstępu"
                   value={editValues.introText}

@@ -147,11 +147,19 @@ export const riskQuizApi = baseApi.injectEndpoints({
       transformResponse: normalizeCategory,
       invalidatesTags: ["RiskQuiz"],
     }),
-    updateRiskCategory: build.mutation<RiskCategory, { categoryId: string; name: string }>({
-      query: ({ categoryId, name }) => ({
+    updateRiskCategory: build.mutation<
+      RiskCategory,
+      {
+        categoryId: string;
+        name: string;
+        // Pusty string przy poziomie przywraca domyślny kod.
+        cardCodePrefixes?: Partial<Record<RiskDifficulty, string>>;
+      }
+    >({
+      query: ({ categoryId, name, cardCodePrefixes }) => ({
         url: adminPath(`/categories/${encodeURIComponent(categoryId)}`),
         method: "PATCH",
-        body: { name },
+        body: { name, cardCodePrefixes },
       }),
       invalidatesTags: ["RiskQuiz"],
     }),

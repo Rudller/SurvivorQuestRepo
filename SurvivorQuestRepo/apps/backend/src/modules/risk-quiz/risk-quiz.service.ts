@@ -42,7 +42,16 @@ import {
   mapStation,
 } from '../station/mappers/station.mapper';
 import {
+  buildRiskPoolCapacities,
+  riskPoolCapacity,
+  riskPoolKey,
+} from './risk-pool-capacity';
+import {
   buildRiskCardCode,
+  defaultRiskCardCodePrefix,
+  normalizeRiskCardCodePrefix,
+  readRiskCardCodePrefixes,
+  type RiskCardCodePrefixes,
   RISK_CARDS_PER_POOL,
   RISK_EXCLUDED_STATION_TYPES,
   RISK_DIFFICULTY_ORDER,
@@ -164,6 +173,9 @@ export class RiskQuizService {
         data: {
           name: sourceCategory.name,
           codeSlug: sourceCategory.codeSlug,
+          // Nadpisane kody kart idą razem ze slugiem — to one decydują, czy
+          // wydrukowana karta zeskanuje się w tej realizacji.
+          cardCodePrefixes: sourceCategory.cardCodePrefixes ?? Prisma.DbNull,
           realizationId,
           sourceTemplateId:
             sourceCategory.sourceTemplateId ?? sourceCategory.id,
@@ -347,7 +359,39 @@ export class RiskQuizService {
       where: { id: schemeId },
       include: RiskQuizService.schemeCategoriesInclude,
     });
-    return scheme ? RiskQuizService.mapSchemeStations(scheme) : scheme;
+    if (!scheme) {
+      return scheme;
+    }
+
+    // Realizacja ma prawdziwe wiersze RiskCard, więc admin pokazuje ich
+    // faktyczną liczbę per pula zamiast zakładać RISK_CARDS_PER_POOL.
+    const cards = await this.prisma.riskCard.findMany({
+      where: {
+        realizationId,
+        categoryId: {
+          in: scheme.schemeCategories.map((item) => item.categoryId),
+        },
+      },
+      select: { categoryId: true, difficulty: true },
+    });
+    const mapped = RiskQuizService.mapSchemeStations(scheme);
+    return {
+      ...mapped,
+      schemeCategories: mapped.schemeCategories.map((schemeCategory) => {
+        const cardCounts = {} as Record<RiskDifficulty, number>;
+        for (const difficulty of RISK_DIFFICULTY_ORDER) {
+          cardCounts[difficulty] = cards.filter(
+            (card) =>
+              card.categoryId === schemeCategory.categoryId &&
+              card.difficulty === difficulty,
+          ).length;
+        }
+        return {
+          ...schemeCategory,
+          category: { ...schemeCategory.category, cardCounts },
+        };
+      }),
+    };
   }
 
   private async requireTeamSession(sessionToken: string) {
@@ -485,7 +529,20 @@ export class RiskQuizService {
       (item) => !attemptedStationIds.has(item.stationId),
     );
 
-    if (available.length === 0) {
+    // Gra ogranicza się do fizycznych kart: po 10 odpowiedziach w puli z 10
+    // kartami pula jest wyczerpana, nawet jeśli zostały w niej zadania.
+    const cardsInPool = await this.prisma.riskCard.count({
+      where: {
+        realizationId: realization.id,
+        categoryId: card.categoryId,
+        difficulty: card.difficulty,
+      },
+    });
+    const poolUsedUp =
+      attemptedStationIds.size >=
+      riskPoolCapacity(cardsInPool, poolStations.length);
+
+    if (available.length === 0 || poolUsedUp) {
       // The one system message that comes from a real moment in the code rather
       // than being derived on read — this is the instant we learn the pool ran
       // dry for this team.
@@ -617,9 +674,41 @@ export class RiskQuizService {
     return entries;
   }
 
+  /**
+   * Pule talii realizacji z ich pojemnością (min(karty, zadania)) — wspólne
+   * źródło dla tabletu (getDeckStatus) i panelu Game Mastera
+   * (getTeamCardStatus), żeby obie strony pokazywały te same liczby.
+   */
+  private async loadRiskPoolCapacities(
+    realizationId: string,
+    categoryIds: string[],
+  ) {
+    const [cards, poolStations] = await Promise.all([
+      this.prisma.riskCard.findMany({
+        where: { realizationId, categoryId: { in: categoryIds } },
+        select: { categoryId: true, difficulty: true },
+      }),
+      this.prisma.riskPoolStation.findMany({
+        where: { categoryId: { in: categoryIds } },
+        select: { categoryId: true, difficulty: true, stationId: true },
+      }),
+    ]);
+
+    return {
+      poolStations,
+      capacities: buildRiskPoolCapacities({ cards, poolStations }),
+      poolKeyByStationId: new Map(
+        poolStations.map((item) => [
+          item.stationId,
+          riskPoolKey(item.categoryId, item.difficulty),
+        ]),
+      ),
+    };
+  }
+
   // Deck status for the idle scan screen: how many category "decks" the
-  // assigned scheme has, and how many stations (cards) this team still
-  // hasn't attempted across every category/difficulty in that scheme.
+  // assigned scheme has, and how many physical cards this team can still
+  // play across every category/difficulty in that scheme.
   // Named distinctly from the admin-facing getBoard(realizationId) below —
   // same class, different signature, would otherwise silently shadow it.
   async getDeckStatus(sessionToken: string) {
@@ -652,10 +741,8 @@ export class RiskQuizService {
       };
     }
 
-    const poolStations = await this.prisma.riskPoolStation.findMany({
-      where: { categoryId: { in: categoryIds } },
-      select: { stationId: true, difficulty: true },
-    });
+    const { poolStations, capacities, poolKeyByStationId } =
+      await this.loadRiskPoolCapacities(realization.id, categoryIds);
 
     const attempted = await this.prisma.riskAttempt.findMany({
       where: {
@@ -664,23 +751,36 @@ export class RiskQuizService {
       },
       select: { stationId: true },
     });
-    const attemptedStationIds = new Set(
-      attempted.map((item) => item.stationId),
+    const answeredByPoolKey = new Map<string, number>();
+    for (const stationId of new Set(attempted.map((item) => item.stationId))) {
+      const key = poolKeyByStationId.get(stationId);
+      if (!key) continue;
+      answeredByPoolKey.set(key, (answeredByPoolKey.get(key) ?? 0) + 1);
+    }
+
+    // Liczone z kart, nie z zadań — patrz riskPoolCapacity().
+    const remainingCards = capacities.reduce(
+      (total, pool) =>
+        total +
+        Math.max(
+          0,
+          pool.capacity -
+            (answeredByPoolKey.get(
+              riskPoolKey(pool.categoryId, pool.difficulty),
+            ) ?? 0),
+        ),
+      0,
     );
 
-    const remainingCards = poolStations.filter(
-      (item) => !attemptedStationIds.has(item.stationId),
-    ).length;
-
-    // What the whole pool pays out at the flat difficulty rate, so the tablet's
+    // What the whole deck pays out at the flat difficulty rate, so the tablet's
     // end screen can draw each team's score as a share of what was on the table
     // rather than as a share of whoever won. Streak multipliers are left out on
     // purpose: they are a property of how a team played, not of the deck, and
     // including them would make the ceiling move per team. A team on a long
     // streak can therefore finish above this number — the tablet caps its bar.
-    const maxPoints = poolStations.reduce(
-      (total, station) =>
-        total + RISK_DIFFICULTY_POINTS[station.difficulty].correct,
+    const maxPoints = capacities.reduce(
+      (total, pool) =>
+        total + pool.capacity * RISK_DIFFICULTY_POINTS[pool.difficulty].correct,
       0,
     );
 
@@ -2085,10 +2185,16 @@ export class RiskQuizService {
   // nowhere else the admin can reach — GET /station lists templates only — so
   // this response is the only source for their editable content.
   private static mapCategoryStations<
-    TCategory extends { poolStations: { station: PrismaStationRow }[] },
+    TCategory extends {
+      name: string;
+      codeSlug: string | null;
+      cardCodePrefixes?: Prisma.JsonValue;
+      poolStations: { station: PrismaStationRow }[];
+    },
   >(category: TCategory) {
     return {
       ...category,
+      cardCodes: RiskQuizService.describeCardCodes(category),
       poolStations: category.poolStations.map((poolStation) => ({
         ...poolStation,
         station: mapStation(poolStation.station),
@@ -2096,10 +2202,43 @@ export class RiskQuizService {
     };
   }
 
+  /**
+   * Co admin pokazuje przy kodach kart kategorii: obowiązujący prefiks każdego
+   * poziomu (nadpisany albo domyślny) i ile kart ma pula. Liczone tutaj, żeby
+   * format kodu nie miał drugiej kopii po stronie admina.
+   */
+  private static describeCardCodes(category: {
+    name: string;
+    codeSlug: string | null;
+    cardCodePrefixes?: Prisma.JsonValue;
+  }) {
+    const overrides = readRiskCardCodePrefixes(category.cardCodePrefixes);
+    // Kategoria sprzed kolumny codeSlug dostaje slug dopiero przy pierwszym
+    // generowaniu kart — do tego czasu podgląd liczy go z nazwy tak samo.
+    const slug = category.codeSlug ?? slugify(category.name ?? '');
+    const prefixes = {} as Record<RiskDifficulty, string>;
+    for (const difficulty of RISK_DIFFICULTY_ORDER) {
+      prefixes[difficulty] =
+        overrides[difficulty] ?? defaultRiskCardCodePrefix(slug, difficulty);
+    }
+    return {
+      cardsPerPool: RISK_CARDS_PER_POOL,
+      prefixes,
+      overridden: RISK_DIFFICULTY_ORDER.filter(
+        (difficulty) => overrides[difficulty] !== undefined,
+      ),
+    };
+  }
+
   private static mapSchemeStations<
     TScheme extends {
       schemeCategories: {
-        category: { poolStations: { station: PrismaStationRow }[] };
+        category: {
+          name: string;
+          codeSlug: string | null;
+          cardCodePrefixes?: Prisma.JsonValue;
+          poolStations: { station: PrismaStationRow }[];
+        };
       }[];
     },
   >(scheme: TScheme) {
@@ -2210,7 +2349,11 @@ export class RiskQuizService {
     );
   }
 
-  async updateCategory(categoryId: string, name: string) {
+  async updateCategory(
+    categoryId: string,
+    name: string,
+    cardCodePrefixes?: Partial<Record<RiskDifficulty, string>>,
+  ) {
     const trimmed = name.trim();
     if (!trimmed) {
       throw new BadRequestException('Category name is required');
@@ -2235,10 +2378,134 @@ export class RiskQuizService {
       );
     }
 
-    return this.prisma.riskCategory.update({
-      where: { id: categoryId },
-      data,
+    if (cardCodePrefixes === undefined) {
+      return this.prisma.riskCategory.update({
+        where: { id: categoryId },
+        data,
+      });
+    }
+
+    const nextPrefixes = RiskQuizService.mergeCardCodePrefixes(
+      readRiskCardCodePrefixes(current.cardCodePrefixes),
+      cardCodePrefixes,
+    );
+    const codeSlug = data.codeSlug ?? current.codeSlug ?? '';
+
+    // Kategoria z biblioteki ciągnie za sobą swoje kopie w realizacjach — one
+    // mają własne karty z tymi samymi kodami, a jedna poprawka w bibliotece
+    // ma naprawić wszystkie gry naraz.
+    const clones =
+      current.realizationId === null
+        ? await this.prisma.riskCategory.findMany({
+            where: { sourceTemplateId: categoryId },
+            select: { id: true, codeSlug: true, realizationId: true },
+          })
+        : [];
+
+    // Nowy kod może być zajęty przez karty starej talii tej samej realizacji
+    // (np. HISTORIA z "Standardowego zestawu" po przejściu na inną talię).
+    const touchedRealizationIds = new Set(
+      [
+        current.realizationId,
+        ...clones.map((clone) => clone.realizationId),
+      ].filter((id): id is string => Boolean(id)),
+    );
+    for (const realizationId of touchedRealizationIds) {
+      await this.releaseStaleCardsOfRealization(realizationId);
+    }
+    const targets = [
+      { id: categoryId, codeSlug },
+      ...clones.map((clone) => ({
+        id: clone.id,
+        codeSlug: clone.codeSlug ?? codeSlug,
+      })),
+    ];
+
+    const cards = await this.prisma.riskCard.findMany({
+      where: { categoryId: { in: targets.map((target) => target.id) } },
+      select: { id: true, categoryId: true, difficulty: true, code: true },
     });
+    const slugByCategoryId = new Map(
+      targets.map((target) => [target.id, target.codeSlug]),
+    );
+    const cardUpdates = cards.flatMap((card) => {
+      // Numer karty siedzi na końcu kodu; karty bez numeru nie powinny istnieć,
+      // ale jeśli jakaś jest, zostawiamy ją w spokoju zamiast zgadywać.
+      const index = /-(\d+)$/.exec(card.code)?.[1];
+      if (!index) return [];
+      const code = buildRiskCardCode(
+        slugByCategoryId.get(card.categoryId) ?? codeSlug,
+        card.difficulty,
+        Number(index),
+        nextPrefixes[card.difficulty],
+      );
+      return code === card.code
+        ? []
+        : [
+            this.prisma.riskCard.update({
+              where: { id: card.id },
+              data: { code },
+            }),
+          ];
+    });
+
+    const prefixesValue = Object.keys(nextPrefixes).length
+      ? nextPrefixes
+      : Prisma.DbNull;
+    try {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.riskCategory.update({
+          where: { id: categoryId },
+          data: { ...data, cardCodePrefixes: prefixesValue },
+        }),
+        ...clones.map((clone) =>
+          this.prisma.riskCategory.update({
+            where: { id: clone.id },
+            data: { cardCodePrefixes: prefixesValue },
+          }),
+        ),
+        ...cardUpdates,
+      ]);
+      return updated;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException(
+          'Taki kod QR ma już inna pula kart w tej realizacji.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Nakłada zmiany z admina na zapisane prefiksy. Pusty string przywraca
+   * format domyślny poziomu; niepoprawny prefiks odrzuca cały zapis, żeby nie
+   * zapisać połowy poprawki.
+   */
+  private static mergeCardCodePrefixes(
+    current: RiskCardCodePrefixes,
+    changes: Partial<Record<RiskDifficulty, string>>,
+  ): RiskCardCodePrefixes {
+    const next: RiskCardCodePrefixes = { ...current };
+    for (const difficulty of RISK_DIFFICULTY_ORDER) {
+      const raw = changes[difficulty];
+      if (raw === undefined) continue;
+      const normalized = normalizeRiskCardCodePrefix(raw);
+      if (!normalized.ok) {
+        throw new BadRequestException(
+          'Kod QR może zawierać tylko litery A–Z, cyfry i myślniki.',
+        );
+      }
+      if (normalized.value) {
+        next[difficulty] = normalized.value;
+      } else {
+        delete next[difficulty];
+      }
+    }
+    return next;
   }
 
   // Finds a codeSlug for `name` that isn't already taken by another TEMPLATE
@@ -2402,6 +2669,64 @@ export class RiskQuizService {
    * the same category — only the DB rows get (re)created per realization.
    * Idempotent — safe to call again after the scheme's categories change.
    */
+  /**
+   * Zwalnia kody kart kategorii, których nie ma już w talii realizacji. Kod
+   * karty jest unikalny w realizacji, więc bez tego stara talia blokowałaby
+   * te same wydrukowane karty w nowej. Takich kart i tak nie da się zeskanować
+   * (scanCard sprawdza talię). Karta bez podejść znika; karta, na której
+   * drużyny już grały, dostaje tylko dopisek w kodzie — usunięcie skasowałoby
+   * kaskadowo historię jej podejść.
+   */
+  private async releaseStaleCards(
+    realizationId: string,
+    activeCategoryIds: string[],
+  ) {
+    const staleCards = await this.prisma.riskCard.findMany({
+      where: { realizationId, categoryId: { notIn: activeCategoryIds } },
+      select: { id: true, code: true, _count: { select: { attempts: true } } },
+    });
+    if (staleCards.length === 0) {
+      return;
+    }
+
+    const unplayedIds = staleCards
+      .filter((card) => card._count.attempts === 0)
+      .map((card) => card.id);
+    const played = staleCards.filter(
+      (card) => card._count.attempts > 0 && !card.code.includes('-STARA-'),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.riskCard.deleteMany({ where: { id: { in: unplayedIds } } }),
+      ...played.map((card) =>
+        this.prisma.riskCard.update({
+          where: { id: card.id },
+          data: {
+            code: `${card.code}-STARA-${card.id.slice(0, 8)}`.toUpperCase(),
+          },
+        }),
+      ),
+    ]);
+  }
+
+  private async releaseStaleCardsOfRealization(realizationId: string) {
+    const realization = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+      select: { riskSchemeId: true },
+    });
+    if (!realization?.riskSchemeId) {
+      return;
+    }
+    const schemeCategories = await this.prisma.riskSchemeCategory.findMany({
+      where: { schemeId: realization.riskSchemeId },
+      select: { categoryId: true },
+    });
+    await this.releaseStaleCards(
+      realizationId,
+      schemeCategories.map((item) => item.categoryId),
+    );
+  }
+
   async generateMissingCards(realizationId: string) {
     const realization = await this.requireRealizationOrThrow(realizationId);
     if (!realization.riskSchemeId) {
@@ -2415,12 +2740,21 @@ export class RiskQuizService {
       include: { category: true },
     });
 
+    // Po zmianie talii karty starej zostają w bazie i trzymają swoje kody —
+    // nowa talia z kategorią o tym samym kodzie (np. HISTORIA) nie mogłaby
+    // dostać własnych kart.
+    await this.releaseStaleCards(
+      realizationId,
+      schemeCategories.map((item) => item.categoryId),
+    );
+
     const existingCards = await this.prisma.riskCard.findMany({
       where: { realizationId },
     });
 
     for (const { category } of schemeCategories) {
       const categorySlug = await this.ensureCategoryCodeSlug(category);
+      const prefixes = readRiskCardCodePrefixes(category.cardCodePrefixes);
       for (const difficulty of RISK_DIFFICULTY_ORDER) {
         const existingCodes = new Set(
           existingCards
@@ -2433,7 +2767,12 @@ export class RiskQuizService {
         );
 
         for (let index = 1; index <= RISK_CARDS_PER_POOL; index += 1) {
-          const code = buildRiskCardCode(categorySlug, difficulty, index);
+          const code = buildRiskCardCode(
+            categorySlug,
+            difficulty,
+            index,
+            prefixes[difficulty],
+          );
           if (existingCodes.has(code)) continue;
 
           await this.prisma.riskCard.create({
@@ -2479,13 +2818,19 @@ export class RiskQuizService {
 
     for (const { category } of schemeCategories) {
       const categorySlug = await this.ensureCategoryCodeSlug(category);
+      const prefixes = readRiskCardCodePrefixes(category.cardCodePrefixes);
       for (const difficulty of RISK_DIFFICULTY_ORDER) {
         for (let index = 1; index <= RISK_CARDS_PER_POOL; index += 1) {
           codes.push({
             categoryId: category.id,
             categoryName: category.name,
             difficulty,
-            code: buildRiskCardCode(categorySlug, difficulty, index),
+            code: buildRiskCardCode(
+              categorySlug,
+              difficulty,
+              index,
+              prefixes[difficulty],
+            ),
           });
         }
       }
@@ -2551,18 +2896,16 @@ export class RiskQuizService {
     });
     const categoryIds = schemeCategories.map((item) => item.categoryId);
 
-    const poolStations = await this.prisma.riskPoolStation.findMany({
-      where: { categoryId: { in: categoryIds } },
-      select: { categoryId: true, difficulty: true, stationId: true },
-    });
-
-    const poolKeyByStationId = new Map<string, string>();
-    const totalByPoolKey = new Map<string, number>();
-    for (const item of poolStations) {
-      const key = `${item.categoryId}:${item.difficulty}`;
-      poolKeyByStationId.set(item.stationId, key);
-      totalByPoolKey.set(key, (totalByPoolKey.get(key) ?? 0) + 1);
-    }
+    const { poolStations, capacities, poolKeyByStationId } =
+      await this.loadRiskPoolCapacities(realizationId, categoryIds);
+    // "Total" to karty, które drużyna może zagrać, a nie liczba zadań w puli —
+    // te same liczby, które widzi tablet.
+    const totalByPoolKey = new Map(
+      capacities.map((pool) => [
+        riskPoolKey(pool.categoryId, pool.difficulty),
+        pool.capacity,
+      ]),
+    );
 
     const attempts = await this.prisma.riskAttempt.findMany({
       where: {
@@ -2598,7 +2941,7 @@ export class RiskQuizService {
 
         for (const schemeCategory of schemeCategories) {
           for (const difficulty of RISK_DIFFICULTY_ORDER) {
-            const key = `${schemeCategory.categoryId}:${difficulty}`;
+            const key = riskPoolKey(schemeCategory.categoryId, difficulty);
             const total = totalByPoolKey.get(key) ?? 0;
             if (total === 0) continue;
 
@@ -3058,8 +3401,6 @@ export class RiskQuizService {
       );
     }
 
-    const chosen = available[Math.floor(Math.random() * available.length)];
-
     const card = await this.prisma.riskCard.findFirst({
       where: { realizationId, categoryId, difficulty },
       orderBy: { createdAt: 'asc' },
@@ -3069,6 +3410,22 @@ export class RiskQuizService {
         'Brak wygenerowanych kart dla tej puli — najpierw wygeneruj karty.',
       );
     }
+
+    // Ten sam limit co przy skanie karty — zdalne losowanie nie może dać
+    // drużynie więcej zadań z puli, niż jest w niej fizycznych kart.
+    const cardsInPool = await this.prisma.riskCard.count({
+      where: { realizationId, categoryId, difficulty },
+    });
+    if (
+      attemptedStationIds.size >=
+      riskPoolCapacity(cardsInPool, poolStations.length)
+    ) {
+      throw new BadRequestException(
+        'Drużyna wykorzystała już wszystkie karty z tej puli.',
+      );
+    }
+
+    const chosen = available[Math.floor(Math.random() * available.length)];
 
     // Treat remote launch as a latest-command-wins signal. Repeated clicks
     // replace a command that the tablet has not consumed yet instead of

@@ -15,10 +15,15 @@ function createService() {
     realization: { findUnique: jest.fn(), update: jest.fn() },
     riskCard: {
       findUnique: jest.fn(),
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      // Pełny komplet wydrukowanych kart na pulę — testy, które nie dotyczą
+      // limitu kart, nie powinny się o niego potykać.
+      count: jest.fn().mockResolvedValue(RISK_CARDS_PER_POOL),
     },
     riskCategory: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -131,6 +136,11 @@ const assignment = {
   realization,
   expiresAt: new Date(Date.now() + 60_000),
 };
+
+// Wydrukowane karty jednej puli, tak jak zwraca je riskCard.findMany z selectem.
+function cardsFor(categoryId: string, difficulty: string, count: number) {
+  return Array.from({ length: count }, () => ({ categoryId, difficulty }));
+}
 
 const card = {
   id: 'card-1',
@@ -253,7 +263,10 @@ describe('RiskQuizService.scanCard', () => {
     });
     prisma.riskCard.findUnique.mockResolvedValue(card);
     prisma.riskPoolStation.findMany.mockResolvedValue([
-      { stationId: 'loser-station', station: { ...quizStation, id: 'loser-station' } },
+      {
+        stationId: 'loser-station',
+        station: { ...quizStation, id: 'loser-station' },
+      },
     ]);
     prisma.riskAttempt.findMany.mockResolvedValue([]);
     // Nothing was open when this request looked, but the other one got its row
@@ -284,7 +297,9 @@ describe('RiskQuizService.scanCard', () => {
 
     // Its own pick is discarded in favour of the row that actually landed.
     expect(result).toEqual(
-      expect.objectContaining({ station: expect.objectContaining({ id: 'station-1' }) }),
+      expect.objectContaining({
+        station: expect.objectContaining({ id: 'station-1' }),
+      }),
     );
   });
 
@@ -349,6 +364,41 @@ describe('RiskQuizService.scanCard', () => {
     });
   });
 
+  it('reports the pool as exhausted once the team has used every physical card, even with tasks left', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    // 11 zadań, 10 kart, 10 już zagranych — jedenaste zadanie zostaje w puli,
+    // ale kart na nie nie ma.
+    prisma.riskPoolStation.findMany.mockResolvedValue(
+      Array.from({ length: 11 }, (_, index) => ({
+        stationId: `station-${index}`,
+        station: { ...quizStation, id: `station-${index}` },
+      })),
+    );
+    prisma.riskAttempt.findMany.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        stationId: `station-${index}`,
+      })),
+    );
+    prisma.riskCard.count.mockResolvedValue(10);
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+    });
+
+    expect(result).toEqual({
+      exhausted: true,
+      categoryName: 'Historia',
+      difficulty: 'EASY',
+    });
+    expect(prisma.riskOpenDraw.create).not.toHaveBeenCalled();
+  });
+
   it("rejects a card whose category is no longer in the realization's scheme", async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue({
@@ -392,11 +442,26 @@ describe('RiskQuizService.getDeckStatus', () => {
       { categoryId: 'category-2' },
     ]);
     prisma.riskPoolStation.findMany.mockResolvedValue([
-      { stationId: 'station-1', difficulty: 'EASY' },
-      { stationId: 'station-2', difficulty: 'EASY' },
-      { stationId: 'station-3', difficulty: 'MEDIUM' },
-      { stationId: 'station-4', difficulty: 'MEDIUM' },
-      { stationId: 'station-5', difficulty: 'HARD' },
+      { categoryId: 'category-1', stationId: 'station-1', difficulty: 'EASY' },
+      { categoryId: 'category-1', stationId: 'station-2', difficulty: 'EASY' },
+      {
+        categoryId: 'category-1',
+        stationId: 'station-3',
+        difficulty: 'MEDIUM',
+      },
+      {
+        categoryId: 'category-2',
+        stationId: 'station-4',
+        difficulty: 'MEDIUM',
+      },
+      { categoryId: 'category-2', stationId: 'station-5', difficulty: 'HARD' },
+    ]);
+    // Kart jest więcej niż zadań w każdej puli, więc liczą się zadania.
+    prisma.riskCard.findMany.mockResolvedValue([
+      ...cardsFor('category-1', 'EASY', 10),
+      ...cardsFor('category-1', 'MEDIUM', 10),
+      ...cardsFor('category-2', 'MEDIUM', 10),
+      ...cardsFor('category-2', 'HARD', 10),
     ]);
     prisma.riskAttempt.findMany
       // Attempted stations for the remaining-card count...
@@ -462,6 +527,77 @@ describe('RiskQuizService.getDeckStatus', () => {
       ],
     });
   });
+
+  it('counts physical cards, not tasks: 5 categories x 3 levels x 10 cards = 150', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    const categoryIds = ['c1', 'c2', 'c3', 'c4', 'c5'];
+    prisma.riskSchemeCategory.findMany.mockResolvedValue(
+      categoryIds.map((categoryId) => ({ categoryId })),
+    );
+    // 12 zadań na pulę, 10 kart — gra kończy się na kartach.
+    const levels = ['EASY', 'MEDIUM', 'HARD'];
+    prisma.riskPoolStation.findMany.mockResolvedValue(
+      categoryIds.flatMap((categoryId) =>
+        levels.flatMap((difficulty) =>
+          Array.from({ length: 12 }, (_, index) => ({
+            categoryId,
+            difficulty,
+            stationId: `${categoryId}-${difficulty}-${index}`,
+          })),
+        ),
+      ),
+    );
+    prisma.riskCard.findMany.mockResolvedValue(
+      categoryIds.flatMap((categoryId) =>
+        levels.flatMap((difficulty) => cardsFor(categoryId, difficulty, 10)),
+      ),
+    );
+    prisma.riskAttempt.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.getDeckStatus('token');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        remainingCards: 150,
+        // 5 kategorii x 10 kart x (10 + 20 + 30)
+        maxPoints: 3000,
+      }),
+    );
+  });
+
+  it('caps a pool at its task count when there are fewer tasks than cards', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      { categoryId: 'category-1' },
+    ]);
+    prisma.riskPoolStation.findMany.mockResolvedValue(
+      Array.from({ length: 8 }, (_, index) => ({
+        categoryId: 'category-1',
+        difficulty: 'HARD',
+        stationId: `station-${index}`,
+      })),
+    );
+    prisma.riskCard.findMany.mockResolvedValue(
+      cardsFor('category-1', 'HARD', 10),
+    );
+    prisma.riskAttempt.findMany
+      .mockResolvedValueOnce([{ stationId: 'station-0' }])
+      .mockResolvedValueOnce([]);
+
+    const result = await service.getDeckStatus('token');
+
+    expect(result).toEqual(expect.objectContaining({ remainingCards: 7 }));
+  });
 });
 
 describe('RiskQuizService.listTestMenuEntries', () => {
@@ -517,6 +653,61 @@ describe('RiskQuizService.listTestMenuEntries', () => {
 });
 
 describe('RiskQuizService.generateMissingCards', () => {
+  it('frees the codes held by cards of a deck the realization no longer plays', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.riskSchemeCategory.findMany.mockResolvedValue([
+      {
+        categoryId: 'new-historia',
+        category: {
+          id: 'new-historia',
+          name: 'Historia',
+          codeSlug: 'historia',
+        },
+      },
+    ]);
+    prisma.riskCard.findMany
+      // Karty starej Historii, której nie ma już w talii.
+      .mockResolvedValueOnce([
+        {
+          id: 'old-unplayed',
+          code: 'RYZYKANCI-HISTORIA-LATWE-1',
+          _count: { attempts: 0 },
+        },
+        {
+          id: 'old-played-1',
+          code: 'RYZYKANCI-HISTORIA-LATWE-2',
+          _count: { attempts: 3 },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.riskCard.create.mockResolvedValue({});
+
+    await service.generateMissingCards('realization-1');
+
+    expect(prisma.riskCard.findMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        realizationId: 'realization-1',
+        categoryId: { notIn: ['new-historia'] },
+      },
+      select: { id: true, code: true, _count: { select: { attempts: true } } },
+    });
+    expect(prisma.riskCard.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['old-unplayed'] } },
+    });
+    // Karta z podejściami zostaje (historia gry), tylko oddaje kod.
+    expect(prisma.riskCard.update).toHaveBeenCalledWith({
+      where: { id: 'old-played-1' },
+      data: { code: 'RYZYKANCI-HISTORIA-LATWE-2-STARA-OLD-PLAY' },
+    });
+    expect(prisma.riskCard.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ code: 'RYZYKANCI-HISTORIA-LATWE-1' }),
+    });
+  });
+
   it('generates uppercase codes, matching the uppercase normalization scanCard() looks up by', async () => {
     const { service, prisma } = createService();
     prisma.realization.findUnique.mockResolvedValue({
@@ -625,6 +816,128 @@ describe('RiskQuizService.createCategory', () => {
 });
 
 describe('RiskQuizService.updateCategory', () => {
+  describe('card code prefixes', () => {
+    function arrangeTemplateCategory(
+      prisma: ReturnType<typeof createService>['prisma'],
+    ) {
+      prisma.riskCategory.findUnique.mockResolvedValue({
+        id: 'template-1',
+        name: 'Historia',
+        codeSlug: 'historia',
+        cardCodePrefixes: null,
+        realizationId: null,
+      });
+      prisma.riskCategory.findMany.mockResolvedValue([
+        { id: 'clone-1', codeSlug: 'historia' },
+      ]);
+      prisma.riskCard.findMany.mockResolvedValue([
+        {
+          id: 'card-medium-3',
+          categoryId: 'clone-1',
+          difficulty: 'MEDIUM',
+          code: 'RYZYKANCI-HISTORIA-SREDNIE-3',
+        },
+        {
+          id: 'card-easy-1',
+          categoryId: 'clone-1',
+          difficulty: 'EASY',
+          code: 'RYZYKANCI-HISTORIA-LATWE-1',
+        },
+      ]);
+      prisma.riskCategory.update.mockImplementation(
+        (args: { where: { id: string } }) => Promise.resolve(args.where),
+      );
+      prisma.riskCard.update.mockResolvedValue({});
+    }
+
+    it('rewrites the printed codes of the pool and carries the fix to realization copies', async () => {
+      const { service, prisma } = createService();
+      arrangeTemplateCategory(prisma);
+
+      await service.updateCategory('template-1', 'Historia', {
+        MEDIUM: ' ryzykanci-historia-sredne ',
+      });
+
+      expect(prisma.riskCategory.update).toHaveBeenCalledWith({
+        where: { id: 'template-1' },
+        data: {
+          name: 'Historia',
+          cardCodePrefixes: { MEDIUM: 'RYZYKANCI-HISTORIA-SREDNE' },
+        },
+      });
+      expect(prisma.riskCategory.update).toHaveBeenCalledWith({
+        where: { id: 'clone-1' },
+        data: { cardCodePrefixes: { MEDIUM: 'RYZYKANCI-HISTORIA-SREDNE' } },
+      });
+      // Numer karty zostaje, zmienia się tylko prefiks; łatwe są nietknięte.
+      expect(prisma.riskCard.update).toHaveBeenCalledTimes(1);
+      expect(prisma.riskCard.update).toHaveBeenCalledWith({
+        where: { id: 'card-medium-3' },
+        data: { code: 'RYZYKANCI-HISTORIA-SREDNE-3' },
+      });
+    });
+
+    it('restores the default format when the prefix is cleared', async () => {
+      const { service, prisma } = createService();
+      arrangeTemplateCategory(prisma);
+      prisma.riskCategory.findUnique.mockResolvedValue({
+        id: 'template-1',
+        name: 'Historia',
+        codeSlug: 'historia',
+        cardCodePrefixes: { MEDIUM: 'RYZYKANCI-HISTORIA-SREDNE' },
+        realizationId: null,
+      });
+      prisma.riskCard.findMany.mockResolvedValue([
+        {
+          id: 'card-medium-3',
+          categoryId: 'clone-1',
+          difficulty: 'MEDIUM',
+          code: 'RYZYKANCI-HISTORIA-SREDNE-3',
+        },
+      ]);
+
+      await service.updateCategory('template-1', 'Historia', { MEDIUM: '' });
+
+      expect(prisma.riskCategory.update).toHaveBeenCalledWith({
+        where: { id: 'template-1' },
+        data: { name: 'Historia', cardCodePrefixes: Prisma.DbNull },
+      });
+      expect(prisma.riskCard.update).toHaveBeenCalledWith({
+        where: { id: 'card-medium-3' },
+        data: { code: 'RYZYKANCI-HISTORIA-SREDNIE-3' },
+      });
+    });
+
+    it('rejects a prefix with characters a printed QR code does not use', async () => {
+      const { service, prisma } = createService();
+      arrangeTemplateCategory(prisma);
+
+      await expect(
+        service.updateCategory('template-1', 'Historia', {
+          MEDIUM: 'ŚREDNIE KARTY',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('reports a clash with another pool of the same realization as a bad request', async () => {
+      const { service, prisma } = createService();
+      arrangeTemplateCategory(prisma);
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(
+        service.updateCategory('template-1', 'Historia', {
+          MEDIUM: 'RYZYKANCI-HISTORIA-LATWE',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   it('renames the category without touching an already-assigned codeSlug', async () => {
     const { service, prisma } = createService();
     prisma.riskCategory.findUnique.mockResolvedValue({
@@ -788,9 +1101,41 @@ describe('RiskQuizService.cloneSchemeForRealization', () => {
       data: {
         name: 'Historia',
         codeSlug: 'historia',
+        cardCodePrefixes: Prisma.DbNull,
         realizationId: 'realization-1',
         sourceTemplateId: 'template-category',
       },
+    });
+  });
+
+  it('copies overridden card code prefixes along with the slug', async () => {
+    const { service, prisma, stationService } = createService();
+    arrangeTemplateDeck(prisma);
+    prisma.riskScheme.findUnique.mockResolvedValueOnce({
+      id: 'template-scheme',
+      name: 'Talia',
+      sourceTemplateId: null,
+      schemeCategories: [
+        {
+          category: {
+            id: 'template-category',
+            name: 'Historia',
+            codeSlug: 'historia',
+            cardCodePrefixes: { MEDIUM: 'RYZYKANCI-HISTORIA-SREDNE' },
+            sourceTemplateId: null,
+            poolStations: [],
+          },
+        },
+      ],
+    });
+    stationService.cloneStationsForScenario.mockResolvedValue([]);
+
+    await service.cloneSchemeForRealization('template-scheme', 'realization-1');
+
+    expect(prisma.riskCategory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cardCodePrefixes: { MEDIUM: 'RYZYKANCI-HISTORIA-SREDNE' },
+      }),
     });
   });
 });
@@ -1804,7 +2149,7 @@ describe('RiskQuizService chat', () => {
     expect(prisma.riskChatMessage.findMany).not.toHaveBeenCalled();
   });
 
-  it('serves the feed with the room switched off, without the teams\' own lines', async () => {
+  it("serves the feed with the room switched off, without the teams' own lines", async () => {
     const { service, prisma } = createService();
     arrangeChat(prisma, { riskChatEnabled: false });
     prisma.riskChatMessage.findMany.mockResolvedValue([
@@ -2230,6 +2575,10 @@ describe('RiskQuizService.getTeamCardStatus', () => {
       { categoryId: 'category-1', difficulty: 'EASY', stationId: 'station-1' },
       { categoryId: 'category-1', difficulty: 'EASY', stationId: 'station-2' },
     ]);
+    // 10 kart na 2 zadania — pula kończy się na zadaniach.
+    prisma.riskCard.findMany.mockResolvedValue(
+      cardsFor('category-1', 'EASY', 10),
+    );
     prisma.riskAttempt.findMany.mockResolvedValue([
       { teamId: 'team-1', stationId: 'station-1' },
     ]);
