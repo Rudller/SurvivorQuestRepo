@@ -37,6 +37,19 @@ describe("describeRiskQuizError", () => {
     expect(describeRiskQuizError(error, FALLBACK, TEXT)).toBe("Ta stacja jest właśnie zajęta.");
   });
 
+  it("translates the backend's used-card conflict", () => {
+    const error = new MobileApiHttpError({
+      statusCode: 409,
+      code: "conflict" as never,
+      message: "Card already used",
+      responseBody: null,
+    });
+
+    expect(describeRiskQuizError(error, FALLBACK, { ...TEXT, cardAlreadyUsed: "Karta już użyta" })).toBe(
+      "Karta już użyta",
+    );
+  });
+
   it("falls back for anything unexpected rather than leaking it", () => {
     expect(describeRiskQuizError(new Error("Cannot read property 'x' of undefined"), FALLBACK, TEXT)).toBe(
       FALLBACK,

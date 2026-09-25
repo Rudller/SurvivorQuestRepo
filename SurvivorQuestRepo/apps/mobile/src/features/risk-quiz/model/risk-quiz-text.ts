@@ -28,6 +28,9 @@ export type RiskQuizText = {
   remainingCards: { label: string };
   // Zastępuje licznik, gdy zadanie przepadło po czasie.
   taskTimeUp: string;
+  // Etykiety linii pod "Źle!", odsłaniającej dobrą odpowiedź albo hasło.
+  correctAnswerLabel: string;
+  secretLabel: string;
   finish: {
     title: string;
     subtitle: string;
@@ -58,6 +61,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       timeout: "Serwer nie odpowiada. Sprawdźcie połączenie.",
       offline: "Brak połączenia z serwerem.",
       scan: "Nie udało się zeskanować karty.",
+      cardAlreadyUsed: "Ta karta była już przez was użyta — weźcie inną.",
       submitOutcome: "Nie udało się wysłać wyniku.",
       submitPhoto: "Nie udało się wysłać zdjęcia.",
       submitReviewedAnswer: "Nie udało się wysłać odpowiedzi.",
@@ -83,6 +87,8 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
     },
     remainingCards: { label: "Zostało kart" },
     taskTimeUp: "Czas minął!",
+    correctAnswerLabel: "Poprawna odpowiedź",
+    secretLabel: "Hasło",
     finish: {
       title: "Koniec gry",
       subtitle: "Talia zamknięta. Oto jak poszło drużynom.",
@@ -103,6 +109,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       timeout: "The server is not responding. Check your connection.",
       offline: "No connection to the server.",
       scan: "Could not scan the card.",
+      cardAlreadyUsed: "Your team has already used this card — take another one.",
       submitOutcome: "Could not send the result.",
       submitPhoto: "Could not send the photo.",
       submitReviewedAnswer: "Could not send the answer.",
@@ -128,6 +135,8 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
     },
     remainingCards: { label: "Cards left" },
     taskTimeUp: "Time's up!",
+    correctAnswerLabel: "Correct answer",
+    secretLabel: "Password",
     finish: {
       title: "Game over",
       subtitle: "The deck is closed. Here is how the teams did.",
@@ -148,6 +157,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       timeout: "Сервер не відповідає. Перевірте з'єднання.",
       offline: "Немає зв'язку із сервером.",
       scan: "Не вдалося відсканувати картку.",
+      cardAlreadyUsed: "Ви вже використали цю картку — візьміть іншу.",
       submitOutcome: "Не вдалося надіслати результат.",
       submitPhoto: "Не вдалося надіслати фото.",
       submitReviewedAnswer: "Не вдалося надіслати відповідь.",
@@ -173,6 +183,8 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
     },
     remainingCards: { label: "Залишилось карток" },
     taskTimeUp: "Час вийшов!",
+    correctAnswerLabel: "Правильна відповідь",
+    secretLabel: "Гасло",
     finish: {
       title: "Гру завершено",
       subtitle: "Колоду закрито. Ось як упоралися команди.",
@@ -193,6 +205,7 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       timeout: "Сервер не отвечает. Проверьте соединение.",
       offline: "Нет связи с сервером.",
       scan: "Не удалось отсканировать карточку.",
+      cardAlreadyUsed: "Вы уже использовали эту карточку — возьмите другую.",
       submitOutcome: "Не удалось отправить результат.",
       submitPhoto: "Не удалось отправить фото.",
       submitReviewedAnswer: "Не удалось отправить ответ.",
@@ -218,6 +231,8 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
     },
     remainingCards: { label: "Осталось карточек" },
     taskTimeUp: "Время вышло!",
+    correctAnswerLabel: "Правильный ответ",
+    secretLabel: "Пароль",
     finish: {
       title: "Игра окончена",
       subtitle: "Колода закрыта. Вот как справились команды.",

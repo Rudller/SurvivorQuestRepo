@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -497,7 +498,10 @@ export class RiskQuizService {
       where: { teamId: team.id },
       include: { card: { include: { category: true } }, station: true },
     });
-    if (openDraw) {
+    const openDrawExpired =
+      openDraw !== null &&
+      (await this.expireOpenDrawIfTimedOut(realization.id, team, openDraw));
+    if (openDraw && !openDrawExpired) {
       return {
         exhausted: false as const,
         cardId: openDraw.cardId,
@@ -513,6 +517,17 @@ export class RiskQuizService {
           this.resolveRiskLanguageContext(realization, input.selectedLanguage),
         ),
       };
+    }
+
+    // Jedna fizyczna karta = jedno zadanie dla drużyny. Bez tego ten sam kod QR
+    // zeskanowany po odpowiedzi losował kolejne zadanie z puli. Inne drużyny
+    // mogą tej karty używać; reset w adminie kasuje podejście i ją odblokowuje.
+    const cardAlreadyPlayed = await this.prisma.riskAttempt.findFirst({
+      where: { teamId: team.id, cardId: card.id },
+      select: { id: true },
+    });
+    if (cardAlreadyPlayed) {
+      throw new ConflictException('Card already used');
     }
 
     const poolStations = await this.prisma.riskPoolStation.findMany({
@@ -870,6 +885,15 @@ export class RiskQuizService {
     });
     if (consumed.count === 0) {
       return { draw: null };
+    }
+
+    // Zadanie, któremu minął czas, nie może zniknąć pod upsertem bez kary.
+    const openDraw = await this.prisma.riskOpenDraw.findUnique({
+      where: { teamId: team.id },
+      include: { card: true, station: true },
+    });
+    if (openDraw) {
+      await this.expireOpenDrawIfTimedOut(realization.id, team, openDraw);
     }
 
     // The remote-launch row is gone the instant it is delivered, so without
@@ -1234,6 +1258,35 @@ export class RiskQuizService {
       input,
       this.resolveRiskLanguageContext(realization, input.selectedLanguage),
     );
+
+    // The card is done with; releasing it here is what lets the next scan deal
+    // a new one instead of replaying this task.
+    await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
+
+    const scored = await this.recordScoredAttempt({
+      realizationId: realization.id,
+      team,
+      card,
+      stationId: station.id,
+      isCorrect,
+      selectedIndex: input.selectedIndex,
+    });
+
+    return { isCorrect, correctIndex, ...scored };
+  }
+
+  // Punktacja jednego podejścia — wspólna dla odpowiedzi z tabletu i dla karty,
+  // którą serwer sam rozlicza po czasie (expireOpenDrawIfTimedOut), żeby kara
+  // i seria liczyły się w obu miejscach tak samo.
+  private async recordScoredAttempt(input: {
+    realizationId: string;
+    team: { id: string; name: string | null; slotNumber: number };
+    card: { id: string; difficulty: RiskDifficulty };
+    stationId: string;
+    isCorrect: boolean;
+    selectedIndex?: number;
+  }) {
+    const { team, card, isCorrect } = input;
     const priorStreak = await this.getCurrentStreak(team.id);
     const streak = isCorrect ? priorStreak + 1 : 0;
     const multiplier = isCorrect ? this.resolveStreakMultiplier(streak) : 1;
@@ -1242,16 +1295,12 @@ export class RiskQuizService {
       ? Math.round(scoring.correct * multiplier)
       : scoring.incorrect;
 
-    // The card is done with; releasing it here is what lets the next scan deal
-    // a new one instead of replaying this task.
-    await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
-
     const attempt = await this.prisma.riskAttempt.create({
       data: {
-        realizationId: realization.id,
+        realizationId: input.realizationId,
         teamId: team.id,
         cardId: card.id,
-        stationId: station.id,
+        stationId: input.stationId,
         selectedIndex:
           typeof input.selectedIndex === 'number' ? input.selectedIndex : null,
         isCorrect,
@@ -1266,7 +1315,7 @@ export class RiskQuizService {
 
     if (isCorrect && pointsDelta > 0) {
       await this.announceCardScored({
-        realizationId: realization.id,
+        realizationId: input.realizationId,
         teamId: team.id,
         attemptId: attempt.id,
         teamName: resolveRiskTeamDisplayName(team),
@@ -1276,13 +1325,64 @@ export class RiskQuizService {
     }
 
     return {
-      isCorrect,
-      correctIndex,
       pointsDelta,
       teamPoints: updatedTeam.points,
       streak,
       multiplier,
     };
+  }
+
+  /**
+   * Rozlicza otwartą kartę, której skończył się czas, jako błędną odpowiedź.
+   * Zwraca true, gdy karty już nie ma (rozliczona tu albo chwilę wcześniej
+   * przez tablet), false — gdy wciąż trwa.
+   *
+   * Tablet sam wysyła porażkę, gdy licznik dojdzie do zera, ale tylko wtedy,
+   * gdy karta jest na ekranie. Zamknięta krzyżykiem (albo tablet zrestartowany)
+   * wisiała dotąd w nieskończoność: każdy skan wracał do niej z "Czas minął!",
+   * a drużyna nie mogła dobrać nic nowego.
+   */
+  private async expireOpenDrawIfTimedOut(
+    realizationId: string,
+    team: { id: string; name: string | null; slotNumber: number },
+    openDraw: {
+      id: string;
+      createdAt: Date;
+      stationId: string;
+      card: { id: string; difficulty: RiskDifficulty };
+      station: { timeLimitSeconds: number };
+    },
+  ): Promise<boolean> {
+    const remainingSeconds = resolveRiskRemainingSeconds(
+      openDraw.station.timeLimitSeconds,
+      openDraw.createdAt,
+    );
+    if (remainingSeconds !== 0) {
+      return false;
+    }
+
+    // deleteMany jako bramka: przy wyścigu z timeoutem z tabletu tylko jedna
+    // strona usuwa wiersz i tylko ona liczy karę.
+    const released = await this.prisma.riskOpenDraw.deleteMany({
+      where: { id: openDraw.id },
+    });
+    if (released.count === 0) {
+      return true;
+    }
+
+    const existingAttempt = await this.prisma.riskAttempt.findFirst({
+      where: { teamId: team.id, stationId: openDraw.stationId },
+    });
+    if (!existingAttempt) {
+      await this.recordScoredAttempt({
+        realizationId,
+        team,
+        card: openDraw.card,
+        stationId: openDraw.stationId,
+        isCorrect: false,
+      });
+    }
+    return true;
   }
 
   // How many of the team's most recent risk-quiz attempts (across every

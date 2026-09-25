@@ -188,8 +188,10 @@ export type StationFormVariant = "regular" | "risk";
 // ones (memory's flip cycle, simon's audio sequence) — and qr-hunt, which sends
 // a team walking between stickers spread around a venue nobody leaves here (it
 // also has no working wiring on the Ryzykanci screen). Rebus and strong-password
-// are out by the client's call, not by a technical limit.
+// are out by the client's call, not by a technical limit, and so is
+// caesar-cipher (2026-09-25: nie pasuje do tempa gry przy stole).
 export const RISK_EXCLUDED_STATION_TYPES: StationType[] = [
+  "caesar-cipher",
   "mini-sudoku",
   "mastermind",
   "boggle",

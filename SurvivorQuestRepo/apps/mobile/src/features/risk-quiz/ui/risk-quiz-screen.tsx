@@ -10,6 +10,8 @@ import { resolveUiLanguage } from "../../i18n";
 import { describeRiskQuizError } from "../model/risk-quiz-error-text";
 import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
 import { resolveRiskTaskStartSeconds, shouldExpireRiskTask } from "../model/risk-task-timer";
+import { resolveRiskCorrectAnswer } from "../model/risk-quiz-correct-answer";
+import { RiskQuizAnswerResult } from "../components/risk-quiz-answer-result";
 import { isInvalidCompletionCodeErrorMessage } from "../../expedition-stage/components/station-overlays/puzzle-helpers";
 import { QrScannerOverlay } from "../../expedition-stage/components/qr-scanner-overlay";
 import { TopRealizationPanel } from "../../expedition-stage/components/top-realization-panel";
@@ -21,6 +23,7 @@ import {
 import {
   fetchMobileSessionState,
   getMobileApiErrorStatusCode,
+  MobileApiHttpError,
   postRiskQuizPhotoTask,
 } from "../../expedition-stage/api/mobile-session.api";
 import {
@@ -250,6 +253,10 @@ const PIG_BUTTON_GAP = 10;
 const TASK_TIMER_FONT_SIZE = 72;
 // Odstęp między próbami wysłania porażki po czasie, gdy poprzednia się nie udała.
 const TASK_TIMEOUT_RETRY_MS = 3000;
+// Jak długo wynik zostaje na ekranie, zanim karta sama się zamknie. Dłużej, gdy
+// po błędzie pokazujemy dobrą odpowiedź albo hasło.
+const RESULT_DISMISS_MS = 2200;
+const ANSWER_REVEAL_DISMISS_MS = 5000;
 const TASK_TIMER_BLOCK_HEIGHT = 86;
 
 export function RiskQuizScreen({
@@ -802,10 +809,20 @@ export function RiskQuizScreen({
       return;
     }
 
-    autoDismissTimeoutRef.current = setTimeout(() => {
-      autoDismissTimeoutRef.current = null;
-      dismissActiveCard();
-    }, 2200);
+    // Po błędzie z odsłoniętą odpowiedzią/hasłem drużyna potrzebuje chwili,
+    // żeby to przeczytać — krzyżyk nadal zamyka kartę wcześniej.
+    const revealsAnswer =
+      !answerResult.isCorrect &&
+      activeDraw !== null &&
+      resolveRiskCorrectAnswer(buildStationPreviewViewModel(activeDraw), answerResult.correctIndex) !== null;
+
+    autoDismissTimeoutRef.current = setTimeout(
+      () => {
+        autoDismissTimeoutRef.current = null;
+        dismissActiveCard();
+      },
+      revealsAnswer ? ANSWER_REVEAL_DISMISS_MS : RESULT_DISMISS_MS,
+    );
 
     return () => {
       if (autoDismissTimeoutRef.current) {
@@ -941,6 +958,13 @@ export function RiskQuizScreen({
       void refreshDeckStatus();
       return null;
     } catch (error) {
+      // Serwer już rozliczył tę kartę (np. sam ją zamknął po czasie, gdy drugi
+      // tablet drużyny skanował). Ponawianie nic nie da — karta znika z ekranu.
+      if (error instanceof MobileApiHttpError && error.message === "Station already attempted") {
+        void refreshDeckStatus();
+        dismissActiveCard();
+        return null;
+      }
       // Freed again so a failed send (a dropped connection mid-answer) can be
       // retried; the backend still rejects a genuine second attempt.
       submittedCardIdRef.current = null;
@@ -1234,6 +1258,14 @@ export function RiskQuizScreen({
   const isAnswerIndexType = activeDraw ? ANSWER_INDEX_TYPES.has(activeDraw.station.type) : false;
   const isAudioQuizType = activeDraw?.station.type === "audio-quiz";
   const answers = activeDraw?.station.quiz?.answers ?? [];
+  const revealedCorrectAnswer =
+    activeDraw && answerResult && !answerResult.isCorrect
+      ? resolveRiskCorrectAnswer(buildStationPreviewViewModel(activeDraw), answerResult.correctIndex)
+      : null;
+  const answerResultLabels = {
+    correctAnswer: riskQuizText.correctAnswerLabel,
+    secret: riskQuizText.secretLabel,
+  };
   const { isAudioPlaying, isAudioLoading, handlePlayAudio, handleStopAudio } = useAudioQuizPlayback({
     stationType: activeDraw ? (activeDraw.station.type as StationTestType) : null,
     quizAudioUrl: activeDraw?.station.quiz?.audioUrl,
@@ -1509,18 +1541,12 @@ export function RiskQuizScreen({
               {isSubmittingAnswer ? <ActivityIndicator color={EXPEDITION_THEME.accent} /> : null}
 
               {answerResult ? (
-                <View style={{ alignItems: "center", marginTop: 8 }}>
-                  <Text
-                    style={{
-                      color: answerResult.isCorrect ? "#22c55e" : "#ef4444",
-                      fontSize: 20,
-                      fontWeight: "800",
-                    }}
-                  >
-                    {answerResult.isCorrect ? "Dobrze!" : "Źle!"} {answerResult.pointsDelta >= 0 ? "+" : ""}
-                    {answerResult.pointsDelta} pkt
-                    {answerResult.isCorrect && answerResult.multiplier > 1 ? ` (x${answerResult.multiplier})` : ""}
-                  </Text>
+                <View style={{ marginTop: 8 }}>
+                  <RiskQuizAnswerResult
+                    result={answerResult}
+                    correctAnswer={revealedCorrectAnswer}
+                    labels={answerResultLabels}
+                  />
                 </View>
               ) : null}
             </Animated.View>
@@ -1578,6 +1604,31 @@ export function RiskQuizScreen({
                 onTimeExpired={() => void completeCurrentCard(false)}
                 timedStationPointsDecayEnabled={false}
               />
+              {/* Absolutnie na dole karty, nie pod nią: wrapper ma maxHeight,
+                  więc blok dołożony pod panelem zostałby ucięty. */}
+              {answerResult ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    paddingVertical: 14,
+                    paddingHorizontal: 16,
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: answerResult.isCorrect ? "#22c55e" : "#ef4444",
+                    backgroundColor: EXPEDITION_THEME.panel,
+                  }}
+                >
+                  <RiskQuizAnswerResult
+                    result={answerResult}
+                    correctAnswer={revealedCorrectAnswer}
+                    labels={answerResultLabels}
+                  />
+                </View>
+              ) : null}
             </Animated.View>
           ) : exhaustedNotice ? (
             <View style={{ width: "100%", alignItems: "center" }}>

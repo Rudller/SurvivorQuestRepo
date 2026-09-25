@@ -8,7 +8,12 @@ export type RiskQuizErrorText = {
   timeout: string;
   /** Shown when the device could not reach the server at all. */
   offline: string;
+  /** Shown when the team scans a physical card it has already played. */
+  cardAlreadyUsed?: string;
 };
+
+// Verbatim message of the backend's ConflictException in scanCard.
+const CARD_ALREADY_USED_MESSAGE = "Card already used";
 
 /**
  * React Native's `fetch` rejects with `TypeError: Network request failed` when
@@ -48,6 +53,9 @@ export function describeRiskQuizError(
   }
 
   if (error instanceof MobileApiHttpError) {
+    if (text.cardAlreadyUsed && error.message === CARD_ALREADY_USED_MESSAGE) {
+      return text.cardAlreadyUsed;
+    }
     return error.message;
   }
 

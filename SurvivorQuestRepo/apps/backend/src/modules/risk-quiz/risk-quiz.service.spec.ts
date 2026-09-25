@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { RiskQuizService } from './risk-quiz.service';
 import { resolveRealizationLanguageContext } from '../mobile/domain/mobile-language.helpers';
 import { Prisma } from '@prisma/client';
@@ -328,6 +332,139 @@ describe('RiskQuizService.scanCard', () => {
     });
 
     expect(result).toEqual(expect.objectContaining({ remainingSeconds: 10 }));
+  });
+
+  it('settles an open card whose time ran out as a wrong answer and deals a new task from the scanned card', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue({ ...card, id: 'card-2' });
+    // Karta zamknięta krzyżykiem 90 s temu przy limicie 60 s — nikt nie wysłał
+    // porażki, więc wisi na serwerze.
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'expired-station',
+      createdAt: new Date(Date.now() - 90_000),
+      card: { ...card, category: { name: 'Historia' } },
+      station: { ...quizStation, id: 'expired-station', timeLimitSeconds: 60 },
+    });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: quizStation.id, station: quizStation },
+    ]);
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+    });
+
+    expect(prisma.riskOpenDraw.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'open-1' },
+    });
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        teamId: 'team-1',
+        cardId: 'card-1',
+        stationId: 'expired-station',
+        isCorrect: false,
+        pointsDelta: -2,
+      }),
+    });
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: 'team-1' },
+      data: { points: { increment: -2 } },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        exhausted: false,
+        cardId: 'card-2',
+        station: expect.objectContaining({ id: 'station-1' }),
+      }),
+    );
+  });
+
+  it('does not score an expired card twice when the tablet already settled it', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'expired-station',
+      createdAt: new Date(Date.now() - 90_000),
+      card: { ...card, category: { name: 'Historia' } },
+      station: { ...quizStation, id: 'expired-station', timeLimitSeconds: 60 },
+    });
+    // Tablet wysłał swój timeout chwilę wcześniej i to on usunął wiersz.
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: quizStation.id, station: quizStation },
+    ]);
+
+    await service.scanCard({ sessionToken: 'token', code: 'abc123' });
+
+    expect(prisma.riskAttempt.create).not.toHaveBeenCalled();
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('never expires an open card of a station without a time limit', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: quizStation.id,
+      createdAt: new Date(Date.now() - 3_600_000),
+      card: { ...card, category: { name: 'Historia' } },
+      station: quizStation,
+    });
+
+    const result = await service.scanCard({
+      sessionToken: 'token',
+      code: 'abc123',
+    });
+
+    expect(prisma.riskOpenDraw.deleteMany).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        cardId: 'card-1',
+        station: expect.objectContaining({ id: 'station-1' }),
+      }),
+    );
+  });
+
+  it('rejects a physical card this team has already played', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskAttempt.findFirst.mockResolvedValue({ id: 'attempt-1' });
+
+    await expect(
+      service.scanCard({ sessionToken: 'token', code: 'abc123' }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.riskAttempt.findFirst).toHaveBeenCalledWith({
+      where: { teamId: 'team-1', cardId: 'card-1' },
+      select: { id: true },
+    });
+    expect(prisma.riskOpenDraw.create).not.toHaveBeenCalled();
   });
 
   it('hands back the card already open instead of drawing a second task', async () => {
@@ -1335,6 +1472,7 @@ describe('RiskQuizService.assignStationToPool', () => {
     'QR_HUNT',
     'REBUS',
     'STRONG_PASSWORD',
+    'CAESAR_CIPHER',
   ])('rejects %s, a type Ryzykanci does not carry', async (type) => {
     const { service, prisma } = createService();
     prisma.station.findUnique.mockResolvedValue({
@@ -2946,6 +3084,43 @@ describe('RiskQuizService.pollPendingDraw', () => {
         }),
       }),
     );
+  });
+
+  it('settles a timed-out open card as a wrong answer before a remote draw replaces it', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
+      teamId: 'team-1',
+      cardId: 'card-9',
+      stationId: 'expired-station',
+      createdAt: new Date(Date.now() - 90_000),
+      card: { ...card, id: 'card-9', category: { name: 'Historia' } },
+      station: { ...quizStation, id: 'expired-station', timeLimitSeconds: 60 },
+    });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+      id: 'draw-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      card: { difficulty: 'EASY', category: { name: 'Historia' } } as never,
+      station: quizStation,
+    });
+    prisma.riskPendingDraw.deleteMany.mockResolvedValue({ count: 1 });
+
+    await service.pollPendingDraw('token');
+
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cardId: 'card-9',
+        stationId: 'expired-station',
+        isCorrect: false,
+      }),
+    });
+    expect(prisma.riskOpenDraw.upsert).toHaveBeenCalled();
   });
 
   it('returns the drawn station and consumes (deletes) the pending draw', async () => {

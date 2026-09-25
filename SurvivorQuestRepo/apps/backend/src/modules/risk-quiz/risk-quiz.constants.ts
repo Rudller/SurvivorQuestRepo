@@ -191,9 +191,11 @@ export function resolveRiskTeamDisplayName(team: {
 // quiet ones (memory's flip cycle, simon's audio sequence) — and QR_HUNT, which
 // sends a team walking between stickers spread around a venue nobody leaves
 // here (it also has no working wiring on the Ryzykanci screen). REBUS and
-// STRONG_PASSWORD are excluded by choice, not by a technical limit.
+// STRONG_PASSWORD are excluded by choice, not by a technical limit, and so is
+// CAESAR_CIPHER (2026-09-25: nie pasuje do tempa gry przy stole).
 // The admin pickers already hide these; this is the guard behind that.
 export const RISK_EXCLUDED_STATION_TYPES = new Set<StationType>([
+  StationType.CAESAR_CIPHER,
   StationType.MINI_SUDOKU,
   StationType.MASTERMIND,
   StationType.BOGGLE,
