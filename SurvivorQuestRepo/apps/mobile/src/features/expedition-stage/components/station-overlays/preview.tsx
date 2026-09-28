@@ -117,6 +117,7 @@ export function StationPreviewOverlay({
   onOpenLanguagePicker,
   presentation = "overlay",
   compactMedia = false,
+  suppressResultPopups = false,
 }: StationPreviewOverlayProps) {
   const isInlinePresentation = presentation === "inline";
   const adaptiveLayout = useAdaptiveLayout();
@@ -322,13 +323,19 @@ export function StationPreviewOverlay({
       if (variant !== "timeout") {
         clearTimeoutPopupCountdown();
       }
+      // Wynik pokazuje host; callbacki (onQuizFailed/onCompleteTask…) poszły
+      // już niezależnie od popupu, a jedyną akcją zamknięcia jest onClose,
+      // którym host i tak zamyka kartę sam.
+      if (suppressResultPopups && variant !== "pending") {
+        return;
+      }
       quizOutcomeActionRef.current = onDismiss ?? onClose;
       setQuizOutcomePopup({
         variant,
         message,
       });
     },
-    [clearTimeoutPopupCountdown, onClose],
+    [clearTimeoutPopupCountdown, onClose, suppressResultPopups],
   );
   const closeQuizOutcomePopup = useCallback(() => {
     const onDismiss = quizOutcomeActionRef.current ?? onClose;
@@ -1840,7 +1847,6 @@ export function StationPreviewOverlay({
         },
       },
     openQuizStationPanelProps: {
-      hideAttempts: presentationProfile.panels.hideAttempts,
       openQuizAttemptsLeft,
       openQuizInput,
       openQuizResult,

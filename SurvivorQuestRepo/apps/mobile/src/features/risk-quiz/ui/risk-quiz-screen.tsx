@@ -257,6 +257,9 @@ const TASK_TIMEOUT_RETRY_MS = 3000;
 // po błędzie pokazujemy dobrą odpowiedź albo hasło.
 const RESULT_DISMISS_MS = 2200;
 const ANSWER_REVEAL_DISMISS_MS = 5000;
+// Wysokość zarezerwowana pod kafelkami quizu na "Źle! -N pkt" + dobrą odpowiedź
+// (dwie linie po ~26 px + odstęp), żeby wynik nie przesuwał kafelków.
+const QUIZ_RESULT_SLOT_HEIGHT = 72;
 const TASK_TIMER_BLOCK_HEIGHT = 86;
 
 export function RiskQuizScreen({
@@ -743,6 +746,9 @@ export function RiskQuizScreen({
   }, [remainingTaskSeconds, activeDraw, answerResult, disableTaskTimeouts, isSubmittingAnswer]);
 
   const isTaskTimedOut = activeDraw !== null && timedOutCardId === activeDraw.cardId;
+  // Czy karta w ogóle ma limit czasu — stałe przez całe życie karty, także po
+  // odpowiedzi, gdy sam licznik już zniknął.
+  const cardHasTaskTimer = activeDraw !== null && resolveRiskTaskStartSeconds(activeDraw) !== null;
 
   const isTimerUrgent =
     remainingTaskSeconds !== null && remainingTaskSeconds <= 10 && remainingTaskSeconds > 0;
@@ -1478,8 +1484,9 @@ export function RiskQuizScreen({
             // in the roomy (no keyboard) state. While typing, space is scarce
             // and the content is bottom-aligned anyway, so it can slide under
             // the timer instead of being pushed off-screen.
-            marginTop:
-              (remainingTaskSeconds !== null || isTaskTimedOut) && keyboardHeight === 0 ? TASK_TIMER_BLOCK_HEIGHT : 0,
+            // Liczone z karty, nie z remainingTaskSeconds: po odpowiedzi timer
+            // znika, a zwolnione miejsce przesuwało wyśrodkowaną treść w górę.
+            marginTop: cardHasTaskTimer && keyboardHeight === 0 ? TASK_TIMER_BLOCK_HEIGHT : 0,
           }}
           contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
           keyboardShouldPersistTaps="handled"
@@ -1510,9 +1517,9 @@ export function RiskQuizScreen({
 
               <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 8, rowGap: 10 }}>
                 {answers.map((option, index) => {
-                  const isSelected = answerResult !== null && index === answerResult.correctIndex;
-                  const showAsWrong =
-                    answerResult !== null && !answerResult.isCorrect && index !== answerResult.correctIndex;
+                  // Po odpowiedzi: poprawny kafelek na zielono, reszta na czerwono.
+                  const isCorrectOption = answerResult !== null && index === answerResult.correctIndex;
+                  const isWrongOption = answerResult !== null && index !== answerResult.correctIndex;
                   return (
                     <Pressable
                       key={index}
@@ -1521,16 +1528,20 @@ export function RiskQuizScreen({
                       className="rounded-2xl border px-4 py-5 justify-center"
                       style={{
                         width: "47%",
-                        borderColor: isSelected
-                          ? EXPEDITION_THEME.accent
-                          : showAsWrong
+                        borderColor: isCorrectOption
+                          ? "#22c55e"
+                          : isWrongOption
                             ? "#ef4444"
                             : EXPEDITION_THEME.border,
-                        backgroundColor: EXPEDITION_THEME.panel,
-                        opacity: showAsWrong ? 0.6 : 1,
+                        backgroundColor: isCorrectOption
+                          ? "rgba(34,197,94,0.35)"
+                          : isWrongOption
+                            ? "rgba(239,68,68,0.3)"
+                            : EXPEDITION_THEME.panel,
                       }}
                     >
                       <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 16 }}>
+                        {isCorrectOption ? "✓ " : ""}
                         {OPTION_LETTERS[index]}. {option}
                       </Text>
                     </Pressable>
@@ -1538,17 +1549,22 @@ export function RiskQuizScreen({
                 })}
               </View>
 
-              {isSubmittingAnswer ? <ActivityIndicator color={EXPEDITION_THEME.accent} /> : null}
-
-              {answerResult ? (
-                <View style={{ marginTop: 8 }}>
-                  <RiskQuizAnswerResult
-                    result={answerResult}
-                    correctAnswer={revealedCorrectAnswer}
-                    labels={answerResultLabels}
-                  />
+              {/* Stały slot na spinner i wynik, obecny od początku karty: treść
+                  jest wyśrodkowana w pionie, więc blok dołożony dopiero po
+                  odpowiedzi podbijał kafelki w górę. Zawartość absolutnie w
+                  środku, żeby nawet długa odpowiedź nie zmieniła wysokości. */}
+              <View style={{ height: QUIZ_RESULT_SLOT_HEIGHT }}>
+                <View style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+                  {isSubmittingAnswer ? <ActivityIndicator color={EXPEDITION_THEME.accent} /> : null}
+                  {answerResult ? (
+                    <RiskQuizAnswerResult
+                      result={answerResult}
+                      correctAnswer={revealedCorrectAnswer}
+                      labels={answerResultLabels}
+                    />
+                  ) : null}
                 </View>
-              ) : null}
+              </View>
             </Animated.View>
           ) : activeDraw ? (
             <Animated.View
@@ -1582,6 +1598,9 @@ export function RiskQuizScreen({
               <StationPreviewOverlay
                 presentation="inline"
                 compactMedia={keyboardHeight > 0}
+                // Wynik z dobrą odpowiedzią pokazuje nakładka poniżej — bez
+                // tego panel dokładał drugi popup "Nie udało się".
+                suppressResultPopups
                 station={buildStationPreviewViewModel(activeDraw)}
                 onClose={dismissActiveCard}
                 onRequestClose={dismissActiveCard}
@@ -1604,29 +1623,43 @@ export function RiskQuizScreen({
                 onTimeExpired={() => void completeCurrentCard(false)}
                 timedStationPointsDecayEnabled={false}
               />
-              {/* Absolutnie na dole karty, nie pod nią: wrapper ma maxHeight,
-                  więc blok dołożony pod panelem zostałby ucięty. */}
+              {/* Nakładka na całą kartę, nie blok pod nią: wrapper ma maxHeight,
+                  więc blok dołożony pod panelem zostałby ucięty, a pasek na dole
+                  ginął na tle panelu stacji. pointerEvents="none" zostawia
+                  krzyżyk panelu klikalny. */}
               {answerResult ? (
                 <View
                   pointerEvents="none"
                   style={{
                     position: "absolute",
+                    top: 0,
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    paddingVertical: 14,
-                    paddingHorizontal: 16,
+                    alignItems: "center",
+                    justifyContent: "center",
                     borderRadius: 18,
-                    borderWidth: 1,
-                    borderColor: answerResult.isCorrect ? "#22c55e" : "#ef4444",
-                    backgroundColor: EXPEDITION_THEME.panel,
+                    backgroundColor: "rgba(0,0,0,0.6)",
                   }}
                 >
-                  <RiskQuizAnswerResult
-                    result={answerResult}
-                    correctAnswer={revealedCorrectAnswer}
-                    labels={answerResultLabels}
-                  />
+                  <View
+                    style={{
+                      width: "90%",
+                      maxWidth: 560,
+                      padding: 24,
+                      borderRadius: 18,
+                      borderWidth: 2,
+                      borderColor: answerResult.isCorrect ? "#22c55e" : "#ef4444",
+                      backgroundColor: EXPEDITION_THEME.panel,
+                    }}
+                  >
+                    <RiskQuizAnswerResult
+                      result={answerResult}
+                      correctAnswer={revealedCorrectAnswer}
+                      labels={answerResultLabels}
+                      emphasis="hero"
+                    />
+                  </View>
                 </View>
               ) : null}
             </Animated.View>

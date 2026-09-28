@@ -100,8 +100,6 @@ export type StationPresentationProfile = {
     minimalChrome: boolean;
     /** Ciaśniejszy wskaźnik prób tam, gdzie karta jest niska. */
     compactAttempts: boolean;
-    /** Wskaźnik prób ukryty zupełnie — gospodarz pokazuje go po swojemu. */
-    hideAttempts: boolean;
     /** Ścięte narożniki to język wizualny Ryzykantów, zaokrąglone — ekspedycji. */
     cornerStyle: PanelCornerStyle;
   };
@@ -167,7 +165,6 @@ export function resolveStationPresentationProfile(
       panels: {
         minimalChrome: true,
         compactAttempts: true,
-        hideAttempts: true,
         cornerStyle: "chamfered",
       },
       behavior: { autoOpenPhotoCapture: true },
@@ -206,7 +203,6 @@ export function resolveStationPresentationProfile(
     panels: {
       minimalChrome: false,
       compactAttempts: false,
-      hideAttempts: false,
       cornerStyle: "rounded",
     },
     behavior: { autoOpenPhotoCapture: false },

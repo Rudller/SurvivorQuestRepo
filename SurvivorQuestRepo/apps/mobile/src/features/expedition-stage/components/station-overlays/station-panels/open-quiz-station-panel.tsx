@@ -6,7 +6,6 @@ import { TEXT_PUZZLE_MAX_ATTEMPTS } from "../puzzle-helpers";
 import { AttemptsIndicator, resolveActionLabelColor, useStationPanelLayout } from "./shared-ui";
 
 type OpenQuizStationPanelProps = {
-  hideAttempts?: boolean;
   openQuizAttemptsLeft: number;
   openQuizInput: string;
   openQuizResult: string | null;
@@ -48,7 +47,6 @@ const OPEN_QUIZ_STATION_TEXT: Record<UiLanguage, OpenQuizStationText> = {
 };
 
 export function OpenQuizStationPanel({
-  hideAttempts = false,
   openQuizAttemptsLeft,
   openQuizInput,
   openQuizResult,
@@ -64,15 +62,13 @@ export function OpenQuizStationPanel({
 
   return (
     <View className="mt-3">
-      {!hideAttempts ? (
-        <View className="mt-1">
-          <AttemptsIndicator
-            label={text.attemptsLeft}
-            attemptsLeft={openQuizAttemptsLeft}
-            maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
-          />
-        </View>
-      ) : null}
+      <View className="mt-1">
+        <AttemptsIndicator
+          label={text.attemptsLeft}
+          attemptsLeft={openQuizAttemptsLeft}
+          maxAttempts={TEXT_PUZZLE_MAX_ATTEMPTS}
+        />
+      </View>
       <View className="mt-2 flex-row gap-2">
         <TextInput
           className="flex-1 rounded-xl border px-4"

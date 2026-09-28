@@ -103,6 +103,10 @@ export type StationPreviewOverlayProps = {
   // answer input has to stay visible. The picture keeps filling the box (and
   // so stays cropped to it) at the reduced height.
   compactMedia?: boolean;
+  // Host sam pokazuje wynik (Ryzykanci: "Źle! -N pkt" + dobra odpowiedź), więc
+  // własne popupy panelu — sukces/porażka/koniec czasu — byłyby drugim
+  // komunikatem o tym samym. "Czekamy na zatwierdzenie" zostaje.
+  suppressResultPopups?: boolean;
 };
 
 export type QuizPrestartOverlayProps = {

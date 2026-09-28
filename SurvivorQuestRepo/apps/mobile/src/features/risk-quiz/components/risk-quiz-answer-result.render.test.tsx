@@ -26,6 +26,20 @@ describe("RiskQuizAnswerResult", () => {
     expect(view.getByText("PRZYGODA")).toBeTruthy();
   });
 
+  it("in hero mode puts the label and the answer on separate lines", async () => {
+    const view = await render(
+      <RiskQuizAnswerResult
+        result={WRONG}
+        correctAnswer={{ kind: "secret", text: "PRZYGODA" }}
+        labels={LABELS}
+        emphasis="hero"
+      />,
+    );
+
+    expect(view.getByText("Hasło")).toBeTruthy();
+    expect(view.getByText("PRZYGODA")).toBeTruthy();
+  });
+
   it("does not reveal anything after a correct answer", async () => {
     const view = await render(
       <RiskQuizAnswerResult result={RIGHT} correctAnswer={{ kind: "answer", text: "Gniezno" }} labels={LABELS} />,
