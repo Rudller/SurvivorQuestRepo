@@ -65,6 +65,12 @@ function CenterPlayerIcon({ color, size }: { color: string; size: number }) {
   );
 }
 
+// Szerokość dolnej kolumny: podium rankingu + licznik czasu.
+const BOTTOM_COLUMN_MAX_WIDTH = 560;
+const CASE_FILES_BUTTON_GAP = 10;
+// Podpis „POSZLAKI" jest szerszy od samego kółka — tyle trzeba zmieścić na marginesie.
+const CASE_FILES_BUTTON_MIN_WIDTH = 76;
+
 /**
  * Teczka z zakładką. Świadomie NIE lupa — lupa w każdej innej aplikacji znaczy
  * „szukaj", więc gracz kliknąłby ją, szukając stanowiska, a nie akt.
@@ -154,7 +160,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: string;
     realizationPrefix: string;
     tasks: string;
-    caseFiles: string;
+    caseFilesButtonLabel: string;
     testMenu: string;
     teamDefaultName: string;
     qrScanCanceled: string;
@@ -207,7 +213,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Mapa wydarzenia",
     realizationPrefix: "Realizacja",
     tasks: "Zadania",
-    caseFiles: "Akta sprawy",
+    caseFilesButtonLabel: "Poszlaki",
     testMenu: "Menu testowe",
     teamDefaultName: "Drużyna",
     qrScanCanceled: "Skanowanie QR anulowane.",
@@ -259,7 +265,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Event map",
     realizationPrefix: "Realization",
     tasks: "Tasks",
-    caseFiles: "Case files",
+    caseFilesButtonLabel: "Clues",
     testMenu: "Test menu",
     teamDefaultName: "Team",
     qrScanCanceled: "QR scanning canceled.",
@@ -311,7 +317,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Мапа події",
     realizationPrefix: "Реалізація",
     tasks: "Завдання",
-    caseFiles: "Матеріали справи",
+    caseFilesButtonLabel: "Докази",
     testMenu: "Тестове меню",
     teamDefaultName: "Команда",
     qrScanCanceled: "Сканування QR скасовано.",
@@ -363,7 +369,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     mapImageAccessibilityLabel: "Карта события",
     realizationPrefix: "Реализация",
     tasks: "Задания",
-    caseFiles: "Материалы дела",
+    caseFilesButtonLabel: "Улики",
     testMenu: "Тестовое меню",
     teamDefaultName: "Команда",
     qrScanCanceled: "Сканирование QR отменено.",
@@ -1485,6 +1491,15 @@ export function ExpeditionStageScreen({
     sessionState.realization.showLeaderboardDuringGame &&
     !isLeaderboardHiddenByCountdown &&
     sessionState.leaderboard.entries.length > 0;
+  const shouldShowCaseFilesButton =
+    sessionState.realization.showCaseFiles && sessionState.caseFiles.length > 0;
+  // Akta stoją na prawo od podium, na wolnym marginesie obok dolnej kolumny
+  // (max 560 px). Na wąskim ekranie tego marginesu nie ma — wtedy przycisk
+  // wchodzi do kolumny i staje przy prawej krawędzi, nad licznikiem czasu.
+  const bottomColumnWidth = Math.min(BOTTOM_COLUMN_MAX_WIDTH, adaptiveLayout.width - 24);
+  const hasCaseFilesSideRoom =
+    (adaptiveLayout.width - 24 - bottomColumnWidth) / 2 >=
+    Math.max(mapControlButtonSize, CASE_FILES_BUTTON_MIN_WIDTH) + CASE_FILES_BUTTON_GAP;
   const shouldShowTasksList = isTabletLayout || isTasksPanelExpanded;
   const tasksListMaxHeight = adaptiveLayout.s(220, 180, 300);
   const animatedTasksListMaxHeight = tasksPanelExpansion.interpolate({
@@ -1591,55 +1606,6 @@ export function ExpeditionStageScreen({
       )}
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
-      {/* Akta stoją przy lewej krawędzi, pod przyciskiem centrowania mapy.
-          Przy ukrytej mapie tamten się nie renderuje, więc akta wskakują
-          dokładnie w jego miejsce. Przycisk siedzi WEWNĄTRZ warstwy chrome, bo
-          ma gasnąć razem z nią przy otwartym stanowisku — inaczej unosiłby się
-          nad pełnoekranowym panelem zadania. */}
-      {sessionState.realization.showCaseFiles && sessionState.caseFiles.length > 0 ? (
-        <View
-          className="absolute left-3"
-          style={{
-            top:
-              insets.top +
-              mapControlTopOffset +
-              (sessionState.realization.hideMap ? 0 : mapControlButtonSize + 10),
-          }}
-        >
-          <Pressable
-            testID="case-files-button"
-            accessibilityRole="button"
-            accessibilityLabel={text.caseFiles}
-            className="items-center justify-center rounded-full border active:opacity-90"
-            style={{
-              width: mapControlButtonSize,
-              height: mapControlButtonSize,
-              borderColor: EXPEDITION_THEME.border,
-              backgroundColor: EXPEDITION_THEME.panel,
-            }}
-            onPress={() => setIsCaseFilesOpen(true)}
-          >
-            <CaseFilesIcon
-              color={EXPEDITION_THEME.accentStrong}
-              size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)}
-            />
-          </Pressable>
-          {unlockedCaseFilesCount > 0 ? (
-            <View
-              className="absolute -right-1 -top-1 items-center justify-center rounded-full px-1.5"
-              style={{ minWidth: 18, height: 18, backgroundColor: EXPEDITION_THEME.accent }}
-            >
-              <Text
-                className="text-[10px] font-bold"
-                style={{ color: EXPEDITION_THEME.background }}
-              >
-                {unlockedCaseFilesCount}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <Pressable onPressIn={overlayFlow.handleTestMenuHoldStart} onPressOut={overlayFlow.handleTestMenuHoldEnd}>
           <TopRealizationPanel
@@ -1813,16 +1779,81 @@ export function ExpeditionStageScreen({
           </View>
         ) : null}
 
-        {shouldShowTopLeaderboard ? (
-          <View className="mb-2 w-full max-w-[560px]">
-            <TopLeaderboardStrip
-              entries={sessionState.leaderboard.entries}
-              currentTeamId={sessionState.team.id}
-            />
+        {shouldShowTopLeaderboard || shouldShowCaseFilesButton ? (
+          <View
+            className="w-full"
+            style={{ maxWidth: BOTTOM_COLUMN_MAX_WIDTH, marginBottom: shouldShowTopLeaderboard ? 8 : 0 }}
+          >
+            {shouldShowTopLeaderboard ? (
+              <TopLeaderboardStrip
+                entries={sessionState.leaderboard.entries}
+                currentTeamId={sessionState.team.id}
+              />
+            ) : null}
+
+            {/* Przycisk siedzi WEWNĄTRZ warstwy chrome, żeby gasł razem z nią
+                przy otwartym stanowisku, zamiast unosić się nad panelem zadania. */}
+            {shouldShowCaseFilesButton ? (
+              <View
+                style={
+                  hasCaseFilesSideRoom
+                    ? { position: "absolute", left: "100%", bottom: 0, marginLeft: CASE_FILES_BUTTON_GAP }
+                    : { alignSelf: "flex-end", marginBottom: 8, marginTop: shouldShowTopLeaderboard ? 8 : 0 }
+                }
+              >
+                <Pressable
+                  testID="case-files-button"
+                  accessibilityRole="button"
+                  accessibilityLabel={text.caseFilesButtonLabel}
+                  className="items-center active:opacity-90"
+                  style={{ minWidth: CASE_FILES_BUTTON_MIN_WIDTH }}
+                  onPress={() => setIsCaseFilesOpen(true)}
+                >
+                  <View
+                    className="items-center justify-center rounded-full border"
+                    style={{
+                      width: mapControlButtonSize,
+                      height: mapControlButtonSize,
+                      borderColor: EXPEDITION_THEME.border,
+                      backgroundColor: EXPEDITION_THEME.panel,
+                    }}
+                  >
+                    <CaseFilesIcon
+                      color={EXPEDITION_THEME.accentStrong}
+                      size={adaptiveLayout.s(isTabletLayout ? 24 : 21, 19, 27)}
+                    />
+                    {unlockedCaseFilesCount > 0 ? (
+                      <View
+                        className="absolute -right-1 -top-1 items-center justify-center rounded-full px-1.5"
+                        style={{ minWidth: 18, height: 18, backgroundColor: EXPEDITION_THEME.accent }}
+                      >
+                        <Text
+                          className="text-[10px] font-bold"
+                          style={{ color: EXPEDITION_THEME.background }}
+                        >
+                          {unlockedCaseFilesCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text
+                    numberOfLines={1}
+                    className="mt-1 font-bold uppercase"
+                    style={{
+                      color: EXPEDITION_THEME.accentStrong,
+                      fontSize: adaptiveLayout.fs(isTabletLayout ? 11 : 10, 9, 13),
+                      letterSpacing: 1,
+                    }}
+                  >
+                    {text.caseFilesButtonLabel}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
-        <View className="w-full max-w-[560px]">
+        <View className="w-full" style={{ maxWidth: BOTTOM_COLUMN_MAX_WIDTH }}>
           <BottomCountdownPanel
             remainingLabel={countdown.remainingLabel}
             isCompleted={countdown.isCompleted}
