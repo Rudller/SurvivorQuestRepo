@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GENERAL_OFFER_SLUG } from "@/features/offers/model/offers";
+import { getSiteUrl } from "@/lib/site-url";
 
 /**
  * Short links for printed material: `survivorquest.pl/o/u` and friends.
@@ -42,14 +43,16 @@ const SHORT_LINKS: Record<string, ShortLink> = {
   s: { path: GENERAL_OFFER_PATH, medium: "stoisko", campaign: TRADE_FAIR_CAMPAIGN, source: "targi" },
 };
 
-export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const link = SHORT_LINKS[code.toLowerCase()];
 
   /* An unknown code is a typo in the print run or a code retired after the
      material shipped. Somebody is standing there holding the flyer, so send
      them to the listing rather than showing a 404. */
-  const target = new URL(link?.path ?? "/oferta", request.url);
+  // Baza z getSiteUrl(), NIE z request.url: za Traefikiem Next widzi swój
+  // wewnętrzny adres (https://localhost:3000) i tam odsyłał każdy skan.
+  const target = new URL(link?.path ?? "/oferta", getSiteUrl());
   if (link) {
     target.searchParams.set("utm_source", link.source);
     target.searchParams.set("utm_medium", link.medium);
