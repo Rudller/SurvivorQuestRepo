@@ -5,6 +5,7 @@ export type Scenario = {
   introText: string;
   gameRules: string;
   stationIds: string[];
+  categories: string[];
   sourceTemplateId?: string;
   createdAt: string;
   updatedAt: string;

@@ -6,6 +6,7 @@ import { stationTypeOptions } from "@/features/games/types/station";
 import { groupStationsByCategory } from "@/features/games/station-catalog.utils";
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useCreateScenarioMutation } from "../api/scenario.api";
+import { ScenarioCategoriesField } from "./scenario-categories-field";
 
 interface CreateScenarioFormProps {
   stations: Station[];
@@ -25,6 +26,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
   const [introText, setIntroText] = useState("");
   const [gameRules, setGameRules] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
 
   function toggleSelection(stationId: string) {
@@ -49,7 +51,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
     );
   }
 
-  const isDirty = useIsDirty({ name, description, introText, gameRules, selectedStationIds });
+  const isDirty = useIsDirty({ name, description, introText, gameRules, selectedStationIds, categories });
 
   return (
     <>
@@ -89,12 +91,14 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
                 introText: introText.trim(),
                 gameRules: gameRules.trim(),
                 stationIds: selectedStationIds,
+                categories,
               }).unwrap();
               setName("");
               setDescription("");
               setIntroText("");
               setGameRules("");
               setSelectedStationIds([]);
+              setCategories([]);
               setFormError(null);
               onClose();
             } catch {
@@ -134,6 +138,8 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
+
+            <ScenarioCategoriesField categories={categories} onChange={setCategories} />
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>

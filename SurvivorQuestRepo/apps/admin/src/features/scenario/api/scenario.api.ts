@@ -8,6 +8,7 @@ type CreateScenarioPayload = {
   introText: string;
   gameRules: string;
   stationIds: string[];
+  categories: string[];
 };
 
 type UpdateScenarioPayload = {
@@ -17,6 +18,7 @@ type UpdateScenarioPayload = {
   introText: string;
   gameRules: string;
   stationIds: string[];
+  categories: string[];
 };
 
 type DeleteScenarioPayload = {

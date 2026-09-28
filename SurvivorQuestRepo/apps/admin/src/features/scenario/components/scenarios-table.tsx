@@ -26,21 +26,15 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
     () => new Map(stations.map((station) => [station.id, station])),
     [stations],
   );
-  const scenarioCategoriesById = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    sortedScenarios.forEach((scenario) => {
-      const categories = new Set<string>();
-      scenario.stationIds.forEach((stationId) => {
-        const station = stationById.get(stationId);
-        if (!station) {
-          return;
-        }
-        getStationGroupCategories(station).forEach((category) => categories.add(category));
-      });
-      map.set(scenario.id, categories);
-    });
-    return map;
-  }, [sortedScenarios, stationById]);
+  // Filtr po własnych tagach scenariusza, nie po kategoriach jego stanowisk —
+  // jedno stanowisko „Logika" wrzucało całą grę kryminalną pod „Logika".
+  const scenarioCategoriesById = useMemo(
+    () =>
+      new Map(
+        sortedScenarios.map((scenario) => [scenario.id, new Set(getStationGroupCategories(scenario))]),
+      ),
+    [sortedScenarios],
+  );
   const categoryOptions = useMemo(() => {
     const counts = new Map<string, number>();
     scenarioCategoriesById.forEach((categories) => {
@@ -114,7 +108,7 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
         <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs uppercase tracking-wider text-zinc-500">
-              Filtruj po kategorii stanowisk • Wyniki: {filteredScenarios.length}/{scenarios.length}
+              Filtruj po kategorii • Wyniki: {filteredScenarios.length}/{scenarios.length}
             </span>
             <button
               type="button"
@@ -180,6 +174,18 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
                   <div>
                     <p className="text-sm font-semibold text-zinc-100">{scenario.name}</p>
                     <p className="mt-1 text-xs text-zinc-400">{scenario.description || "Brak opisu scenariusza."}</p>
+                    {scenario.categories?.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {scenario.categories.map((category) => (
+                          <span
+                            key={category}
+                            className="rounded-full border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] text-zinc-300"
+                          >
+                            {category}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">

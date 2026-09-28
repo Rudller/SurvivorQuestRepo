@@ -6,6 +6,7 @@ import type { Station } from "@/features/games/types/station";
 import { groupStationsByCategory } from "@/features/games/station-catalog.utils";
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/scenario.api";
+import { ScenarioCategoriesField } from "./scenario-categories-field";
 
 interface EditScenarioModalProps {
   scenario: Scenario;
@@ -23,6 +24,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
     introText: scenario.introText,
     gameRules: scenario.gameRules,
     stationIds: scenario.stationIds,
+    categories: scenario.categories ?? [],
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -123,6 +125,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                   introText: editValues.introText.trim(),
                   gameRules: editValues.gameRules.trim(),
                   stationIds: editValues.stationIds,
+                  categories: editValues.categories,
                 }).unwrap();
                 onClose();
               } catch {
@@ -139,6 +142,11 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
               />
             </label>
+
+            <ScenarioCategoriesField
+              categories={editValues.categories}
+              onChange={(categories) => setEditValues((prev) => ({ ...prev, categories }))}
+            />
 
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>

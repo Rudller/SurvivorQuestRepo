@@ -199,6 +199,8 @@ model Scenario {
   description      String
   introText        String?
   gameRules        String?
+  /// Tagi scenariusza do filtrowania listy — niezależne od kategorii stanowisk.
+  categories       String[]         @default([])
   sourceTemplateId String?
   realizationId    String?
   createdAt        DateTime         @default(now())

@@ -7,6 +7,7 @@ export type CreateScenarioDto = {
   introText: string;
   gameRules: string;
   stationIds: string[];
+  categories: string[];
 };
 
 export type UpdateScenarioDto = CreateScenarioDto & {
@@ -36,6 +37,32 @@ function ensureOptionalDescription(value: unknown) {
   }
 
   return value.trim();
+}
+
+// Tagi scenariusza, niezależne od kategorii jego stanowisk. Brak pola to pusta
+// lista, a nie błąd — starsze wersje admina go nie wysyłają.
+function sanitizeCategories(value: unknown) {
+  if (typeof value === 'undefined') {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new BadRequestException('Invalid payload');
+  }
+
+  const categories: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw new BadRequestException('Invalid payload');
+    }
+
+    const normalized = item.trim();
+    if (normalized && !categories.includes(normalized)) {
+      categories.push(normalized);
+    }
+  }
+
+  return categories;
 }
 
 function sanitizeStationIds(value: unknown) {
@@ -68,6 +95,7 @@ export function parseCreateScenarioDto(payload: unknown): CreateScenarioDto {
     introText: ensureOptionalDescription(body.introText),
     gameRules: ensureOptionalDescription(body.gameRules),
     stationIds: sanitizeStationIds(body.stationIds),
+    categories: sanitizeCategories(body.categories),
   };
 }
 
@@ -118,6 +146,7 @@ export function toCreateScenarioEntity(dto: CreateScenarioDto): ScenarioEntity {
     introText: dto.introText,
     gameRules: dto.gameRules,
     stationIds: dto.stationIds,
+    categories: dto.categories,
     kind: 'template',
     isTemplate: true,
     isInstance: false,
@@ -137,6 +166,7 @@ export function toUpdatedScenarioEntity(
     introText: dto.introText,
     gameRules: dto.gameRules,
     stationIds: dto.stationIds,
+    categories: dto.categories,
     updatedAt: new Date().toISOString(),
   };
 }
