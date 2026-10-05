@@ -10,9 +10,7 @@ import {
   Query,
   UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { RiskDifficulty, RiskPigType } from '@prisma/client';
 import type { Express } from 'express';
@@ -25,10 +23,7 @@ import {
   RISK_QUIZ_PENDING_DRAW_THROTTLE,
   RISK_QUIZ_POLL_THROTTLE,
 } from '../../common/security/throttle.constants';
-import {
-  assertValidTeamPhotoFile,
-  MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES,
-} from '../mobile/domain/team-photo-upload.helpers';
+import { assertValidTeamPhotoFile } from '../mobile/domain/team-photo-upload.helpers';
 import { RISK_PIG_TYPES } from './risk-quiz.constants';
 import { RiskQuizService } from './risk-quiz.service';
 
@@ -157,11 +152,8 @@ export class RiskQuizController {
 
   @Post('photo')
   @Throttle(MOBILE_PHOTO_UPLOAD_THROTTLE)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: MAX_TEAM_PHOTO_UPLOAD_SIZE_BYTES },
-    }),
-  )
+  // Body (with the file) is parsed by TeamPhotoUploadMiddleware, before the
+  // throttle guard — see the module's configure().
   async submitPhotoTask(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body()

@@ -126,6 +126,9 @@ importers:
       google-translate-api-x:
         specifier: ^10.7.3
         version: 10.7.3
+      multer:
+        specifier: 2.1.0
+        version: 2.1.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
