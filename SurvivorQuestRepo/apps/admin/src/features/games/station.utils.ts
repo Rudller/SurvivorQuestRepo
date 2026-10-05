@@ -326,6 +326,20 @@ export function isWordPuzzleStationType(stationType: StationType) {
   );
 }
 
+// The puzzles whose `question` IS the puzzle — the secret word, the phrase to
+// decode — rather than a question about it. A translator turns such a secret
+// into a different puzzle (ALERT → ALARM), so auto-translate copies it over
+// untouched and a real per-language secret is typed in by hand. Mirrors
+// isPuzzleSecretQuestionStationType in the backend.
+export function isPuzzleSecretQuestionStationType(stationType: StationType) {
+  return (
+    isWordPuzzleStationType(stationType) &&
+    stationType !== "mini-sudoku" &&
+    stationType !== "strong-password" &&
+    stationType !== "memory"
+  );
+}
+
 export function supportsChallengeDifficulty(stationType: StationType) {
   return stationType === "strong-password" || stationType === "mastermind" || stationType === "mini-sudoku";
 }

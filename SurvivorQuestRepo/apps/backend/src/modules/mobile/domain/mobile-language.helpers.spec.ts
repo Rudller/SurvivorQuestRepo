@@ -98,24 +98,24 @@ describe('resolveLocalizedStationPresentation — mechanics never come from a tr
   });
 });
 
-describe('resolveLocalizedStationPresentation — puzzle secrets stay in the base language', () => {
-  // Auto-tłumacz przepisuje `question` zagadki słownej i odbudowuje z niego
-  // answers. Efektem nie jest ta sama zagadka po angielsku, tylko inna zagadka,
-  // do której zapisana odpowiedź nie pasuje. Lepiej pokazać polskie hasło niż
-  // nierozwiązywalne angielskie.
-  it('keeps the base question and answers for a word puzzle', () => {
+describe('resolveLocalizedStationPresentation — puzzle secrets follow the player language', () => {
+  // Hasło zagadki słownej to treść zagadki: angielski gracz ma dostać planszę
+  // z angielskim hasłem (KOMUNIKAT → MESSAGE), a nie polskie litery pod
+  // angielskim opisem. Zepsute maszynowe tłumaczenia haseł blokuje teraz admin
+  // (auto-tłumacz kopiuje hasło bazowe), więc tłumaczenie w bazie jest celowe.
+  it('serves the translated secret of a word puzzle', () => {
     const station = buildStation({
-      type: 'anagram',
+      type: 'boggle',
       quiz: {
-        question: 'WARSZAWA',
-        answers: ['WARSZAWA', 'A', 'B', 'C'],
+        question: 'KOMUNIKAT',
+        answers: ['KOMUNIKAT', 'A', 'B', 'C'],
         correctAnswerIndex: 0,
       },
       translations: {
         english: {
           quiz: {
-            question: 'WARSAW',
-            answers: ['WARSAW', 'A', 'B', 'C'],
+            question: 'MESSAGE',
+            answers: ['MESSAGE', 'A', 'B', 'C'],
             correctAnswerIndex: 0,
           },
         },
@@ -127,8 +127,25 @@ describe('resolveLocalizedStationPresentation — puzzle secrets stay in the bas
       englishPlayerContext(),
     );
 
-    expect(localized.quiz?.question).toBe('WARSZAWA');
-    expect(localized.quiz?.answers[0]).toBe('WARSZAWA');
+    expect(localized.quiz?.question).toBe('MESSAGE');
+    expect(localized.quiz?.answers[0]).toBe('MESSAGE');
+  });
+
+  it('falls back to the base secret when the language has no quiz translation', () => {
+    const station = buildStation({
+      type: 'anagram',
+      quiz: {
+        question: 'ALERT',
+        answers: ['ALERT', 'A', 'B', 'C'],
+        correctAnswerIndex: 0,
+      },
+      translations: { english: { name: 'Incident timeline' } },
+    });
+
+    expect(
+      resolveLocalizedStationPresentation(station, englishPlayerContext()).quiz
+        ?.question,
+    ).toBe('ALERT');
   });
 
   // mini-sudoku opisuje zadanie prozą — plansza nie bierze się z treści pytania,

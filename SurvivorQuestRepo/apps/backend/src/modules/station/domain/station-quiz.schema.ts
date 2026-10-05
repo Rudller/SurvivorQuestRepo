@@ -1,8 +1,5 @@
-import {
-  QUIZ_ANSWER_COUNT,
-  isPuzzleSecretQuestionStationType,
-} from './station.rules';
-import type { StationQuiz, StationType } from './station.types';
+import { QUIZ_ANSWER_COUNT } from './station.rules';
+import type { StationQuiz } from './station.types';
 
 // Pojedyncze źródło prawdy dla pól StationQuiz.
 //
@@ -244,7 +241,6 @@ export function readStationQuizText(raw: unknown): StationQuizText {
 export function mergeStationQuizTranslation(
   base: StationQuiz | undefined,
   candidates: Array<StationQuiz | undefined>,
-  stationType: StationType,
 ): StationQuiz | undefined {
   const translation = candidates.find(
     (candidate) => candidate && Array.isArray(candidate.answers),
@@ -267,18 +263,15 @@ export function mergeStationQuizTranslation(
 
   // Grupa `content` jest atomowa: answers i correctAnswerIndex musza pochodzic
   // z tego samego zrodla, inaczej angielski quiz jest oceniany polskim kluczem.
-  // Dla zagadek, ktorych pytanie JEST trescia lamiglowki, cala grupa zostaje
-  // bazowa - przetlumaczone haslo to inna zagadka, nie ta sama po angielsku.
-  const content = isPuzzleSecretQuestionStationType(stationType)
-    ? base
-    : translation;
-
+  // Dotyczy to tez hasel zagadek slownych: angielski gracz dostaje angielskie
+  // haslo. Maszynowego tlumaczenia hasel pilnuje admin - auto-tlumacz kopiuje
+  // haslo bazowe, a wersje jezykowa wpisuje sie recznie.
   return {
-    question: content.question,
-    answers: content.answers,
-    correctAnswerIndex: content.correctAnswerIndex,
-    ...(content.acceptedAnswers?.length
-      ? { acceptedAnswers: content.acceptedAnswers }
+    question: translation.question,
+    answers: translation.answers,
+    correctAnswerIndex: translation.correctAnswerIndex,
+    ...(translation.acceptedAnswers?.length
+      ? { acceptedAnswers: translation.acceptedAnswers }
       : {}),
     // Nagranie zwykle istnieje tylko po bazowemu; brak wersji per jezyk nie moze
     // wyciszyc stacji.

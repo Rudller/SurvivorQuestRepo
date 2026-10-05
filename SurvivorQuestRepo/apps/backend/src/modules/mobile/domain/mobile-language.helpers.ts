@@ -210,7 +210,6 @@ export function resolveLocalizedStationPresentation(
     quiz: mergeStationQuizTranslation(
       station.quiz,
       translations.map((value) => value?.quiz),
-      station.type,
     ),
   };
 }

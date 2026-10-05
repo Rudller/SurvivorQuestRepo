@@ -37,6 +37,7 @@ import {
   isCompletionCodeRequired,
   isQuizStationType,
   isWordPuzzleStationType,
+  isPuzzleSecretQuestionStationType,
   isImageSupportedStationType,
   isFillBlankStationType,
   isOpenQuizStationType,
@@ -377,7 +378,12 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
       queue({ kind: "description" }, description);
     }
 
-    if (hasQuiz && !questionFilled && type !== "simon" && quizQuestion.trim()) {
+    const puzzleSecretToCopy =
+      hasQuiz && !questionFilled && isPuzzleSecretQuestionStationType(type) && quizQuestion.trim()
+        ? quizQuestion.trim()
+        : undefined;
+
+    if (hasQuiz && !questionFilled && !isPuzzleSecretQuestionStationType(type) && quizQuestion.trim()) {
       queue({ kind: "question" }, quizQuestion);
 
       if (type === "quiz" || type === "audio-quiz") {
@@ -413,28 +419,30 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
       // rebuilds them from the translated question.
     }
 
-    if (texts.length === 0) {
+    if (texts.length === 0 && !puzzleSecretToCopy) {
       setAutoTranslateMessage("Brak treści do przetłumaczenia w języku podstawowym.");
       return;
     }
 
     setAutoTranslateMessage(null);
 
-    let translatedTexts: string[];
+    let translatedTexts: string[] = [];
     try {
-      const response = await translateRealizationTexts({
-        sourceLanguage: baseLanguage,
-        targetLanguage: editingLanguage,
-        texts,
-      }).unwrap();
-      translatedTexts = response.texts;
+      if (texts.length > 0) {
+        const response = await translateRealizationTexts({
+          sourceLanguage: baseLanguage,
+          targetLanguage: editingLanguage,
+          texts,
+        }).unwrap();
+        translatedTexts = response.texts;
+      }
     } catch {
       setAutoTranslateMessage("Nie udało się przetłumaczyć stanowiska. Sprawdź konfigurację auto-tłumacza i spróbuj ponownie.");
       return;
     }
 
     const patch: Partial<StationTranslation> = {};
-    let translatedQuestion: string | undefined;
+    let translatedQuestion: string | undefined = puzzleSecretToCopy;
     const answers = createEmptyQuizAnswers();
     const matchingLeft = new Map<number, string>();
     const matchingRight = new Map<number, string>();

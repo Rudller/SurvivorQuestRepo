@@ -3961,7 +3961,7 @@ describe('RiskQuizService station localisation', () => {
     });
 
     expect(result).toMatchObject({
-      station: { quiz: { caesarShift: 5, question: 'WKDMQH' } },
+      station: { quiz: { caesarShift: 5, question: 'VHFUHW' } },
     });
   });
 
