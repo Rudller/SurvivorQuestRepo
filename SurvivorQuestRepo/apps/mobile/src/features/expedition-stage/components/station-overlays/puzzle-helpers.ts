@@ -387,6 +387,73 @@ export function caesarShift(value: string, shift: number) {
     .join("");
 }
 
+// The cipher is set in a heavy, uppercase face; an average capital is about
+// this wide relative to the font size. Erring wide only costs a slightly
+// smaller text, erring narrow would wrap a word onto a line we didn't count.
+export const CAESAR_TEXT_GLYPH_WIDTH_RATIO = 0.78;
+export const CAESAR_TEXT_LINE_HEIGHT_RATIO = 1.06;
+
+// Greedy word wrap: words never split, a line breaks only between them.
+export function wrapWordsToWidth(words: string[], charWidth: number, maxWidth: number) {
+  const lines: string[][] = [];
+  let lineWidth = 0;
+
+  words.forEach((word) => {
+    const wordWidth = word.length * charWidth;
+    const spaceWidth = charWidth;
+    const current = lines[lines.length - 1];
+    if (current && lineWidth + spaceWidth + wordWidth <= maxWidth) {
+      current.push(word);
+      lineWidth += spaceWidth + wordWidth;
+      return;
+    }
+
+    lines.push([word]);
+    lineWidth = wordWidth;
+  });
+
+  return lines;
+}
+
+/**
+ * The largest font size at which the whole cipher fits the measured panel,
+ * whole words only. A fixed line cap cut the last word off a multi-word phrase
+ * on tablets, and a team cannot decode what it never sees.
+ */
+export function fitCaesarFontSize(input: {
+  text: string;
+  maxFontSize: number;
+  minFontSize: number;
+  letterSpacing: number;
+  width: number;
+  height: number;
+}) {
+  const { maxFontSize, minFontSize, letterSpacing, width, height } = input;
+  if (width <= 0 || height <= 0) {
+    return maxFontSize;
+  }
+
+  const words = input.text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return maxFontSize;
+  }
+
+  for (let fontSize = Math.floor(maxFontSize); fontSize > minFontSize; fontSize -= 1) {
+    const charWidth = fontSize * CAESAR_TEXT_GLYPH_WIDTH_RATIO + letterSpacing;
+    const fitsWidth = words.every((word) => word.length * charWidth <= width);
+    if (!fitsWidth) {
+      continue;
+    }
+
+    const lineCount = wrapWordsToWidth(words, charWidth, width).length;
+    if (lineCount * fontSize * CAESAR_TEXT_LINE_HEIGHT_RATIO <= height) {
+      return fontSize;
+    }
+  }
+
+  return minFontSize;
+}
+
 export function resolveCaesarShift(station: StationPuzzleViewModel) {
   if (
     typeof station.quizCaesarShift === "number" &&

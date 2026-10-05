@@ -10,6 +10,8 @@ import {
   QUIZ_BRAIN_ICON_URI,
   TEXT_PUZZLE_MAX_ATTEMPTS,
   caesarShift,
+  CAESAR_TEXT_LINE_HEIGHT_RATIO,
+  fitCaesarFontSize,
   isGuessableHangmanCharacter,
 } from "../puzzle-helpers";
 import type { StationTestType } from "../types";
@@ -108,6 +110,8 @@ type StationMediaPanelProps = {
   };
 };
 
+const CAESAR_LETTER_SPACING = 5;
+
 export function StationMediaPanel({
   minimalChrome = false,
   stationId,
@@ -136,6 +140,15 @@ export function StationMediaPanel({
   const isMiniSudokuStation = stationType === "mini-sudoku";
   const isWordleStation = stationType === "wordle";
   const caesarEncoded = caesarShift(caesarMedia.decodedText, caesarMedia.shiftValue);
+  const [caesarTextArea, setCaesarTextArea] = useState({ width: 0, height: 0 });
+  const caesarFontSize = fitCaesarFontSize({
+    text: caesarEncoded,
+    maxFontSize: adaptiveLayout.fs(isTabletOverlay ? 72 : 32, 30, 84),
+    minFontSize: 12,
+    letterSpacing: CAESAR_LETTER_SPACING,
+    width: caesarTextArea.width,
+    height: caesarTextArea.height,
+  });
   const [hangmanWordContainerWidth, setHangmanWordContainerWidth] = useState(0);
   const hangmanWords = hangmanMedia.secret.split(/\s+/).filter(Boolean);
   const hangmanDisplayWords = hangmanWords.length > 0 ? hangmanWords : [hangmanMedia.secret];
@@ -287,19 +300,29 @@ export function StationMediaPanel({
           }}
         >
           <View className="flex-1 items-center justify-center">
-            <Text
-              className="text-center font-black tracking-[5px]"
-              style={{
-                color: EXPEDITION_THEME.accentStrong,
-                fontSize: adaptiveLayout.fs(isTabletOverlay ? 72 : 32, 30, 84),
-                lineHeight: adaptiveLayout.s(isTabletOverlay ? 76 : 36, 34, 88),
+            {/* No line cap: the font is sized to the measured area instead, so
+                every word of a long phrase stays on screen. */}
+            <View
+              style={{ flex: 1, alignSelf: "stretch", justifyContent: "center" }}
+              onLayout={(event) => {
+                const { width, height } = event.nativeEvent.layout;
+                setCaesarTextArea((current) =>
+                  current.width === width && current.height === height ? current : { width, height },
+                );
               }}
-              adjustsFontSizeToFit
-              minimumFontScale={0.55}
-              numberOfLines={2}
             >
-              {caesarEncoded}
-            </Text>
+              <Text
+                className="text-center font-black"
+                style={{
+                  color: EXPEDITION_THEME.accentStrong,
+                  fontSize: caesarFontSize,
+                  lineHeight: Math.round(caesarFontSize * CAESAR_TEXT_LINE_HEIGHT_RATIO),
+                  letterSpacing: CAESAR_LETTER_SPACING,
+                }}
+              >
+                {caesarEncoded}
+              </Text>
+            </View>
             <Text
               className="text-center font-semibold"
               style={{

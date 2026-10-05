@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { NavigationBar } from "expo-navigation-bar";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
@@ -408,6 +409,8 @@ function resolvePollErrorDetail(error: unknown): string {
   return `${message || "Unknown error"} • ${timeLabel}`;
 }
 
+const KEEP_AWAKE_TAG = "sq-realization";
+
 export function MobileApp() {
   const [onboardingSession, setOnboardingSession] = useState<OnboardingSession | null>(null);
   const [isHydratingSession, setIsHydratingSession] = useState(true);
@@ -452,6 +455,21 @@ export function MobileApp() {
   const statusBarStyle: "light" | "dark" = activeThemeMode === "dark" ? "light" : "dark";
   const adaptiveLayout = useAdaptiveLayout();
   const introLabelFontSize = adaptiveLayout.fs(adaptiveLayout.isTablet ? 13 : 11, 10, 16);
+  const hasJoinedRealization = onboardingSession !== null;
+
+  // Once a tablet has joined a realization the screen must not go dark: it sits
+  // on the waiting screen until the start, and mid-game a team reading a clue or
+  // walking between stations would otherwise come back to a lock screen.
+  useEffect(() => {
+    if (!hasJoinedRealization) {
+      return;
+    }
+
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => undefined);
+    return () => {
+      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
+    };
+  }, [hasJoinedRealization]);
 
   useEffect(() => {
     if (Platform.OS !== "android") {
