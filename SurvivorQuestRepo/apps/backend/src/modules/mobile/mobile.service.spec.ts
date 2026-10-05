@@ -1940,6 +1940,27 @@ describe('MobileService realization reset', () => {
       pendingStationLaunch: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
+      pointsQrCodeClaim: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      teamPhoto: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskOpenDraw: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskChatMessage: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskPig: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskPigEffect: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      riskPigGrant: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
 
@@ -1950,6 +1971,60 @@ describe('MobileService realization reset', () => {
     const service = buildMobileService(prisma, realizationService);
     return { service, prisma, realizationService };
   }
+
+  function arrangeRealization(
+    prisma: ReturnType<typeof createService>['prisma'],
+    realizationService: ReturnType<typeof createService>['realizationService'],
+  ) {
+    realizationService.listRealizations.mockResolvedValue([
+      {
+        id: 'realization-1',
+        companyName: 'Firma',
+        introText: null,
+        gameRules: null,
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        locationRequired: true,
+        joinCode: 'JOIN01',
+        teamCount: 0,
+        stationIds: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        scenarioStations: [],
+      },
+    ]);
+    prisma.realization.findMany.mockResolvedValue([
+      { id: 'realization-1', locationRequired: true },
+    ]);
+    prisma.realization.update.mockResolvedValue({ id: 'realization-1' });
+  }
+
+  // Teams keep their ids across a reset, so anything keyed by team id that
+  // survives it leaks into the real game: a bonus claimed while testing is
+  // "already claimed" and its points come back on the next recalculation, and
+  // test photos end up in the client's gallery.
+  it('clears bonus QR claims, photos and Ryzykanci runtime state', async () => {
+    const { service, prisma, realizationService } = createService();
+    arrangeRealization(prisma, realizationService);
+
+    await service.resetMobileAdminRealization('realization-1');
+
+    const byRealization = { where: { realizationId: 'realization-1' } };
+    expect(prisma.pointsQrCodeClaim.deleteMany).toHaveBeenCalledWith(
+      byRealization,
+    );
+    expect(prisma.teamPhoto.deleteMany).toHaveBeenCalledWith(byRealization);
+    expect(prisma.riskChatMessage.deleteMany).toHaveBeenCalledWith(
+      byRealization,
+    );
+    expect(prisma.riskPig.deleteMany).toHaveBeenCalledWith(byRealization);
+    expect(prisma.riskPigEffect.deleteMany).toHaveBeenCalledWith(byRealization);
+    expect(prisma.riskPigGrant.deleteMany).toHaveBeenCalledWith(byRealization);
+    expect(prisma.riskOpenDraw.deleteMany).toHaveBeenCalledWith({
+      where: { team: { realizationId: 'realization-1' } },
+    });
+  });
 
   it('clears risk-quiz attempts so a reset realization has no pre-attempted cards', async () => {
     const { service, prisma, realizationService } = createService();

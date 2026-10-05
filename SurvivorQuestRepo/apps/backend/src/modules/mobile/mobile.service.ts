@@ -3036,6 +3036,13 @@ export class MobileService {
       deletedRiskAttempts,
       deletedRiskPendingDraws,
       deletedPendingStationLaunches,
+      deletedPointsQrClaims,
+      deletedTeamPhotos,
+      deletedRiskOpenDraws,
+      deletedRiskChatMessages,
+      deletedRiskPigs,
+      deletedRiskPigEffects,
+      deletedRiskPigGrants,
     ] = await this.prisma.$transaction([
       this.prisma.teamAssignment.deleteMany({
         where: { realizationId: realization.id },
@@ -3070,6 +3077,36 @@ export class MobileService {
       }),
       this.prisma.pendingStationLaunch.deleteMany({
         where: { team: { realizationId: realization.id } },
+      }),
+      // Bonus QR claims hang off the team id, which survives the reset — left
+      // in, a bonus scanned while testing reads as "already claimed" in the
+      // real game, and recalculateTeamPoints adds its points straight back.
+      this.prisma.pointsQrCodeClaim.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      // The client's gallery is built from these rows, so test selfies and
+      // task photos would otherwise end up in it. Only the rows go; the files
+      // stay in R2.
+      this.prisma.teamPhoto.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      // Ryzykanci runtime state: a drawn card still open, the chat, and the
+      // pigs with their effects and grant ticks all belong to the run, not to
+      // the realization's setup.
+      this.prisma.riskOpenDraw.deleteMany({
+        where: { team: { realizationId: realization.id } },
+      }),
+      this.prisma.riskChatMessage.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.riskPig.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.riskPigEffect.deleteMany({
+        where: { realizationId: realization.id },
+      }),
+      this.prisma.riskPigGrant.deleteMany({
+        where: { realizationId: realization.id },
       }),
     ]);
 
@@ -3113,6 +3150,13 @@ export class MobileService {
         deletedRiskAttempts: deletedRiskAttempts.count,
         deletedRiskPendingDraws: deletedRiskPendingDraws.count,
         deletedPendingStationLaunches: deletedPendingStationLaunches.count,
+        deletedPointsQrClaims: deletedPointsQrClaims.count,
+        deletedTeamPhotos: deletedTeamPhotos.count,
+        deletedRiskOpenDraws: deletedRiskOpenDraws.count,
+        deletedRiskChatMessages: deletedRiskChatMessages.count,
+        deletedRiskPigs: deletedRiskPigs.count,
+        deletedRiskPigEffects: deletedRiskPigEffects.count,
+        deletedRiskPigGrants: deletedRiskPigGrants.count,
       },
     });
 
