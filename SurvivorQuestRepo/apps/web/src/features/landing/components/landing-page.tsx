@@ -160,7 +160,7 @@ export function LandingPage({
             <SectionHeading
               eyebrow="Realizacje"
               title="Jak to wyglądało u innych."
-              description="Dwa przykłady eventów, które prowadziliśmy — z tym, czego potrzebował klient, i tym, co z tego wyszło."
+              description="Trzy przykłady eventów, które prowadziliśmy — z tym, czego potrzebował klient, i tym, co z tego wyszło."
             />
             <div className="mt-10 grid gap-10">
               {CASE_STUDIES.map((caseStudy) => (
@@ -169,6 +169,11 @@ export function LandingPage({
                   <p className="mt-3 text-sm leading-relaxed text-ivory-muted">
                     <span className="font-medium text-ivory">Potrzeba:</span> {caseStudy.challenge}
                   </p>
+                  {caseStudy.course ? (
+                    <p className="mt-2 text-sm leading-relaxed text-ivory-muted">
+                      <span className="font-medium text-ivory">Przebieg:</span> {caseStudy.course}
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-sm leading-relaxed text-ivory-muted">
                     <span className="font-medium text-ivory">Efekt:</span> {caseStudy.outcome}
                   </p>
@@ -178,6 +183,21 @@ export function LandingPage({
                         <li key={metric.label} className="rounded-xl bg-graphite px-4 py-5">
                           <p className="text-2xl font-semibold leading-tight text-ivory">{metric.value}</p>
                           <p className="mt-1.5 text-xs leading-relaxed text-ivory-faint">{metric.label}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {caseStudy.photos.length > 0 ? (
+                    <ul className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+                      {caseStudy.photos.map((photo) => (
+                        <li key={photo.src} className="relative aspect-[2/3] overflow-hidden rounded-xl bg-graphite">
+                          <Image
+                            src={photo.src}
+                            alt={photo.alt}
+                            fill
+                            sizes="(min-width: 1024px) 320px, 33vw"
+                            className="object-cover"
+                          />
                         </li>
                       ))}
                     </ul>

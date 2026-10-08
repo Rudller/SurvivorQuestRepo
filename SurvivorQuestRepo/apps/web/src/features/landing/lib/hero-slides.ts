@@ -69,8 +69,8 @@ export const HERO_SLIDES: readonly HeroSlide[] = [
     secondaryCta: { label: "Więcej o grze terenowej", href: "#gra-terenowa" },
   },
   {
-    src: "/hero/gra-hotelowa.jpg",
-    alt: "Uczestnicy gry hotelowej skanują kod QR na ścianie lobby, na tablecie widać ranking drużyn.",
+    src: "/hero/gra-hotelowa-aura.jpg",
+    alt: "Ekran z intro gry hotelowej i tablety drużyn przygotowane na stole w sali.",
     label: "Gra hotelowa",
     eyebrow: "Gra hotelowa i w obiekcie",
     title: "Integracja w hotelu lub centrum konferencyjnym, niezależna od pogody.",
@@ -85,8 +85,8 @@ export const HERO_SLIDES: readonly HeroSlide[] = [
     secondaryCta: { label: "Więcej o grze hotelowej", href: "#gra-hotelowa" },
   },
   {
-    src: "/hero/ryzykanci.png",
-    alt: "Drużyna pochylona nad tabletem i kartami Ryzykantów przy stole w sali konferencyjnej.",
+    src: "/hero/ryzykanci-stol.jpg",
+    alt: "Tablet z zasadami Ryzykantów i pudełko z kartami do gry na stole.",
     label: "Ryzykanci",
     eyebrow: "Ryzykanci — quiz drużynowy",
     title: "Wieczorny finał integracji: karty, kategorie i ryzykowanie punktów.",

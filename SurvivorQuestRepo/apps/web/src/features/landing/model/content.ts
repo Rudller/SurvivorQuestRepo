@@ -103,15 +103,18 @@ export const PROCESS_STEPS = [
 /**
  * Proof, not decoration. `metrics` replaced a row of grey tiles that literally
  * read "Zdjęcie: start drużyn" — captions standing in for photos that were
- * never taken. Until real photos exist, hard figures carry the section; add a
- * `photos` field back only when there are actual images to put in it.
+ * never taken. `photos` holds only real shots from the event itself (portrait,
+ * exported to `public/realizacje`); leave it empty rather than fill it with stock.
  */
 type CaseStudy = {
   title: string;
   challenge: string;
+  /** How the game itself went; optional, shown between the need and the result. */
+  course?: string;
   outcome: string;
   /** Hard figures shown under the story; empty until the numbers are confirmed. */
   metrics: readonly { value: string; label: string }[];
+  photos: readonly { src: string; alt: string }[];
 };
 
 export const CASE_STUDIES: readonly CaseStudy[] = [
@@ -122,14 +125,37 @@ export const CASE_STUDIES: readonly CaseStudy[] = [
     outcome:
       "Drużyny ruszyły równolegle różnymi trasami, a ranking na żywo utrzymał rywalizację do ostatniego zadania. Finał z ogłoszeniem wyników zamknął dzień na wspólnym ekranie.",
     metrics: [],
+    photos: [],
   },
   {
-    title: "Wyjazd firmowy w hotelu z wieczornymi Ryzykantami",
+    title: "Gra hotelowa w całym obiekcie",
     challenge:
-      "Po całym dniu konferencji goście potrzebowali atrakcji, która wciągnie wszystkich, a nie tylko najgłośniejszy stolik.",
+      "Hotel miał być planszą, a nie tylko tłem: gra miała wykorzystać cały obiekt, od lobby i baru po korytarze i sale konferencyjne.",
+    course:
+      "Start w sali konferencyjnej: intro gry na dużym ekranie i tablety rozdane drużynom. Potem zespoły ruszyły po hotelu — każde stanowisko to tabliczka z kodem QR, a po zeskanowaniu zadanie związane z tym konkretnym miejscem. Ranking aktualizował się na żywo, więc do końca było wiadomo, kto goni kogo.",
     outcome:
-      "Krótka gra w obiekcie między sesjami rozgrzała zespoły, a wieczorny quiz z ryzykowaniem punktów wyrównał szanse — o zwycięstwie zdecydowała ostatnia karta.",
+      "Cały hotel zamienił się w planszę gry. Pytania i zadania ułożyliśmy pod jego infrastrukturę, więc odpowiedzi trzeba było znaleźć na miejscu, a nie w telefonie.",
     metrics: [],
+    photos: [
+      { src: "/realizacje/aura-hotel-1.jpg", alt: "Drużyna pochylona nad tabletem w hotelowym korytarzu podczas gry hotelowej." },
+      { src: "/realizacje/aura-hotel-2.jpg", alt: "Uczestnik gry przy barze w lobby rozwiązuje zadanie na tablecie." },
+      { src: "/realizacje/aura-hotel-3.jpg", alt: "Stanowisko gry hotelowej: tabliczka z kodem QR wśród roślin w hotelu." },
+    ],
+  },
+  {
+    title: "Ryzykanci w sali konferencyjnej",
+    challenge:
+      "Klient chciał gry dla całej sali naraz: bez wychodzenia w teren, przy stołach, z rywalizacją, w którą wciągnie się każda drużyna, a nie tylko najgłośniejszy stolik.",
+    course:
+      "Na stołach leżały talie kart z kodami QR, pogrupowane w kategorie i trzy poziomy trudności. Drużyny wybierały kartę, skanowały ją tabletem i decydowały, ile chcą zaryzykować: im trudniejsze pytanie, tym więcej punktów do zdobycia i do stracenia.",
+    outcome:
+      "Ranking zmieniał się po każdej karcie, więc emocje trzymały do samego końca — o zwycięstwie zdecydowała ostatnia karta.",
+    metrics: [],
+    photos: [
+      { src: "/realizacje/ryzykanci-1.jpg", alt: "Stanowisko Ryzykantów: pudełko z kartami i tablet z zasadami gry na stoliku." },
+      { src: "/realizacje/ryzykanci-2.jpg", alt: "Uczestnik rozwiązuje na tablecie zadanie z łączeniem par na czas." },
+      { src: "/realizacje/ryzykanci-3.jpg", alt: "Uczestnik odszyfrowuje hasło na tablecie, obok na stole karty z kodami QR." },
+    ],
   },
 ];
 
