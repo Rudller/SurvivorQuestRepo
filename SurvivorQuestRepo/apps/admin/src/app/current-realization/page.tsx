@@ -30,6 +30,7 @@ import { CurrentRealizationTeamTasksPanel } from "@/features/current-realization
 import { CurrentRealizationRiskChatPanel } from "@/features/current-realization/components/current-realization-risk-chat-panel";
 import { CurrentRealizationRiskPigsPanel } from "@/features/current-realization/components/current-realization-risk-pigs-panel";
 import { useGetRiskTeamStatusQuery, useResetRiskTeamAttemptsMutation } from "@/features/risk-quiz/api/risk-quiz.api";
+import { SystemHealthPanel } from "@/features/system-health/components/system-health-panel";
 import { AdminShell } from "@/shared/components/admin-shell";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
@@ -543,6 +544,8 @@ export default function CurrentRealizationPage() {
             ) : null}
           </div>
         )}
+
+        <SystemHealthPanel />
 
         {isOverviewLoading && <p className="mt-4 text-sm text-zinc-400">Ładowanie podglądu realizacji...</p>}
 
