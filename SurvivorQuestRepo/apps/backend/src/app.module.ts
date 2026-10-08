@@ -16,6 +16,7 @@ import { RealizationModule } from './modules/realization/realization.module';
 import { RiskQuizModule } from './modules/risk-quiz/risk-quiz.module';
 import { ScenarioModule } from './modules/scenario/scenario.module';
 import { StationModule } from './modules/station/station.module';
+import { SystemModule } from './modules/system/system.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -53,6 +54,7 @@ import { UsersModule } from './modules/users/users.module';
     MobileModule,
     GalleryModule,
     RiskQuizModule,
+    SystemModule,
   ],
   controllers: [AppController],
   providers: [

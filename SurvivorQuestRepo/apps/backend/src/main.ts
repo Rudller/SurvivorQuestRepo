@@ -3,6 +3,8 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import type { Application } from 'express';
 import { AppModule } from './app.module';
+import { createRequestMetricsMiddleware } from './modules/system/request-metrics.middleware';
+import { SystemMetricsService } from './modules/system/system-metrics.service';
 import { HttpExceptionFilter } from './common/http/http-exception.filter';
 import {
   getCorsOriginAllowlist,
@@ -112,6 +114,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use(createRequestMetricsMiddleware(app.get(SystemMetricsService)));
   app.use(cookieParser());
   await app.listen(process.env.PORT ?? 3001);
 }
