@@ -11,6 +11,8 @@ import {
   applyCompletedTaskState,
   applyPendingTaskMutationsState,
   isPhotoSubmissionRecorded,
+  createRequestTimeoutError,
+  isImmediatelyRetriableError,
   isRetriableNetworkError,
   runRequestWithRetry,
 } from "./use-expedition-session";
@@ -275,50 +277,76 @@ describe("network retry helpers", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it("treats timeout as retriable and succeeds on next attempt", async () => {
-    const request = jest.fn<Promise<string>, [AbortSignal]>(() => {
-      if (request.mock.calls.length === 1) {
-        return new Promise<string>((resolve) => {
-          setTimeout(() => {
-            resolve("late");
-          }, 20);
-        });
-      }
-      return Promise.resolve("ok");
-    });
+  // Awaria 2026-10-06: timeout znaczy, że serwer dostał żądanie i nie nadąża.
+  // Natychmiastowe ponowienie tylko dokłada mu pracy — żądanie wraca w
+  // następnym takcie albo przez kolejkę zaległych akcji.
+  it("does not retry a timed out request immediately", async () => {
+    const request = jest.fn<Promise<string>, [AbortSignal]>(
+      () => new Promise<string>(() => {}),
+    );
 
-    const result = await runRequestWithRetry({
-      request,
-      timeoutMs: 5,
-      timeoutMessage: "timed out",
-      retryDelaysMs: [1],
-    });
+    await expect(
+      runRequestWithRetry({
+        request,
+        timeoutMs: 5,
+        timeoutMessage: "Przekroczono czas oczekiwania na odpowiedź serwera.",
+        retryDelaysMs: [1, 1],
+      }),
+    ).rejects.toThrow("Przekroczono czas oczekiwania");
 
-    expect(result).toBe("ok");
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it("aborts a timed out attempt before retrying", async () => {
-    const request = jest.fn<Promise<string>, [AbortSignal]>((signal) => {
-      if (request.mock.calls.length === 1) {
-        return new Promise<string>((resolve, reject) => {
+  it("aborts a timed out attempt", async () => {
+    const request = jest.fn<Promise<string>, [AbortSignal]>(
+      (signal) =>
+        new Promise<string>((_resolve, reject) => {
           signal.addEventListener("abort", () => reject(new Error("aborted")));
-        });
-      }
+        }),
+    );
 
-      return Promise.resolve("ok");
-    });
+    await expect(
+      runRequestWithRetry({
+        request,
+        timeoutMs: 5,
+        timeoutMessage: "timed out",
+        retryDelaysMs: [1],
+      }),
+    ).rejects.toThrow("timed out");
 
-    const result = await runRequestWithRetry({
-      request,
-      timeoutMs: 5,
-      timeoutMessage: "timed out",
-      retryDelaysMs: [1],
-    });
-
-    expect(result).toBe("ok");
-    expect(request).toHaveBeenCalledTimes(2);
     expect(request.mock.calls[0]?.[0].aborted).toBe(true);
+  });
+
+  it.each(["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504"])(
+    "does not retry an overloaded server response (%s) immediately",
+    async (message) => {
+      const request = jest
+        .fn<Promise<string>, [AbortSignal]>()
+        .mockRejectedValue(new Error(message));
+
+      await expect(
+        runRequestWithRetry({
+          request,
+          timeoutMs: 100,
+          timeoutMessage: "timeout",
+          retryDelaysMs: [1, 1],
+        }),
+      ).rejects.toThrow(message);
+
+      expect(request).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("recognizes a timeout in any UI language as worth queueing", () => {
+    for (const message of [
+      "Przekroczono czas oczekiwania na odpowiedź serwera.",
+      "Перевищено час очікування відповіді сервера.",
+      "Server response timeout exceeded.",
+    ]) {
+      const error = createRequestTimeoutError(message);
+      expect(isRetriableNetworkError(error)).toBe(true);
+      expect(isImmediatelyRetriableError(error)).toBe(false);
+    }
   });
 
   it("does not retry when retry delays are empty", async () => {
@@ -340,6 +368,13 @@ describe("network retry helpers", () => {
     expect(isRetriableNetworkError(new Error("Failed to fetch"))).toBe(true);
     expect(isRetriableNetworkError(new Error("HTTP 503"))).toBe(true);
     expect(isRetriableNetworkError(new Error("HTTP 400"))).toBe(false);
+  });
+
+  it("retries immediately only when the request likely never reached the server", () => {
+    expect(isImmediatelyRetriableError(new Error("Network request failed"))).toBe(true);
+    expect(isImmediatelyRetriableError(new Error("Failed to fetch"))).toBe(true);
+    expect(isImmediatelyRetriableError(new Error("HTTP 503"))).toBe(false);
+    expect(isImmediatelyRetriableError(new Error("HTTP 400"))).toBe(false);
   });
 
   it("treats HTTP 403 as an invalid mobile session", () => {

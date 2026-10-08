@@ -42,6 +42,12 @@ const PHOTO_UPLOAD_STATUS_CHECK_TIMEOUT_MS = 4_000;
 const PHOTO_UPLOAD_STATUS_CHECK_DELAYS_MS = [0, 1_500, 3_000] as const;
 const PENDING_TASK_MUTATIONS_STORAGE_PREFIX = "sq.mobile.pending-task-mutations.v1";
 const PENDING_SYNC_RETRY_INTERVAL_MS = 3_000;
+const PENDING_SYNC_MAX_RETRY_INTERVAL_MS = 60_000;
+
+/** ±20%, żeby kilkanaście tabletów nie odpytywało serwera w tej samej chwili. */
+function withJitter(ms: number) {
+  return Math.round(ms * (0.8 + Math.random() * 0.4));
+}
 
 type PendingTaskMutation =
   | {
@@ -213,9 +219,32 @@ function wait(ms: number) {
   });
 }
 
+/**
+ * Timeout rozpoznawany po znaczniku, nie po treści — komunikat jest tłumaczony
+ * („Przekroczono czas oczekiwania…”), więc szukanie w nim słowa „timeout”
+ * działało tylko po angielsku: w polskiej grze akcja zadania, która nie
+ * doczekała się odpowiedzi, kończyła się błędem zamiast trafić do kolejki.
+ * Znacznik zamiast podklasy Error, bo instanceof na podklasach wbudowanych
+ * typów bywa zawodny po transpilacji.
+ */
+export function createRequestTimeoutError(message: string) {
+  return Object.assign(new Error(message), { isRequestTimeout: true as const });
+}
+
+export function isRequestTimeoutError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error as Error & { isRequestTimeout?: boolean }).isRequestTimeout === true
+  );
+}
+
 export function isRetriableNetworkError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
+  }
+
+  if (isRequestTimeoutError(error)) {
+    return true;
   }
 
   const message = error.message.toLowerCase();
@@ -233,6 +262,27 @@ export function isRetriableNetworkError(error: unknown) {
   );
 }
 
+/**
+ * Błędy, po których warto ponowić od razu: żądanie najpewniej nie dotarło do
+ * serwera (zerwane połączenie). Timeout, 429 i 5xx znaczą coś odwrotnego —
+ * serwer dostał żądanie i nie nadąża — więc natychmiastowe ponowienie tylko
+ * dokłada mu pracy. Tak 6.10.2026 ponowienia podwoiły ruch zadławionego
+ * backendu. Takie żądania wracają w następnym takcie odpytywania albo przez
+ * kolejkę zaległych akcji (isRetriableNetworkError).
+ */
+export function isImmediatelyRetriableError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("network request failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("network error")
+  );
+}
+
 function withRequestTimeout<T>(
   request: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
@@ -244,7 +294,7 @@ function withRequestTimeout<T>(
     const timeoutId = setTimeout(() => {
       isSettled = true;
       abortController.abort();
-      reject(new Error(timeoutMessage));
+      reject(createRequestTimeoutError(timeoutMessage));
     }, timeoutMs);
 
     Promise.resolve().then(() => request(abortController.signal)).then(
@@ -288,7 +338,7 @@ export async function runRequestWithRetry<T>({
       return await withRequestTimeout(request, timeoutMs, timeoutMessage);
     } catch (error) {
       lastError = error;
-      if (attempt >= retryDelaysMs.length || !isRetriableNetworkError(error)) {
+      if (attempt >= retryDelaysMs.length || !isImmediatelyRetriableError(error)) {
         throw error;
       }
       await wait(retryDelaysMs[attempt]);
@@ -876,36 +926,89 @@ export function useExpeditionSession(
     }
   }, [offlineMode, pendingTaskMutations, selectedLanguage, session.apiBaseUrl, session.sessionToken, text]);
 
+  // Interwały czytają najnowsze callbacki z refów. Wcześniej efekt zależał od
+  // nich wprost, a one zmieniają się przy każdej zmianie kolejki zaległych
+  // akcji — każda zmiana kasowała interwał i od razu strzelała dodatkowym
+  // pełnym session/state.
+  const flushPendingTaskMutationsRef = useRef(flushPendingTaskMutations);
+  flushPendingTaskMutationsRef.current = flushPendingTaskMutations;
+  const refreshSessionStateRef = useRef(refreshSessionState);
+  refreshSessionStateRef.current = refreshSessionState;
+
+  // Jedno odpytanie naraz: kolejny takt (albo akcja gracza) czeka na trwające
+  // zamiast dokładać równoległe.
+  const sessionSyncInFlightRef = useRef<Promise<unknown> | null>(null);
+  const syncSessionState = useCallback(() => {
+    if (!sessionSyncInFlightRef.current) {
+      sessionSyncInFlightRef.current = flushPendingTaskMutationsRef
+        .current()
+        .then(() => refreshSessionStateRef.current())
+        .finally(() => {
+          sessionSyncInFlightRef.current = null;
+        });
+    }
+    return sessionSyncInFlightRef.current;
+  }, []);
+
   useEffect(() => {
     if (offlineMode) {
       setIsLoading(false);
       return;
     }
 
-    void flushPendingTaskMutations().then(() => refreshSessionState());
+    void syncSessionState();
 
     const interval = setInterval(() => {
-      void flushPendingTaskMutations().then(() => refreshSessionState());
+      void syncSessionState();
     }, SESSION_POLLING_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);
     };
-  }, [flushPendingTaskMutations, offlineMode, refreshSessionState]);
+    // Nowe odpytanie od razu tylko przy zmianie sesji albo języka (treści
+    // przychodzą z serwera przetłumaczone), nie przy każdej zmianie kolejki.
+  }, [offlineMode, selectedLanguage, session.apiBaseUrl, session.sessionToken, syncSessionState]);
 
+  const hasPendingTaskMutations = pendingTaskMutations.length > 0;
   useEffect(() => {
-    if (offlineMode || pendingTaskMutations.length === 0) {
+    if (offlineMode || !hasPendingTaskMutations) {
       return;
     }
 
-    const interval = setInterval(() => {
-      void flushPendingTaskMutations().then(() => refreshSessionState());
-    }, PENDING_SYNC_RETRY_INTERVAL_MS);
+    // Backoff: przy nieudanym wysłaniu kolejki kolejne próby coraz rzadziej
+    // (3 s → 6 s → … → 60 s), z rozrzutem, żeby tablety nie biły równo.
+    // Stan sesji dopiero po udanym wysłaniu — przy padniętym serwerze nie ma
+    // po co go dobijać pełnym odczytem co 3 s.
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let delayMs = PENDING_SYNC_RETRY_INTERVAL_MS;
+
+    const scheduleNext = () => {
+      timeoutId = setTimeout(() => {
+        void flushPendingTaskMutationsRef.current().then((errorMessage) => {
+          if (cancelled) {
+            return;
+          }
+          if (errorMessage) {
+            delayMs = Math.min(delayMs * 2, PENDING_SYNC_MAX_RETRY_INTERVAL_MS);
+          } else {
+            delayMs = PENDING_SYNC_RETRY_INTERVAL_MS;
+            void refreshSessionStateRef.current();
+          }
+          scheduleNext();
+        });
+      }, withJitter(delayMs));
+    };
+
+    scheduleNext();
 
     return () => {
-      clearInterval(interval);
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [flushPendingTaskMutations, offlineMode, pendingTaskMutations.length, refreshSessionState]);
+  }, [hasPendingTaskMutations, offlineMode]);
 
   const startStationTask = useCallback(
     async (stationId: string, startedAt?: string) => {

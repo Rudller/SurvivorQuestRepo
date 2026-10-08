@@ -914,6 +914,7 @@ export function ExpeditionStageScreen({
   const [centerPlayerSignal, setCenterPlayerSignal] = useState(0);
   const hasAutoSelectedStationRef = useRef(false);
   const autoLocationSyncTimestampRef = useRef(0);
+  const autoLocationSyncInFlightRef = useRef(false);
   const uiChromeOpacity = useAnimatedValue(1);
   const tasksPanelExpansion = useAnimatedValue(isTabletLayout ? 1 : 0);
   const { playerLocation, requestCurrentLocation } = usePlayerLocation();
@@ -1028,8 +1029,17 @@ export function ExpeditionStageScreen({
     }
   }, [selectedStationId, stationIds]);
 
+  const isServerSessionEnded = sessionState.endState.isEnded;
   useEffect(() => {
-    if (!playerLocation) {
+    // Po końcu gry pozycja nikomu się nie przyda, a tablet zostawiony na
+    // stole wysyłałby ją bez końca.
+    if (!playerLocation || isServerSessionEnded) {
+      return;
+    }
+
+    // Najwyżej jedno żądanie naraz: przy wolnym serwerze kolejne pingi nie
+    // nakładają się na niedokończone.
+    if (autoLocationSyncInFlightRef.current) {
       return;
     }
 
@@ -1040,13 +1050,18 @@ export function ExpeditionStageScreen({
     }
 
     autoLocationSyncTimestampRef.current = nowTimestamp;
+    autoLocationSyncInFlightRef.current = true;
 
-    void syncTeamLocation(playerLocation).then((message) => {
-      if (message) {
-        setActionError(message);
-      }
-    });
-  }, [playerLocation, syncTeamLocation]);
+    void syncTeamLocation(playerLocation)
+      .then((message) => {
+        if (message) {
+          setActionError(message);
+        }
+      })
+      .finally(() => {
+        autoLocationSyncInFlightRef.current = false;
+      });
+  }, [isServerSessionEnded, playerLocation, syncTeamLocation]);
 
   useEffect(() => {
     if (!isSessionInvalid) {
