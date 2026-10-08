@@ -126,10 +126,6 @@ export function renderLogTitle(log: EventLogEntry, stationName: string | null) {
     return "Przeliczono punkty drużyny";
   }
 
-  if (log.eventType === "team_location_updated") {
-    return "Zaktualizowano lokalizację drużyny";
-  }
-
   return log.eventType.replaceAll("_", " ");
 }
 

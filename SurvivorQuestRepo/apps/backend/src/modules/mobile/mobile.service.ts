@@ -24,6 +24,7 @@ import {
   hashOpaqueToken,
 } from '../../shared/lib/opaque-token';
 import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
+import { VISIBLE_EVENT_LOG_WHERE } from '../../shared/lib/event-log';
 import {
   isCaseFileUnlocked,
   toMobileCaseFilePayload,
@@ -31,8 +32,13 @@ import {
 import { generateRandomCode } from '../../shared/lib/random-code';
 import {
   RealizationService,
+  type RealizationEntity,
   type RealizationStatus,
 } from '../realization/realization.service';
+import {
+  fromPrismaRealizationStatus,
+  resolveRealizationStatus,
+} from '../realization/mappers/realization.mapper';
 import { StationService, type StationEntity } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
 import {
@@ -1282,9 +1288,7 @@ export class MobileService {
     heading?: number;
     at?: string;
   }) {
-    const { assignment, team, realization } = await this.requireSession(
-      input.sessionToken,
-    );
+    const { team } = await this.requireSession(input.sessionToken);
 
     if (!isLatitude(input.lat) || !isLongitude(input.lng)) {
       throw new BadRequestException('Invalid coordinates');
@@ -1296,13 +1300,15 @@ export class MobileService {
       max: LOCATION_MAX_ACCURACY_METERS,
       field: 'accuracy',
     });
-    const speed = parseOptionalNumberInRange({
+    // speed i heading szły tylko do wpisu w EventLogu, którego już nie ma.
+    // Walidacja zostaje, żeby kontrakt API (400 przy złej wartości) się nie zmienił.
+    parseOptionalNumberInRange({
       value: input.speed,
       min: 0,
       max: LOCATION_MAX_SPEED_MPS,
       field: 'speed',
     });
-    const heading = parseOptionalNumberInRange({
+    parseOptionalNumberInRange({
       value: input.heading,
       min: 0,
       max: 360,
@@ -1341,22 +1347,8 @@ export class MobileService {
       },
     });
 
-    await this.emitEvent({
-      realizationId: realization.id,
-      teamId: team.id,
-      actorType: EventActorType.MOBILE_DEVICE,
-      actorId: assignment.deviceId,
-      eventType: 'team_location_updated',
-      payload: {
-        lat: input.lat,
-        lng: input.lng,
-        accuracy: accuracy ?? null,
-        speed: speed ?? null,
-        heading: heading ?? null,
-        at: locationAt,
-        serverReceivedAt,
-      },
-    });
+    // Bez wpisu w EventLogu: pozycja zmienia się co kilka sekund, zalewała log
+    // realizacji w panelu i rozdmuchiwała tabelę (zob. HIDDEN_EVENT_LOG_TYPES).
 
     return {
       ok: true,
@@ -2438,6 +2430,7 @@ export class MobileService {
     const logs = await this.prisma.eventLog.findMany({
       where: {
         realizationId: realization.id,
+        ...VISIBLE_EVENT_LOG_WHERE,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -3450,11 +3443,15 @@ export class MobileService {
 
   private async resolveMobileAdminRealizationOrThrow(realizationId: string) {
     const requestedId = realizationId.trim();
-    const realizations = await this.getRealizationsView();
-    const realization =
+    // Panel admina odpytuje to co kilka sekund — wybór „bieżącej” robimy na
+    // lekkich kolumnach, a pełny widok ładujemy tylko dla jednej realizacji.
+    const targetId =
       requestedId && requestedId !== 'current'
-        ? realizations.find((item) => item.id === requestedId)
-        : this.resolveCurrentMobileRealization(realizations);
+        ? requestedId
+        : await this.resolveCurrentMobileRealizationId();
+    const realization = targetId
+      ? await this.getRealizationViewById(targetId)
+      : null;
 
     if (!realization) {
       throw new NotFoundException('Realization not found');
@@ -3463,25 +3460,64 @@ export class MobileService {
     return realization;
   }
 
+  private static readonly REALIZATION_VIEW_FLAGS_SELECT = {
+    id: true,
+    locationRequired: true,
+    showLeaderboard: true,
+    showLeaderboardDuringGame: true,
+    showLeaderboardOnFinish: true,
+    hideLeaderboardMinutesBeforeEnd: true,
+    teamStationNumberingEnabled: true,
+    timedStationPointsDecayEnabled: true,
+    hideTaskList: true,
+    showCaseFiles: true,
+  } as const;
+
+  /**
+   * Wszystkie realizacje — tylko dla ścieżek, które naprawdę muszą przejrzeć
+   * listę (bootstrap przy starcie aplikacji, dołączanie kodem). Ścieżki
+   * wołane w pętli (sesja drużyny, panel admina) używają getRealizationViewById.
+   */
   private async getRealizationsView() {
-    const items = await this.realizationService.listRealizations();
+    const items = await this.realizationService.listRealizations({
+      includeLogs: false,
+    });
     const realizationRows = await this.prisma.realization.findMany({
-      select: {
-        id: true,
-        locationRequired: true,
-        showLeaderboard: true,
-        showLeaderboardDuringGame: true,
-        showLeaderboardOnFinish: true,
-        hideLeaderboardMinutesBeforeEnd: true,
-        teamStationNumberingEnabled: true,
-        timedStationPointsDecayEnabled: true,
-        hideTaskList: true,
-        showCaseFiles: true,
-      },
+      select: MobileService.REALIZATION_VIEW_FLAGS_SELECT,
     });
     const rowById = new Map(realizationRows.map((row) => [row.id, row]));
 
-    return items.map((item) => ({
+    return items.map((item) =>
+      this.toRealizationView(item, rowById.get(item.id)),
+    );
+  }
+
+  private async getRealizationViewById(realizationId: string) {
+    const item = await this.realizationService.findRealizationById(
+      realizationId,
+      { includeLogs: false },
+    );
+    if (!item) {
+      return null;
+    }
+
+    const row = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+      select: MobileService.REALIZATION_VIEW_FLAGS_SELECT,
+    });
+
+    return this.toRealizationView(item, row ?? undefined);
+  }
+
+  private toRealizationView(
+    item: RealizationEntity,
+    row:
+      | Prisma.RealizationGetPayload<{
+          select: typeof MobileService.REALIZATION_VIEW_FLAGS_SELECT;
+        }>
+      | undefined,
+  ) {
+    return {
       ...item,
       id: item.id,
       companyName: item.companyName,
@@ -3496,42 +3532,70 @@ export class MobileService {
       durationMinutes: item.durationMinutes,
       language: item.language,
       customLanguage: item.customLanguage,
-      locationRequired:
-        rowById.get(item.id)?.locationRequired ?? item.status === 'in-progress',
-      showLeaderboard:
-        rowById.get(item.id)?.showLeaderboard ?? item.showLeaderboard,
+      locationRequired: row?.locationRequired ?? item.status === 'in-progress',
+      showLeaderboard: row?.showLeaderboard ?? item.showLeaderboard,
       showLeaderboardDuringGame:
-        rowById.get(item.id)?.showLeaderboardDuringGame ??
+        row?.showLeaderboardDuringGame ??
         item.showLeaderboardDuringGame ??
-        rowById.get(item.id)?.showLeaderboard ??
+        row?.showLeaderboard ??
         item.showLeaderboard,
       showLeaderboardOnFinish:
-        rowById.get(item.id)?.showLeaderboardOnFinish ??
+        row?.showLeaderboardOnFinish ??
         item.showLeaderboardOnFinish ??
-        rowById.get(item.id)?.showLeaderboard ??
+        row?.showLeaderboard ??
         item.showLeaderboard,
       hideLeaderboardMinutesBeforeEnd:
-        rowById.get(item.id)?.hideLeaderboardMinutesBeforeEnd ??
+        row?.hideLeaderboardMinutesBeforeEnd ??
         item.hideLeaderboardMinutesBeforeEnd ??
         0,
       teamStationNumberingEnabled:
-        rowById.get(item.id)?.teamStationNumberingEnabled ??
+        row?.teamStationNumberingEnabled ??
         item.teamStationNumberingEnabled ??
         true,
       timedStationPointsDecayEnabled:
-        rowById.get(item.id)?.timedStationPointsDecayEnabled ??
+        row?.timedStationPointsDecayEnabled ??
         item.timedStationPointsDecayEnabled ??
         false,
-      hideTaskList:
-        rowById.get(item.id)?.hideTaskList ?? item.hideTaskList ?? false,
-      showCaseFiles:
-        rowById.get(item.id)?.showCaseFiles ?? item.showCaseFiles ?? false,
+      hideTaskList: row?.hideTaskList ?? item.hideTaskList ?? false,
+      showCaseFiles: row?.showCaseFiles ?? item.showCaseFiles ?? false,
       joinCode: item.joinCode,
       teamCount: Math.max(1, Math.round(item.teamCount)),
       stationIds: item.stationIds,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-    }));
+    };
+  }
+
+  private async resolveCurrentMobileRealizationId() {
+    // Ta sama kolejność i ten sam status co w getRealizationsView, żeby wybór
+    // „bieżącej” realizacji się nie zmienił.
+    const rows = await this.prisma.realization.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        scheduledAt: true,
+        durationMinutes: true,
+      },
+    });
+    const candidates = rows.map((row) => {
+      const scheduledAt = row.scheduledAt.toISOString();
+      return {
+        id: row.id,
+        scheduledAt,
+        status: this.normalizeStatus(
+          resolveRealizationStatus(
+            fromPrismaRealizationStatus(row.status),
+            scheduledAt,
+            row.durationMinutes,
+          ),
+          scheduledAt,
+          row.durationMinutes,
+        ),
+      };
+    });
+
+    return this.resolveCurrentMobileRealization(candidates)?.id ?? null;
   }
 
   private resolveCurrentMobileRealization<
@@ -3675,9 +3739,10 @@ export class MobileService {
       assignment.id,
       assignment.sessionToken === rawToken ? rawToken : undefined,
     );
-    const realizations = await this.getRealizationsView();
-    const realization = realizations.find(
-      (item) => item.id === assignment.realizationId,
+    // Wołane przy każdym odpytaniu z każdego tabletu — ładuj tylko realizację
+    // z sesji, nigdy całej listy (koszt rósłby z każdą realizacją w bazie).
+    const realization = await this.getRealizationViewById(
+      assignment.realizationId,
     );
 
     if (!assignment.team || !realization) {
@@ -3704,7 +3769,10 @@ export class MobileService {
    * świadomie zostaje nietknięte — poszerzenie go o wszystkie drużyny
    * obciążyłoby każdą realizację, także te bez akt.
    */
-  private async resolveMobileCaseFiles(realization: { id: string; showCaseFiles?: boolean }) {
+  private async resolveMobileCaseFiles(realization: {
+    id: string;
+    showCaseFiles?: boolean;
+  }) {
     if (!realization.showCaseFiles) {
       return [];
     }

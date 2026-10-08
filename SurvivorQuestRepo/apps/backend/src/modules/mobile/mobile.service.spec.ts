@@ -41,6 +41,28 @@ function privateApi<TReturn = unknown>(target: object) {
 }
 
 /**
+ * Mock RealizationService, w ktorym lookup po id czyta z tej samej listy —
+ * testy ustawiaja tylko listRealizations, a sciezki z jedna realizacja
+ * (sesja tabletu, panel admina z konkretnym id) dostaja z niej swoj rekord.
+ */
+function createRealizationServiceMock() {
+  const listRealizations = jest.fn();
+  const findRealizationById = jest.fn(async (id: string) => {
+    const items = ((await listRealizations()) ?? []) as Array<{ id: string }>;
+    return items.find((item) => item.id === id) ?? null;
+  });
+  return { listRealizations, findRealizationById };
+}
+
+/** Odpowiednik findUnique czytajacy z mocka findMany tego samego modelu. */
+function findUniqueFrom(findMany: jest.Mock) {
+  return jest.fn(async ({ where }: { where: { id: string } }) => {
+    const rows = ((await findMany()) ?? []) as Array<{ id: string }>;
+    return rows.find((row) => row.id === where.id) ?? null;
+  });
+}
+
+/**
  * Jedno miejsce konstruujace MobileService w testach. Konstruktor dostal
  * czwarta zaleznosc i dwanascie wywolan w tym pliku zostalo z trzema
  * argumentami - z helperem taka zmiana to jedna linijka, a nie dwanascie.
@@ -1793,15 +1815,15 @@ describe('MobileService station payload mapper', () => {
 
 describe('MobileService admin station QR export', () => {
   function createService() {
+    const findMany = jest.fn();
     const prisma = {
       realization: {
-        findMany: jest.fn(),
+        findMany,
+        findUnique: findUniqueFrom(findMany),
       },
     };
 
-    const realizationService = {
-      listRealizations: jest.fn(),
-    };
+    const realizationService = createRealizationServiceMock();
 
     const service = buildMobileService(prisma, realizationService);
     return { service, prisma, realizationService };
@@ -1908,9 +1930,11 @@ describe('MobileService admin station QR export', () => {
 
 describe('MobileService realization reset', () => {
   function createService() {
+    const realizationFindMany = jest.fn();
     const prisma = {
       realization: {
-        findMany: jest.fn(),
+        findMany: realizationFindMany,
+        findUnique: findUniqueFrom(realizationFindMany),
         update: jest.fn(),
       },
       team: {
@@ -1964,9 +1988,7 @@ describe('MobileService realization reset', () => {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
 
-    const realizationService = {
-      listRealizations: jest.fn(),
-    };
+    const realizationService = createRealizationServiceMock();
 
     const service = buildMobileService(prisma, realizationService);
     return { service, prisma, realizationService };
@@ -2682,5 +2704,170 @@ describe('MobileService forceMobileAdminDeviceExit', () => {
       [{ data: Record<string, unknown> }],
     ];
     expect(Object.keys(data)).toEqual(['sessionToken']);
+  });
+});
+
+/**
+ * Regresja po awarii produkcji (2026-10-06): kazde odpytanie tabletu ladowalo
+ * wszystkie realizacje razem z calym EventLogiem, wiec koszt rosl z liczba
+ * realizacji w bazie i zapychal pule polaczen Prismy. Sciezki wolane w petli
+ * maja ladowac tylko jedna realizacje i nigdy logow.
+ */
+describe('MobileService realization loading cost', () => {
+  function createService() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      realization: {
+        findMany,
+        findUnique: findUniqueFrom(findMany),
+      },
+      teamAssignment: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'assignment-1',
+          realizationId: 'realization-2',
+          sessionToken: 'hashed-token',
+          expiresAt: new Date(Date.now() + 60_000),
+          team: { id: 'team-1' },
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const realizationService = createRealizationServiceMock();
+    realizationService.listRealizations.mockResolvedValue([
+      { id: 'realization-1', status: 'planned' },
+      {
+        id: 'realization-2',
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+        teamCount: 2,
+        stationIds: [],
+      },
+    ]);
+
+    const service = buildMobileService(prisma, realizationService);
+    return { service, prisma, realizationService };
+  }
+
+  it('loads only the session realization, without logs, for tablet requests', async () => {
+    const { service, realizationService } = createService();
+
+    const result =
+      await privateApi<Promise<{ realization: { id: string } }>>(
+        service,
+      ).requireSession('mob_token');
+
+    expect(result.realization.id).toBe('realization-2');
+    expect(realizationService.findRealizationById).toHaveBeenCalledWith(
+      'realization-2',
+      { includeLogs: false },
+    );
+    // findRealizationById w mocku czyta z listy — liczy sie, ze serwis nie
+    // poprosil o liste sam z siebie.
+    expect(realizationService.listRealizations).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves the current admin realization from light columns and loads only that one', async () => {
+    const { service, prisma, realizationService } = createService();
+    prisma.realization.findMany.mockResolvedValue([
+      {
+        id: 'realization-2',
+        status: 'IN_PROGRESS',
+        scheduledAt: new Date(),
+        durationMinutes: 120,
+      },
+      {
+        id: 'realization-1',
+        status: 'PLANNED',
+        scheduledAt: new Date(Date.now() + 86_400_000),
+        durationMinutes: 120,
+      },
+    ]);
+
+    const realization =
+      await privateApi<Promise<{ id: string }>>(
+        service,
+      ).resolveMobileAdminRealizationOrThrow('current');
+
+    expect(realization.id).toBe('realization-2');
+    expect(prisma.realization.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: {
+          id: true,
+          status: true,
+          scheduledAt: true,
+          durationMinutes: true,
+        },
+      }),
+    );
+    expect(realizationService.findRealizationById).toHaveBeenCalledTimes(1);
+    expect(realizationService.findRealizationById).toHaveBeenCalledWith(
+      'realization-2',
+      { includeLogs: false },
+    );
+  });
+
+  it('skips event logs when the full list is needed (bootstrap)', async () => {
+    const { service, realizationService } = createService();
+
+    await service.getMobileBootstrap();
+
+    expect(realizationService.listRealizations).toHaveBeenCalledWith({
+      includeLogs: false,
+    });
+  });
+});
+
+/**
+ * Lokalizacja zmienia sie co kilka sekund i zalewala EventLog (ok. 90% tabeli
+ * na produkcji) oraz log w panelu /current-realization.
+ */
+describe('MobileService team location logging', () => {
+  it('stores the position on the team without writing an event log entry', async () => {
+    const prisma = {
+      team: { update: jest.fn().mockResolvedValue({}) },
+      eventLog: { create: jest.fn() },
+    };
+    const service = buildMobileService(prisma);
+    spyOnPrivate(service, 'requireSession').mockResolvedValue({
+      assignment: { id: 'assignment-1', deviceId: 'device-1' },
+      team: { id: 'team-1', lastLocationLat: null, lastLocationLng: null },
+      realization: { id: 'realization-1' },
+    });
+
+    const result = await service.updateMobileTeamLocation({
+      sessionToken: 'mob_token',
+      lat: 52.2297,
+      lng: 21.0122,
+      accuracy: 5,
+    });
+
+    expect(result).toMatchObject({ ok: true, deduplicated: false });
+    expect(prisma.team.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'team-1' },
+        data: expect.objectContaining({
+          lastLocationLat: 52.2297,
+          lastLocationLng: 21.0122,
+        }),
+      }),
+    );
+    expect(prisma.eventLog.create).not.toHaveBeenCalled();
+  });
+
+  it('still rejects an out-of-range speed', async () => {
+    const service = buildMobileService({});
+    spyOnPrivate(service, 'requireSession').mockResolvedValue({
+      team: { id: 'team-1' },
+    });
+
+    await expect(
+      service.updateMobileTeamLocation({
+        sessionToken: 'mob_token',
+        lat: 52.2297,
+        lng: 21.0122,
+        speed: -1,
+      }),
+    ).rejects.toThrow();
   });
 });

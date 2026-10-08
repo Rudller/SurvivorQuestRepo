@@ -7,6 +7,7 @@ import { EventActorType, PointsQrClaimMode } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateRandomCode } from '../../shared/lib/random-code';
 import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
+import { VISIBLE_EVENT_LOG_WHERE } from '../../shared/lib/event-log';
 import {
   requireRealizationId,
   validateRealizationPayload,
@@ -54,6 +55,11 @@ export type {
   RealizationType,
 } from './entities/realization.entity';
 
+export type RealizationEntityOptions = {
+  /** Domyślnie true. Tablety nie używają logów, a te rosną bez końca. */
+  includeLogs?: boolean;
+};
+
 function isStationEntity(value: unknown): value is StationEntity {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return false;
@@ -80,15 +86,27 @@ export class RealizationService {
     private readonly riskQuizService: RiskQuizService,
   ) {}
 
-  async listRealizations() {
+  async listRealizations(options: RealizationEntityOptions = {}) {
     const realizations = await this.prisma.realization.findMany({
       orderBy: { createdAt: 'desc' },
     });
 
     const mapped = await Promise.all(
-      realizations.map((item) => this.toEntity(item.id)),
+      realizations.map((item) => this.toEntity(item.id, undefined, options)),
     );
     return mapped.filter((item) => item !== null);
+  }
+
+  /**
+   * Jedna realizacja zamiast całej listy — dla ścieżek wołanych w pętli przez
+   * tablety (session/state, location, pending-launch). Koszt nie rośnie z
+   * liczbą realizacji w bazie.
+   */
+  async findRealizationById(
+    realizationId: string,
+    options: RealizationEntityOptions = {},
+  ) {
+    return this.toEntity(realizationId, undefined, options);
   }
 
   async createRealization(payload: CreateRealizationDto) {
@@ -670,6 +688,7 @@ export class RealizationService {
   private async toEntity(
     realizationId: string,
     stationsFromSync?: StationEntity[],
+    { includeLogs = true }: RealizationEntityOptions = {},
   ) {
     const realization = await this.prisma.realization.findUnique({
       where: { id: realizationId },
@@ -702,10 +721,13 @@ export class RealizationService {
       (scenario
         ? await this.stationService.findStationsByIds(scenario.stationIds)
         : []);
-    const logsRaw = await this.prisma.eventLog.findMany({
-      where: { realizationId },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Log zdarzeń rośnie z każdą akcją drużyny; panel go potrzebuje, tablety nie.
+    const logsRaw = includeLogs
+      ? await this.prisma.eventLog.findMany({
+          where: { realizationId, ...VISIBLE_EVENT_LOG_WHERE },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
     const publicJoinCode = this.joinCodeService.resolvePublicJoinCode(
       realization.id,
       realization.joinCode,
