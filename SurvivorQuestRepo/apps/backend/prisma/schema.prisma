@@ -643,6 +643,10 @@ model EventLog {
 
   @@index([realizationId, createdAt])
   @@index([teamId, createdAt])
+  // Zapytania po typie zdarzenia (wyniki zadań od ostatniego resetu, ostatni
+  // reset, gotowość drużyny) — bez nich Postgres czytał cały log realizacji.
+  @@index([realizationId, eventType, createdAt])
+  @@index([teamId, eventType, createdAt])
 }
 
 model ChatMessage {

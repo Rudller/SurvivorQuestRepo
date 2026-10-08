@@ -448,7 +448,8 @@ describe('MobileService join session', () => {
     };
 
     const realizationService = {
-      listRealizations: jest.fn(),
+      ...createRealizationServiceMock(),
+      findRealizationIdByJoinCode: jest.fn().mockResolvedValue('realization-1'),
     };
 
     const service = buildMobileService(prisma, realizationService);
@@ -1486,117 +1487,147 @@ describe('MobileService task scoring', () => {
   });
 });
 
-describe('MobileService failed task snapshots', () => {
-  function createService() {
-    const prisma = {
-      eventLog: {
-        findMany: jest.fn(),
-      },
-    };
+/**
+ * EventLog w pamięci, który naprawdę wykonuje filtry używane przez serwis
+ * (realizationId, teamId, eventType.in, createdAt.gt, sortowanie). Testy
+ * sprawdzają wynik, a nie kształt zapytania — po awarii 2026-10-06 zapytanie
+ * zmieniło się z „cała historia do resetu” na „od ostatniego resetu”.
+ */
+type FakeEventLogRow = {
+  realizationId: string;
+  teamId: string | null;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+};
 
+function createFakeEventLog(rows: FakeEventLogRow[]) {
+  type Where = {
+    realizationId?: string;
+    teamId?: string | null;
+    eventType?: { in?: string[]; notIn?: string[] };
+    createdAt?: { gt?: Date };
+  };
+
+  const matches = (row: FakeEventLogRow, where: Where = {}) =>
+    (where.realizationId === undefined ||
+      row.realizationId === where.realizationId) &&
+    (where.teamId === undefined || row.teamId === where.teamId) &&
+    (!where.eventType?.in || where.eventType.in.includes(row.eventType)) &&
+    (!where.eventType?.notIn ||
+      !where.eventType.notIn.includes(row.eventType)) &&
+    (!where.createdAt?.gt || row.createdAt > where.createdAt.gt);
+
+  const sortedDesc = (where?: Where) =>
+    rows
+      .filter((row) => matches(row, where))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  return {
+    findMany: jest.fn(async ({ where }: { where?: Where } = {}) =>
+      sortedDesc(where),
+    ),
+    findFirst: jest.fn(
+      async ({ where }: { where?: Where } = {}) => sortedDesc(where)[0] ?? null,
+    ),
+    count: jest.fn(
+      async ({ where }: { where?: Where } = {}) => sortedDesc(where).length,
+    ),
+  };
+}
+
+describe('MobileService failed task snapshots', () => {
+  const at = (minute: number) =>
+    new Date(Date.UTC(2026, 9, 6, 15, minute, 0));
+
+  function createService(rows: FakeEventLogRow[]) {
+    const prisma = { eventLog: createFakeEventLog(rows) };
     const service = buildMobileService(prisma);
     return { service, prisma };
   }
 
-  it('ignores outcomes older than completed tasks reset', async () => {
-    const { service, prisma } = createService();
-    prisma.eventLog.findMany.mockResolvedValue([
-      {
-        eventType: 'task_failed',
-        payload: { stationId: 'station-after-reset' },
-      },
-      {
-        eventType: 'completed_tasks_reset',
-        payload: { resetCount: 3 },
-      },
-      {
-        eventType: 'task_failed',
-        payload: { stationId: 'station-before-reset' },
-      },
-    ]);
-
-    const failedStationIds = await privateApi<Promise<string[]>>(
-      service,
-    ).getFailedTaskStationIds({
+  function teamLog(
+    minute: number,
+    eventType: string,
+    stationId: string,
+    teamId = 'team-1',
+  ): FakeEventLogRow {
+    return {
       realizationId: 'realization-1',
-      teamId: 'team-1',
+      teamId,
+      eventType,
+      payload: { stationId },
+      createdAt: at(minute),
+    };
+  }
+
+  function resetLog(minute: number, eventType: string): FakeEventLogRow {
+    return {
+      realizationId: 'realization-1',
+      teamId: null,
+      eventType,
+      payload: {},
+      createdAt: at(minute),
+    };
+  }
+
+  const failedFor = (service: object, teamId = 'team-1') =>
+    privateApi<Promise<Set<string>>>(service).getFailedTaskStationIds({
+      realizationId: 'realization-1',
+      teamId,
     });
 
-    expect([...failedStationIds]).toEqual(['station-after-reset']);
-    expect(prisma.eventLog.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          realizationId: 'realization-1',
-          OR: expect.arrayContaining([
-            expect.objectContaining({ teamId: 'team-1' }),
-            expect.objectContaining({ teamId: null }),
-          ]),
-        }),
-      }),
-    );
+  it('ignores outcomes older than completed tasks reset', async () => {
+    const { service } = createService([
+      teamLog(1, 'task_failed', 'station-before-reset'),
+      resetLog(2, 'completed_tasks_reset'),
+      teamLog(3, 'task_failed', 'station-after-reset'),
+    ]);
+
+    expect([...(await failedFor(service))]).toEqual(['station-after-reset']);
   });
 
   it('clears failed outcomes after realization reset', async () => {
-    const { service, prisma } = createService();
-    prisma.eventLog.findMany.mockResolvedValue([
-      {
-        eventType: 'realization_reset',
-        payload: { resetAt: new Date().toISOString() },
-      },
-      {
-        eventType: 'task_failed',
-        payload: { stationId: 'station-before-reset' },
-      },
+    const { service } = createService([
+      teamLog(1, 'task_failed', 'station-before-reset'),
+      resetLog(2, 'realization_reset'),
     ]);
 
-    const failedStationIds = await privateApi<Promise<string[]>>(
-      service,
-    ).getFailedTaskStationIds({
-      realizationId: 'realization-1',
-      teamId: 'team-1',
-    });
-
-    expect([...failedStationIds]).toEqual([]);
+    expect([...(await failedFor(service))]).toEqual([]);
   });
 
   it('clears failed outcome for station after admin task reset', async () => {
-    const { service, prisma } = createService();
-    prisma.eventLog.findMany.mockResolvedValue([
-      {
-        eventType: 'task_reset_by_admin',
-        payload: { stationId: 'station-1' },
-      },
-      {
-        eventType: 'task_failed',
-        payload: { stationId: 'station-1' },
-      },
-      {
-        eventType: 'task_failed',
-        payload: { stationId: 'station-2' },
-      },
+    const { service } = createService([
+      teamLog(1, 'task_failed', 'station-2'),
+      teamLog(2, 'task_failed', 'station-1'),
+      teamLog(3, 'task_reset_by_admin', 'station-1'),
     ]);
 
-    const failedStationIds = await privateApi<Promise<string[]>>(
-      service,
-    ).getFailedTaskStationIds({
-      realizationId: 'realization-1',
-      teamId: 'team-1',
-    });
+    expect([...(await failedFor(service))]).toEqual(['station-2']);
+  });
 
-    expect([...failedStationIds]).toEqual(['station-2']);
-    expect(prisma.eventLog.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          OR: expect.arrayContaining([
-            expect.objectContaining({
-              eventType: {
-                in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
-              },
-            }),
-          ]),
-        }),
-      }),
-    );
+  it("ignores other teams' outcomes", async () => {
+    const { service } = createService([
+      teamLog(1, 'task_failed', 'station-1', 'team-2'),
+      teamLog(2, 'task_failed', 'station-2'),
+    ]);
+
+    expect([...(await failedFor(service))]).toEqual(['station-2']);
+  });
+
+  it('reads only the current game, never the history before the last reset', async () => {
+    const { service, prisma } = createService([
+      teamLog(1, 'task_failed', 'station-1'),
+      resetLog(2, 'realization_reset'),
+      teamLog(3, 'task_completed', 'station-1'),
+    ]);
+
+    await failedFor(service);
+
+    const [[query]] = prisma.eventLog.findMany.mock.calls as [
+      [{ where: { createdAt?: { gt?: Date } } }],
+    ];
+    expect(query.where.createdAt).toEqual({ gt: at(2) });
   });
 });
 
@@ -1939,7 +1970,7 @@ describe('MobileService realization reset', () => {
       },
       team: {
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockResolvedValue({ id: 'team-1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       teamAssignment: {
@@ -2869,5 +2900,73 @@ describe('MobileService team location logging', () => {
         speed: -1,
       }),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * Start gry: kilkanaście tabletów dołącza niemal jednocześnie. Równolegle
+ * dwa tablety brały tę samą wolną drużynę, a zakładanie slotów kończyło się
+ * 500 na unikalnym (realizationId, slotNumber) — wyszło w teście obciążeniowym.
+ */
+describe('MobileService concurrent joins', () => {
+  it('runs joins to the same realization one at a time', async () => {
+    const service = buildMobileService({});
+    let active = 0;
+    let maxActive = 0;
+    const runJoin = () =>
+      privateApi<Promise<number>>(service).withRealizationJoinLock(
+        'realization-1',
+        async () => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          active -= 1;
+          return maxActive;
+        },
+      );
+
+    await Promise.all([runJoin(), runJoin(), runJoin(), runJoin()]);
+
+    expect(maxActive).toBe(1);
+  });
+
+  it('keeps the queue going after a failed join', async () => {
+    const service = buildMobileService({});
+    const lock = privateApi<Promise<string>>(service).withRealizationJoinLock;
+
+    const failed = lock.call(service, 'realization-1', async () => {
+      throw new Error('boom');
+    });
+    const next = lock.call(service, 'realization-1', async () => 'ok');
+
+    await expect(failed).rejects.toThrow('boom');
+    await expect(next).resolves.toBe('ok');
+  });
+
+  it('creates missing team slots in one duplicate-safe insert', async () => {
+    const prisma = {
+      team: {
+        findMany: jest.fn().mockResolvedValue([{ id: 't1', slotNumber: 1, taskTotal: 2, taskDone: 0 }]),
+        createMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+    };
+    const service = buildMobileService(prisma);
+
+    await privateApi<Promise<void>>(service).ensureTeamsForRealization({
+      id: 'realization-1',
+      teamCount: 3,
+      stationIds: ['s1', 's2'],
+    });
+
+    expect(prisma.team.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.team.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skipDuplicates: true,
+        data: [
+          expect.objectContaining({ slotNumber: 2 }),
+          expect.objectContaining({ slotNumber: 3 }),
+        ],
+      }),
+    );
   });
 });

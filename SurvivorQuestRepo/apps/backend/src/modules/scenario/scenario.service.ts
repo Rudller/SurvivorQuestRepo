@@ -102,6 +102,22 @@ export class ScenarioService {
     return mapScenario(scenario);
   }
 
+  /** Wiele scenariuszy jednym zapytaniem — lista realizacji nie może robić N+1. */
+  async findScenariosByIds(ids: string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const scenarios = await this.prisma.scenario.findMany({
+      where: { id: { in: ids } },
+      include: {
+        scenarioStations: { orderBy: { order: 'asc' } },
+      },
+    });
+
+    return scenarios.map(mapScenario);
+  }
+
   async addScenario(scenario: ScenarioEntity) {
     await this.prisma.scenario.create({
       data: {

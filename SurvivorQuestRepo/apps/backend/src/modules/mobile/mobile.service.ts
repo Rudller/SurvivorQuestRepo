@@ -71,9 +71,15 @@ import {
   parseTeamColor,
   toLowerSafe,
 } from './domain/mobile-team.helpers';
-import { SESSION_TTL_MS } from './domain/mobile-session.helpers';
+import {
+  SESSION_TTL_MS,
+  shouldRefreshSessionTtl,
+} from './domain/mobile-session.helpers';
 
 const LOCATION_MAX_ACCURACY_METERS = 10_000;
+const LAST_SEEN_REFRESH_MS = 60_000;
+// Ogon logu w overview panelu admina; reszta historii nie jest tam potrzebna.
+const ADMIN_OVERVIEW_LOG_LIMIT = 300;
 const LOCATION_MAX_SPEED_MPS = 120;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -141,7 +147,44 @@ export class MobileService {
     private readonly stationStorageService: StationStorageService,
   ) {}
 
+  private bootstrapCache: {
+    expiresAt: number;
+    response: ReturnType<MobileService['buildMobileBootstrap']>;
+  } | null = null;
+
+  private static readonly BOOTSTRAP_CACHE_TTL_MS = 5_000;
+
+  /**
+   * Lista wszystkich realizacji — jedyna ścieżka tabletu, której koszt rośnie
+   * z liczbą realizacji. Tablety wołają ją przy starcie i sprawdzaniu
+   * połączenia, często kilkanaście naraz, więc odpowiedź jest współdzielona
+   * przez kilka sekund (serverTime liczony na nowo przy każdym wywołaniu).
+   */
   async getMobileBootstrap() {
+    const now = Date.now();
+    let entry = this.bootstrapCache;
+    if (!entry || entry.expiresAt <= now) {
+      const response = this.buildMobileBootstrap();
+      const fresh = {
+        expiresAt: now + MobileService.BOOTSTRAP_CACHE_TTL_MS,
+        response,
+      };
+      this.bootstrapCache = fresh;
+      response.catch(() => {
+        if (this.bootstrapCache === fresh) {
+          this.bootstrapCache = null;
+        }
+      });
+      entry = fresh;
+    }
+
+    return {
+      ...(await entry.response),
+      serverTime: new Date().toISOString(),
+    };
+  }
+
+  private async buildMobileBootstrap() {
     const realizations = await this.getRealizationsView();
 
     return {
@@ -209,13 +252,58 @@ export class MobileService {
       throw new BadRequestException('Invalid payload');
     }
 
-    const realizations = await this.getRealizationsView();
-    const realization = this.findRealizationByJoinCode(realizations, joinCode);
+    const realizationId =
+      await this.realizationService.findRealizationIdByJoinCode(joinCode);
+    const realization = realizationId
+      ? await this.getRealizationViewById(realizationId)
+      : null;
 
     if (!realization) {
       throw new NotFoundException('Invalid join code');
     }
 
+    return this.withRealizationJoinLock(realization.id, () =>
+      this.joinMobileSessionLocked(realization, deviceId, input.memberName),
+    );
+  }
+
+  /**
+   * Dołączenia do jednej realizacji idą po kolei. Kilkanaście tabletów
+   * dołącza na starcie gry niemal jednocześnie, a wybór wolnej drużyny to
+   * „sprawdź, potem przypisz”: równolegle dwa tablety brały tę samą drużynę
+   * (jedna drużyna z dwoma tabletami, inna bez żadnego), a zakładanie slotów
+   * kończyło się błędem 500 na unikalnym (realizationId, slotNumber).
+   * Dołączanie jest rzadkie, więc kolejka nic nie kosztuje. Zamek jest w
+   * pamięci procesu — backend działa w jednym kontenerze; createMany ze
+   * skipDuplicates w ensureTeamsForRealization chroni zakładanie slotów także
+   * bez niego.
+   */
+  private readonly joinLocks = new Map<string, Promise<unknown>>();
+
+  private async withRealizationJoinLock<T>(
+    realizationId: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.joinLocks.get(realizationId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(run);
+    const tail = current.catch(() => undefined);
+    this.joinLocks.set(realizationId, tail);
+    try {
+      return await current;
+    } finally {
+      if (this.joinLocks.get(realizationId) === tail) {
+        this.joinLocks.delete(realizationId);
+      }
+    }
+  }
+
+  private async joinMobileSessionLocked(
+    realization: NonNullable<
+      Awaited<ReturnType<MobileService['loadRealizationViewById']>>
+    >,
+    deviceId: string,
+    memberName: string | undefined,
+  ) {
     await this.ensureTeamsForRealization(realization);
 
     const existingAssignment = await this.prisma.teamAssignment.findFirst({
@@ -327,7 +415,7 @@ export class MobileService {
         realizationId: realization.id,
         teamId: selectedTeam.id,
         deviceId,
-        memberName: input.memberName?.trim() || null,
+        memberName: memberName?.trim() || null,
         sessionToken: hashOpaqueToken(sessionToken),
         expiresAt: new Date(now.getTime() + SESSION_TTL_MS),
         lastSeenAt: now,
@@ -411,6 +499,7 @@ export class MobileService {
     const timeLimitSecondsByStationId =
       await this.getTimeLimitSecondsByStationId(
         orderedStationIds.map(({ stationId }) => stationId),
+        realization.scenarioStations ?? [],
       );
 
     const tasks = orderedStationIds.map(({ stationId, stationNumber }) => {
@@ -436,11 +525,14 @@ export class MobileService {
 
     const caseFiles = await this.resolveMobileCaseFiles(realization);
 
-    const eventLogCount = await this.prisma.eventLog.count({
+    // Jeden odczyt drużyn dla zajętości kolorów i rankingu.
+    const realizationTeams = await this.prisma.team.findMany({
       where: { realizationId: realization.id },
+      orderBy: [{ points: 'desc' }, { slotNumber: 'asc' }],
+      select: MobileService.REALIZATION_TEAM_SUMMARY_SELECT,
     });
     const customizationOccupancy =
-      await this.getCustomizationOccupancyByRealization(realization.id);
+      this.toCustomizationOccupancy(realizationTeams);
     const normalizedRealizationStatus = this.normalizeStatus(
       realization.status,
       realization.scheduledAt,
@@ -450,8 +542,12 @@ export class MobileService {
       realization,
       teamId: team.id,
       normalizedRealizationStatus,
+      teamTaskProgress: taskProgress,
     });
-    const leaderboard = await this.buildRealizationLeaderboard(realization.id);
+    const leaderboard = await this.buildRealizationLeaderboard(
+      realization.id,
+      realizationTeams,
+    );
 
     if (normalizedRealizationStatus === 'planned') {
       await this.emitTeamReadyForStartIfNeeded({
@@ -530,7 +626,10 @@ export class MobileService {
       leaderboard,
       meta: {
         sessionExpiresAt: assignment.expiresAt.toISOString(),
-        eventLogCount,
+        // Aplikacja tego nie wyświetla (tylko podbija lokalnie). count() po
+        // całym logu przy każdym odpytaniu każdego tabletu rósł razem z grą —
+        // pole zostaje dla zgodności kontraktu z wydanymi APK.
+        eventLogCount: 0,
       },
     };
   }
@@ -1288,7 +1387,9 @@ export class MobileService {
     heading?: number;
     at?: string;
   }) {
-    const { team } = await this.requireSession(input.sessionToken);
+    const { team, realization } = await this.requireSession(
+      input.sessionToken,
+    );
 
     if (!isLatitude(input.lat) || !isLongitude(input.lng)) {
       throw new BadRequestException('Invalid coordinates');
@@ -1322,11 +1423,22 @@ export class MobileService {
     }
 
     const serverReceivedAt = new Date().toISOString();
-    const deduplicated = shouldSkipLocationUpdate(team, {
-      lat: input.lat,
-      lng: input.lng,
-      at: locationAt,
-    });
+    // Po końcu gry tablety (APK do 1.1.8) dalej wysyłają pozycję co 10 s.
+    // Odpowiedź jak przy duplikacie — stara aplikacja przyjmie ją bez błędu —
+    // ale bez zapisu do bazy.
+    const realizationEnded =
+      this.normalizeStatus(
+        realization.status,
+        realization.scheduledAt,
+        realization.durationMinutes,
+      ) === 'done';
+    const deduplicated =
+      realizationEnded ||
+      shouldSkipLocationUpdate(team, {
+        lat: input.lat,
+        lng: input.lng,
+        at: locationAt,
+      });
 
     if (deduplicated) {
       return {
@@ -2260,14 +2372,18 @@ export class MobileService {
 
   async pollPendingStationLaunch(sessionToken: string) {
     const { team, realization } = await this.requireSession(sessionToken);
-    await this.assertGameplayAllowed({ realization, teamId: team.id });
 
+    // Każdy tablet pyta co 4 s, a prawie zawsze nic nie czeka — najpierw tani
+    // odczyt po unikalnym teamId, stan gry (kolejne zapytania) dopiero wtedy,
+    // gdy jest co uruchomić. Aplikacja i tak reaguje tylko na 401.
     const pending = await this.prisma.pendingStationLaunch.findUnique({
       where: { teamId: team.id },
     });
     if (!pending) {
       return { launch: null };
     }
+
+    await this.assertGameplayAllowed({ realization, teamId: team.id });
 
     const consumed = await this.prisma.pendingStationLaunch.deleteMany({
       where: { id: pending.id, teamId: team.id },
@@ -2427,31 +2543,32 @@ export class MobileService {
       },
     });
 
+    // Panel odpytuje to co 10 s na kartę. Do wyświetlenia wystarczy ogon
+    // logu; stan zadań liczymy z osobnego, wąskiego zapytania od ostatniego
+    // resetu, a licznik z count — żadne z nich nie ciągnie całej historii.
     const logs = await this.prisma.eventLog.findMany({
       where: {
         realizationId: realization.id,
         ...VISIBLE_EVENT_LOG_WHERE,
       },
       orderBy: { createdAt: 'desc' },
+      take: ADMIN_OVERVIEW_LOG_LIMIT,
+    });
+    const eventCount = await this.prisma.eventLog.count({
+      where: {
+        realizationId: realization.id,
+        ...VISIBLE_EVENT_LOG_WHERE,
+      },
+    });
+    const taskOutcomeLogs = await this.getTaskOutcomeLogsSinceLastReset({
+      realizationId: realization.id,
     });
     const latestTaskOutcomeByTeam = new Map<
       string,
       Map<string, 'failed' | 'done' | 'reset'>
     >();
-    for (const log of logs) {
-      if (
-        log.eventType === 'completed_tasks_reset' ||
-        log.eventType === 'realization_reset'
-      ) {
-        break;
-      }
-
-      if (
-        !log.teamId ||
-        (log.eventType !== 'task_failed' &&
-          log.eventType !== 'task_completed' &&
-          log.eventType !== 'task_reset_by_admin')
-      ) {
+    for (const log of taskOutcomeLogs) {
+      if (!log.teamId) {
         continue;
       }
 
@@ -2480,7 +2597,13 @@ export class MobileService {
     }
 
     const timeLimitSecondsByStationId =
-      await this.getTimeLimitSecondsByStationId(realization.stationIds);
+      await this.getTimeLimitSecondsByStationId(
+        realization.stationIds,
+        realization.scenarioStations ?? [],
+      );
+    const progressByTeamStation = new Map(
+      taskProgresses.map((item) => [`${item.teamId}:${item.stationId}`, item]),
+    );
 
     const teamViews = teams.map((team) => {
       const teamAssignments = assignments.filter(
@@ -2494,9 +2617,7 @@ export class MobileService {
         realization.teamStationNumberingEnabled,
       );
       const tasks = orderedStationIds.map(({ stationId, stationNumber }) => {
-        const progress = taskProgresses.find(
-          (item) => item.stationId === stationId && item.teamId === team.id,
-        );
+        const progress = progressByTeamStation.get(`${team.id}:${stationId}`);
         const isFailed =
           latestTaskOutcomeByTeam.get(team.id)?.get(stationId) === 'failed';
 
@@ -2549,6 +2670,8 @@ export class MobileService {
       };
     });
 
+    const teamViewById = new Map(teamViews.map((team) => [team.id, team]));
+
     return {
       realization: {
         id: realization.id,
@@ -2573,18 +2696,15 @@ export class MobileService {
         themePack: realization.themePack,
         riskSchemeId: realization.riskSchemeId ?? null,
         stationIds: realization.stationIds,
-        stations: await Promise.all(
-          realization.stationIds.map((stationId) =>
-            this.getStationSummaryForAdmin(stationId),
-          ),
+        stations: await this.getStationSummariesForAdmin(
+          realization.stationIds,
+          realization.scenarioStations ?? [],
         ),
         updatedAt: realization.updatedAt,
       },
       teams: teamViews,
       logs: logs.map((log) => {
-        const teamForLog = log.teamId
-          ? teamViews.find((team) => team.id === log.teamId)
-          : null;
+        const teamForLog = log.teamId ? teamViewById.get(log.teamId) : null;
 
         return {
           id: log.id,
@@ -2611,7 +2731,7 @@ export class MobileService {
           0,
         ),
         pointsTotal: teamViews.reduce((sum, team) => sum + team.points, 0),
-        eventCount: logs.length,
+        eventCount,
       },
     };
   }
@@ -2953,6 +3073,7 @@ export class MobileService {
           startedAt,
         },
       });
+      this.invalidateRealizationView(realization.id);
     }
 
     await this.emitEvent({
@@ -2992,6 +3113,7 @@ export class MobileService {
           status: PrismaRealizationStatus.DONE,
         },
       });
+      this.invalidateRealizationView(realization.id);
     }
 
     await this.emitEvent({
@@ -3127,6 +3249,7 @@ export class MobileService {
         scheduledAt: resetAt,
       },
     });
+    this.invalidateRealizationView(realization.id);
 
     await this.emitEvent({
       realizationId: realization.id,
@@ -3482,17 +3605,68 @@ export class MobileService {
     const items = await this.realizationService.listRealizations({
       includeLogs: false,
     });
-    const realizationRows = await this.prisma.realization.findMany({
-      select: MobileService.REALIZATION_VIEW_FLAGS_SELECT,
-    });
-    const rowById = new Map(realizationRows.map((row) => [row.id, row]));
 
-    return items.map((item) =>
-      this.toRealizationView(item, rowById.get(item.id)),
-    );
+    // Encja niesie flagi z tego samego wiersza — osobne zapytanie o nie było
+    // drugim odczytem tych samych danych przy każdym żądaniu.
+    return items.map((item) => this.toRealizationView(item, item));
   }
 
-  private async getRealizationViewById(realizationId: string) {
+  /**
+   * Widok realizacji współdzielony przez wszystkie tablety jednej gry.
+   *
+   * Każde żądanie tabletu (stan sesji, lokalizacja, oczekujące uruchomienie)
+   * potrzebuje tej samej realizacji. Bez cache'u N tabletów to N pełnych
+   * ładowań (realizacja, scenariusz, stacje) na każdy takt pollingu — przy
+   * awarii 2026-10-06 dokładnie ten koszt rósł, aż zadusił backend. Z nim koszt
+   * zależy od liczby gier, nie urządzeń, a równoczesne żądania czekają na jedno
+   * ładowanie zamiast odpalać własne. Krótki TTL ogranicza nieświeżość edycji z
+   * panelu; start/koniec/reset z panelu unieważniają wpis od razu.
+   */
+  private readonly realizationViewCache = new Map<
+    string,
+    {
+      expiresAt: number;
+      view: Promise<ReturnType<MobileService['toRealizationView']> | null>;
+    }
+  >();
+
+  private static readonly REALIZATION_VIEW_CACHE_TTL_MS = 3_000;
+
+  private invalidateRealizationView(realizationId: string) {
+    this.realizationViewCache.delete(realizationId);
+  }
+
+  private getRealizationViewById(realizationId: string) {
+    const now = Date.now();
+    const cached = this.realizationViewCache.get(realizationId);
+    if (cached && cached.expiresAt > now) {
+      return cached.view;
+    }
+
+    // Wygasłe wpisy po zakończonych grach nie mogą się zbierać bez końca.
+    for (const [key, entry] of this.realizationViewCache) {
+      if (entry.expiresAt <= now) {
+        this.realizationViewCache.delete(key);
+      }
+    }
+
+    const view = this.loadRealizationViewById(realizationId);
+    const entry = {
+      expiresAt: now + MobileService.REALIZATION_VIEW_CACHE_TTL_MS,
+      view,
+    };
+    this.realizationViewCache.set(realizationId, entry);
+    // Błąd ładowania nie może zostać w cache'u na cały TTL.
+    view.catch(() => {
+      if (this.realizationViewCache.get(realizationId) === entry) {
+        this.realizationViewCache.delete(realizationId);
+      }
+    });
+
+    return view;
+  }
+
+  private async loadRealizationViewById(realizationId: string) {
     const item = await this.realizationService.findRealizationById(
       realizationId,
       { includeLogs: false },
@@ -3501,12 +3675,7 @@ export class MobileService {
       return null;
     }
 
-    const row = await this.prisma.realization.findUnique({
-      where: { id: realizationId },
-      select: MobileService.REALIZATION_VIEW_FLAGS_SELECT,
-    });
-
-    return this.toRealizationView(item, row ?? undefined);
+    return this.toRealizationView(item, item);
   }
 
   private toRealizationView(
@@ -3687,30 +3856,29 @@ export class MobileService {
       );
     }
 
+    // Jedno zapytanie zamiast pętli create; skipDuplicates (ON CONFLICT DO
+    // NOTHING) sprawia, że równoległe dołączenie, które założyło te sloty
+    // chwilę wcześniej, nie kończy się błędem na unikalnym slotNumber.
+    const missingSlots: number[] = [];
     for (
       let slot = existing.length + 1;
       slot <= realization.teamCount;
       slot += 1
     ) {
-      await this.prisma.team.create({
-        data: {
+      missingSlots.push(slot);
+    }
+    if (missingSlots.length > 0) {
+      await this.prisma.team.createMany({
+        data: missingSlots.map((slot) => ({
           realizationId: realization.id,
           slotNumber: slot,
           taskTotal: targetTaskTotal,
           taskDone: 0,
           status: TeamStatus.UNASSIGNED,
-        },
+        })),
+        skipDuplicates: true,
       });
     }
-  }
-
-  private findRealizationByJoinCode<T extends { joinCode: string }>(
-    realizations: T[],
-    joinCode: string,
-  ) {
-    return realizations.find(
-      (item) => item.joinCode.toLowerCase() === joinCode.toLowerCase(),
-    );
   }
 
   private async requireSession(sessionToken: string) {
@@ -3735,10 +3903,20 @@ export class MobileService {
     }
 
     const rawToken = sessionToken.trim();
-    await this.touchAssignment(
-      assignment.id,
-      assignment.sessionToken === rawToken ? rawToken : undefined,
-    );
+    const needsTokenRehash = assignment.sessionToken === rawToken;
+    // Zapis przy każdym odpytaniu to zapis co kilka sekund z każdego tabletu.
+    // lastSeenAt z dokładnością do minuty wystarcza, a okno ważności przesuwa
+    // się i tak, zanim zejdzie do połowy (shouldRefreshSessionTtl).
+    if (
+      needsTokenRehash ||
+      shouldRefreshSessionTtl(assignment.expiresAt) ||
+      Date.now() - assignment.lastSeenAt.getTime() >= LAST_SEEN_REFRESH_MS
+    ) {
+      await this.touchAssignment(
+        assignment.id,
+        needsTokenRehash ? rawToken : undefined,
+      );
+    }
     // Wołane przy każdym odpytaniu z każdego tabletu — ładuj tylko realizację
     // z sesji, nigdy całej listy (koszt rósłby z każdą realizacją w bazie).
     const realization = await this.getRealizationViewById(
@@ -3926,8 +4104,32 @@ export class MobileService {
     return points;
   }
 
-  private async getStationSummaryForAdmin(stationId: string) {
-    const station = await this.stationService.findStationById(stationId);
+  /** Stacje z widoku realizacji; do bazy jednym zapytaniem tylko brakujące. */
+  private async getStationSummariesForAdmin(
+    stationIds: string[],
+    knownStations: StationEntity[],
+  ) {
+    const stationById = new Map(
+      knownStations.map((station) => [station.id, station]),
+    );
+    const missingStationIds = stationIds.filter((id) => !stationById.has(id));
+    if (missingStationIds.length > 0) {
+      const fetched =
+        await this.stationService.findStationsByIds(missingStationIds);
+      for (const station of fetched) {
+        stationById.set(station.id, station);
+      }
+    }
+
+    return stationIds.map((stationId) =>
+      this.toStationSummaryForAdmin(stationId, stationById.get(stationId)),
+    );
+  }
+
+  private toStationSummaryForAdmin(
+    stationId: string,
+    station: StationEntity | null | undefined,
+  ) {
     return {
       stationId,
       stationName: station?.name ?? `Stanowisko ${stationId}`,
@@ -4136,6 +4338,12 @@ export class MobileService {
     };
     teamId: string;
     normalizedRealizationStatus?: RealizationStatus;
+    /** Postęp drużyny, jeśli wołający już go ma — oszczędza dwa zapytania. */
+    teamTaskProgress?: Array<{
+      stationId: string;
+      status: TaskStatus;
+      finishedAt: Date | null;
+    }>;
   }) {
     const normalizedRealizationStatus =
       input.normalizedRealizationStatus ||
@@ -4166,7 +4374,27 @@ export class MobileService {
     }
 
     const stationIds = input.realization.stationIds;
-    if (stationIds.length > 0) {
+    if (stationIds.length > 0 && input.teamTaskProgress) {
+      const stationIdSet = new Set(stationIds);
+      const doneTasks = input.teamTaskProgress.filter(
+        (item) =>
+          stationIdSet.has(item.stationId) && item.status === TaskStatus.DONE,
+      );
+      if (doneTasks.length >= stationIds.length) {
+        const latestFinishedAt = doneTasks.reduce<Date | null>(
+          (latest, item) =>
+            item.finishedAt && (!latest || item.finishedAt > latest)
+              ? item.finishedAt
+              : latest,
+          null,
+        );
+        return {
+          isEnded: true,
+          reason: 'all-tasks-completed' as MobileSessionEndReason,
+          endedAt: latestFinishedAt?.toISOString() || new Date().toISOString(),
+        };
+      }
+    } else if (stationIds.length > 0) {
       const [doneTasksCount, latestDoneTask] = await Promise.all([
         this.prisma.teamTaskProgress.count({
           where: {
@@ -4220,27 +4448,40 @@ export class MobileService {
     return new Date(deadlineMs).toISOString();
   }
 
-  private async buildRealizationLeaderboard(realizationId: string) {
+  private static readonly REALIZATION_TEAM_SUMMARY_SELECT = {
+    id: true,
+    slotNumber: true,
+    name: true,
+    color: true,
+    badgeKey: true,
+    badgeImageUrl: true,
+    points: true,
+    taskDone: true,
+    taskTotal: true,
+    status: true,
+  } as const;
+
+  /**
+   * @param preloadedTeams drużyny posortowane po punktach malejąco, potem po
+   * slocie — jak w zapytaniu poniżej.
+   */
+  private async buildRealizationLeaderboard(
+    realizationId: string,
+    preloadedTeams?: Prisma.TeamGetPayload<{
+      select: typeof MobileService.REALIZATION_TEAM_SUMMARY_SELECT;
+    }>[],
+  ) {
     const [teams, assignments] = await Promise.all([
-      this.prisma.team.findMany({
-        where: { realizationId },
-        orderBy: [{ points: 'desc' }, { slotNumber: 'asc' }],
-        select: {
-          id: true,
-          slotNumber: true,
-          name: true,
-          color: true,
-          badgeKey: true,
-          badgeImageUrl: true,
-          points: true,
-          taskDone: true,
-          taskTotal: true,
-          status: true,
-        },
-      }),
+      preloadedTeams ??
+        this.prisma.team.findMany({
+          where: { realizationId },
+          orderBy: [{ points: 'desc' }, { slotNumber: 'asc' }],
+          select: MobileService.REALIZATION_TEAM_SUMMARY_SELECT,
+        }),
       this.prisma.teamAssignment.findMany({
         where: { realizationId },
         select: { teamId: true },
+        distinct: ['teamId'],
       }),
     ]);
 
@@ -4294,6 +4535,21 @@ export class MobileService {
       orderBy: { slotNumber: 'asc' },
     });
 
+    return this.toCustomizationOccupancy(teams);
+  }
+
+  private toCustomizationOccupancy(
+    unsortedTeams: Array<{
+      slotNumber: number;
+      color: string | null;
+      badgeKey: string | null;
+    }>,
+  ) {
+    // Pierwszy slot wygrywa — kolejność musi być po slocie, niezależnie od
+    // tego, jak posortował wołający.
+    const teams = [...unsortedTeams].sort(
+      (a, b) => a.slotNumber - b.slotNumber,
+    );
     const colors: Partial<Record<TeamColor, number>> = {};
     const icons: Record<string, number> = {};
     for (const item of teams) {
@@ -4441,45 +4697,54 @@ export class MobileService {
     } as const;
   }
 
-  private async getFailedTaskStationIds(input: {
+  /**
+   * Wyniki zadań (zaliczone/nieudane/cofnięte) od ostatniego resetu, od
+   * najnowszego. Dwa zapytania po indeksie [realizationId, eventType,
+   * createdAt] zamiast całej historii realizacji przeglądanej do resetu —
+   * koszt zależy od bieżącej gry, nie od wszystkich gier rozegranych na tej
+   * realizacji.
+   */
+  private async getTaskOutcomeLogsSinceLastReset(input: {
     realizationId: string;
-    teamId: string;
+    teamId?: string;
   }) {
-    const logs = await this.prisma.eventLog.findMany({
+    const lastReset = await this.prisma.eventLog.findFirst({
       where: {
         realizationId: input.realizationId,
-        OR: [
-          {
-            teamId: input.teamId,
-            eventType: {
-              in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
-            },
-          },
-          {
-            teamId: null,
-            eventType: {
-              in: ['completed_tasks_reset', 'realization_reset'],
-            },
-          },
-        ],
+        teamId: null,
+        eventType: { in: ['completed_tasks_reset', 'realization_reset'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+
+    return this.prisma.eventLog.findMany({
+      where: {
+        realizationId: input.realizationId,
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        eventType: {
+          in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
+        },
+        ...(lastReset ? { createdAt: { gt: lastReset.createdAt } } : {}),
       },
       orderBy: { createdAt: 'desc' },
       select: {
+        teamId: true,
         eventType: true,
         payload: true,
       },
     });
+  }
+
+  private async getFailedTaskStationIds(input: {
+    realizationId: string;
+    teamId: string;
+  }) {
+    const logs = await this.getTaskOutcomeLogsSinceLastReset(input);
 
     const failed = new Set<string>();
     const decided = new Set<string>();
     for (const log of logs) {
-      if (
-        log.eventType === 'completed_tasks_reset' ||
-        log.eventType === 'realization_reset'
-      ) {
-        break;
-      }
-
       const stationId = this.parseStationIdFromEventPayload(log.payload);
       if (!stationId || decided.has(stationId)) {
         continue;
@@ -4529,20 +4794,41 @@ export class MobileService {
     return 'done' as const;
   }
 
-  private async getTimeLimitSecondsByStationId(stationIds: string[]) {
-    const uniqueStationIds = Array.from(new Set(stationIds));
-    if (uniqueStationIds.length === 0) {
-      return new Map<string, number>();
+  /**
+   * Limity czasu stacji. Stacje scenariusza są już w widoku realizacji, więc
+   * do bazy idą tylko te spoza niego (np. pula Ryzykantów) — zwykle żadne.
+   */
+  private async getTimeLimitSecondsByStationId(
+    stationIds: string[],
+    knownStations: StationEntity[] = [],
+  ) {
+    const result = new Map<string, number>();
+    const knownById = new Map(
+      knownStations.map((station) => [station.id, station]),
+    );
+    const missingStationIds: string[] = [];
+    for (const stationId of new Set(stationIds)) {
+      const known = knownById.get(stationId);
+      if (known) {
+        result.set(stationId, known.timeLimitSeconds);
+      } else {
+        missingStationIds.push(stationId);
+      }
+    }
+
+    if (missingStationIds.length === 0) {
+      return result;
     }
 
     const stations = await this.prisma.station.findMany({
-      where: { id: { in: uniqueStationIds } },
+      where: { id: { in: missingStationIds } },
       select: { id: true, timeLimitSeconds: true },
     });
+    for (const station of stations) {
+      result.set(station.id, station.timeLimitSeconds);
+    }
 
-    return new Map(
-      stations.map((station) => [station.id, station.timeLimitSeconds]),
-    );
+    return result;
   }
 
   private fromTeamStatus(status: TeamStatus) {

@@ -102,6 +102,21 @@ export class RealizationJoinCodeService {
     throw new BadRequestException('Failed to generate unique join code');
   }
 
+  /**
+   * Warunki na kolumnę joinCode, pod którymi może leżeć wpisany kod: zapis v2
+   * kończy się skrótem kodu, stare zapisy trzymały go jawnie. Trafienie i tak
+   * trzeba potwierdzić przez resolvePublicJoinCode.
+   */
+  storedJoinCodeCandidates(publicCode: string) {
+    const normalized = publicCode.trim().toUpperCase();
+    const hashedCode = this.hashJoinCode(normalized);
+
+    return {
+      hashedSuffix: `:${hashedCode}`,
+      plainCode: normalized,
+    };
+  }
+
   resolvePublicJoinCode(realizationId: string, storedJoinCode: string) {
     const parsed = this.parseStoredJoinCode(storedJoinCode);
     if (!parsed) {

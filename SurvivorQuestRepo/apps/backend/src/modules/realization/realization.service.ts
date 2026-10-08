@@ -7,7 +7,7 @@ import { EventActorType, PointsQrClaimMode } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateRandomCode } from '../../shared/lib/random-code';
 import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
-import { VISIBLE_EVENT_LOG_WHERE } from '../../shared/lib/event-log';
+import { REALIZATION_CHANGE_LOG_WHERE } from '../../shared/lib/event-log';
 import {
   requireRealizationId,
   validateRealizationPayload,
@@ -91,10 +91,7 @@ export class RealizationService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const mapped = await Promise.all(
-      realizations.map((item) => this.toEntity(item.id, undefined, options)),
-    );
-    return mapped.filter((item) => item !== null);
+    return this.toEntities(realizations, options);
   }
 
   /**
@@ -107,6 +104,38 @@ export class RealizationService {
     options: RealizationEntityOptions = {},
   ) {
     return this.toEntity(realizationId, undefined, options);
+  }
+
+  /**
+   * Realizacja po kodzie dołączenia — jedno zapytanie po kolumnie joinCode
+   * zamiast ładowania wszystkich realizacji i porównywania kodów w pamięci.
+   */
+  async findRealizationIdByJoinCode(joinCode: string) {
+    const code = joinCode.trim();
+    if (!code) {
+      return null;
+    }
+
+    const { hashedSuffix, plainCode } =
+      this.joinCodeService.storedJoinCodeCandidates(code);
+    const candidates = await this.prisma.realization.findMany({
+      where: {
+        OR: [
+          { joinCode: { endsWith: hashedSuffix } },
+          { joinCode: { equals: plainCode, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, joinCode: true },
+    });
+
+    const match = candidates.find(
+      (item) =>
+        this.joinCodeService
+          .resolvePublicJoinCode(item.id, item.joinCode)
+          .toLowerCase() === code.toLowerCase(),
+    );
+
+    return match?.id ?? null;
   }
 
   async createRealization(payload: CreateRealizationDto) {
@@ -721,13 +750,125 @@ export class RealizationService {
       (scenario
         ? await this.stationService.findStationsByIds(scenario.stationIds)
         : []);
-    // Log zdarzeń rośnie z każdą akcją drużyny; panel go potrzebuje, tablety nie.
+    // Tylko historia zmian realizacji — zdarzenia gry rosną z każdą akcją
+    // drużyny i nie mają tu czego szukać (awaria 2026-10-06).
     const logsRaw = includeLogs
       ? await this.prisma.eventLog.findMany({
-          where: { realizationId, ...VISIBLE_EVENT_LOG_WHERE },
+          where: { realizationId, ...REALIZATION_CHANGE_LOG_WHERE },
           orderBy: { createdAt: 'asc' },
         })
       : [];
+
+    return this.assembleEntity({
+      realization,
+      scenarioTemplateId,
+      scenarioTemplateName,
+      riskSchemeTemplateId,
+      stations,
+      logsRaw,
+    });
+  }
+
+  /**
+   * Wszystkie realizacje stałą liczbą zapytań (realizacje, scenariusze,
+   * szablony scenariuszy, talie, stacje, logi zmian) — niezależnie od tego,
+   * ile realizacji uzbiera się w bazie. Panel admina odpytuje listę w pętli.
+   */
+  private async toEntities(
+    realizations: Awaited<
+      ReturnType<PrismaService['realization']['findMany']>
+    >,
+    { includeLogs = true }: RealizationEntityOptions = {},
+  ) {
+    if (realizations.length === 0) {
+      return [];
+    }
+
+    const unique = (values: Array<string | null | undefined>) => [
+      ...new Set(values.filter((value): value is string => Boolean(value))),
+    ];
+
+    const scenarios = await this.scenarioService.findScenariosByIds(
+      unique(realizations.map((item) => item.scenarioId)),
+    );
+    const scenarioById = new Map(scenarios.map((item) => [item.id, item]));
+    const missingTemplateIds = unique(
+      scenarios.map((item) => item.sourceTemplateId),
+    ).filter((id) => !scenarioById.has(id));
+    const templates =
+      await this.scenarioService.findScenariosByIds(missingTemplateIds);
+    const templateById = new Map(templates.map((item) => [item.id, item]));
+
+    const riskSchemes = await this.riskQuizService.findSchemeSummariesByIds(
+      unique(realizations.map((item) => item.riskSchemeId)),
+    );
+    const riskSchemeById = new Map(riskSchemes.map((item) => [item.id, item]));
+
+    const allStations = await this.stationService.findStationsByIds(
+      unique(scenarios.flatMap((item) => item.stationIds)),
+    );
+    const stationById = new Map(allStations.map((item) => [item.id, item]));
+
+    const logsByRealizationId = new Map<
+      string,
+      Awaited<ReturnType<PrismaService['eventLog']['findMany']>>
+    >();
+    if (includeLogs) {
+      const logs = await this.prisma.eventLog.findMany({
+        where: {
+          realizationId: { in: realizations.map((item) => item.id) },
+          ...REALIZATION_CHANGE_LOG_WHERE,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      for (const log of logs) {
+        const bucket = logsByRealizationId.get(log.realizationId) ?? [];
+        bucket.push(log);
+        logsByRealizationId.set(log.realizationId, bucket);
+      }
+    }
+
+    return realizations.map((realization) => {
+      const scenario = realization.scenarioId
+        ? (scenarioById.get(realization.scenarioId) ?? null)
+        : null;
+      const scenarioTemplateId = scenario?.sourceTemplateId ?? scenario?.id;
+      const scenarioTemplate =
+        scenarioTemplateId && scenarioTemplateId !== scenario?.id
+          ? (scenarioById.get(scenarioTemplateId) ??
+            templateById.get(scenarioTemplateId) ??
+            null)
+          : scenario;
+      const riskScheme = realization.riskSchemeId
+        ? riskSchemeById.get(realization.riskSchemeId)
+        : undefined;
+
+      return this.assembleEntity({
+        realization,
+        scenarioTemplateId,
+        scenarioTemplateName: scenarioTemplate?.name,
+        riskSchemeTemplateId: riskScheme
+          ? (riskScheme.sourceTemplateId ?? riskScheme.id)
+          : undefined,
+        stations: (scenario?.stationIds ?? [])
+          .map((id) => stationById.get(id))
+          .filter((station): station is StationEntity => Boolean(station)),
+        logsRaw: logsByRealizationId.get(realization.id) ?? [],
+      });
+    });
+  }
+
+  private assembleEntity(input: {
+    realization: NonNullable<
+      Awaited<ReturnType<PrismaService['realization']['findUnique']>>
+    >;
+    scenarioTemplateId: string | undefined;
+    scenarioTemplateName: string | undefined;
+    riskSchemeTemplateId: string | undefined;
+    stations: StationEntity[];
+    logsRaw: Parameters<typeof mapRealizationLogs>[0];
+  }) {
+    const { realization, stations } = input;
     const publicJoinCode = this.joinCodeService.resolvePublicJoinCode(
       realization.id,
       realization.joinCode,
@@ -740,14 +881,14 @@ export class RealizationService {
           'timedStationPointsDecayEnabled' in realization
             ? realization.timedStationPointsDecayEnabled
             : false,
-        scenarioTemplateId,
-        scenarioTemplateName,
-        riskSchemeTemplateId,
+        scenarioTemplateId: input.scenarioTemplateId,
+        scenarioTemplateName: input.scenarioTemplateName,
+        riskSchemeTemplateId: input.riskSchemeTemplateId,
         joinCode: publicJoinCode,
       },
       stationIds: stations.map((item) => item.id),
       scenarioStations: stations,
-      logs: mapRealizationLogs(logsRaw),
+      logs: mapRealizationLogs(input.logsRaw),
     });
   }
 

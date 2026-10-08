@@ -13,3 +13,12 @@ export const HIDDEN_EVENT_LOG_TYPES = ['team_location_updated'];
 export const VISIBLE_EVENT_LOG_WHERE = {
   eventType: { notIn: HIDDEN_EVENT_LOG_TYPES },
 } satisfies Prisma.EventLogWhereInput;
+
+/**
+ * Wpisy zakładki „Logi zmian” w edycji realizacji (RealizationService.createLog).
+ * Encja realizacji niesie tylko je — zdarzenia gry (setki na drużynę) panel
+ * czyta z overview, z limitem.
+ */
+export const REALIZATION_CHANGE_LOG_WHERE = {
+  eventType: { in: ['realization.created', 'realization.updated'] },
+} satisfies Prisma.EventLogWhereInput;

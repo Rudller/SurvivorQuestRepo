@@ -320,6 +320,17 @@ export class RiskQuizService {
     });
   }
 
+  async findSchemeSummariesByIds(schemeIds: string[]) {
+    if (schemeIds.length === 0) {
+      return [];
+    }
+
+    return this.prisma.riskScheme.findMany({
+      where: { id: { in: schemeIds } },
+      select: { id: true, realizationId: true, sourceTemplateId: true },
+    });
+  }
+
   /**
    * The deck id an update should store. The realization editor's dropdown lists
    * templates only, so a realization that already owns a clone submits the
