@@ -15,6 +15,7 @@ import type {
 import { regularStationTypeGroups, riskStationTypeGroups, stationTypeHints } from "../types/station";
 import type { StationFormVariant } from "../types/station";
 import { useIsDirty } from "../../../shared/lib/use-is-dirty";
+import { StyledMarkdownEditor, STATION_DESCRIPTION_TOOLS } from "../../../shared/components/styled-markdown-editor";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -1228,28 +1229,26 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
             </div>
             ) : null}
 
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">
-                {editValues.type === "photo-task"
+            <StyledMarkdownEditor
+              label={
+                editValues.type === "photo-task"
                   ? "Polecenie (co należy sfotografować)"
                   : editValues.type === "qr-hunt"
                     ? "Wskazówka (gdzie szukać kodów QR)"
-                    : "Opis"}
-              </span>
-              <textarea
-                value={activeDescription}
-                onChange={(event) => setActiveDescription(event.target.value)}
-                rows={4}
-                placeholder={
-                  editValues.type === "photo-task"
-                    ? "Np. Znajdź młotek i zrób jego zdjęcie"
-                    : editValues.type === "qr-hunt"
-                      ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
-                      : "Opis stanowiska"
-                }
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
+                    : "Opis"
+              }
+              value={activeDescription}
+              onChange={setActiveDescription}
+              rows={4}
+              placeholder={
+                editValues.type === "photo-task"
+                  ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                  : editValues.type === "qr-hunt"
+                    ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                    : "Opis stanowiska"
+              }
+              tools={STATION_DESCRIPTION_TOOLS}
+            />
 
             {isQuizStationType(editValues.type) ? (
               <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">

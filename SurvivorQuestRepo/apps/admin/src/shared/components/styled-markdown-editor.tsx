@@ -2,6 +2,21 @@
 
 import { useRef } from "react";
 
+export type StyledMarkdownTool = "bold" | "italic" | "underline" | "bulletList" | "numberList";
+
+/** Station descriptions render inline on the tablet — no lists, just emphasis. */
+export const STATION_DESCRIPTION_TOOLS: readonly StyledMarkdownTool[] = ["bold", "italic", "underline"];
+
+const DEFAULT_TOOLS: readonly StyledMarkdownTool[] = ["bold", "italic", "bulletList", "numberList"];
+
+const TOOL_HELP: Record<StyledMarkdownTool, string> = {
+  bold: "**pogrubienie**",
+  italic: "*kursywa*",
+  underline: "__podkreślenie__",
+  bulletList: "- lista wypunktowana",
+  numberList: "1. lista numerowana",
+};
+
 type StyledMarkdownEditorProps = {
   label: string;
   value: string;
@@ -9,6 +24,8 @@ type StyledMarkdownEditorProps = {
   placeholder?: string;
   rows?: number;
   helperText?: string;
+  /** Which toolbar buttons to show — the mobile renderer of each field decides what it can display. */
+  tools?: readonly StyledMarkdownTool[];
 };
 
 function applyWrap(
@@ -73,6 +90,7 @@ export function StyledMarkdownEditor({
   placeholder,
   rows = 6,
   helperText,
+  tools = DEFAULT_TOOLS,
 }: StyledMarkdownEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -88,34 +106,54 @@ export function StyledMarkdownEditor({
     <label className="block space-y-1.5">
       <span className="text-xs uppercase tracking-wider text-zinc-400">{label}</span>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2">
-        <button
-          type="button"
-          onClick={() => withTextarea((textarea) => applyWrap(textarea, value, "**", "**", onChange))}
-          className="rounded border border-zinc-600 px-2 py-1 text-xs font-semibold text-zinc-200 hover:border-zinc-400"
-        >
-          B
-        </button>
-        <button
-          type="button"
-          onClick={() => withTextarea((textarea) => applyWrap(textarea, value, "*", "*", onChange))}
-          className="rounded border border-zinc-600 px-2 py-1 text-xs italic text-zinc-200 hover:border-zinc-400"
-        >
-          I
-        </button>
-        <button
-          type="button"
-          onClick={() => withTextarea((textarea) => applyList(textarea, value, "bullet", onChange))}
-          className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-400"
-        >
-          • Lista
-        </button>
-        <button
-          type="button"
-          onClick={() => withTextarea((textarea) => applyList(textarea, value, "number", onChange))}
-          className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-400"
-        >
-          1. Lista
-        </button>
+        {tools.includes("bold") ? (
+          <button
+            type="button"
+            title="Pogrubienie"
+            onClick={() => withTextarea((textarea) => applyWrap(textarea, value, "**", "**", onChange))}
+            className="rounded border border-zinc-600 px-2 py-1 text-xs font-semibold text-zinc-200 hover:border-zinc-400"
+          >
+            B
+          </button>
+        ) : null}
+        {tools.includes("italic") ? (
+          <button
+            type="button"
+            title="Kursywa"
+            onClick={() => withTextarea((textarea) => applyWrap(textarea, value, "*", "*", onChange))}
+            className="rounded border border-zinc-600 px-2 py-1 text-xs italic text-zinc-200 hover:border-zinc-400"
+          >
+            I
+          </button>
+        ) : null}
+        {tools.includes("underline") ? (
+          <button
+            type="button"
+            title="Podkreślenie"
+            onClick={() => withTextarea((textarea) => applyWrap(textarea, value, "__", "__", onChange))}
+            className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 underline hover:border-zinc-400"
+          >
+            U
+          </button>
+        ) : null}
+        {tools.includes("bulletList") ? (
+          <button
+            type="button"
+            onClick={() => withTextarea((textarea) => applyList(textarea, value, "bullet", onChange))}
+            className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-400"
+          >
+            • Lista
+          </button>
+        ) : null}
+        {tools.includes("numberList") ? (
+          <button
+            type="button"
+            onClick={() => withTextarea((textarea) => applyList(textarea, value, "number", onChange))}
+            className="rounded border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:border-zinc-400"
+          >
+            1. Lista
+          </button>
+        ) : null}
       </div>
       <textarea
         ref={textareaRef}
@@ -126,8 +164,7 @@ export function StyledMarkdownEditor({
         className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
       />
       <p className="text-xs text-zinc-500">
-        {helperText ||
-          "Obsługa formatowania: **pogrubienie**, *kursywa*, - lista wypunktowana, 1. lista numerowana."}
+        {helperText || `Obsługa formatowania: ${tools.map((tool) => TOOL_HELP[tool]).join(", ")}.`}
       </p>
     </label>
   );

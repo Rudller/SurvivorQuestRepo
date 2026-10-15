@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { Scenario } from "../types/scenario";
 import type { Station } from "@/features/games/types/station";
 import { isCompletionCodeRequired } from "@/features/games/station.utils";
+import { stripInlineFormatting } from "@/features/realizations/mobile-preview/puzzle-helpers";
 import { getStationGroupCategories, uncategorizedStationGroupKey } from "@/features/games/station-catalog.utils";
 
 const UNCATEGORIZED_FILTER_LABEL = "Bez kategorii";
@@ -205,7 +206,7 @@ export function ScenariosTable({ scenarios, stations, isLoading, onEdit, onRefet
 
                         return (
                           <p key={station.id} className="text-xs text-zinc-300">
-                            • {station.name}: {station.description || "Brak opisu aktywności"}
+                            • {station.name}: {stripInlineFormatting(station.description) || "Brak opisu aktywności"}
                           </p>
                         );
                       })

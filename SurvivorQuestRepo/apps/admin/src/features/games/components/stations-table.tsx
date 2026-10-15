@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import type { Station } from "../types/station";
+import { stripInlineFormatting } from "@/features/realizations/mobile-preview/puzzle-helpers";
 import {
   getStationTypeLabel,
   formatTimeLimit,
@@ -263,7 +264,7 @@ export function StationsTable({
                           <span className="w-fit rounded-md border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">
                             {getStationTypeLabel(game.type)}
                           </span>
-                          <p className="line-clamp-2 pb-0.5 text-sm leading-6 text-zinc-400">{game.description}</p>
+                          <p className="line-clamp-2 pb-0.5 text-sm leading-6 text-zinc-400">{stripInlineFormatting(game.description)}</p>
                           <p className="text-sm font-medium text-amber-300">{game.points} pkt</p>
                           <p className="text-xs text-zinc-300">{formatTimeLimit(game.timeLimitSeconds)}</p>
                           <p className="text-xs text-zinc-300">

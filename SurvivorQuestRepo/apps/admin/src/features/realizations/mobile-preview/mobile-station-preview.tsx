@@ -9,6 +9,7 @@ import { PreviewTaskWrapper } from "./preview-ui";
 import { formatRemainingTimeLabel, resolvePuzzleSecret } from "./puzzle-helpers";
 import { resolveStationPreviewPrompt } from "./prompt-text";
 import { PREVIEW_LAYOUT } from "./layout-tokens";
+import { FormattedInline } from "./formatted-inline";
 import { toPuzzleView } from "./types";
 import { OpenQuizPreview, QuizPreview, ReviewedAnswerPreview, TrueFalsePreview } from "./panels/quiz-preview";
 import { CodePreview } from "./panels/code-preview";
@@ -139,14 +140,14 @@ export function MobileStationPreview({
             className={`mb-2 ${requiresCode ? "text-justify" : "line-clamp-2"}`}
             style={{ color: MOBILE_THEME.textMuted, fontSize: PREVIEW_LAYOUT.descriptionFontSize, lineHeight: 1.4 }}
           >
-            {description}
+            <FormattedInline text={description} />
           </p>
         ) : null}
 
         {type === "photo-task" ? (
           <>
             <p className="mb-2 text-center" style={{ color: MOBILE_THEME.textPrimary, fontSize: PREVIEW_LAYOUT.promptFontSize }}>
-              {prompt}
+              <FormattedInline text={prompt} />
             </p>
             <CameraPlaceholderPreview kind={type} />
           </>

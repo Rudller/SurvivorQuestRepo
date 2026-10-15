@@ -1,6 +1,7 @@
 import { MOBILE_THEME } from "../mobile-preview-theme";
 import { PREVIEW_LAYOUT } from "../layout-tokens";
 import { PreviewActionButton } from "../preview-ui";
+import { FormattedInline } from "../formatted-inline";
 
 const QR_WATERMARK_ICON_URI = "https://unpkg.com/@tabler/icons@3.34.1/icons/outline/qrcode.svg";
 const CARD_HEIGHT = 240;
@@ -24,7 +25,7 @@ export function QrHuntPreview({ description, qrScanCodesCount }: { description?:
 
       {description ? (
         <p className="mt-2" style={{ color: MOBILE_THEME.textMuted, fontSize: PREVIEW_LAYOUT.descriptionFontSize, lineHeight: 1.4 }}>
-          {description}
+          <FormattedInline text={description} />
         </p>
       ) : null}
 

@@ -13,6 +13,7 @@ export type IntroInlinePart = {
   text: string;
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
 };
 
 export type WordleCellState = "correct" | "present" | "absent";
@@ -771,7 +772,7 @@ export function parseIntroBlocks(rawText: string): IntroBlock[] {
 }
 
 export function parseIntroInline(text: string): IntroInlinePart[] {
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const tokenPattern = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g;
   const parts: IntroInlinePart[] = [];
   let lastIndex = 0;
 
@@ -785,6 +786,8 @@ export function parseIntroInline(text: string): IntroInlinePart[] {
 
     if (token.startsWith("**") && token.endsWith("**")) {
       parts.push({ text: token.slice(2, -2), bold: true });
+    } else if (token.startsWith("__") && token.endsWith("__")) {
+      parts.push({ text: token.slice(2, -2), underline: true });
     } else if (token.startsWith("*") && token.endsWith("*")) {
       parts.push({ text: token.slice(1, -1), italic: true });
     } else {
@@ -860,4 +863,11 @@ export function blendHexColors(from: string, to: string, ratio: number) {
   const g = Math.round(fromRgb.g + (toRgb.g - fromRgb.g) * t);
   const b = Math.round(fromRgb.b + (toRgb.b - fromRgb.b) * t);
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** Station description without its **bold** / *italic* / __underline__ markers, for plain-text lists. */
+export function stripInlineFormatting(text: string): string {
+  return parseIntroInline(text)
+    .map((part) => part.text)
+    .join("");
 }

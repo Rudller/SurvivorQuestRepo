@@ -15,6 +15,7 @@ import type {
 import { regularStationTypeGroups, riskStationTypeGroups, stationTypeHints } from "../types/station";
 import type { StationFormVariant } from "../types/station";
 import { useIsDirty } from "../../../shared/lib/use-is-dirty";
+import { StyledMarkdownEditor, STATION_DESCRIPTION_TOOLS } from "../../../shared/components/styled-markdown-editor";
 import {
   getRealizationLanguageFlag,
   getRealizationLanguageLabel,
@@ -1242,28 +1243,26 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
           </div>
           ) : null}
 
-          <label className="space-y-1.5">
-            <span className="text-xs uppercase tracking-wider text-zinc-400">
-              {type === "photo-task"
+          <StyledMarkdownEditor
+            label={
+              type === "photo-task"
                 ? "Polecenie (co należy sfotografować)"
                 : type === "qr-hunt"
                   ? "Wskazówka (gdzie szukać kodów QR)"
-                  : "Opis (opcjonalny)"}
-            </span>
-            <textarea
-              value={activeDescription}
-              onChange={(event) => setActiveDescription(event.target.value)}
-              placeholder={
-                type === "photo-task"
-                  ? "Np. Znajdź młotek i zrób jego zdjęcie"
-                  : type === "qr-hunt"
-                    ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
-                    : "Krótki opis stanowiska"
-              }
-              rows={4}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-            />
-          </label>
+                  : "Opis (opcjonalny)"
+            }
+            value={activeDescription}
+            onChange={setActiveDescription}
+            placeholder={
+              type === "photo-task"
+                ? "Np. Znajdź młotek i zrób jego zdjęcie"
+                : type === "qr-hunt"
+                  ? "Np. Kody znajdziesz przy wejściach do budynków na trasie"
+                  : "Krótki opis stanowiska"
+            }
+            rows={4}
+            tools={STATION_DESCRIPTION_TOOLS}
+          />
 
           {isQuizStationType(type) ? (
             <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">

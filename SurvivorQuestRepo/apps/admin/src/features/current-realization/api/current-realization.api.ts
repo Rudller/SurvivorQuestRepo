@@ -46,6 +46,40 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+type CurrentRealizationLog = CurrentRealizationOverview["logs"][number];
+
+function normalizeLog(value: unknown): CurrentRealizationLog {
+  const log = asRecord(value);
+
+  return {
+    id: asString(log.id),
+    realizationId: asString(log.realizationId ?? log.realization_id),
+    teamId:
+      (log.teamId as string | null) ??
+      (log.team_id as string | null) ??
+      null,
+    teamSlot: (() => {
+      const value = log.teamSlot ?? log.team_slot;
+      if (value === null || typeof value === "undefined") {
+        return null;
+      }
+      return asNumber(value, 0);
+    })(),
+    teamName:
+      (log.teamName as string | null) ??
+      (log.team_name as string | null) ??
+      null,
+    actorType: asString(
+      log.actorType ?? log.actor_type,
+      "system",
+    ) as CurrentRealizationOverview["logs"][number]["actorType"],
+    actorId: asString(log.actorId ?? log.actor_id),
+    eventType: asString(log.eventType ?? log.event_type),
+    payload: asRecord(log.payload),
+    createdAt: asString(log.createdAt ?? log.created_at),
+  };
+}
+
 function toMobileAdminRealizationPath(
   realizationId: string | undefined,
   suffix = "",
@@ -219,37 +253,7 @@ function normalizeOverview(raw: unknown): CurrentRealizationOverview {
         updatedAt: asString(team.updatedAt ?? team.updated_at),
       };
     }),
-    logs: asArray(source.logs).map((value) => {
-      const log = asRecord(value);
-
-      return {
-        id: asString(log.id),
-        realizationId: asString(log.realizationId ?? log.realization_id),
-        teamId:
-          (log.teamId as string | null) ??
-          (log.team_id as string | null) ??
-          null,
-        teamSlot: (() => {
-          const value = log.teamSlot ?? log.team_slot;
-          if (value === null || typeof value === "undefined") {
-            return null;
-          }
-          return asNumber(value, 0);
-        })(),
-        teamName:
-          (log.teamName as string | null) ??
-          (log.team_name as string | null) ??
-          null,
-        actorType: asString(
-          log.actorType ?? log.actor_type,
-          "system",
-        ) as CurrentRealizationOverview["logs"][number]["actorType"],
-        actorId: asString(log.actorId ?? log.actor_id),
-        eventType: asString(log.eventType ?? log.event_type),
-        payload: asRecord(log.payload),
-        createdAt: asString(log.createdAt ?? log.created_at),
-      };
-    }),
+    logs: asArray(source.logs).map(normalizeLog),
     stats: {
       activeTeams: asNumber(stats.activeTeams ?? stats.active_teams),
       completedTasks: asNumber(stats.completedTasks ?? stats.completed_tasks),
@@ -388,6 +392,20 @@ function normalizePendingPhotoReviews(raw: unknown): PendingPhotoReview[] {
 
 export const currentRealizationApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    // Log jednej drużyny prosto z bazy — overview niesie tylko ogon logu całej
+    // realizacji, więc wcześniejsze wpisy drużyny by z niego wypadły.
+    getCurrentRealizationTeamLogs: build.query<
+      CurrentRealizationLog[],
+      { realizationId: string; teamId: string }
+    >({
+      query: ({ realizationId, teamId }) =>
+        toMobileAdminRealizationPath(
+          realizationId,
+          `/teams/${encodeURIComponent(teamId)}/logs`,
+        ),
+      transformResponse: (response: unknown) => asArray(response).map(normalizeLog),
+      providesTags: ["Realization"],
+    }),
     getCurrentRealizationOverview: build.query<
       CurrentRealizationOverview,
       { realizationId?: string } | void
@@ -606,6 +624,7 @@ export const currentRealizationApi = baseApi.injectEndpoints({
 
 export const {
   useGetCurrentRealizationOverviewQuery,
+  useGetCurrentRealizationTeamLogsQuery,
   useResetCurrentRealizationCompletedTasksMutation,
   useStartCurrentRealizationMutation,
   useFinishCurrentRealizationMutation,

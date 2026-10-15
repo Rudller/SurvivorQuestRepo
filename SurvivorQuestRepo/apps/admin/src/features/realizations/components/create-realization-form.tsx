@@ -49,7 +49,7 @@ import {
   RealizationStationsEditor,
   toRealizationStationDraft,
 } from "./realization-stations-editor";
-import { StyledMarkdownEditor } from "./styled-markdown-editor";
+import { StyledMarkdownEditor } from "@/shared/components/styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesDraftEditor, type PointsQrCodeDraft } from "./points-qr-codes-draft-editor";
 import { useCreateRiskSchemeMutation, useGetRiskSchemesQuery } from "@/features/risk-quiz/api/risk-quiz.api";

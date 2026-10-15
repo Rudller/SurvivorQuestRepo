@@ -13,8 +13,10 @@ import type { Realization } from "@/features/realizations/types/realization";
 import { useGetRealizationsQuery } from "@/features/realizations/api/realization.api";
 import { EditRealizationPanel } from "@/features/realizations/components/edit-realization-panel";
 import { CurrentRealizationPhotoReviewsPanel } from "@/features/current-realization/components/current-realization-photo-reviews-panel";
+import { skipToken } from "@reduxjs/toolkit/query";
 import {
   useGetCurrentRealizationOverviewQuery,
+  useGetCurrentRealizationTeamLogsQuery,
   useFinishCurrentRealizationMutation,
   useResetCurrentRealizationMutation,
   useForceCurrentRealizationDeviceExitMutation,
@@ -74,6 +76,8 @@ export default function CurrentRealizationPage() {
   const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [visibleLogCount, setVisibleLogCount] = useState(20);
+  // "all" albo id drużyny, której log pokazujemy.
+  const [logTeamFilter, setLogTeamFilter] = useState<string>("all");
   const [selectedRealizationId, setSelectedRealizationId] = useState<"current" | string>("current");
   const [joinCodeQrImage, setJoinCodeQrImage] = useState<QrImageLightboxImage | null>(null);
   const [isGeneratingJoinCodeQr, setIsGeneratingJoinCodeQr] = useState(false);
@@ -89,9 +93,12 @@ export default function CurrentRealizationPage() {
   const [finishCurrentRealization, { isLoading: isFinishingRealization }] = useFinishCurrentRealizationMutation();
   const [resetCurrentRealization, { isLoading: isResettingRealization }] = useResetCurrentRealizationMutation();
   const [forceDeviceExit, { isLoading: isForcingDeviceExit }] = useForceCurrentRealizationDeviceExitMutation();
+  // Bez pollingu: to lista WSZYSTKICH realizacji z pełnymi stanowiskami (ponad
+  // 1 MB przy kilkudziesięciu), a tu służy tylko selektorowi i panelowi edycji.
+  // Stan gry na żywo niesie overview co 10 s; zmiany z panelu unieważniają tag
+  // "Realization", a powrót na kartę odświeża listę.
   const { data: realizations, isLoading: isRealizationsLoading } = useGetRealizationsQuery(undefined, {
     skip: !meData,
-    pollingInterval: 30_000,
     refetchOnFocus: true,
     refetchOnReconnect: true,
   });
@@ -189,12 +196,21 @@ export default function CurrentRealizationPage() {
     () => topTeams.reduce((sum, team) => sum + Math.max(team.taskStats.total - team.taskStats.done, 0), 0),
     [topTeams],
   );
+  // Drużyna mogła zniknąć z realizacji (inna realizacja w selektorze) — wtedy
+  // wracamy do całego logu zamiast pokazywać pustą listę.
+  const effectiveLogTeamId =
+    logTeamFilter !== "all" && overview?.teams.some((team) => team.id === logTeamFilter) ? logTeamFilter : null;
+  const { data: teamLogs, isFetching: isTeamLogsFetching } = useGetCurrentRealizationTeamLogsQuery(
+    overview && effectiveLogTeamId ? { realizationId: overview.realization.id, teamId: effectiveLogTeamId } : skipToken,
+    { pollingInterval: 10_000, refetchOnFocus: true, refetchOnReconnect: true },
+  );
+  const activeLogs = effectiveLogTeamId ? teamLogs : overview?.logs;
   const sortedLogs = useMemo(
     () =>
-      [...(overview?.logs ?? [])].sort(
+      [...(activeLogs ?? [])].sort(
         (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
       ),
-    [overview?.logs],
+    [activeLogs],
   );
   const visibleLogs = useMemo(() => sortedLogs.slice(0, visibleLogCount), [sortedLogs, visibleLogCount]);
   const hasMoreLogs = visibleLogCount < sortedLogs.length;
@@ -812,7 +828,29 @@ export default function CurrentRealizationPage() {
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-                  <h2 className="text-sm font-semibold text-zinc-100">Log zdarzeń</h2>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold text-zinc-100">Log zdarzeń</h2>
+                    <label className="flex items-center gap-2 text-xs text-zinc-400">
+                      <span>Drużyna</span>
+                      <select
+                        value={effectiveLogTeamId ?? "all"}
+                        onChange={(event) => {
+                          setLogTeamFilter(event.target.value);
+                          setVisibleLogCount(20);
+                        }}
+                        className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-amber-400/80"
+                      >
+                        <option value="all">Wszystkie</option>
+                        {[...overview.teams]
+                          .sort((left, right) => left.slotNumber - right.slotNumber)
+                          .map((team) => (
+                            <option key={team.id} value={team.id}>
+                              {team.name || `Drużyna #${team.slotNumber}`}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
                   <div className="mt-3 max-h-105 space-y-2.5 overflow-y-auto pr-1">
                     {visibleLogs.map((log) => (
                       <article key={log.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3.5">
@@ -843,7 +881,13 @@ export default function CurrentRealizationPage() {
                       </article>
                     ))}
                     {visibleLogs.length === 0 && (
-                      <p className="text-sm text-zinc-500">Brak eventów dla tej realizacji.</p>
+                      <p className="text-sm text-zinc-500">
+                        {effectiveLogTeamId
+                          ? isTeamLogsFetching && !teamLogs
+                            ? "Wczytywanie logu drużyny..."
+                            : "Brak eventów dla tej drużyny."
+                          : "Brak eventów dla tej realizacji."}
+                      </p>
                     )}
                   </div>
                   {hasMoreLogs ? (

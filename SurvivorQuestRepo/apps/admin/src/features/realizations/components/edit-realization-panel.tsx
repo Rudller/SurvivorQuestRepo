@@ -56,7 +56,7 @@ import {
   RealizationStationsEditor,
   toRealizationStationDraft,
 } from "./realization-stations-editor";
-import { StyledMarkdownEditor } from "./styled-markdown-editor";
+import { StyledMarkdownEditor } from "@/shared/components/styled-markdown-editor";
 import { UploadedAssetPicker } from "./uploaded-asset-picker";
 import { PointsQrCodesManager } from "./points-qr-codes-manager";
 import { CaseFilesManager } from "./case-files-manager";

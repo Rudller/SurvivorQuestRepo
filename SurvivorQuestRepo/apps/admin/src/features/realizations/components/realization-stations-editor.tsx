@@ -50,6 +50,7 @@ import {
 } from "../types/realization";
 import { useTranslateRealizationTextsMutation } from "../api/realization.api";
 import { MobileStationPreview } from "../mobile-preview/mobile-station-preview";
+import { StyledMarkdownEditor, STATION_DESCRIPTION_TOOLS } from "@/shared/components/styled-markdown-editor";
 
 const RealizationLocationPickerMap = dynamic(
   () => import("./realization-location-picker-map").then((module) => module.RealizationLocationPickerMap),
@@ -1890,17 +1891,13 @@ export function RealizationStationsEditor({
                   </div>
                   ) : null}
 
-                  <label className="block space-y-1.5">
-                    <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
-                    <textarea
-                      rows={3}
-                      value={selectedStationDescription}
-                      onChange={(event) => updateStationForSelectedLanguage(stationIndex, { description: event.target.value })}
-                      className={`w-full rounded-lg border bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ${
-                        "border-zinc-700 focus:border-amber-400/80"
-                      }`}
-                    />
-                  </label>
+                  <StyledMarkdownEditor
+                    label="Opis"
+                    rows={3}
+                    value={selectedStationDescription}
+                    onChange={(value) => updateStationForSelectedLanguage(stationIndex, { description: value })}
+                    tools={STATION_DESCRIPTION_TOOLS}
+                  />
 
                   {isQuizStationType(station.type) ? (
                     <div className="space-y-3 rounded-xl border border-zinc-700 bg-zinc-900/70 p-3">
