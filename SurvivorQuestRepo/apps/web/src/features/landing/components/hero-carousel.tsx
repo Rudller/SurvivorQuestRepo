@@ -83,6 +83,7 @@ export function HeroCarousel({ slides, innerClassName, quoteHrefBase }: HeroCaro
               sizes="100vw"
               priority={index === 0}
               className="object-cover object-center"
+              style={slide.focus ? { objectPosition: slide.focus } : undefined}
             />
           </div>
         ))}

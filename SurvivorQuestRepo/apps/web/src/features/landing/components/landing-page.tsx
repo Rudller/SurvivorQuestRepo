@@ -1,7 +1,8 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
-  CASE_STUDIES,
+  CUSTOM_TECH,
   EVENT_FORMATS,
   FAQ_ITEMS,
   PROCESS_STEPS,
@@ -10,7 +11,10 @@ import {
 } from "@/features/landing/model/content";
 import type { HeroSlide } from "@/features/landing/lib/hero-slides";
 import { withQuoteSubject } from "@/features/landing/lib/quote-href";
+import { FormatShowcase } from "./format-showcase";
 import { HeroCarousel } from "./hero-carousel";
+import { LineIcon } from "./line-icon";
+import { RevealOnView } from "./reveal-on-view";
 import { LandingNav } from "./landing-nav";
 import { LandingHeaderVisibilityController } from "./landing-header-visibility-controller";
 import { SectionHeading } from "./section-heading";
@@ -30,7 +34,7 @@ const LANDING_NAV_ITEMS = [
   { href: "#formaty", label: "Formaty" },
   { href: "#dlaczego", label: "Dlaczego my" },
   { href: "#jak-pracujemy", label: "Jak pracujemy" },
-  { href: "#realizacje", label: "Realizacje" },
+  { href: "#technologia", label: "Technologia" },
   { href: "#faq", label: "FAQ" },
   { href: "#kontakt", label: "Kontakt" },
 ] as const;
@@ -60,6 +64,7 @@ export function LandingPage({
 }: LandingPageProps) {
   const currentYear = new Date().getFullYear();
   const quoteHref = withQuoteSubject(quoteHrefBase, "Wycena eventu SurvivorQuest");
+  const ideaHref = withQuoteSubject(quoteHrefBase, "Pomysł na technologię eventową");
 
   return (
     <>
@@ -90,51 +95,48 @@ export function LandingPage({
           <div className={SECTION_INNER}>
             <SectionHeading
               eyebrow="Co organizujemy"
-              title="Trzy formaty, jeden zespół, który prowadzi wszystko od A do Z."
-              description="Każdy format przygotowujemy pod Waszą grupę, miejsce i okazję."
+              title="Gry hotelowe, gry terenowe i Ryzykanci — każdą prowadzimy od A do Z."
+              description="Każdą grę przygotowujemy pod Waszą grupę, miejsce i okazję."
             />
             <p className="mt-6 max-w-3xl text-sm leading-relaxed text-ivory-muted sm:text-base">
-              Wszystkie trzy prowadzimy w tej samej autorskiej aplikacji i tak samo od strony organizacyjnej:
-              przyjeżdżamy z tabletami i prowadzącymi, rozstawiamy grę i zabieramy sprzęt po finale. Różni je miejsce
-              i rytm — event integracyjny w terenie rządzi się czym innym niż impreza integracyjna wieczorem w sali po
-              konferencji, więc format dobieramy do tego, ile macie czasu i gdzie jesteście.
+              Wszystkie prowadzimy w tej samej autorskiej aplikacji i tak samo od strony organizacyjnej: przyjeżdżamy z
+              tabletami i prowadzącymi, rozstawiamy grę i zabieramy sprzęt po finale. Różni je miejsce i rytm — event
+              integracyjny w terenie rządzi się czym innym niż impreza integracyjna wieczorem w sali po konferencji,
+              więc grę dobieramy do tego, ile macie czasu i gdzie jesteście.
             </p>
-            <div className="mt-10 grid gap-10 lg:grid-cols-3 lg:gap-8">
-              {EVENT_FORMATS.map((format) => (
-                <article key={format.id} id={format.id} className="scroll-mt-22">
-                  <h3 className="text-lg font-semibold text-ivory">{format.title}</h3>
-                  <p className="mt-2 text-sm font-medium text-amber-soft">{format.tagline}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-ivory-muted">{format.description}</p>
-                  <ul className="mt-4 space-y-2.5">
-                    {format.points.map((point) => (
-                      <li key={point} className="flex gap-2.5 text-sm leading-relaxed text-ivory-faint">
-                        <span className="mt-2 size-1.5 shrink-0 rounded-full bg-amber" aria-hidden />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
-            </div>
+            <FormatShowcase formats={EVENT_FORMATS} />
           </div>
         </section>
 
         <section id="dlaczego" className={TONE_A}>
-          <div className={SECTION_INNER}>
+          <RevealOnView className={`relative ${SECTION_INNER}`}>
+            {/* Out of the flow on purpose: it sits beside the heading and never pushes the reasons down. */}
+            <div
+              data-reveal-photo="right"
+              className="absolute right-4 top-0 hidden aspect-[4/5] w-36 overflow-hidden rounded-2xl bg-graphite sm:right-6 lg:right-8 lg:block"
+            >
+              <Image
+                src="/sekcje/dlaczego-aplikacja.jpg"
+                alt="Uśmiechnięty mężczyzna na pomarańczowej kanapie pokazuje tablet z ekranem gry SurvivorQuest."
+                fill
+                sizes="144px"
+                className="object-cover object-[50%_45%]"
+              />
+            </div>
             <SectionHeading
               eyebrow="Dlaczego event w aplikacji"
               title="Własna aplikacja zmienia integrację w rozgrywkę, której nikt nie odpuszcza."
               description="Nie sprzedajemy narzędzia — prowadzimy w nim eventy. Dzięki temu gra jest szybsza, uczciwsza i wygląda lepiej niż karta z pieczątkami."
             />
             <div className="mt-10 grid gap-10 sm:grid-cols-2 lg:gap-8">
-              {WHY_APP.map((reason) => (
-                <article key={reason.title}>
+              {WHY_APP.map((reason, index) => (
+                <article key={reason.title} data-reveal-item style={{ "--i": index } as CSSProperties}>
                   <h3 className="text-lg font-semibold text-ivory">{reason.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-ivory-muted">{reason.description}</p>
                 </article>
               ))}
             </div>
-          </div>
+          </RevealOnView>
         </section>
 
         <section id="jak-pracujemy" className={TONE_B}>
@@ -146,66 +148,57 @@ export function LandingPage({
             />
             <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
               {PROCESS_STEPS.map((step) => (
-                <article key={step.title}>
+                <article key={step.title} className="flex flex-col">
                   <h3 className="text-lg font-semibold text-ivory">{step.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-ivory-muted">{step.description}</p>
+                  {/* mt-auto lines the icons up in one row however long each description runs. */}
+                  <div className="mt-auto flex justify-center pt-8">
+                    <LineIcon name={step.icon} className="size-20 text-amber" />
+                  </div>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section id="realizacje" className={TONE_A}>
-          <div className={SECTION_INNER}>
+        <section id="technologia" className={`${TONE_A} relative overflow-hidden`}>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(245,166,35,0.14),transparent_45%)]" />
+          <RevealOnView className={`relative ${SECTION_INNER}`}>
             <SectionHeading
-              eyebrow="Realizacje"
-              title="Jak to wyglądało u innych."
-              description="Trzy przykłady eventów, które prowadziliśmy — z tym, czego potrzebował klient, i tym, co z tego wyszło."
+              eyebrow="Technologia na eventy"
+              title="Masz pomysł, którego nie da się kupić z półki? Zbudujemy go."
+              description="Poza naszymi grami tworzymy technologię od zera — aplikacje, systemy webowe i urządzenia, które robią na evencie coś, czego nie robi nikt inny."
             />
-            <div className="mt-10 grid gap-10">
-              {CASE_STUDIES.map((caseStudy) => (
-                <article key={caseStudy.title}>
-                  <h3 className="text-lg font-semibold text-ivory sm:text-xl">{caseStudy.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-ivory-muted">
-                    <span className="font-medium text-ivory">Potrzeba:</span> {caseStudy.challenge}
-                  </p>
-                  {caseStudy.course ? (
-                    <p className="mt-2 text-sm leading-relaxed text-ivory-muted">
-                      <span className="font-medium text-ivory">Przebieg:</span> {caseStudy.course}
-                    </p>
-                  ) : null}
-                  <p className="mt-2 text-sm leading-relaxed text-ivory-muted">
-                    <span className="font-medium text-ivory">Efekt:</span> {caseStudy.outcome}
-                  </p>
-                  {caseStudy.metrics.length > 0 ? (
-                    <ul className="mt-5 grid gap-3 sm:grid-cols-3">
-                      {caseStudy.metrics.map((metric) => (
-                        <li key={metric.label} className="rounded-xl bg-graphite px-4 py-5">
-                          <p className="text-2xl font-semibold leading-tight text-ivory">{metric.value}</p>
-                          <p className="mt-1.5 text-xs leading-relaxed text-ivory-faint">{metric.label}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {caseStudy.photos.length > 0 ? (
-                    <ul className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
-                      {caseStudy.photos.map((photo) => (
-                        <li key={photo.src} className="relative aspect-[2/3] overflow-hidden rounded-xl bg-graphite">
-                          <Image
-                            src={photo.src}
-                            alt={photo.alt}
-                            fill
-                            sizes="(min-width: 1024px) 320px, 33vw"
-                            className="object-cover"
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
+            <ul className="mt-10 grid gap-5 md:grid-cols-3">
+              {CUSTOM_TECH.map((item, index) => (
+                <li
+                  key={item.title}
+                  data-reveal-item
+                  style={{ "--i": index } as CSSProperties}
+                  className="rounded-2xl border border-line/70 bg-graphite/60 p-6"
+                >
+                  <LineIcon name={item.icon} className="size-12 text-amber" />
+                  <h3 className="mt-5 text-lg font-semibold text-ivory">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-ivory-muted">{item.description}</p>
+                </li>
               ))}
+            </ul>
+            <div
+              data-reveal-item
+              style={{ "--i": CUSTOM_TECH.length } as CSSProperties}
+              className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="max-w-xl text-sm leading-relaxed text-ivory-muted sm:text-base">
+                Opisz pomysł w kilku zdaniach — odpowiemy, czy i jak da się go zbudować, i ile to potrwa.
+              </p>
+              <Link
+                href={ideaHref}
+                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber px-5 py-3 text-sm font-semibold text-obsidian transition hover:-translate-y-0.5 hover:bg-amber-soft active:translate-y-0 active:bg-amber-deep"
+              >
+                Napisz, co wymyśliliście
+              </Link>
             </div>
-          </div>
+          </RevealOnView>
         </section>
 
         <section className={TONE_B}>

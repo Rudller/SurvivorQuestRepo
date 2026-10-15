@@ -11,48 +11,172 @@
  * registry in the backend (see CLAUDE.md).
  */
 
-/** `id` doubles as the anchor a hero slide's second button scrolls to. */
-export const EVENT_FORMATS = [
+export type EventGame = {
+  /** Anchor of the game's row, and the file name of its photo in `public/formaty`. */
+  id: string;
+  /** Small label above the name — what kind of game it is. */
+  kind: string;
+  title: string;
+  description: string;
+  points: readonly string[];
+  /** `null` until a photo exists — the row then shows a branded placeholder. */
+  image: { src: string; alt: string } | null;
+  /** A scenario written by somebody else, credited next to the game. */
+  partner?: { name: string; logoSrc: string };
+  /** Decoration drawn over the photo. */
+  photoEffect?: "snow";
+  /** Ways the same game can be run, shown side by side under the points. */
+  variants?: readonly { title: string; description: string }[];
+};
+
+export type EventFormat = {
+  /** Anchor of the category header — the hero slides' second buttons scroll here. */
+  id: string;
+  title: string;
+  /** One sentence under the category name; also the description in the JSON-LD offer catalog. */
+  tagline: string;
+  games: readonly EventGame[];
+};
+
+/**
+ * Categories in the order the offer section lists them, each with the games
+ * we run in it. Do not rename the category ids: the hero slides link to them.
+ */
+export const EVENT_FORMATS: readonly EventFormat[] = [
   {
-    id: "gra-terenowa",
-    title: "Gra terenowa i gra miejska dla firm",
-    tagline: "Rywalizacja drużyn w terenie: miasto, park, okolice hotelu.",
-    description:
-      "Drużyny z tabletami ruszają na trasę, odnajdują punkty na mapie, skanują kody QR i rozwiązują zadania: quizy, szyfry, zagadki, układanki i zadania fotograficzne. Punkty i pozycje drużyn aktualizują się na bieżąco, a koordynator na miejscu pilnuje tempa. Format sprawdza się jako główna atrakcja wyjazdu integracyjnego, jako otwarcie konferencji i jako gra miejska dla firm, które chcą przy okazji pokazać zespołowi nowe miasto.",
-    points: [
-      "Scenariusz i trasa ułożone pod Waszą lokalizację i termin",
-      "Tablety, oznaczone punkty gry i prowadzący w cenie",
-      "Trasy startujące równolegle, żeby duża grupa nie stała w kolejce",
-      "Ranking na żywo i podsumowanie z wynikami po grze",
+    id: "gra-hotelowa",
+    title: "Gry hotelowe",
+    tagline:
+      "Integracja w hotelu lub centrum konferencyjnym, niezależna od pogody — stanowiska w salach, na korytarzach i wokół obiektu.",
+    games: [
+      {
+        id: "aura-restart-challenge",
+        kind: "Gra hotelowa",
+        title: "Aura Restart Challenge",
+        description:
+          "Drużyny ruszają po całym obiekcie, polują na kody QR i rozwiązują zadania zespołowe, zbierając punkty między częścią konferencyjną a kolacją. Krótsza wersja sprawdza się jako przerywnik, dłuższa jako główna atrakcja wyjazdu.",
+        points: [
+          "Zadania dopasowane do obiektu i harmonogramu dnia",
+          "Cała gra pod dachem, więc pogoda niczego nie zmienia",
+          "Ranking na żywo na tabletach i na ekranie w sali",
+        ],
+        image: {
+          src: "/formaty/aura-restart-challenge.jpg",
+          alt: "Ekran z intro gry Aura Restart Challenge i tablety drużyn przygotowane na stole w sali.",
+        },
+      },
+      {
+        id: "black-file",
+        kind: "Gra kryminalna",
+        title: "Black File",
+        description:
+          "W hotelu wydarzyło się coś, czego nikt nie potrafi wyjaśnić. Drużyny dostają teczkę sprawy, zbierają poszlaki w salach i na korytarzach, łamią szyfry i łączą fakty, zanim zrobi to konkurencja. Wygrywa zespół, który jako pierwszy wskaże sprawcę — i udowodni to dowodami.",
+        points: [
+          "Fabuła kryminalna rozpisana na cały obiekt",
+          "Poszlaki, szyfry i dowody odblokowywane na tablecie",
+          "Finał z rozwiązaniem sprawy na oczach wszystkich",
+        ],
+        image: {
+          src: "/formaty/black-file.jpg",
+          alt: "Drużyna przy hotelowym barze przesłuchuje barmana w trakcie gry kryminalnej Black File.",
+        },
+      },
+      {
+        id: "ho-ho-hotel",
+        kind: "Gra świąteczna",
+        title: "Ho-ho-hotel",
+        description:
+          "Świąteczna gra na firmową wigilię i grudniowe wyjazdy. Drużyny ratują święta w hotelu: szukają zagubionych prezentów, rozwiązują zimowe zagadki i zbierają punkty przed kolacją. Lekka, rodzinna w klimacie i wciągająca nawet tych, którzy na integracje zwykle nie chodzą.",
+        points: [
+          "Gotowa na sezon firmowych wigilii",
+          "Zadania w świątecznym klimacie, bez wychodzenia na mróz",
+          "Idealny wstęp do wieczornej kolacji",
+        ],
+        image: {
+          src: "/formaty/ho-ho-hotel.jpg",
+          alt: "Święty Mikołaj z pluszowym misiem w drewnianej, świątecznie udekorowanej chatce.",
+        },
+        photoEffect: "snow",
+      },
     ],
   },
   {
-    id: "gra-hotelowa",
-    title: "Gra hotelowa i gra w obiekcie",
-    tagline: "Integracja w hotelu lub centrum konferencyjnym, niezależna od pogody.",
-    description:
-      "Stanowiska rozstawiamy w salach, na korytarzach i wokół obiektu. Drużyny polują na kody QR, rozwiązują zadania zespołowe i zbierają punkty między częścią konferencyjną a kolacją. To format na wyjazd firmowy i konferencję, gdzie czas jest policzony co do kwadransa, a integracja zespołu musi zmieścić się między dwiema sesjami — i nie może się posypać dlatego, że akurat zaczęło padać.",
-    points: [
-      "Zadania dopasowane do obiektu i harmonogramu dnia",
-      "Zero logistyki po Waszej stronie: przyjeżdżamy, rozstawiamy, prowadzimy",
-      "Wersja krótsza jako przerywnik lub dłuższa jako główna atrakcja",
-      "Cała gra toczy się pod dachem, więc pogoda niczego nie zmienia",
+    id: "gra-terenowa",
+    title: "Gry terenowe",
+    tagline:
+      "Rywalizacja drużyn w terenie: miasto, park, las albo okolice hotelu — z mapą, kodami QR i rankingiem na żywo.",
+    games: [
+      {
+        id: "cztery-zywioly",
+        kind: "Gra terenowa",
+        title: "Cztery żywioły",
+        description:
+          "Ogień, woda, ziemia i powietrze — cztery strefy, cztery rodzaje wyzwań. Drużyny przechodzą przez kolejne żywioły, łącząc zadania w terenie z zadaniami na tablecie, a o zwycięstwie decyduje to, jak zespół radzi sobie w każdym z nich. Scenariusz przygotowany wspólnie z HardTeam.",
+        points: [
+          "Cztery strefy z różnym typem wyzwań",
+          "Zadania fizyczne i logiczne w jednej grze",
+          "Scenariusz i zaplecze HardTeam, prowadzenie w naszej aplikacji",
+        ],
+        image: {
+          src: "/formaty/cztery-zywioly.jpg",
+          alt: "Drużyna na trawie wspólnie trzyma liny i ustawia wieżę z klocków w zadaniu zespołowym.",
+        },
+        partner: { name: "HardTeam", logoSrc: "/hard-team-logo.png" },
+      },
+      {
+        id: "aura-restart-challenge-outdoor",
+        kind: "Gra terenowa",
+        title: "Aura Restart Challenge Outdoor",
+        description:
+          "Terenowa wersja Aury: drużyny z tabletami ruszają na trasę, odnajdują punkty na mapie, skanują kody QR i rozwiązują quizy, szyfry i zadania fotograficzne. Grę prowadzimy w dwóch wersjach — z instruktorami na stanowiskach albo jako samodzielna wyprawa drużyn.",
+        points: [
+          "Trasa ułożona pod Waszą lokalizację i termin",
+          "Trasy startujące równolegle, żeby duża grupa nie stała w kolejce",
+          "Podsumowanie z wynikami i zdjęciami po grze",
+        ],
+        variants: [
+          {
+            title: "Z instruktorami",
+            description:
+              "Na trasie czekają stanowiska manualne prowadzone przez naszych instruktorów — zadania ruchowe i zręcznościowe obok zadań na tablecie.",
+          },
+          {
+            title: "Bez instruktorów",
+            description:
+              "Drużyny same wyruszają na trasę i mierzą się z zagadkami i wyzwaniami ukrytymi w terenie. Więcej swobody i odkrywania na własną rękę, a nasz prowadzący czuwa nad przebiegiem gry od startu po finał.",
+          },
+        ],
+        image: {
+          src: "/formaty/aura-restart-challenge-outdoor.jpg",
+          alt: "Instruktor SurvivorQuest przy boisku, na którym uczestnicy grają w bumper ball.",
+        },
+      },
     ],
   },
   {
     id: "ryzykanci",
-    title: "Ryzykanci — quiz drużynowy dla firm",
-    tagline: "Wieczorny finał integracji: karty, kategorie i ryzykowanie punktów.",
-    description:
-      "Drużyny losują karty z kategorii i poziomu trudności, dostają pytanie lub zadanie na tablecie i decydują, ile punktów stawiają. Prowadzący podkręca emocje, a ranking na ekranie zmienia się po każdej karcie. Mechanika ryzyka robi tu całą robotę: drużyna, która została w tyle, może odrobić stratę jedną odważną decyzją, więc nikt nie odpada z zabawy po pierwszej rundzie.",
-    points: [
-      "Kategorie i pytania szyte pod Waszą firmę i branżę",
-      "Prowadzący, tablety dla drużyn i ekran z rankingiem",
-      "Od kameralnych zespołów po całe działy w jednej sali",
-      "Jako wieczorna atrakcja po grze terenowej albo samodzielny event",
+    title: "Ryzykanci",
+    tagline: "Quiz drużynowy na wieczorny finał integracji: karty, kategorie i ryzykowanie punktów.",
+    games: [
+      {
+        id: "ryzykanci-quiz",
+        kind: "Quiz drużynowy",
+        title: "Ryzykanci",
+        description:
+          "Drużyny losują karty z kategorii i poziomu trudności, dostają pytanie lub zadanie na tablecie i decydują, ile punktów stawiają. Ranking na ekranie zmienia się po każdej karcie, a drużyna, która została w tyle, może odrobić stratę jedną odważną decyzją.",
+        points: [
+          "Kategorie i pytania szyte pod Waszą firmę i branżę",
+          "Prowadzący, tablety dla drużyn i ekran z rankingiem",
+          "Jako wieczorna atrakcja po grze terenowej albo samodzielny event",
+        ],
+        image: {
+          src: "/formaty/ryzykanci-quiz.jpg",
+          alt: "Tablet z zasadami Ryzykantów i pudełko z kartami do gry na stole.",
+        },
+      },
     ],
   },
-] as const;
+];
 
 export const WHY_APP = [
   {
@@ -80,84 +204,54 @@ export const WHY_APP = [
 export const PROCESS_STEPS = [
   {
     title: "1. Brief",
+    icon: "brief",
     description:
       "Rozmawiamy o okazji, liczbie osób, miejscu i terminie. Doradzamy format i czas trwania — czasem odradzamy ten, o który pytacie, jeśli do grupy lepiej pasuje inny.",
   },
   {
     title: "2. Scenariusz pod Was",
+    icon: "scenario",
     description:
       "Układamy trasę lub stanowiska, dobieramy typy zadań do charakteru i kondycji grupy i wplatamy treści o Waszej firmie. Scenariusz dostajecie do akceptacji przed eventem.",
   },
   {
     title: "3. Dzień eventu",
+    icon: "event",
     description:
       "Przyjeżdżamy ze sprzętem, rozstawiamy punkty, dzielimy uczestników na drużyny, prowadzimy grę i pilnujemy tempa. Wy gracie.",
   },
   {
     title: "4. Finał i podsumowanie",
+    icon: "finale",
     description:
       "Ogłaszamy wyniki na ekranie, a po evencie przesyłamy ranking i zdjęcia z zadań — materiał, który wraca potem do firmowego newslettera albo na ścianę w biurze.",
   },
 ] as const;
 
 /**
- * Proof, not decoration. `metrics` replaced a row of grey tiles that literally
- * read "Zdjęcie: start drużyn" — captions standing in for photos that were
- * never taken. `photos` holds only real shots from the event itself (portrait,
- * exported to `public/realizacje`); leave it empty rather than fill it with stock.
+ * Custom builds — not a new task type inside the game app, but something made
+ * from scratch for one event or brand.
  */
-type CaseStudy = {
-  title: string;
-  challenge: string;
-  /** How the game itself went; optional, shown between the need and the result. */
-  course?: string;
-  outcome: string;
-  /** Hard figures shown under the story; empty until the numbers are confirmed. */
-  metrics: readonly { value: string; label: string }[];
-  photos: readonly { src: string; alt: string }[];
-};
-
-export const CASE_STUDIES: readonly CaseStudy[] = [
+export const CUSTOM_TECH = [
   {
-    title: "Gra terenowa dla ponad stu uczestników",
-    challenge:
-      "Firma chciała jednego wydarzenia dla wszystkich działów naraz: wiele drużyn w terenie, bez chaosu i bez czekania w kolejce do stanowisk.",
-    outcome:
-      "Drużyny ruszyły równolegle różnymi trasami, a ranking na żywo utrzymał rywalizację do ostatniego zadania. Finał z ogłoszeniem wyników zamknął dzień na wspólnym ekranie.",
-    metrics: [],
-    photos: [],
+    icon: "mobile",
+    title: "Aplikacje mobilne i na tablety",
+    description:
+      "Własna aplikacja pod Wasz event albo markę — od rejestracji uczestników po interaktywną grę z Waszą fabułą. Projektujemy, piszemy i wdrażamy ją na urządzeniach.",
   },
   {
-    title: "Gra hotelowa w całym obiekcie",
-    challenge:
-      "Hotel miał być planszą, a nie tylko tłem: gra miała wykorzystać cały obiekt, od lobby i baru po korytarze i sale konferencyjne.",
-    course:
-      "Start w sali konferencyjnej: intro gry na dużym ekranie i tablety rozdane drużynom. Potem zespoły ruszyły po hotelu — każde stanowisko to tabliczka z kodem QR, a po zeskanowaniu zadanie związane z tym konkretnym miejscem. Ranking aktualizował się na żywo, więc do końca było wiadomo, kto goni kogo.",
-    outcome:
-      "Cały hotel zamienił się w planszę gry. Pytania i zadania ułożyliśmy pod jego infrastrukturę, więc odpowiedzi trzeba było znaleźć na miejscu, a nie w telefonie.",
-    metrics: [],
-    photos: [
-      { src: "/realizacje/aura-hotel-1.jpg", alt: "Drużyna pochylona nad tabletem w hotelowym korytarzu podczas gry hotelowej." },
-      { src: "/realizacje/aura-hotel-2.jpg", alt: "Uczestnik gry przy barze w lobby rozwiązuje zadanie na tablecie." },
-      { src: "/realizacje/aura-hotel-3.jpg", alt: "Stanowisko gry hotelowej: tabliczka z kodem QR wśród roślin w hotelu." },
-    ],
+    icon: "web",
+    title: "Aplikacje webowe",
+    description:
+      "Systemy działające w przeglądarce: rankingi na żywo na dużym ekranie, głosowania i quizy dla całej sali, panele dla prowadzących. Bez instalowania czegokolwiek.",
   },
   {
-    title: "Ryzykanci w sali konferencyjnej",
-    challenge:
-      "Klient chciał gry dla całej sali naraz: bez wychodzenia w teren, przy stołach, z rywalizacją, w którą wciągnie się każda drużyna, a nie tylko najgłośniejszy stolik.",
-    course:
-      "Na stołach leżały talie kart z kodami QR, pogrupowane w kategorie i trzy poziomy trudności. Drużyny wybierały kartę, skanowały ją tabletem i decydowały, ile chcą zaryzykować: im trudniejsze pytanie, tym więcej punktów do zdobycia i do stracenia.",
-    outcome:
-      "Ranking zmieniał się po każdej karcie, więc emocje trzymały do samego końca — o zwycięstwie zdecydowała ostatnia karta.",
-    metrics: [],
-    photos: [
-      { src: "/realizacje/ryzykanci-1.jpg", alt: "Stanowisko Ryzykantów: pudełko z kartami i tablet z zasadami gry na stoliku." },
-      { src: "/realizacje/ryzykanci-2.jpg", alt: "Uczestnik rozwiązuje na tablecie zadanie z łączeniem par na czas." },
-      { src: "/realizacje/ryzykanci-3.jpg", alt: "Uczestnik odszyfrowuje hasło na tablecie, obok na stole karty z kodami QR." },
-    ],
+    icon: "chip",
+    title: "Urządzenia na ESP32",
+    description:
+      "Fizyczne rekwizyty, które reagują: przyciski do quizów, skrzynie otwierane kodem, czujniki, światła i dźwięk — połączone z grą albo działające samodzielnie.",
   },
-];
+] as const;
 
 export const FAQ_ITEMS = [
   {

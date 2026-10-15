@@ -6,6 +6,8 @@ export type HeroHighlight = {
 export type HeroSlide = {
   src: string;
   alt: string;
+  /** CSS object-position for photos whose subject is off-centre (e.g. portrait shots); defaults to the centre. */
+  focus?: string;
   /** Short name shown on the picker at the bottom of the hero — the first slide is the brand, the rest are the offer. */
   label: string;
   /** Copy that swaps together with the photo. */
@@ -37,13 +39,14 @@ export type HeroSlide = {
  */
 export const HERO_SLIDES: readonly HeroSlide[] = [
   {
-    src: "/hero/survivorquest.png",
-    alt: "Drużyna przy stoliku z tabletami SurvivorQuest w hotelowym lobby.",
+    src: "/hero/survivorquest-stoisko.jpg",
+    alt: "Tablety z grami Aura AI, SurvivorQuest i Ryzykanci, stojaki z kodami QR i talie kart na stoisku targowym.",
+    focus: "50% 30%",
     label: "SurvivorQuest",
-    eyebrow: "Eventy firmowe prowadzone w aplikacji",
-    title: "Gry terenowe i eventy integracyjne dla firm — prowadzone w aplikacji, którą napisaliśmy sami.",
+    eyebrow: "SurvivorQuest",
+    title: "Łączymy teambuilding z nowoczesnymi technologiami.",
     lead:
-      "SurvivorQuest (Survivor Quest) organizuje integracje, w których drużyny grają na tabletach: mapa, kody QR, zadania o Waszej firmie i wynik zmieniający się na oczach wszystkich. Aplikacja jest nasza — piszemy ją i rozwijamy sami, więc scenariusz dopasowujemy do Was, a nie Was do gotowca. Przyjeżdżamy ze sprzętem, prowadzimy grę i kończymy ją finałem z ogłoszeniem zwycięzców.",
+      "Wciągająca gra zespołowa na tabletach: interaktywne mapy, kody QR i wyzwania związane z Waszą firmą. Nie korzystamy z gotowych schematów – rozwijamy własną aplikację, więc scenariusz, zadania i mechanikę gry dopasowujemy do Was. Przywozimy sprzęt, prowadzimy rozgrywkę i kończymy ją wielkim finałem z ogłoszeniem zwycięzców. Wy dostarczacie energię – my zamieniamy ją w rywalizację i wspomnienia, które zostają na długo.",
     highlights: [
       { value: "3", label: "formaty do wyboru: gra miejska, gra w obiekcie i quiz drużynowy Ryzykanci" },
       { value: "19", label: "typów zadań w naszej aplikacji — od szyfrów po zadania fotograficzne" },
@@ -53,8 +56,25 @@ export const HERO_SLIDES: readonly HeroSlide[] = [
     secondaryCta: { label: "Zobacz formaty", href: "#formaty" },
   },
   {
-    src: "/hero/gra-terenowa.png",
-    alt: "Uczestnicy gry terenowej w lesie konfigurują drużynę na tablecie.",
+    src: "/hero/gra-hotelowa-aura.jpg",
+    alt: "Ekran z intro gry hotelowej i tablety drużyn przygotowane na stole w sali.",
+    label: "Gra hotelowa",
+    eyebrow: "Gra hotelowa i w obiekcie",
+    title: "Integracja w hotelu lub centrum konferencyjnym na każdą pogodę.",
+    lead:
+      "Stanowiska w salach i na korytarzach, polowanie na kody QR i zadania zespołowe między konferencją a kolacją. Przyjeżdżamy, rozstawiamy i prowadzimy — po Waszej stronie zostaje termin i lista uczestników.",
+    highlights: [
+      { value: "Niezależne od pogody", label: "gra toczy się w salach, na korytarzach i wokół obiektu" },
+      { value: "Między sesjami", label: "krótsza wersja jako przerywnik lub dłuższa jako główna atrakcja" },
+      { value: "0 sprzętu", label: "tablety przywozimy my, nikt nie instaluje niczego na telefonie" },
+    ],
+    quoteSubject: "Wycena: gra hotelowa",
+    secondaryCta: { label: "Więcej o grze hotelowej", href: "#gra-hotelowa" },
+  },
+  {
+    src: "/hero/gra-terenowa-druzyna.jpg",
+    alt: "Drużyna na boisku pochyla się nad drewnianymi listwami i układa z nich konstrukcję według zdjęcia.",
+    focus: "50% 22%",
     label: "Gra terenowa",
     eyebrow: "Gra terenowa miejska i outdoor",
     title: "Drużyny z tabletami ruszają w miasto, park albo wokół hotelu.",
@@ -67,22 +87,6 @@ export const HERO_SLIDES: readonly HeroSlide[] = [
     ],
     quoteSubject: "Wycena: gra terenowa",
     secondaryCta: { label: "Więcej o grze terenowej", href: "#gra-terenowa" },
-  },
-  {
-    src: "/hero/gra-hotelowa-aura.jpg",
-    alt: "Ekran z intro gry hotelowej i tablety drużyn przygotowane na stole w sali.",
-    label: "Gra hotelowa",
-    eyebrow: "Gra hotelowa i w obiekcie",
-    title: "Integracja w hotelu lub centrum konferencyjnym, niezależna od pogody.",
-    lead:
-      "Stanowiska w salach i na korytarzach, polowanie na kody QR i zadania zespołowe między konferencją a kolacją. Przyjeżdżamy, rozstawiamy i prowadzimy — po Waszej stronie zostaje termin i lista uczestników.",
-    highlights: [
-      { value: "Bez pogody", label: "gra toczy się w salach, na korytarzach i wokół obiektu" },
-      { value: "Między sesjami", label: "krótsza wersja jako przerywnik lub dłuższa jako główna atrakcja" },
-      { value: "0 instalacji", label: "tablety przywozimy my, nikt nie instaluje niczego na telefonie" },
-    ],
-    quoteSubject: "Wycena: gra hotelowa",
-    secondaryCta: { label: "Więcej o grze hotelowej", href: "#gra-hotelowa" },
   },
   {
     src: "/hero/ryzykanci-stol.jpg",
