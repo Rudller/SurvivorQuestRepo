@@ -211,6 +211,12 @@ const INTRO_FALLBACK_TEXT =
 // the admin panel) while idle on the scan screen — see the polling effect
 // below.
 const IDLE_POLL_INTERVAL_MS = 4000;
+// The idle tick refreshes the deck counter and score at most this often. Every
+// answer refreshes it on its own, so the idle path only has to catch a verdict
+// the Game Master gave on another screen — and deck-status is the heaviest read
+// on this screen (scheme, cards, pool, attempts), which 15 tablets were sending
+// every 4 s each.
+const IDLE_DECK_REFRESH_INTERVAL_MS = 15_000;
 // The event feed has its own interval on purpose: the idle poll above is gated
 // off during the intro and while the scanner is open, and a feed that goes
 // quiet exactly when somebody is scanning is worse than a slightly slower one.
@@ -450,7 +456,9 @@ export function RiskQuizScreen({
 
   // useCallback so the idle poll below can depend on it without restarting the
   // interval on every render.
+  const lastDeckRefreshAtRef = useRef(0);
   const refreshDeckStatus = useCallback(async () => {
+    lastDeckRefreshAtRef.current = Date.now();
     try {
       const status = await fetchRiskQuizDeckStatus(apiBaseUrl, { sessionToken });
       setDeckStatus(status);
@@ -594,7 +602,9 @@ export function RiskQuizScreen({
         if (!result.draw) {
           // Idle tick: no card waiting, so use the round trip to refresh the
           // deck and the score instead of letting the screen go stale.
-          void refreshDeckStatus();
+          if (Date.now() - lastDeckRefreshAtRef.current >= IDLE_DECK_REFRESH_INTERVAL_MS) {
+            void refreshDeckStatus();
+          }
           return;
         }
         openDrawnCard({

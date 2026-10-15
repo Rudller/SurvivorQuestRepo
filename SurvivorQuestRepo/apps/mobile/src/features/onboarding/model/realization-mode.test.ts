@@ -3,6 +3,7 @@ import {
   parseThemePack,
   resolveRealizationMode,
   resolveThemeFamily,
+  usesLocationTracking,
 } from "./realization-mode";
 
 describe("parseRealizationType", () => {
@@ -131,5 +132,21 @@ describe("resolveThemeFamily", () => {
     // needs and what a single string comparison could not express.
     expect(resolveThemeFamily({ type: "hotel-games" })).toBe("expedition");
     expect(resolveRealizationMode({ type: "hotel-games" })).toBe("expedition");
+  });
+});
+
+describe("usesLocationTracking", () => {
+  it("keeps GPS on for games played outdoors", () => {
+    expect(usesLocationTracking("outdoor-games")).toBe(true);
+  });
+
+  it("turns GPS off for hotel games and Ryzykanci", () => {
+    expect(usesLocationTracking("hotel-games")).toBe(false);
+    expect(usesLocationTracking("risk-quiz")).toBe(false);
+  });
+
+  it("keeps tracking when the type is unknown, as before", () => {
+    expect(usesLocationTracking(undefined)).toBe(true);
+    expect(usesLocationTracking("something-new")).toBe(true);
   });
 });

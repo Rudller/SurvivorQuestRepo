@@ -295,7 +295,7 @@ export function buildInitialSessionState(session: OnboardingSession): Expedition
       logoUrl: undefined,
       hideMap: false,
       mapImageUrl: undefined,
-      type: undefined,
+      type: session.realization?.type,
       language: session.realization?.language,
       customLanguage: session.realization?.customLanguage,
       selectedLanguage: fallbackLanguage,

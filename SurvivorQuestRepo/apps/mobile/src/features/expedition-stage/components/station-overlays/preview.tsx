@@ -6,6 +6,7 @@ import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../../onboarding/mo
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import { MOBILE_UX_TOKENS } from "../../../../shared/ui/ux-tokens";
 import { AutoScrollingBox } from "../../../../shared/ui/auto-scrolling-box";
+import { FormattedText } from "../../../../shared/ui/intro-text-preview";
 import { CodeStationPanel } from "./station-panels/code-station-panel";
 import { MiniSudokuKeypadSection } from "./station-panels/mini-sudoku-station-panel";
 import { usePhotoTaskCapture, PhotoTaskStatusText } from "./station-panels/photo-task-station-panel";
@@ -2108,7 +2109,7 @@ export function StationPreviewOverlay({
                         lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                       }}
                     >
-                      {stationDescription}
+                      <FormattedText text={stationDescription} />
                     </Text>
                   </AutoScrollingBox>
                 ) : null}
@@ -2236,7 +2237,7 @@ export function StationPreviewOverlay({
                           lineHeight: adaptiveLayout.s(isTabletOverlay ? 28 : 20, 18, 32),
                         }}
                       >
-                        {stationQuizPrompt}
+                        <FormattedText text={stationQuizPrompt} />
                       </Text>
                     </AutoScrollingBox>
                   ) : (
@@ -2248,7 +2249,7 @@ export function StationPreviewOverlay({
                         lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 18, 16, 28),
                       }}
                     >
-                      {stationQuizPrompt}
+                      <FormattedText text={stationQuizPrompt} />
                     </Text>
                   )}
                   <PhotoTaskStatusText
@@ -2440,7 +2441,7 @@ export function StationPreviewOverlay({
                         lineHeight: adaptiveLayout.s(isTabletOverlay ? 24 : 17, 16, 30),
                       }}
                     >
-                      {stationDescription}
+                      <FormattedText text={stationDescription} />
                     </Text>
                   </AutoScrollingBox>
                 </View>
@@ -2483,7 +2484,7 @@ export function StationPreviewOverlay({
                       }}
                     >
                       {stationDescription.length > 0
-                        ? stationDescription
+                        ? <FormattedText text={stationDescription} />
                         : text.taskDescriptionMissing}
                     </Text>
                   </AutoScrollingBox>
@@ -2497,7 +2498,7 @@ export function StationPreviewOverlay({
                       lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                     }}
                   >
-                    {stationDescription}
+                    <FormattedText text={stationDescription} />
                   </Text>
                 </AutoScrollingBox>
               ) : null}
@@ -2523,7 +2524,7 @@ export function StationPreviewOverlay({
                       lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                     }}
                   >
-                    {stationDescription}
+                    <FormattedText text={stationDescription} />
                   </Text>
                 </AutoScrollingBox>
               ) : null}

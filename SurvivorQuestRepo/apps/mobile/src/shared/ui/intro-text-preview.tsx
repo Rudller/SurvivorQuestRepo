@@ -1,4 +1,4 @@
-import { Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { AutoScrollingBox } from "./auto-scrolling-box";
 import { EXPEDITION_THEME } from "../../features/onboarding/model/constants";
 import { useAdaptiveLayout } from "../layout/use-adaptive-layout";
@@ -13,6 +13,7 @@ export type InlineRulesPart = {
   text: string;
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
 };
 
 export function parseRulesBlocks(rawText: string): RulesBlock[] {
@@ -41,7 +42,7 @@ export function parseRulesBlocks(rawText: string): RulesBlock[] {
 }
 
 export function parseInlineRules(text: string): InlineRulesPart[] {
-  const tokenPattern = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const tokenPattern = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g;
   const parts: InlineRulesPart[] = [];
   let lastIndex = 0;
 
@@ -55,6 +56,8 @@ export function parseInlineRules(text: string): InlineRulesPart[] {
 
     if (token.startsWith("**") && token.endsWith("**")) {
       parts.push({ text: token.slice(2, -2), bold: true });
+    } else if (token.startsWith("__") && token.endsWith("__")) {
+      parts.push({ text: token.slice(2, -2), underline: true });
     } else if (token.startsWith("*") && token.endsWith("*")) {
       parts.push({ text: token.slice(1, -1), italic: true });
     } else {
@@ -69,6 +72,36 @@ export function parseInlineRules(text: string): InlineRulesPart[] {
   }
 
   return parts;
+}
+
+/**
+ * Station descriptions: **bold**, *italic* and __underline__ inside one text
+ * run. Line breaks stay as typed — no list or paragraph parsing here, the
+ * description keeps the caller's own font size, colour and alignment.
+ */
+export function FormattedText({ text, style }: { text: string; style?: StyleProp<TextStyle> }) {
+  const parts = parseInlineRules(text);
+
+  return (
+    <Text style={style}>
+      {parts.map((part, partIndex) =>
+        part.bold || part.italic || part.underline ? (
+          <Text
+            key={partIndex}
+            style={{
+              fontWeight: part.bold ? "700" : undefined,
+              fontStyle: part.italic ? "italic" : undefined,
+              textDecorationLine: part.underline ? "underline" : undefined,
+            }}
+          >
+            {part.text}
+          </Text>
+        ) : (
+          part.text
+        ),
+      )}
+    </Text>
+  );
 }
 
 type IntroTextPreviewProps = {
@@ -114,6 +147,7 @@ export function IntroTextPreview({ text, fallbackText }: IntroTextPreviewProps) 
                 style={{
                   fontWeight: part.bold ? "700" : "400",
                   fontStyle: part.italic ? "italic" : "normal",
+                  textDecorationLine: part.underline ? "underline" : "none",
                 }}
               >
                 {part.text}

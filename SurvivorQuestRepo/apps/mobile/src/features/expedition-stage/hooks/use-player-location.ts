@@ -106,7 +106,7 @@ function calculateDistanceMeters(from: MapCoordinate, to: MapCoordinate) {
   return earthRadiusMeters * c;
 }
 
-export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
+export function usePlayerLocation(initialCoordinate?: MapCoordinate | null, enabled = true) {
   const uiLanguage = useUiLanguage();
   const text = PLAYER_LOCATION_TEXT[uiLanguage];
   const latestHeadingRef = useRef<number | null>(null);
@@ -272,6 +272,11 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
     let headingSubscription: Location.LocationSubscription | null = null;
     let pollingTimer: ReturnType<typeof setInterval> | null = null;
 
+    // Gry bez lokalizacji: ani prośby o uprawnienie, ani nasłuchu GPS.
+    if (!enabled) {
+      return;
+    }
+
     async function startTracking() {
       try {
         const permission = await Location.requestForegroundPermissionsAsync();
@@ -390,7 +395,7 @@ export function usePlayerLocation(initialCoordinate?: MapCoordinate | null) {
         clearInterval(pollingTimer);
       }
     };
-  }, [applyLocationCandidate, requestCurrentLocation, text]);
+  }, [applyLocationCandidate, enabled, requestCurrentLocation, text]);
 
   return {
     playerLocation,

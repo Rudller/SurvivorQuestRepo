@@ -80,6 +80,16 @@ export function parseRealizationType(raw: unknown): RealizationType | undefined 
   return known;
 }
 
+/**
+ * Czy tablet śledzi i wysyła pozycję z GPS. Gra hotelowa toczy się w budynku, a
+ * Ryzykanci przy stole — tam pozycja nic nie daje, a tablet dokładał przez nią
+ * żądanie co 10 s. Nieznany typ zostaje przy śledzeniu, jak dotąd.
+ */
+export function usesLocationTracking(rawType: unknown): boolean {
+  const type = parseRealizationType(rawType);
+  return type !== "hotel-games" && type !== "risk-quiz";
+}
+
 export function resolveRealizationMode(
   realization: RealizationLike | undefined | null,
 ): RealizationMode {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useAnimatedValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -16,6 +16,7 @@ import {
   type RealizationLanguage,
   type RealizationLanguageOption,
 } from "../../onboarding/model/types";
+import { usesLocationTracking } from "../../onboarding/model/realization-mode";
 import { LanguagePickerModal } from "../../../shared/ui/language-picker-modal";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
@@ -917,7 +918,22 @@ export function ExpeditionStageScreen({
   const autoLocationSyncInFlightRef = useRef(false);
   const uiChromeOpacity = useAnimatedValue(1);
   const tasksPanelExpansion = useAnimatedValue(isTabletLayout ? 1 : 0);
-  const { playerLocation, requestCurrentLocation } = usePlayerLocation();
+  // Typ z sesji dołączenia jest znany od pierwszej klatki; stan z serwera
+  // dochodzi później, a do tego czasu GPS już by ruszył.
+  const tracksLocation = usesLocationTracking(session.realization?.type ?? sessionState.realization.type);
+  const { playerLocation, requestCurrentLocation: requestTrackedLocation } = usePlayerLocation(
+    undefined,
+    tracksLocation,
+  );
+  // Bez śledzenia skan QR i otwarcie stanowiska nie pytają o pozycję — backend
+  // też jej wtedy nie wymaga (locationRequired = false dla tych typów).
+  const requestCurrentLocation = useCallback(
+    () =>
+      tracksLocation
+        ? requestTrackedLocation()
+        : Promise.reject(new Error("Location tracking is off for this realization")),
+    [requestTrackedLocation, tracksLocation],
+  );
   const mapPlayerLocation = useMemo(() => {
     return playerLocation ?? null;
   }, [playerLocation]);
@@ -1033,7 +1049,7 @@ export function ExpeditionStageScreen({
   useEffect(() => {
     // Po końcu gry pozycja nikomu się nie przyda, a tablet zostawiony na
     // stole wysyłałby ją bez końca.
-    if (!playerLocation || isServerSessionEnded) {
+    if (!tracksLocation || !playerLocation || isServerSessionEnded) {
       return;
     }
 
@@ -1061,7 +1077,7 @@ export function ExpeditionStageScreen({
       .finally(() => {
         autoLocationSyncInFlightRef.current = false;
       });
-  }, [isServerSessionEnded, playerLocation, syncTeamLocation]);
+  }, [isServerSessionEnded, playerLocation, syncTeamLocation, tracksLocation]);
 
   useEffect(() => {
     if (!isSessionInvalid) {

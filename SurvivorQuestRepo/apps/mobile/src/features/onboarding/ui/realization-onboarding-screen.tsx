@@ -101,6 +101,11 @@ type MobileBootstrapRealization = {
   stationIds: string[];
 };
 
+// Bootstrap służy do sprawdzenia połączenia i wersji. Lista wszystkich
+// realizacji z bazy była potrzebna tylko po to, by po dołączeniu znaleźć w niej
+// swoją — teraz przychodzi ona w odpowiedzi session/join.
+const MOBILE_BOOTSTRAP_PATH = "/api/mobile/bootstrap?realizations=none";
+
 type MobileBootstrapResponse = {
   serverTime: string;
   teamColors: string[];
@@ -112,6 +117,9 @@ type MobileBootstrapResponse = {
 type MobileJoinResponse = {
   sessionToken: string;
   realizationId: string;
+  // Backend od wersji z bootstrapem bez listy oddaje tu realizację, do której
+  // tablet dołączył. Starszy backend tego pola nie ma — wtedy pełny bootstrap.
+  realization?: MobileBootstrapRealization;
   locationRequired: boolean;
   customizationOccupancy?: {
     colors?: Record<string, number>;
@@ -1651,7 +1659,7 @@ export function RealizationOnboardingScreen({
         setApiConnectionTarget(candidate);
 
         try {
-          const bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
+          const bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, MOBILE_BOOTSTRAP_PATH);
 
           if (!isCancelled) {
             setApiConnectionStatus("connected");
@@ -1892,7 +1900,7 @@ export function RealizationOnboardingScreen({
         setApiConnectionTarget(candidate);
 
         try {
-          bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, "/api/mobile/bootstrap");
+          bootstrap = await requestMobileApi<MobileBootstrapResponse>(candidate, MOBILE_BOOTSTRAP_PATH);
           resolvedBaseUrl = candidate;
           break;
         } catch (error) {
@@ -1919,7 +1927,11 @@ export function RealizationOnboardingScreen({
         }),
       });
 
-      const realization = bootstrap.realizations.find((item) => item.id === join.realizationId);
+      const realization =
+        join.realization ??
+        (
+          await requestMobileApi<MobileBootstrapResponse>(resolvedBaseUrl, "/api/mobile/bootstrap")
+        ).realizations.find((item) => item.id === join.realizationId);
 
       if (!realization) {
         throw new Error(text.realizationNotFound);
