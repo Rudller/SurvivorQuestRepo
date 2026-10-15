@@ -1,4 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
+import type { RealizationTranslations } from '../../realization/entities/realization.entity';
+import { ensureRealizationTranslations } from '../../realization/dto/realization.dto';
 import type { ScenarioEntity } from '../scenario.service';
 
 export type CreateScenarioDto = {
@@ -6,6 +8,7 @@ export type CreateScenarioDto = {
   description: string;
   introText: string;
   gameRules: string;
+  translations?: RealizationTranslations;
   stationIds: string[];
   categories: string[];
 };
@@ -65,6 +68,19 @@ function sanitizeCategories(value: unknown) {
   return categories;
 }
 
+// Tekst bazowy scenariusza jest zawsze po polsku, a scenariusz nie ma nazwy
+// języka niestandardowego — wpisy `polish` i `other` nie miałyby gdzie trafić.
+function sanitizeScenarioTranslations(value: unknown) {
+  const translations = ensureRealizationTranslations(value);
+  if (!translations) {
+    return undefined;
+  }
+
+  delete translations.polish;
+  delete translations.other;
+  return Object.keys(translations).length > 0 ? translations : undefined;
+}
+
 function sanitizeStationIds(value: unknown) {
   if (!Array.isArray(value)) {
     throw new BadRequestException('Invalid payload');
@@ -94,6 +110,7 @@ export function parseCreateScenarioDto(payload: unknown): CreateScenarioDto {
     description: ensureOptionalDescription(body.description),
     introText: ensureOptionalDescription(body.introText),
     gameRules: ensureOptionalDescription(body.gameRules),
+    translations: sanitizeScenarioTranslations(body.translations),
     stationIds: sanitizeStationIds(body.stationIds),
     categories: sanitizeCategories(body.categories),
   };
@@ -145,6 +162,7 @@ export function toCreateScenarioEntity(dto: CreateScenarioDto): ScenarioEntity {
     description: dto.description,
     introText: dto.introText,
     gameRules: dto.gameRules,
+    translations: dto.translations,
     stationIds: dto.stationIds,
     categories: dto.categories,
     kind: 'template',
@@ -165,6 +183,7 @@ export function toUpdatedScenarioEntity(
     description: dto.description,
     introText: dto.introText,
     gameRules: dto.gameRules,
+    translations: dto.translations,
     stationIds: dto.stationIds,
     categories: dto.categories,
     updatedAt: new Date().toISOString(),

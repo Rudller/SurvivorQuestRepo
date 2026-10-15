@@ -7,6 +7,7 @@ import { groupStationsByCategory } from "@/features/games/station-catalog.utils"
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/scenario.api";
 import { ScenarioCategoriesField } from "./scenario-categories-field";
+import { compactScenarioTranslations, ScenarioTextsField } from "./scenario-texts-field";
 
 interface EditScenarioModalProps {
   scenario: Scenario;
@@ -23,6 +24,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
     description: scenario.description,
     introText: scenario.introText,
     gameRules: scenario.gameRules,
+    translations: scenario.translations ?? {},
     stationIds: scenario.stationIds,
     categories: scenario.categories ?? [],
   });
@@ -124,6 +126,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                   description: trimmedDescription,
                   introText: editValues.introText.trim(),
                   gameRules: editValues.gameRules.trim(),
+                  translations: compactScenarioTranslations(editValues.translations),
                   stationIds: editValues.stationIds,
                   categories: editValues.categories,
                 }).unwrap();
@@ -158,27 +161,12 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
               />
             </label>
 
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
-              <textarea
-                value={editValues.introText}
-                onChange={(event) => setEditValues((prev) => ({ ...prev, introText: event.target.value }))}
-                rows={4}
-                placeholder="Tekst wstępu podpowie się automatycznie przy tworzeniu realizacji z tego scenariusza"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
-
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Zasady gry</span>
-              <textarea
-                value={editValues.gameRules}
-                onChange={(event) => setEditValues((prev) => ({ ...prev, gameRules: event.target.value }))}
-                rows={4}
-                placeholder="Zasady gry podpowiedzą się automatycznie przy tworzeniu realizacji z tego scenariusza"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
+            <ScenarioTextsField
+              value={editValues}
+              onChange={(update) =>
+                setEditValues((prev) => ({ ...prev, ...update(prev) }))
+              }
+            />
 
             <div className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>

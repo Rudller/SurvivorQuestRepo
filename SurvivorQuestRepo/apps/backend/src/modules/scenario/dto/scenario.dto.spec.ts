@@ -54,3 +54,49 @@ describe('scenario dto — categories', () => {
     expect(updated.categories).toEqual(['Hotel']);
   });
 });
+
+describe('scenario dto — translations', () => {
+  it('przyjmuje tłumaczenia wstępu i zasad, pomija puste wpisy', () => {
+    const dto = parseCreateScenarioDto({
+      ...basePayload,
+      translations: {
+        english: { introText: ' Welcome ', gameRules: '' },
+        ukrainian: { introText: '', gameRules: '' },
+      },
+    });
+
+    expect(dto.translations).toEqual({ english: { introText: 'Welcome' } });
+  });
+
+  it('pomija polish i other — baza scenariusza jest zawsze po polsku', () => {
+    const dto = parseCreateScenarioDto({
+      ...basePayload,
+      translations: {
+        polish: { introText: 'Witaj' },
+        other: { introText: 'Hola' },
+      },
+    });
+
+    expect(dto.translations).toBeUndefined();
+  });
+
+  it('bez pola translations nie rzuca, żeby stare klienty nie padały', () => {
+    expect(parseCreateScenarioDto(basePayload).translations).toBeUndefined();
+  });
+
+  it('przenosi tłumaczenia do encji przy edycji, także ich usunięcie', () => {
+    const created = toCreateScenarioEntity(
+      parseCreateScenarioDto({
+        ...basePayload,
+        translations: { russian: { gameRules: 'Правила' } },
+      }),
+    );
+    expect(created.translations).toEqual({ russian: { gameRules: 'Правила' } });
+
+    const updated = toUpdatedScenarioEntity(
+      created,
+      parseUpdateScenarioDto({ ...basePayload, id: created.id }),
+    );
+    expect(updated.translations).toBeUndefined();
+  });
+});

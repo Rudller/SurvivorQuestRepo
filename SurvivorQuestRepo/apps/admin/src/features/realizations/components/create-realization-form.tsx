@@ -1581,13 +1581,22 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                         // scenariuszem — czyli w naturalnej kolejności klikania —
                         // po cichu wyrzucał podstawiony briefing. Ryzykantów to
                         // nie dotyczyło, bo oni nie mają scenariusza.
-                        if (nextScenario.introText?.trim()) {
-                          setIntroText(nextScenario.introText);
+                        // Tekst bazowy scenariusza jest po polsku, a jego
+                        // tłumaczenia trafiają do realizacji w całości — także
+                        // dla języków zaznaczonych dopiero później.
+                        const scenarioTexts: RealizationTranslations = {
+                          ...nextScenario.translations,
+                          polish: { introText: nextScenario.introText, gameRules: nextScenario.gameRules },
+                        };
+                        const baseTexts = scenarioTexts[baseTextLanguage] ?? scenarioTexts.polish;
+                        if (baseTexts?.introText?.trim()) {
+                          setIntroText(baseTexts.introText);
                         }
-                        if (nextScenario.gameRules?.trim()) {
-                          setGameRules(nextScenario.gameRules);
+                        if (baseTexts?.gameRules?.trim()) {
+                          setGameRules(baseTexts.gameRules);
                         }
-                        setTranslations({});
+                        delete scenarioTexts[baseTextLanguage];
+                        setTranslations(scenarioTexts);
                       }
                     }}
                     className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}

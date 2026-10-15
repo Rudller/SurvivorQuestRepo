@@ -25,7 +25,7 @@ const REALIZATION_TRANSLATION_LANGUAGES: (keyof RealizationTranslations)[] = [
   'other',
 ];
 
-function ensureRealizationTranslations(
+export function ensureRealizationTranslations(
   value: unknown,
 ): RealizationTranslations | undefined {
   if (typeof value === 'undefined') {

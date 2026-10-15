@@ -1,4 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import type { RealizationTranslations } from '../realization/entities/realization.entity';
+import {
+  parseRealizationTranslationsData,
+  toPrismaRealizationTranslationsData,
+} from '../realization/mappers/realization.mapper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
 
@@ -10,6 +16,8 @@ export type ScenarioEntity = {
   description: string;
   introText: string;
   gameRules: string;
+  /** Tłumaczenia introText/gameRules; tekst bazowy jest zawsze po polsku. */
+  translations?: RealizationTranslations;
   stationIds: string[];
   categories: string[];
   sourceTemplateId?: string;
@@ -38,6 +46,7 @@ function mapScenario(input: {
   description: string;
   introText: string | null;
   gameRules: string | null;
+  translations: Prisma.JsonValue | null;
   categories: string[];
   sourceTemplateId: string | null;
   realizationId: string | null;
@@ -53,6 +62,7 @@ function mapScenario(input: {
     description: input.description,
     introText: input.introText ?? '',
     gameRules: input.gameRules ?? '',
+    translations: parseRealizationTranslationsData(input.translations),
     stationIds: input.scenarioStations.map((item) => item.stationId),
     categories: input.categories,
     sourceTemplateId: input.sourceTemplateId || undefined,
@@ -126,6 +136,9 @@ export class ScenarioService {
         description: scenario.description,
         introText: scenario.introText,
         gameRules: scenario.gameRules,
+        translations: toPrismaRealizationTranslationsData(
+          scenario.translations,
+        ),
         categories: scenario.categories,
         sourceTemplateId: scenario.sourceTemplateId,
         realizationId: scenario.realizationId,
@@ -155,6 +168,9 @@ export class ScenarioService {
           description: updatedScenario.description,
           introText: updatedScenario.introText,
           gameRules: updatedScenario.gameRules,
+          translations: toPrismaRealizationTranslationsData(
+            updatedScenario.translations,
+          ),
           categories: updatedScenario.categories,
           sourceTemplateId: updatedScenario.sourceTemplateId,
         },
@@ -208,6 +224,7 @@ export class ScenarioService {
       description: source.description,
       introText: source.introText,
       gameRules: source.gameRules,
+      translations: source.translations,
       stationIds: clonedStations.map((station) => station.id),
       categories: source.categories,
       sourceTemplateId: source.sourceTemplateId ?? source.id,

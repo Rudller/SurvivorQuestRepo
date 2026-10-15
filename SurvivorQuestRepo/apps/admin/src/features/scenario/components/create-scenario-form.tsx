@@ -7,6 +7,13 @@ import { groupStationsByCategory } from "@/features/games/station-catalog.utils"
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useCreateScenarioMutation } from "../api/scenario.api";
 import { ScenarioCategoriesField } from "./scenario-categories-field";
+import {
+  compactScenarioTranslations,
+  ScenarioTextsField,
+  type ScenarioTexts,
+} from "./scenario-texts-field";
+
+const emptyTexts: ScenarioTexts = { introText: "", gameRules: "", translations: {} };
 
 interface CreateScenarioFormProps {
   stations: Station[];
@@ -23,8 +30,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [introText, setIntroText] = useState("");
-  const [gameRules, setGameRules] = useState("");
+  const [texts, setTexts] = useState<ScenarioTexts>(emptyTexts);
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -51,7 +57,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
     );
   }
 
-  const isDirty = useIsDirty({ name, description, introText, gameRules, selectedStationIds, categories });
+  const isDirty = useIsDirty({ name, description, texts, selectedStationIds, categories });
 
   return (
     <>
@@ -88,15 +94,15 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
               await createScenario({
                 name: trimmedName,
                 description: trimmedDescription,
-                introText: introText.trim(),
-                gameRules: gameRules.trim(),
+                introText: texts.introText.trim(),
+                gameRules: texts.gameRules.trim(),
+                translations: compactScenarioTranslations(texts.translations),
                 stationIds: selectedStationIds,
                 categories,
               }).unwrap();
               setName("");
               setDescription("");
-              setIntroText("");
-              setGameRules("");
+              setTexts(emptyTexts);
               setSelectedStationIds([]);
               setCategories([]);
               setFormError(null);
@@ -152,27 +158,7 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
               />
             </label>
 
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Tekst wstępu</span>
-              <textarea
-                value={introText}
-                onChange={(event) => setIntroText(event.target.value)}
-                rows={4}
-                placeholder="Tekst wstępu podpowie się automatycznie przy tworzeniu realizacji z tego scenariusza"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
-
-            <label className="space-y-1.5">
-              <span className="text-xs uppercase tracking-wider text-zinc-400">Zasady gry</span>
-              <textarea
-                value={gameRules}
-                onChange={(event) => setGameRules(event.target.value)}
-                rows={4}
-                placeholder="Zasady gry podpowiedzą się automatycznie przy tworzeniu realizacji z tego scenariusza"
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
-              />
-            </label>
+            <ScenarioTextsField value={texts} onChange={setTexts} />
 
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>

@@ -9,6 +9,7 @@ function scenarioRow(overrides: Record<string, unknown> = {}) {
     description: '',
     introText: null,
     gameRules: null,
+    translations: null,
     categories: ['Kryminalny'],
     sourceTemplateId: null,
     realizationId: null,
@@ -64,6 +65,44 @@ describe('ScenarioService — categories', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ categories: ['Kryminalny'] }),
+      }),
+    );
+  });
+
+  it('przenosi tłumaczenia wstępu i zasad na kopię scenariusza', async () => {
+    const create = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      scenario: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce(
+            scenarioRow({ translations: { english: { introText: 'Hello' } } }),
+          )
+          .mockResolvedValueOnce(
+            scenarioRow({ id: 'clone', realizationId: 'realization-1' }),
+          ),
+        create,
+      },
+    };
+    const stationService = {
+      cloneStationsForScenario: jest
+        .fn()
+        .mockResolvedValue([{ id: 'cloned-station-1' }]),
+    };
+    const service = new ScenarioService(
+      prisma as unknown as PrismaService,
+      stationService as unknown as StationService,
+    );
+
+    await service.cloneScenario('scenario-1', {
+      realizationId: 'realization-1',
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          translations: { english: { introText: 'Hello' } },
+        }),
       }),
     );
   });
