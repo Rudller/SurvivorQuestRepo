@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useCompleteCurrentRealizationTeamTaskMutation,
   useFailCurrentRealizationTeamTaskMutation,
@@ -40,6 +40,7 @@ export function CurrentRealizationPhotoReviewsPanel({
   const [completeRiskCard, { isLoading: isCompletingRiskCard }] = useCompleteRiskCardMutation();
   const [failRiskCard, { isLoading: isFailingRiskCard }] = useFailRiskCardMutation();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [previewPhoto, setPreviewPhoto] = useState<{ src: string; caption: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     teamId: string;
     stationId: string;
@@ -142,12 +143,21 @@ export function CurrentRealizationPhotoReviewsPanel({
                   ) : null}
                 </div>
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={review.photoUrl}
-                  alt={review.stationName}
-                  className="h-32 w-full rounded-md border border-zinc-700 object-cover"
-                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewPhoto({ src: review.photoUrl, caption: `${review.stationName} · ${review.teamName}` })
+                  }
+                  aria-label="Powiększ zdjęcie"
+                  className="block w-full cursor-zoom-in"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={review.photoUrl}
+                    alt={review.stationName}
+                    className="h-32 w-full rounded-md border border-zinc-700 object-cover"
+                  />
+                </button>
               )}
               <p className="text-xs font-medium text-zinc-100">{review.stationName}</p>
               {review.kind === "photo" && review.stationDescription ? (
@@ -178,6 +188,64 @@ export function CurrentRealizationPhotoReviewsPanel({
           );
         })}
       </div>
+
+      <PhotoPreviewLightbox photo={previewPhoto} onClose={() => setPreviewPhoto(null)} />
     </div>
+  );
+}
+
+function PhotoPreviewLightbox({
+  photo,
+  onClose,
+}: {
+  photo: { src: string; caption: string } | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!photo) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [photo, onClose]);
+
+  if (!photo) {
+    return null;
+  }
+
+  // The thumbnail crops with object-cover; here the whole frame must be
+  // visible, so the image only shrinks to fit the viewport, never crops.
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Zamknij podgląd zdjęcia"
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-zinc-950/90"
+      />
+      <div className="pointer-events-none fixed inset-0 z-[61] flex flex-col items-center justify-center gap-3 p-4">
+        <div className="pointer-events-auto flex w-full max-w-[95vw] items-center justify-between gap-3">
+          <p className="truncate text-sm font-semibold text-zinc-100">{photo.caption}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500"
+          >
+            Zamknij
+          </button>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.src}
+          alt={photo.caption}
+          className="pointer-events-auto max-h-[calc(100vh-6rem)] max-w-[95vw] rounded-lg object-contain"
+        />
+      </div>
+    </>
   );
 }
