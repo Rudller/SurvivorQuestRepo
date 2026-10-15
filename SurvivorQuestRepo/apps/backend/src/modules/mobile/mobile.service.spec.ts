@@ -551,6 +551,11 @@ describe('MobileService join session', () => {
     const createPayload = prisma.teamAssignment.create.mock.calls[0][0];
     expect(createPayload.data.teamId).toBe('team-2');
     expect(result.team.slotNumber).toBe(2);
+    // Aplikacja bierze realizację stąd, nie z listy wszystkich w bootstrapie.
+    expect(result.realization).toEqual(
+      expect.objectContaining({ id: 'realization-1', companyName: 'Firma' }),
+    );
+    expect(result.realization).not.toHaveProperty('joinCode');
   });
 });
 
@@ -663,6 +668,154 @@ describe('MobileService bootstrap', () => {
       'hideLeaderboardMinutesBeforeEnd',
       5,
     );
+  });
+});
+
+describe('MobileService bootstrap without realizations', () => {
+  it('answers without touching the realization list', () => {
+    const realizationService = { listRealizations: jest.fn() };
+    const service = buildMobileService({}, realizationService);
+
+    const result = service.getMobileBootstrapWithoutRealizations();
+
+    expect(result.realizations).toEqual([]);
+    expect(result.teamColors.length).toBeGreaterThan(0);
+    expect(realizationService.listRealizations).not.toHaveBeenCalled();
+  });
+});
+
+describe('MobileService location-free realization types', () => {
+  function realizationRow(id: string, type: string) {
+    return {
+      id,
+      type,
+      companyName: 'Firma',
+      language: 'polish',
+      customLanguage: null,
+      introText: null,
+      gameRules: null,
+      status: 'in-progress',
+      scheduledAt: new Date().toISOString(),
+      durationMinutes: 120,
+      joinCode: `JOIN-${id}`,
+      locationRequired: true,
+      showLeaderboard: true,
+      teamCount: 2,
+      stationIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  it('never requires a location in hotel games or Ryzykanci', async () => {
+    const realizationService = {
+      listRealizations: jest
+        .fn()
+        .mockResolvedValue([
+          realizationRow('outdoor', 'outdoor-games'),
+          realizationRow('hotel', 'hotel-games'),
+          realizationRow('risk', 'risk-quiz'),
+        ]),
+    };
+    const service = buildMobileService({}, realizationService);
+
+    const result = await service.getMobileBootstrap();
+    const byId = Object.fromEntries(
+      result.realizations.map((item) => [item.id, item.locationRequired]),
+    );
+
+    expect(byId).toEqual({ outdoor: true, hotel: false, risk: false });
+  });
+
+  it('accepts but does not store a position sent from a hotel game', async () => {
+    const prisma = { team: { update: jest.fn() } };
+    const service = buildMobileService(prisma);
+    spyOnPrivate(service, 'requireSession').mockResolvedValue({
+      team: { id: 'team-1', lastLocationAt: null },
+      realization: {
+        type: 'hotel-games',
+        status: 'in-progress',
+        scheduledAt: new Date().toISOString(),
+        durationMinutes: 120,
+      },
+    });
+
+    const result = await service.updateMobileTeamLocation({
+      sessionToken: 'token',
+      lat: 52.2,
+      lng: 21.0,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, deduplicated: true }),
+    );
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('MobileService team logs', () => {
+  it("reads one team's log straight from the database", async () => {
+    const prisma = {
+      team: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'team-2', slotNumber: 2, name: 'Wilki' }),
+      },
+      eventLog: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'log-1',
+            realizationId: 'realization-1',
+            teamId: 'team-2',
+            actorType: 'MOBILE_DEVICE',
+            actorId: 'device-1',
+            eventType: 'task_completed',
+            payload: { stationId: 'station-1' },
+            createdAt: new Date('2026-10-11T10:00:00Z'),
+          },
+        ]),
+      },
+    };
+    const service = buildMobileService(prisma);
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminRealizationOrThrow',
+    ).mockResolvedValue({
+      id: 'realization-1',
+    });
+
+    const logs = await service.listMobileAdminTeamLogs(
+      'realization-1',
+      'team-2',
+    );
+
+    expect(prisma.eventLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          realizationId: 'realization-1',
+          teamId: 'team-2',
+        }),
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+    expect(logs).toEqual([
+      expect.objectContaining({ id: 'log-1', teamName: 'Wilki', teamSlot: 2 }),
+    ]);
+  });
+
+  it('refuses a team from another realization', async () => {
+    const prisma = { team: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const service = buildMobileService(prisma);
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminRealizationOrThrow',
+    ).mockResolvedValue({
+      id: 'realization-1',
+    });
+
+    await expect(
+      service.listMobileAdminTeamLogs('realization-1', 'team-x'),
+    ).rejects.toThrow('Team not found');
   });
 });
 
@@ -1537,8 +1690,7 @@ function createFakeEventLog(rows: FakeEventLogRow[]) {
 }
 
 describe('MobileService failed task snapshots', () => {
-  const at = (minute: number) =>
-    new Date(Date.UTC(2026, 9, 6, 15, minute, 0));
+  const at = (minute: number) => new Date(Date.UTC(2026, 9, 6, 15, minute, 0));
 
   function createService(rows: FakeEventLogRow[]) {
     const prisma = { eventLog: createFakeEventLog(rows) };
@@ -2946,7 +3098,11 @@ describe('MobileService concurrent joins', () => {
   it('creates missing team slots in one duplicate-safe insert', async () => {
     const prisma = {
       team: {
-        findMany: jest.fn().mockResolvedValue([{ id: 't1', slotNumber: 1, taskTotal: 2, taskDone: 0 }]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 't1', slotNumber: 1, taskTotal: 2, taskDone: 0 },
+          ]),
         createMany: jest.fn().mockResolvedValue({ count: 2 }),
       },
     };

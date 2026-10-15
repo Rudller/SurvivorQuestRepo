@@ -87,10 +87,12 @@ function createService() {
     },
     riskPigGrant: {
       groupBy: jest.fn().mockResolvedValue([]),
-      create: jest.fn(),
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     riskChatMessage: {
       create: jest.fn(),
+      // Wpisy systemowe idą przez createMany + skipDuplicates (bez P2002).
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
       findFirst: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -1665,15 +1667,18 @@ describe('RiskQuizService.submitAnswer', () => {
       selectedIndex: 1,
     });
 
-    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        authorKind: 'SYSTEM',
-        teamId: 'team-1',
-        systemEvent: 'card-scored',
-        dedupeKey: 'card-scored:attempt-9',
-        content: 'Sokoły zdobywa 15 pkt (x1.5).',
-        payload: { teamName: 'Sokoły', points: 15, multiplier: 1.5 },
-      }),
+    expect(prisma.riskChatMessage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          authorKind: 'SYSTEM',
+          teamId: 'team-1',
+          systemEvent: 'card-scored',
+          dedupeKey: 'card-scored:attempt-9',
+          content: 'Sokoły zdobywa 15 pkt (x1.5).',
+          payload: { teamName: 'Sokoły', points: 15, multiplier: 1.5 },
+        }),
+      ],
+      skipDuplicates: true,
     });
   });
 
@@ -1697,7 +1702,43 @@ describe('RiskQuizService.submitAnswer', () => {
     expect(result.pointsDelta).toBe(-2);
     expect(result.streak).toBe(0);
     expect(result.multiplier).toBe(1);
-    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
+    expect(prisma.riskChatMessage.createMany).not.toHaveBeenCalled();
+  });
+
+  // Dwa tablety drużyny widzą tę samą kartę, a tablet ponawia odpowiedź po
+  // zerwanym połączeniu. Test obciążeniowy 15 tabletów złapał tu podwójne
+  // podejścia i podwójne punkty.
+  it('scores a card once when two answers for it arrive together', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.station.findUnique.mockResolvedValue(quizStation);
+    prisma.riskPoolStation.findUnique.mockResolvedValue({ id: 'pool-1' });
+    const written: unknown[] = [];
+    prisma.riskAttempt.findFirst.mockImplementation(() =>
+      Promise.resolve(written[0] ?? null),
+    );
+    prisma.riskAttempt.create.mockImplementation(
+      async ({ data }: { data: unknown }) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        written.push(data);
+        return { id: 'attempt-1' };
+      },
+    );
+    prisma.team.update.mockResolvedValue({ ...team, points: 10 });
+
+    const answer = () =>
+      service.submitAnswer({
+        sessionToken: 'token',
+        cardId: 'card-1',
+        stationId: 'station-1',
+        selectedIndex: 1,
+      });
+    const results = await Promise.allSettled([answer(), answer()]);
+
+    expect(prisma.riskAttempt.create).toHaveBeenCalledTimes(1);
+    expect(prisma.team.update).toHaveBeenCalledTimes(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
   });
 
   it('trusts the client-asserted outcome for non-quiz station types', async () => {
@@ -2061,8 +2102,8 @@ describe('RiskQuizService świnie', () => {
 
     await service.getPigState({ sessionToken: 'token' });
 
-    const granted = prisma.riskPigGrant.create.mock.calls.map(
-      (call) => call[0].data.teamId,
+    const granted = prisma.riskPigGrant.createMany.mock.calls.map(
+      (call) => call[0].data[0].teamId,
     );
     // 12 teams -> bottom quarter is 3, plus the single wildcard.
     expect(granted).toHaveLength(4);
@@ -2075,8 +2116,8 @@ describe('RiskQuizService świnie', () => {
 
     await service.getPigState({ sessionToken: 'token' });
 
-    const granted = prisma.riskPigGrant.create.mock.calls.map(
-      (call) => call[0].data.teamId,
+    const granted = prisma.riskPigGrant.createMany.mock.calls.map(
+      (call) => call[0].data[0].teamId,
     );
     // A quarter of two rounds to nothing, so the floor of one has to hold.
     expect(granted).toContain('team-1');
@@ -2097,8 +2138,8 @@ describe('RiskQuizService świnie', () => {
 
     await service.getPigState({ sessionToken: 'token' });
 
-    const granted = prisma.riskPigGrant.create.mock.calls.map(
-      (call) => call[0].data.teamId,
+    const granted = prisma.riskPigGrant.createMany.mock.calls.map(
+      (call) => call[0].data[0].teamId,
     );
     // This is what stops a consistently strong team from finishing the game
     // without ever throwing one.
@@ -2109,12 +2150,7 @@ describe('RiskQuizService świnie', () => {
     const { service, prisma } = createService();
     arrangePigs(prisma);
     // The other tablet won the race and already wrote every grant row.
-    prisma.riskPigGrant.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('duplicate', {
-        code: 'P2002',
-        clientVersion: 'test',
-      }),
-    );
+    prisma.riskPigGrant.createMany.mockResolvedValue({ count: 0 });
 
     await service.getPigState({ sessionToken: 'token' });
 
@@ -2129,7 +2165,7 @@ describe('RiskQuizService świnie', () => {
 
     await service.getPigState({ sessionToken: 'token' });
 
-    expect(prisma.riskPigGrant.create).not.toHaveBeenCalled();
+    expect(prisma.riskPigGrant.createMany).not.toHaveBeenCalled();
   });
 
   it('skips a team that is still sitting on an unused pig', async () => {
@@ -2139,7 +2175,7 @@ describe('RiskQuizService świnie', () => {
 
     await service.getPigState({ sessionToken: 'token' });
 
-    expect(prisma.riskPigGrant.create).toHaveBeenCalled();
+    expect(prisma.riskPigGrant.createMany).toHaveBeenCalled();
     expect(prisma.riskPig.create).not.toHaveBeenCalled();
   });
 
@@ -2187,6 +2223,33 @@ describe('RiskQuizService świnie', () => {
     expect(prisma.riskPigEffect.create).toHaveBeenCalled();
   });
 
+  // Load test, 25 tablets: two throws at the same moment both passed the
+  // availability check and the second insert died on the unique targetTeamId.
+  it('lands only one of two throws that arrive together', async () => {
+    const { service, prisma } = createService();
+    arrangePigs(prisma);
+    let held: { id: string; type: string } | null = { id: 'pig-1', type: 'FOG' };
+    let effects: { targetTeamId: string }[] = [];
+    prisma.riskPig.findUnique.mockImplementation(async () => held);
+    prisma.riskPigEffect.findMany.mockImplementation(async () => effects);
+    prisma.riskPigEffect.create.mockImplementation(async () => {
+      held = null;
+      effects = [{ targetTeamId: 'team-2' }];
+      return {};
+    });
+
+    const results = await Promise.allSettled([
+      service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
+      service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' }),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(prisma.riskPigEffect.create).toHaveBeenCalledTimes(1);
+  });
+
   it('announces the throw with the thrower masked when the realization hides names', async () => {
     const { service, prisma } = createService();
     arrangePigs(prisma, { realization: { pigShowThrowerName: false } });
@@ -2195,12 +2258,15 @@ describe('RiskQuizService świnie', () => {
 
     await service.throwPig({ sessionToken: 'token', targetTeamId: 'team-2' });
 
-    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        systemEvent: 'pig-thrown',
-        teamId: 'team-2',
-        payload: { fromName: null, targetName: 'Drużyna 2', pigType: 'FOG' },
-      }),
+    expect(prisma.riskChatMessage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          systemEvent: 'pig-thrown',
+          teamId: 'team-2',
+          payload: { fromName: null, targetName: 'Drużyna 2', pigType: 'FOG' },
+        }),
+      ],
+      skipDuplicates: true,
     });
   });
 
@@ -2378,8 +2444,11 @@ describe('RiskQuizService chat', () => {
       }),
     );
     // The derived events still get written even though the chat is off.
-    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ systemEvent: 'game-start', payload: {} }),
+    expect(prisma.riskChatMessage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ systemEvent: 'game-start', payload: {} }),
+      ],
+      skipDuplicates: true,
     });
   });
 
@@ -2402,11 +2471,11 @@ describe('RiskQuizService chat', () => {
     await service.listChatMessages({ sessionToken: 'token' });
     await service.listChatMessages({ sessionToken: 'token' });
 
-    const leadCalls = prisma.riskChatMessage.create.mock.calls.filter(
-      (call) => call[0].data.systemEvent === 'lead-change',
+    const leadCalls = prisma.riskChatMessage.createMany.mock.calls.filter(
+      (call) => call[0].data[0].systemEvent === 'lead-change',
     );
     expect(leadCalls).toHaveLength(1);
-    expect(leadCalls[0][0].data).toEqual(
+    expect(leadCalls[0][0].data[0]).toEqual(
       expect.objectContaining({
         teamId: 'team-2',
         dedupeKey: 'lead-change:team-2:40',
@@ -2427,22 +2496,18 @@ describe('RiskQuizService chat', () => {
 
     await service.listChatMessages({ sessionToken: 'token' });
 
-    const leadCalls = prisma.riskChatMessage.create.mock.calls.filter(
-      (call) => call[0].data.systemEvent === 'lead-change',
+    const leadCalls = prisma.riskChatMessage.createMany.mock.calls.filter(
+      (call) => call[0].data[0].systemEvent === 'lead-change',
     );
     expect(leadCalls).toHaveLength(0);
   });
 
-  it('swallows the unique violation two tablets racing on the same event cause', async () => {
+  it('lets the database skip an event another tablet already wrote', async () => {
     const { service, prisma } = createService();
     arrangeChat(prisma);
     prisma.team.findFirst.mockResolvedValue(null);
     // The other tablet won the race and already inserted game-start.
-    const conflict = new Prisma.PrismaClientKnownRequestError('duplicate', {
-      code: 'P2002',
-      clientVersion: 'test',
-    });
-    prisma.riskChatMessage.create.mockRejectedValue(conflict);
+    prisma.riskChatMessage.createMany.mockResolvedValue({ count: 0 });
 
     await expect(
       service.listChatMessages({ sessionToken: 'token' }),
@@ -2461,8 +2526,8 @@ describe('RiskQuizService chat', () => {
 
     await service.listChatMessages({ sessionToken: 'token' });
 
-    const events = prisma.riskChatMessage.create.mock.calls.map(
-      (call) => call[0].data.systemEvent,
+    const events = prisma.riskChatMessage.createMany.mock.calls.map(
+      (call) => call[0].data[0].systemEvent,
     );
     expect(events).toContain('game-end');
     // A finished game has no leader to crown any more.
@@ -2672,12 +2737,15 @@ describe('RiskQuizService photo review decisions', () => {
     });
     // The frozen award already carries the streak bonus, so the feed shows the
     // amount without a multiplier of its own.
-    expect(prisma.riskChatMessage.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        systemEvent: 'card-scored',
-        dedupeKey: 'card-scored:attempt-1',
-        payload: expect.objectContaining({ points: 30, multiplier: 1 }),
-      }),
+    expect(prisma.riskChatMessage.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          systemEvent: 'card-scored',
+          dedupeKey: 'card-scored:attempt-1',
+          payload: expect.objectContaining({ points: 30, multiplier: 1 }),
+        }),
+      ],
+      skipDuplicates: true,
     });
   });
 
@@ -2701,7 +2769,7 @@ describe('RiskQuizService photo review decisions', () => {
       // -10, not -40: the frozen 30 was never on the team's account.
       data: { points: { increment: -10 } },
     });
-    expect(prisma.riskChatMessage.create).not.toHaveBeenCalled();
+    expect(prisma.riskChatMessage.createMany).not.toHaveBeenCalled();
   });
 
   it('still settles a decided attempt by the difference', async () => {

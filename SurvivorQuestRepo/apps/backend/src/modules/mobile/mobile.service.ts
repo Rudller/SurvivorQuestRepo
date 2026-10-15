@@ -84,6 +84,11 @@ const LOCATION_MAX_SPEED_MPS = 120;
 const MINUTES_TO_MS = 60_000;
 const AUTO_DONE_GRACE_MS = 24 * 60 * 60 * 1000;
 
+/** Typy gier, w których pozycja tabletu nie jest ani wymagana, ani zapisywana. */
+function isLocationFreeRealizationType(type: string) {
+  return type === 'hotel-games' || type === 'risk-quiz';
+}
+
 function parseMobileTaskTimestamp(value: string | undefined, fallback: Date) {
   if (!value) {
     return fallback;
@@ -160,6 +165,22 @@ export class MobileService {
    * połączenia, często kilkanaście naraz, więc odpowiedź jest współdzielona
    * przez kilka sekund (serverTime liczony na nowo przy każdym wywołaniu).
    */
+  /**
+   * Bez listy realizacji: aplikacja od wersji z tym parametrem bierze dane swojej
+   * realizacji z odpowiedzi session/join, a bootstrap służy jej tylko do
+   * sprawdzenia połączenia i wersji. Taka odpowiedź nie dotyka bazy. Pełna lista
+   * zostaje dla starszych APK, które szukają w niej realizacji po dołączeniu.
+   */
+  getMobileBootstrapWithoutRealizations() {
+    return {
+      serverTime: new Date().toISOString(),
+      teamColors: TEAM_COLORS,
+      badgeKeys: BADGE_KEYS,
+      latestAppVersion: process.env.MOBILE_APP_LATEST_VERSION ?? null,
+      realizations: [],
+    };
+  }
+
   async getMobileBootstrap() {
     const now = Date.now();
     let entry = this.bootstrapCache;
@@ -192,51 +213,57 @@ export class MobileService {
       teamColors: TEAM_COLORS,
       badgeKeys: BADGE_KEYS,
       latestAppVersion: process.env.MOBILE_APP_LATEST_VERSION ?? null,
-      realizations: realizations.map((realization) => {
-        const languageContext = resolveRealizationLanguageContext({
-          language: realization.language,
-          customLanguage: realization.customLanguage,
-        });
-        const localizedTexts = resolveLocalizedRealizationTexts(
-          realization,
-          languageContext,
-        );
+      realizations: realizations.map((realization) =>
+        this.toBootstrapRealization(realization),
+      ),
+    };
+  }
 
-        return {
-          id: realization.id,
-          companyName: realization.companyName,
-          type: realization.type,
-          themePack: realization.themePack,
-          language: languageContext.baseLanguage,
-          customLanguage: languageContext.customLanguage,
-          selectedLanguage: languageContext.selectedLanguage,
-          availableLanguages: languageContext.availableLanguageOptions,
-          introText: localizedTexts.introText,
-          gameRules: localizedTexts.gameRules,
-          status: this.normalizeStatus(
-            realization.status,
-            realization.scheduledAt,
-            realization.durationMinutes,
-          ),
-          scheduledAt: realization.scheduledAt,
-          durationMinutes: realization.durationMinutes,
-          locationRequired: realization.locationRequired,
-          showLeaderboard: realization.showLeaderboard,
-          showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
-          showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
-          hideLeaderboardMinutesBeforeEnd:
-            realization.hideLeaderboardMinutesBeforeEnd,
-          teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
-          timedStationPointsDecayEnabled:
-            realization.timedStationPointsDecayEnabled,
-          hideTaskList: realization.hideTaskList,
-          showCaseFiles: realization.showCaseFiles,
-          teamCount: realization.teamCount,
-          stationIds: realization.stationIds,
-          createdAt: realization.createdAt,
-          updatedAt: realization.updatedAt,
-        };
-      }),
+  private toBootstrapRealization(
+    realization: ReturnType<MobileService['toRealizationView']>,
+  ) {
+    const languageContext = resolveRealizationLanguageContext({
+      language: realization.language,
+      customLanguage: realization.customLanguage,
+    });
+    const localizedTexts = resolveLocalizedRealizationTexts(
+      realization,
+      languageContext,
+    );
+
+    return {
+      id: realization.id,
+      companyName: realization.companyName,
+      type: realization.type,
+      themePack: realization.themePack,
+      language: languageContext.baseLanguage,
+      customLanguage: languageContext.customLanguage,
+      selectedLanguage: languageContext.selectedLanguage,
+      availableLanguages: languageContext.availableLanguageOptions,
+      introText: localizedTexts.introText,
+      gameRules: localizedTexts.gameRules,
+      status: this.normalizeStatus(
+        realization.status,
+        realization.scheduledAt,
+        realization.durationMinutes,
+      ),
+      scheduledAt: realization.scheduledAt,
+      durationMinutes: realization.durationMinutes,
+      locationRequired: realization.locationRequired,
+      showLeaderboard: realization.showLeaderboard,
+      showLeaderboardDuringGame: realization.showLeaderboardDuringGame,
+      showLeaderboardOnFinish: realization.showLeaderboardOnFinish,
+      hideLeaderboardMinutesBeforeEnd:
+        realization.hideLeaderboardMinutesBeforeEnd,
+      teamStationNumberingEnabled: realization.teamStationNumberingEnabled,
+      timedStationPointsDecayEnabled:
+        realization.timedStationPointsDecayEnabled,
+      hideTaskList: realization.hideTaskList,
+      showCaseFiles: realization.showCaseFiles,
+      teamCount: realization.teamCount,
+      stationIds: realization.stationIds,
+      createdAt: realization.createdAt,
+      updatedAt: realization.updatedAt,
     };
   }
 
@@ -262,9 +289,12 @@ export class MobileService {
       throw new NotFoundException('Invalid join code');
     }
 
-    return this.withRealizationJoinLock(realization.id, () =>
+    const joined = await this.withRealizationJoinLock(realization.id, () =>
       this.joinMobileSessionLocked(realization, deviceId, input.memberName),
     );
+    // Dane realizacji, do której tablet właśnie dołączył — dotąd aplikacja
+    // szukała ich w bootstrapie, czyli w liście WSZYSTKICH realizacji z bazy.
+    return { ...joined, realization: this.toBootstrapRealization(realization) };
   }
 
   /**
@@ -1387,9 +1417,7 @@ export class MobileService {
     heading?: number;
     at?: string;
   }) {
-    const { team, realization } = await this.requireSession(
-      input.sessionToken,
-    );
+    const { team, realization } = await this.requireSession(input.sessionToken);
 
     if (!isLatitude(input.lat) || !isLongitude(input.lng)) {
       throw new BadRequestException('Invalid coordinates');
@@ -1423,17 +1451,19 @@ export class MobileService {
     }
 
     const serverReceivedAt = new Date().toISOString();
-    // Po końcu gry tablety (APK do 1.1.8) dalej wysyłają pozycję co 10 s.
-    // Odpowiedź jak przy duplikacie — stara aplikacja przyjmie ją bez błędu —
-    // ale bez zapisu do bazy.
-    const realizationEnded =
+    // Po końcu gry tablety (APK do 1.1.8) dalej wysyłają pozycję co 10 s, a
+    // starsze APK robią to także w grach hotelowych, które pozycji nie
+    // potrzebują. Odpowiedź jak przy duplikacie — stara aplikacja przyjmie ją
+    // bez błędu — ale bez zapisu do bazy.
+    const locationNotStored =
+      isLocationFreeRealizationType(realization.type) ||
       this.normalizeStatus(
         realization.status,
         realization.scheduledAt,
         realization.durationMinutes,
       ) === 'done';
     const deduplicated =
-      realizationEnded ||
+      locationNotStored ||
       shouldSkipLocationUpdate(team, {
         lat: input.lat,
         lng: input.lng,
@@ -2736,6 +2766,47 @@ export class MobileService {
     };
   }
 
+  /**
+   * Log zdarzeń jednej drużyny. Overview niesie tylko ogon logu całej
+   * realizacji (ADMIN_OVERVIEW_LOG_LIMIT), więc filtrowanie go w panelu gubiło
+   * wcześniejsze wpisy drużyny. Ten odczyt idzie po indeksie (teamId, createdAt)
+   * i jest wołany tylko przy wybranym filtrze.
+   */
+  async listMobileAdminTeamLogs(realizationId: string, teamId: string) {
+    const realization =
+      await this.resolveMobileAdminRealizationOrThrow(realizationId);
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, realizationId: realization.id },
+      select: { id: true, slotNumber: true, name: true },
+    });
+    if (!team) {
+      throw new NotFoundException('Team not found');
+    }
+
+    const logs = await this.prisma.eventLog.findMany({
+      where: {
+        realizationId: realization.id,
+        teamId: team.id,
+        ...VISIBLE_EVENT_LOG_WHERE,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: ADMIN_OVERVIEW_LOG_LIMIT,
+    });
+
+    return logs.map((log) => ({
+      id: log.id,
+      realizationId: log.realizationId,
+      teamId: log.teamId,
+      teamSlot: team.slotNumber,
+      teamName: team.name ?? null,
+      actorType: this.fromActorType(log.actorType),
+      actorId: log.actorId,
+      eventType: log.eventType,
+      payload: log.payload as Record<string, unknown>,
+      createdAt: log.createdAt.toISOString(),
+    }));
+  }
+
   async resetMobileAdminCompletedTasks(realizationId: string) {
     const realization =
       await this.resolveMobileAdminRealizationOrThrow(realizationId);
@@ -3701,7 +3772,13 @@ export class MobileService {
       durationMinutes: item.durationMinutes,
       language: item.language,
       customLanguage: item.customLanguage,
-      locationRequired: row?.locationRequired ?? item.status === 'in-progress',
+      // Gra hotelowa toczy się w budynku, a Ryzykanci przy stole — pozycja
+      // z GPS niczego tam nie daje, a wymóg blokował start zadań, dopóki
+      // tablet jej nie przysłał. Flaga z bazy (domyślnie true, bez przełącznika
+      // w panelu) liczy się tylko dla gier terenowych.
+      locationRequired: isLocationFreeRealizationType(item.type)
+        ? false
+        : (row?.locationRequired ?? item.status === 'in-progress'),
       showLeaderboard: row?.showLeaderboard ?? item.showLeaderboard,
       showLeaderboardDuringGame:
         row?.showLeaderboardDuringGame ??

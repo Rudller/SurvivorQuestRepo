@@ -20,6 +20,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StationService } from '../station/station.service';
 import { StationStorageService } from '../station/station-storage.service';
 import { getOpaqueTokenCandidates } from '../../shared/lib/opaque-token';
+import { KeyedSerialQueue } from '../../shared/lib/keyed-serial-queue';
 import {
   isCodeProtectedStationType,
   parseCompletionCode,
@@ -127,6 +128,53 @@ export class RiskQuizService {
     private readonly stationService: StationService,
     private readonly stationStorageService: StationStorageService,
   ) {}
+
+  /**
+   * Rozliczenie karty drużyny idzie po kolei. Kilka tabletów jednej drużyny
+   * widzi tę samą otwartą kartę, a tablet ponawia odpowiedź po zerwanym
+   * połączeniu — dwa równoległe „sprawdź podejście, potem zapisz” dawały dwa
+   * podejścia do jednego zadania i podwójne punkty (RiskAttempt nie ma
+   * unikalnego indeksu na teamId+stationId).
+   */
+  private readonly teamOutcomeQueue = new KeyedSerialQueue();
+  /**
+   * Rzuty świnek w jednej grze idą po kolei. Dwa równoległe rzuty w tę samą
+   * drużynę oba przechodziły sprawdzenie „czy można w nią rzucić”, a drugi
+   * zapis wpadał na unikalny targetTeamId (500). Podwójne kliknięcie rzutu
+   * kasowało tę samą świnkę dwa razy.
+   */
+  private readonly pigThrowQueue = new KeyedSerialQueue();
+
+  /**
+   * Wpisy systemowe czatu i przydział świnek są wyliczane przy odczycie, a
+   * odczytuje je każdy tablet co 5 s. Raz na takt na realizację wystarcza —
+   * koszt zależy wtedy od liczby gier, nie urządzeń.
+   */
+  private static readonly DERIVED_SYNC_INTERVAL_MS = 2_000;
+  private readonly lastSystemMessageSyncAt = new Map<string, number>();
+  private readonly lastPigGrantSyncAt = new Map<string, number>();
+
+  private claimDerivedSync(
+    registry: Map<string, number>,
+    realizationId: string,
+  ) {
+    const now = Date.now();
+    const last = registry.get(realizationId);
+    if (
+      last !== undefined &&
+      now - last < RiskQuizService.DERIVED_SYNC_INTERVAL_MS
+    ) {
+      return false;
+    }
+    // Zakończone gry nie mogą zostawać w mapie bez końca.
+    if (registry.size > 500) {
+      for (const [key, at] of registry) {
+        if (now - at > 10 * 60_000) registry.delete(key);
+      }
+    }
+    registry.set(realizationId, now);
+    return true;
+  }
 
   // --- Realization-owned deck clones ---
   //
@@ -1038,58 +1086,60 @@ export class RiskQuizService {
       );
     }
 
-    const existingAttempt = await this.prisma.riskAttempt.findFirst({
-      where: { teamId: team.id, stationId: station.id },
+    return this.teamOutcomeQueue.run(team.id, async () => {
+      const existingAttempt = await this.prisma.riskAttempt.findFirst({
+        where: { teamId: team.id, stationId: station.id },
+      });
+      if (existingAttempt) {
+        throw new BadRequestException('Station already attempted');
+      }
+
+      const uploaded = await this.stationStorageService.uploadTeamTaskPhoto(
+        input.file,
+        {
+          realizationId: realization.id,
+          teamId: team.id,
+          stationId: station.id,
+        },
+      );
+
+      const streak = (await this.getCurrentStreak(team.id)) + 1;
+      const frozenAward = Math.round(
+        RISK_DIFFICULTY_POINTS[card.difficulty].correct *
+          this.resolveStreakMultiplier(streak),
+      );
+
+      await this.prisma.$transaction([
+        this.prisma.teamPhoto.create({
+          data: {
+            realizationId: realization.id,
+            teamId: team.id,
+            stationId: station.id,
+            kind: 'TASK_PROOF',
+            objectKey: uploaded.key,
+            url: uploaded.url,
+          },
+        }),
+        this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } }),
+        this.prisma.riskAttempt.create({
+          data: {
+            realizationId: realization.id,
+            teamId: team.id,
+            cardId: card.id,
+            stationId: station.id,
+            isCorrect: null,
+            pointsDelta: frozenAward,
+          },
+        }),
+      ]);
+
+      return {
+        status: 'pending' as const,
+        photoUrl: uploaded.url,
+        pendingPointsDelta: frozenAward,
+        teamPoints: team.points,
+      };
     });
-    if (existingAttempt) {
-      throw new BadRequestException('Station already attempted');
-    }
-
-    const uploaded = await this.stationStorageService.uploadTeamTaskPhoto(
-      input.file,
-      {
-        realizationId: realization.id,
-        teamId: team.id,
-        stationId: station.id,
-      },
-    );
-
-    const streak = (await this.getCurrentStreak(team.id)) + 1;
-    const frozenAward = Math.round(
-      RISK_DIFFICULTY_POINTS[card.difficulty].correct *
-        this.resolveStreakMultiplier(streak),
-    );
-
-    await this.prisma.$transaction([
-      this.prisma.teamPhoto.create({
-        data: {
-          realizationId: realization.id,
-          teamId: team.id,
-          stationId: station.id,
-          kind: 'TASK_PROOF',
-          objectKey: uploaded.key,
-          url: uploaded.url,
-        },
-      }),
-      this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } }),
-      this.prisma.riskAttempt.create({
-        data: {
-          realizationId: realization.id,
-          teamId: team.id,
-          cardId: card.id,
-          stationId: station.id,
-          isCorrect: null,
-          pointsDelta: frozenAward,
-        },
-      }),
-    ]);
-
-    return {
-      status: 'pending' as const,
-      photoUrl: uploaded.url,
-      pendingPointsDelta: frozenAward,
-      teamPoints: team.points,
-    };
   }
 
   // The free-text twin of submitPhotoTask above: same "send it and wait for the
@@ -1125,38 +1175,40 @@ export class RiskQuizService {
       throw new BadRequestException('Answer is too long');
     }
 
-    const existingAttempt = await this.prisma.riskAttempt.findFirst({
-      where: { teamId: team.id, stationId: station.id },
+    return this.teamOutcomeQueue.run(team.id, async () => {
+      const existingAttempt = await this.prisma.riskAttempt.findFirst({
+        where: { teamId: team.id, stationId: station.id },
+      });
+      if (existingAttempt) {
+        throw new BadRequestException('Station already attempted');
+      }
+
+      const streak = (await this.getCurrentStreak(team.id)) + 1;
+      const frozenAward = Math.round(
+        RISK_DIFFICULTY_POINTS[card.difficulty].correct *
+          this.resolveStreakMultiplier(streak),
+      );
+
+      await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
+
+      await this.prisma.riskAttempt.create({
+        data: {
+          realizationId: realization.id,
+          teamId: team.id,
+          cardId: card.id,
+          stationId: station.id,
+          isCorrect: null,
+          answerText,
+          pointsDelta: frozenAward,
+        },
+      });
+
+      return {
+        status: 'pending' as const,
+        pendingPointsDelta: frozenAward,
+        teamPoints: team.points,
+      };
     });
-    if (existingAttempt) {
-      throw new BadRequestException('Station already attempted');
-    }
-
-    const streak = (await this.getCurrentStreak(team.id)) + 1;
-    const frozenAward = Math.round(
-      RISK_DIFFICULTY_POINTS[card.difficulty].correct *
-        this.resolveStreakMultiplier(streak),
-    );
-
-    await this.prisma.riskOpenDraw.deleteMany({ where: { teamId: team.id } });
-
-    await this.prisma.riskAttempt.create({
-      data: {
-        realizationId: realization.id,
-        teamId: team.id,
-        cardId: card.id,
-        stationId: station.id,
-        isCorrect: null,
-        answerText,
-        pointsDelta: frozenAward,
-      },
-    });
-
-    return {
-      status: 'pending' as const,
-      pendingPointsDelta: frozenAward,
-      teamPoints: team.points,
-    };
   }
 
   private async requireCardStationPair(
@@ -1206,7 +1258,25 @@ export class RiskQuizService {
     const { team, realization } = await this.requireTeamSession(
       input.sessionToken,
     );
+    return this.teamOutcomeQueue.run(team.id, () =>
+      this.submitAnswerLocked(input, team, realization),
+    );
+  }
 
+  private async submitAnswerLocked(
+    input: {
+      cardId: string;
+      stationId: string;
+      selectedIndex?: number;
+      completed?: boolean;
+      completionCode?: string;
+      selectedLanguage?: string;
+    },
+    team: Awaited<ReturnType<RiskQuizService['requireTeamSession']>>['team'],
+    realization: Awaited<
+      ReturnType<RiskQuizService['requireTeamSession']>
+    >['realization'],
+  ) {
     const [card, station] = await Promise.all([
       this.prisma.riskCard.findUnique({ where: { id: input.cardId } }),
       this.prisma.station.findUnique({ where: { id: input.stationId } }),
@@ -1372,6 +1442,22 @@ export class RiskQuizService {
       return false;
     }
 
+    // W tej samej kolejce co odpowiedź z tabletu: odpowiedź w ostatniej
+    // sekundzie i rozliczenie po czasie nie mogą obie zapisać podejścia.
+    return this.teamOutcomeQueue.run(team.id, () =>
+      this.expireOpenDrawLocked(realizationId, team, openDraw),
+    );
+  }
+
+  private async expireOpenDrawLocked(
+    realizationId: string,
+    team: { id: string; name: string | null; slotNumber: number },
+    openDraw: {
+      id: string;
+      stationId: string;
+      card: { id: string; difficulty: RiskDifficulty };
+    },
+  ): Promise<boolean> {
     // deleteMany jako bramka: przy wyścigu z timeoutem z tabletu tylko jedna
     // strona usuwa wiersz i tylko ona liczy karę.
     const released = await this.prisma.riskOpenDraw.deleteMany({
@@ -1723,9 +1809,12 @@ export class RiskQuizService {
     // is the Polish rendering for the admin panel and older clients.
     payload: Prisma.InputJsonObject;
   }) {
-    try {
-      await this.prisma.riskChatMessage.create({
-        data: {
+    // ON CONFLICT DO NOTHING zamiast łapania P2002: ten sam wpis próbuje
+    // dodać każdy odczyt, a odrzucony INSERT to wycofana transakcja w bazie i
+    // wyjątek w Node przy każdym odpytaniu z każdego tabletu.
+    await this.prisma.riskChatMessage.createMany({
+      data: [
+        {
           realizationId: input.realizationId,
           authorKind: RiskChatAuthorKind.SYSTEM,
           teamId: input.teamId,
@@ -1735,16 +1824,9 @@ export class RiskQuizService {
           payload: input.payload,
           dedupeKey: input.dedupeKey,
         },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return;
-      }
-      throw error;
-    }
+      ],
+      skipDuplicates: true,
+    });
   }
 
   // Public so scanCard can announce an exhausted pool, which is the one event
@@ -1792,6 +1874,9 @@ export class RiskQuizService {
   }
 
   private async syncSystemMessages(realizationId: string) {
+    if (!this.claimDerivedSync(this.lastSystemMessageSyncAt, realizationId)) {
+      return;
+    }
     const realization = await this.prisma.realization.findUnique({
       where: { id: realizationId },
       select: {
@@ -1955,6 +2040,18 @@ export class RiskQuizService {
       throw new BadRequestException('Pigs are disabled for this realization');
     }
 
+    return this.pigThrowQueue.run(realization.id, () =>
+      this.throwPigLocked(team, realization, input.targetTeamId),
+    );
+  }
+
+  private async throwPigLocked(
+    team: Awaited<ReturnType<RiskQuizService['requireTeamSession']>>['team'],
+    realization: Awaited<
+      ReturnType<RiskQuizService['requireTeamSession']>
+    >['realization'],
+    targetTeamId: string | undefined,
+  ) {
     const held = await this.prisma.riskPig.findUnique({
       where: { ownerTeamId: team.id },
     });
@@ -1973,8 +2070,8 @@ export class RiskQuizService {
     // Omitting the target means "pick for me" — the picker offers that as a
     // button, and it is also the fallback the client uses when the chosen team
     // got hit by somebody else between rendering the list and tapping.
-    const target = input.targetTeamId
-      ? available.find((item) => item.id === input.targetTeamId)
+    const target = targetTeamId
+      ? available.find((item) => item.id === targetTeamId)
       : available[Math.floor(Math.random() * available.length)];
     if (!target) {
       throw new BadRequestException('This team cannot be targeted right now');
@@ -2046,18 +2143,22 @@ export class RiskQuizService {
     // The Game Master overwrites whatever is running rather than being told the
     // team is busy — a manual throw is a deliberate act, not part of the
     // economy the availability rule exists to balance.
-    await this.prisma.riskPigEffect.deleteMany({
-      where: { targetTeamId: target.id },
-    });
-    await this.prisma.riskPigEffect.create({
-      data: {
-        realizationId: realization.id,
-        targetTeamId: target.id,
-        fromTeamId: null,
-        fromName: 'Mistrz Gry',
-        type: input.type,
-        expiresAt: new Date(Date.now() + realization.pigEffectSeconds * 1000),
-      },
+    await this.pigThrowQueue.run(realization.id, async () => {
+      await this.prisma.riskPigEffect.deleteMany({
+        where: { targetTeamId: target.id },
+      });
+      await this.prisma.riskPigEffect.create({
+        data: {
+          realizationId: realization.id,
+          targetTeamId: target.id,
+          fromTeamId: null,
+          fromName: 'Mistrz Gry',
+          type: input.type,
+          expiresAt: new Date(
+            Date.now() + realization.pigEffectSeconds * 1000,
+          ),
+        },
+      });
     });
 
     await this.announcePigThrow({
@@ -2189,6 +2290,9 @@ export class RiskQuizService {
    * the grant row first is the one that creates the pig.
    */
   private async syncPigGrants(realizationId: string) {
+    if (!this.claimDerivedSync(this.lastPigGrantSyncAt, realizationId)) {
+      return;
+    }
     const realization = await this.prisma.realization.findUnique({
       where: { id: realizationId },
       select: {
@@ -2274,20 +2378,15 @@ export class RiskQuizService {
         : RISK_PIG_TYPES;
 
     for (const recipient of [...weakest, ...wildcards]) {
-      try {
-        // Grant row first: it is the unique-guarded one, so winning it is what
-        // earns the right to create the pig.
-        await this.prisma.riskPigGrant.create({
-          data: { realizationId, teamId: recipient.id, tickKey },
-        });
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
-          continue;
-        }
-        throw error;
+      // Grant row first: it is the unique-guarded one, so winning it is what
+      // earns the right to create the pig. skipDuplicates instead of catching
+      // P2002 — every poll after the tick would otherwise be a failed insert.
+      const granted = await this.prisma.riskPigGrant.createMany({
+        data: [{ realizationId, teamId: recipient.id, tickKey }],
+        skipDuplicates: true,
+      });
+      if (granted.count === 0) {
+        continue;
       }
 
       // Holding is capped at one, so a team sitting on an unused pig simply

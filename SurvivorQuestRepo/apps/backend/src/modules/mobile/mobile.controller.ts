@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
 } from '@nestjs/common';
@@ -23,7 +24,6 @@ import {
 } from '../../common/security/throttle.constants';
 import { MobileService } from './mobile.service';
 import { assertValidTeamPhotoFile } from './domain/team-photo-upload.helpers';
-
 
 type AdminFailTaskPayload = {
   reason?: string;
@@ -109,7 +109,12 @@ export class MobileController {
   constructor(private readonly mobileService: MobileService) {}
 
   @Get('bootstrap')
-  async getMobileBootstrap() {
+  async getMobileBootstrap(@Query('realizations') realizations?: string) {
+    // `realizations=none`: nowa aplikacja nie potrzebuje listy wszystkich
+    // realizacji — swoją dostaje w odpowiedzi session/join.
+    if (realizations === 'none') {
+      return this.mobileService.getMobileBootstrapWithoutRealizations();
+    }
     return this.mobileService.getMobileBootstrap();
   }
 
@@ -456,6 +461,16 @@ export class MobileController {
     @Param('realizationId') realizationId: string,
   ) {
     return this.mobileService.getMobileAdminRealizationOverview(realizationId);
+  }
+
+  @Get('admin/realizations/:realizationId/teams/:teamId/logs')
+  @AdminOrInstructor()
+  @UseGuards(AuthenticatedSessionGuard, RolesGuard)
+  async listMobileAdminTeamLogs(
+    @Param('realizationId') realizationId: string,
+    @Param('teamId') teamId: string,
+  ) {
+    return this.mobileService.listMobileAdminTeamLogs(realizationId, teamId);
   }
 
   @Post('admin/realizations/:realizationId/reset-completed-tasks')
