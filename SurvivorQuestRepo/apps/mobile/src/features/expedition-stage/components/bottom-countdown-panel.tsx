@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
+import { SnowCap } from "../../../shared/ui/snow-cap";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 
@@ -19,7 +20,6 @@ const BOTTOM_COUNTDOWN_PANEL_TEXT: Record<
     time: string;
     progress: string;
     realizationFinished: string;
-    openingScanner: string;
     qrScanner: string;
   }
 > = {
@@ -27,28 +27,24 @@ const BOTTOM_COUNTDOWN_PANEL_TEXT: Record<
     time: "Czas",
     progress: "Postęp",
     realizationFinished: "Realizacja zakończona",
-    openingScanner: "Otwieranie skanera...",
     qrScanner: "Skaner QR",
   },
   english: {
     time: "Time",
     progress: "Progress",
     realizationFinished: "Realization finished",
-    openingScanner: "Opening scanner...",
     qrScanner: "QR scanner",
   },
   ukrainian: {
     time: "Час",
     progress: "Прогрес",
     realizationFinished: "Реалізацію завершено",
-    openingScanner: "Відкриваємо сканер...",
     qrScanner: "QR-сканер",
   },
   russian: {
     time: "Время",
     progress: "Прогресс",
     realizationFinished: "Реализация завершена",
-    openingScanner: "Открываем сканер...",
     qrScanner: "QR-сканер",
   },
 };
@@ -89,7 +85,9 @@ export function BottomCountdownPanel({
   const footerMarginTop = adaptiveLayout.s(isTabletLayout ? 9 : 8, 6, 10);
   const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
-  const footerLabel = isInteractionDisabled ? text.realizationFinished : isScannerOpening ? text.openingScanner : text.qrScanner;
+  // Podczas otwierania skanera napis zostaje ten sam: dłuższy tekst łamał się
+  // na dwie linie i podnosił cały panel. Stan sygnalizuje przygaszony przycisk.
+  const footerLabel = isInteractionDisabled ? text.realizationFinished : text.qrScanner;
 
   return (
     <View
@@ -140,6 +138,8 @@ export function BottomCountdownPanel({
           </Text>
         </View>
       </View>
+      {/* Absolutna i ponad krawędzią — nie zmienia wysokości panelu. */}
+      <SnowCap cornerRadius={panelRadius} height={isTabletLayout ? 16 : 13} seed={3} />
     </View>
   );
 }

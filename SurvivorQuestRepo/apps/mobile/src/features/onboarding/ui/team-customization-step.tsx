@@ -6,6 +6,7 @@ import { MobileFeedbackBanner } from "../../../shared/ui/mobile-feedback-banner"
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { textRole } from "../../../shared/ui/typography";
+import { SnowCap } from "../../../shared/ui/snow-cap";
 
 export type TeamCustomizationStepText = {
   editorTitle: string;
@@ -484,6 +485,9 @@ function CustomizationShell({
       }}
     >
       {children}
+      {/* Ostatnie dziecko, żeby zaspa leżała na treści, a nie pod nią. Poza
+          oprawą świąteczną SnowCap nic nie rysuje. */}
+      <SnowCap cornerRadius={24} height={isTabletLayout ? 16 : 13} seed={4} />
     </View>
   );
 }

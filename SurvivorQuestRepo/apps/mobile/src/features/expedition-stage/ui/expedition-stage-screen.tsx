@@ -5,6 +5,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import {
   EXPEDITION_THEME,
+  getExpeditionThemeFamily,
   getExpeditionThemeMode,
   getTeamColors,
   type ExpeditionThemeMode,
@@ -21,6 +22,11 @@ import { LanguagePickerModal } from "../../../shared/ui/language-picker-modal";
 import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
 import { HiddenMapBackdrop } from "../components/hidden-map-backdrop";
+import { ChristmasBackground } from "../../../shared/ui/christmas-background";
+import { Snowfall } from "../../../shared/ui/snowfall";
+import { SleighFlyby } from "../../../shared/ui/sleigh-flyby";
+import { ChristmasGarland } from "../../../shared/ui/christmas-garland";
+import { SnowCap } from "../../../shared/ui/snow-cap";
 import { CaseFilesModal } from "../components/case-files-modal";
 import { countUnlockedCaseFiles } from "../components/case-files.model";
 import {
@@ -869,6 +875,7 @@ export function ExpeditionStageScreen({
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_STAGE_TEXT[uiLanguage];
   const isLightTheme = getExpeditionThemeMode() === "light";
+  const isChristmasTheme = getExpeditionThemeFamily() === "christmas";
   const tasksPanelWidth = adaptiveLayout.s(isTabletLayout ? 188 : 142, 126, 204);
   const tasksPanelPaddingHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 8, 7, 16);
   const tasksPanelPaddingVertical = adaptiveLayout.s(isTabletLayout ? 10 : 6, 5, 12);
@@ -1592,7 +1599,11 @@ export function ExpeditionStageScreen({
           // Wcześniej stała tu ikona aplikacji 512 px rozciągnięta `cover` na
           // cały ekran — na tablecie zamazany upscale. Teraz warstwa rysowana
           // do rozmiaru ekranu, z motywem zależnym od oprawy.
-          <HiddenMapBackdrop />
+          isChristmasTheme ? (
+            <ChristmasBackground isLightTheme={isLightTheme} />
+          ) : (
+            <HiddenMapBackdrop />
+          )
         ) : backdropKind === "image" ? (
           <View style={StyleSheet.absoluteFill}>
             <Image
@@ -1617,6 +1628,15 @@ export function ExpeditionStageScreen({
         )}
       </View>
 
+      {/* Śnieg pada nad każdym rodzajem tła — także nad mapą — ale pod
+          przyciskami, panelami i kartami stanowisk, które renderują się niżej. */}
+      {isChristmasTheme ? (
+        <>
+          <SleighFlyby isLightTheme={isLightTheme} />
+          <Snowfall isLightTheme={isLightTheme} />
+        </>
+      ) : null}
+
       {!sessionState.realization.hideMap && (
         <View className="absolute left-3" style={{ top: insets.top + mapControlTopOffset }}>
           <Pressable
@@ -1637,6 +1657,9 @@ export function ExpeditionStageScreen({
       )}
 
       <Animated.View className="flex-1" pointerEvents="box-none" style={{ opacity: uiChromeOpacity }}>
+      {/* Girlanda w warstwie chromu, nie nad całym ekranem: gaśnie razem z
+          panelami, gdy otwiera się karta stanowiska, więc nigdy jej nie zasłoni. */}
+      {isChristmasTheme ? <ChristmasGarland isLightTheme={isLightTheme} /> : null}
       <View className="absolute left-3 right-3" style={{ top: insets.top + 12 }}>
         <Pressable onPressIn={overlayFlow.handleTestMenuHoldStart} onPressOut={overlayFlow.handleTestMenuHoldEnd}>
           <TopRealizationPanel
@@ -1659,6 +1682,7 @@ export function ExpeditionStageScreen({
             themeMode={themeMode}
             onToggleTheme={onToggleTheme}
           />
+          <SnowCap cornerRadius={isTabletLayout ? 28 : 18} height={isTabletLayout ? 15 : 12} seed={2} />
         </Pressable>
 
         <View className="mt-2 w-full items-end">

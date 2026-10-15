@@ -40,6 +40,10 @@ import {
   type TeamColor,
 } from "../model/types";
 import { TeamCustomizationStep, type TeamCustomizationStepText } from "./team-customization-step";
+import { ChristmasBackground } from "../../../shared/ui/christmas-background";
+import { Snowfall } from "../../../shared/ui/snowfall";
+import { SleighFlyby } from "../../../shared/ui/sleigh-flyby";
+import { ChristmasGarland } from "../../../shared/ui/christmas-garland";
 import { TeamIconPickerModal, type TeamIconPickerText } from "./team-icon-picker-modal";
 import {
   API_BASE_URL_OVERRIDE_STORAGE_KEY,
@@ -2457,6 +2461,15 @@ export function RealizationOnboardingScreen({
         // Ryzykanci swap the expedition's dashed map route for the card-suit
         // watermarks, glow and falling cards the rest of that game runs on.
         <RiskQuizBackground isLightTheme={getExpeditionThemeMode() === "light"} />
+      ) : onboardingThemeFamily === "christmas" ? (
+        // Oprawa świąteczna wchodzi tym samym krokiem co kolory: dekoracje i
+        // śnieg zamiast przerywanej trasy ekspedycji.
+        <>
+          <ChristmasBackground isLightTheme={getExpeditionThemeMode() === "light"} />
+          <SleighFlyby isLightTheme={getExpeditionThemeMode() === "light"} />
+          <Snowfall isLightTheme={getExpeditionThemeMode() === "light"} />
+          <ChristmasGarland isLightTheme={getExpeditionThemeMode() === "light"} />
+        </>
       ) : (
         <>
         <View pointerEvents="none" className="absolute inset-0">

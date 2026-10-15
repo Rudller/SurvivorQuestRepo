@@ -55,6 +55,11 @@ import {
 } from "../features/expedition-stage/api/mobile-session.api";
 import { useAdaptiveLayout } from "../shared/layout/use-adaptive-layout";
 import { AutoScrollingIntroBox, parseInlineRules, parseRulesBlocks } from "../shared/ui/intro-text-preview";
+import { ChristmasBackground } from "../shared/ui/christmas-background";
+import { Snowfall } from "../shared/ui/snowfall";
+import { SleighFlyby } from "../shared/ui/sleigh-flyby";
+import { ChristmasGarland } from "../shared/ui/christmas-garland";
+import { SnowCap } from "../shared/ui/snow-cap";
 import { LanguagePickerModal } from "../shared/ui/language-picker-modal";
 import { HiddenResetOnHold } from "../shared/ui/hidden-reset-on-hold";
 
@@ -966,6 +971,16 @@ export function MobileApp() {
           className="flex-1"
           style={{ backgroundColor: activeThemePalette.background }}
         >
+          {activeThemeFamily === "christmas" ? (
+            // Ekran oczekiwania leży między etapem 4 a grą, więc niesie tę samą
+            // oprawę co one — inaczej śnieg znikałby na czas czekania na start.
+            <>
+              <ChristmasBackground isLightTheme={activeThemeMode === "light"} />
+              <SleighFlyby isLightTheme={activeThemeMode === "light"} />
+              <Snowfall isLightTheme={activeThemeMode === "light"} />
+              <ChristmasGarland isLightTheme={activeThemeMode === "light"} />
+            </>
+          ) : null}
           {isRiskQuizWaiting ? (
             // Ryzykanci get the logo as the header instead of a labelled card:
             // no panel, no borders, content straight on the palette background.
@@ -1021,6 +1036,7 @@ export function MobileApp() {
                 />
                 {waitingStatusRow}
                 {waitingRetryButton}
+                <SnowCap cornerRadius={24} height={isTabletLayout ? 16 : 13} seed={7} />
               </View>
             </View>
           )}

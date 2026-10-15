@@ -4,6 +4,7 @@ import { Animated, Pressable, Text, View, useAnimatedValue } from "react-native"
 import { EXPEDITION_THEME } from "../../../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../../../shared/layout/use-adaptive-layout";
 import { ChamferedPanel, PanelSurface, type PanelCornerStyle } from "../../../../../shared/ui/chamfered-panel";
+import { ChristmasBurst } from "../../../../../shared/ui/christmas-burst";
 import { resolveQuizOutcomePresentation, type QuizOutcomeSkinName } from "./quiz-outcome-presentation";
 
 export type QuizOutcomePopup = {
@@ -418,6 +419,10 @@ export function QuizOutcomePopupPanel({
           {panelBody}
         </Animated.View>
       )}
+      {/* Nad kartą, żeby iskry wylatywały z jej środka. `key` restartuje efekt
+          przy każdym kolejnym sukcesie z kolejki. Poza oprawą świąteczną i przy
+          „Ogranicz ruch” komponent nic nie rysuje. */}
+      {activePopup.variant === "success" ? <ChristmasBurst key={activePopup.message} /> : null}
     </Animated.View>
   );
 }

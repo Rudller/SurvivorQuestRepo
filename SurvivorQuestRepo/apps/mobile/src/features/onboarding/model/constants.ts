@@ -210,10 +210,18 @@ const CRIME_THEME_LIGHT: ExpeditionThemePalette = {
   scrimAbyssRgb: "5, 6, 7",
 };
 
-// Święta: nasycony świerk zamiast oliwkowej zieleni ekspedycji, z czerwienią
-// ostrokrzewu na ramkach i akcentach. Zieleń z czerwienią to para, po której
-// oprawę widać z drugiego końca sali — i to odróżnia ją od ekspedycji, która
-// jest zielona, ale z piaskowym akcentem.
+// Święta: nasycony świerk zamiast oliwkowej zieleni ekspedycji, czerwień
+// ostrokrzewu na akcencie i złoto lampek na ramkach i podkreśleniach. Zieleń z
+// czerwienią to para, po której oprawę widać z drugiego końca sali — i to
+// odróżnia ją od ekspedycji, która jest zielona, ale z piaskowym akcentem.
+//
+// Czerwień siedziała kiedyś także na `border`, czyli na krawędzi każdego
+// panelu — ekran wychodził czerwony, a nie świąteczny. Ten sam błąd budżetu,
+// przed którym ostrzega komentarz przy palecie kryminalnej. Ramki niesie więc
+// przygaszone złoto, a czerwień zostaje na akcencie.
+//
+// Granat ze złotem (klasyczna „zimowa noc”) odpadł świadomie: to paleta
+// Ryzykantów i oprawa wyglądałaby jak ich stół.
 const CHRISTMAS_THEME_DARK: ExpeditionThemePalette = {
   background: "#0b1f17",
   mapLine: "#1f4436",
@@ -221,9 +229,9 @@ const CHRISTMAS_THEME_DARK: ExpeditionThemePalette = {
   panel: "rgba(16, 45, 34, 0.92)",
   panelMuted: "rgba(11, 35, 26, 0.94)",
   panelStrong: "rgba(24, 61, 46, 0.92)",
-  border: "#8c2f33",
+  border: "#8a6a2e",
   accent: "#e05a55",
-  accentStrong: "#f2827c",
+  accentStrong: "#f3d27a",
   textPrimary: "#f4f7f3",
   textMuted: "#b7c7bd",
   textSubtle: "#8aa096",
@@ -234,9 +242,9 @@ const CHRISTMAS_THEME_DARK: ExpeditionThemePalette = {
   scrimAbyssRgb: "4, 12, 9",
 };
 
-// Wariant jasny idzie w śnieg. Czerwień schodzi do głębokiej, bo jasna z
-// ciemnego wariantu nie niesie kontrastu tekstowego na bladym tle — ta sama
-// zasada, co przy złocie Ryzykantów i czerwieni kryminału.
+// Wariant jasny idzie w śnieg. Czerwień i złoto schodzą do głębokich, bo
+// jasne z ciemnego wariantu nie niosą kontrastu tekstowego na bladym tle — ta
+// sama zasada, co przy złocie Ryzykantów i czerwieni kryminału.
 const CHRISTMAS_THEME_LIGHT: ExpeditionThemePalette = {
   background: "#eef3ee",
   mapLine: "#a8bdaf",
@@ -244,9 +252,9 @@ const CHRISTMAS_THEME_LIGHT: ExpeditionThemePalette = {
   panel: "rgba(250, 252, 249, 0.96)",
   panelMuted: "rgba(240, 245, 240, 0.98)",
   panelStrong: "rgba(228, 236, 229, 0.98)",
-  border: "#a8474a",
+  border: "#b08d45",
   accent: "#a32a2e",
-  accentStrong: "#851f23",
+  accentStrong: "#714e14",
   textPrimary: "#0b1f17",
   textMuted: "#3b4f44",
   textSubtle: "#5c7065",
