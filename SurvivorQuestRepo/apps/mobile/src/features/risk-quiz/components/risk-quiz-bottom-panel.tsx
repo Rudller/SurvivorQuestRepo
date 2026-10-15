@@ -97,13 +97,13 @@ export function RiskQuizBottomPanel({
   const streakNoteFontSize = adaptiveLayout.fs(isTabletLayout ? 10 : 9, 8, 11);
   const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
+  // Bez osobnego napisu na czas otwierania skanera — dłuższy tekst zmieniał
+  // wysokość panelu. Stan sygnalizuje przygaszony przycisk.
   const footerLabel = isCardOpen
     ? text.closeCard
     : isCompleted
       ? text.realizationFinished
-      : isScannerOpening
-        ? text.openingScanner
-        : text.scanCard;
+      : text.scanCard;
   const hasStreak = streak > 0;
 
   return (

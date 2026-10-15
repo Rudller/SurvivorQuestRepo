@@ -18,7 +18,6 @@ export type RiskQuizText = {
     streak: string;
     closeCard: string;
     realizationFinished: string;
-    openingScanner: string;
     scanCard: string;
     streakNote: string;
   };
@@ -74,7 +73,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       streak: "Seria",
       closeCard: "Zamknij kartę",
       realizationFinished: "Realizacja zakończona",
-      openingScanner: "Otwieranie skanera...",
       scanCard: "Skanuj kartę",
       streakNote: "Seria bez pudła mnoży punkty za kolejne karty.",
     },
@@ -122,7 +120,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       streak: "Streak",
       closeCard: "Close the card",
       realizationFinished: "Event finished",
-      openingScanner: "Opening the scanner...",
       scanCard: "Scan a card",
       streakNote: "A streak without a miss multiplies the points on later cards.",
     },
@@ -170,7 +167,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       streak: "Серія",
       closeCard: "Закрити картку",
       realizationFinished: "Захід завершено",
-      openingScanner: "Відкриваємо сканер...",
       scanCard: "Сканувати картку",
       streakNote: "Серія без промаху множить бали за наступні картки.",
     },
@@ -218,7 +214,6 @@ export const RISK_QUIZ_TEXT: Record<UiLanguage, RiskQuizText> = {
       streak: "Серия",
       closeCard: "Закрыть карточку",
       realizationFinished: "Мероприятие завершено",
-      openingScanner: "Открываем сканер...",
       scanCard: "Сканировать карточку",
       streakNote: "Серия без промаха умножает очки за следующие карточки.",
     },
