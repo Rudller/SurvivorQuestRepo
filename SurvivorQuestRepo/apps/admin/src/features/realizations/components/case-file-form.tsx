@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
+import { resolveApiErrorMessage } from "@/shared/lib/api-error";
+import { compressImageForUpload } from "@/shared/lib/compress-image";
 import {
   useCreateCaseFileMutation,
   useUpdateCaseFileMutation,
@@ -24,6 +26,18 @@ import {
  * podgląd zanim admin kliknie „Zapisz". To ten sam wzorzec, którym idą obrazki
  * stanowisk.
  */
+
+// Lustro limitów z realization.controller.ts (MAX_LOGO_UPLOAD_SIZE_BYTES i
+// MAX_CASE_FILE_AUDIO_UPLOAD_SIZE_BYTES). Zdjęcia nie są przez nie odrzucane —
+// przeglądarka zmniejsza je pod próg przed wysyłką, z zapasem na nagłówki
+// multipart. Audio kompresować się tu nie da, więc dla niego limit zostaje.
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+const IMAGE_COMPRESSION_TARGET_BYTES = 4 * 1024 * 1024;
+const MAX_AUDIO_UPLOAD_BYTES = 12 * 1024 * 1024;
+
+function formatMegabytes(bytes: number) {
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
 
 type CaseFileFormProps = {
   realizationId: string;
@@ -68,7 +82,8 @@ export function CaseFileForm({
   const [uploadImage, { isLoading: isUploadingImage }] = useUploadCaseFileImageMutation();
   const [uploadAudio, { isLoading: isUploadingAudio }] = useUploadCaseFileAudioMutation();
 
-  const isBusy = isCreating || isUpdating || isUploadingImage || isUploadingAudio;
+  const [isCompressing, setIsCompressing] = useState(false);
+  const isBusy = isCreating || isUpdating || isUploadingImage || isUploadingAudio || isCompressing;
 
   async function handleFile(file: File | undefined) {
     if (!file) {
@@ -77,16 +92,44 @@ export function CaseFileForm({
 
     setError(null);
 
+    const sizeLimit = kind === "audio" ? MAX_AUDIO_UPLOAD_BYTES : MAX_IMAGE_UPLOAD_BYTES;
+    if (kind === "audio" && file.size > sizeLimit) {
+      setError(
+        `Plik ma ${formatMegabytes(file.size)}, a limit dla nagrań to ${formatMegabytes(sizeLimit)}.`,
+      );
+      return;
+    }
+
+    let fileToUpload = file;
+    if (kind !== "audio") {
+      setIsCompressing(true);
+      try {
+        fileToUpload = await compressImageForUpload(file, { maxBytes: IMAGE_COMPRESSION_TARGET_BYTES });
+      } catch {
+        setError("Nie udało się odczytać zdjęcia. Spróbuj zapisać je jako JPG lub PNG.");
+        return;
+      } finally {
+        setIsCompressing(false);
+      }
+    }
+
     try {
       const uploaded =
         kind === "audio"
-          ? await uploadAudio({ realizationId, file }).unwrap()
-          : await uploadImage({ realizationId, file }).unwrap();
+          ? await uploadAudio({ realizationId, file: fileToUpload }).unwrap()
+          : await uploadImage({ realizationId, file: fileToUpload }).unwrap();
 
       setUrl(uploaded.url);
       setObjectKey(uploaded.key);
-    } catch {
-      setError("Nie udało się wysłać pliku. Sprawdź format i rozmiar.");
+    } catch (uploadError) {
+      // Pokazujemy, co faktycznie odpowiedział serwer — zbiorczy komunikat
+      // ukrywał zarówno wygasłą sesję, jak i błąd zapisu do magazynu plików.
+      const status = (uploadError as { status?: unknown }).status;
+      setError(
+        status === 413
+          ? `Plik jest za duży. Limit to ${formatMegabytes(sizeLimit)}.`
+          : `Nie udało się wysłać pliku: ${resolveApiErrorMessage(uploadError) ?? `błąd ${String(status ?? "sieci")}`}.`,
+      );
     }
   }
 
@@ -199,14 +242,16 @@ export function CaseFileForm({
           </span>
           <input
             type="file"
-            accept={kind === "audio" ? "audio/*" : "image/png,image/jpeg,image/webp"}
+            accept={kind === "audio" ? "audio/*" : "image/*"}
             onChange={(event) => {
               void handleFile(event.target.files?.[0]);
               event.currentTarget.value = "";
             }}
             className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-xs file:text-zinc-200"
           />
-          {isUploadingImage || isUploadingAudio ? (
+          {isCompressing ? (
+            <p className="text-xs text-zinc-500">Zmniejszanie zdjęcia…</p>
+          ) : isUploadingImage || isUploadingAudio ? (
             <p className="text-xs text-zinc-500">Wysyłanie pliku…</p>
           ) : null}
           {url && kind === "image" ? (
