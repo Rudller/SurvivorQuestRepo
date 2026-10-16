@@ -27,6 +27,7 @@ import {
 } from "@/features/risk-quiz/api/risk-quiz.api";
 import type { Scenario } from "@/features/scenario/types/scenario";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
+import { GalleryLinkActions } from "@/shared/components/gallery-link-actions";
 import { resolveFieldBorderClassName } from "@/shared/lib/form-styles";
 import { FormSection } from "@/shared/components/form-section";
 
@@ -40,8 +41,8 @@ import {
   useUpdateRealizationMutation,
   useDeleteRealizationMutation,
   useTranslateRealizationTextsMutation,
-  useUploadRealizationLogoMutation,
   useRefreshRealizationFromScenarioMutation,
+  useUploadRealizationLogoMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
 } from "../api/realization.api";
@@ -164,12 +165,12 @@ export function EditRealizationPanel({
     useUploadStationAudioMutation();
   const [translateRealizationTexts, { isLoading: isAutoTranslating }] =
     useTranslateRealizationTextsMutation();
-
   const [refreshFromScenario, { isLoading: isRefreshingFromScenario }] =
     useRefreshRealizationFromScenarioMutation();
   const [refreshFromScenarioError, setRefreshFromScenarioError] = useState<
     string | null
   >(null);
+
   const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [editError, setEditError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -1075,6 +1076,15 @@ export function EditRealizationPanel({
                           {joinCodeCopied ? "Skopiowano" : "Kopiuj"}
                         </button>
                       </div>
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <p className="text-xs uppercase tracking-wider text-zinc-500">
+                        Galeria zdjęć dla klienta
+                      </p>
+                      <GalleryLinkActions
+                        realizationId={realization.id}
+                        joinCode={realization.joinCode}
+                      />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <p className="text-xs uppercase tracking-wider text-zinc-500">
@@ -2063,16 +2073,6 @@ export function EditRealizationPanel({
                 </label>
                 )}
 
-                <div className="space-y-1.5">
-                  <span className="text-xs uppercase tracking-wider text-zinc-400">
-                    Oferta PDF
-                  </span>
-                  {(pendingOfferPdfFile?.name ?? editValues.offerPdfName) && (
-                    <p className="mb-1 break-all text-xs text-zinc-300">
-                      📄 {pendingOfferPdfFile?.name ?? editValues.offerPdfName}
-                    </p>
-                  )}
-                  <input
                 {!isRiskQuizType && realization.scenarioId ? (
                   <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                     <button
@@ -2133,6 +2133,16 @@ export function EditRealizationPanel({
                   </div>
                 ) : null}
 
+                <div className="space-y-1.5">
+                  <span className="text-xs uppercase tracking-wider text-zinc-400">
+                    Oferta PDF
+                  </span>
+                  {(pendingOfferPdfFile?.name ?? editValues.offerPdfName) && (
+                    <p className="mb-1 break-all text-xs text-zinc-300">
+                      📄 {pendingOfferPdfFile?.name ?? editValues.offerPdfName}
+                    </p>
+                  )}
+                  <input
                     type="file"
                     accept="application/pdf"
                     onChange={(event) => {

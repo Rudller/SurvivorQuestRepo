@@ -60,3 +60,49 @@ export async function fetchGalleryPhotos(realizationId: string, accessToken: str
 
   return (await response.json()) as GalleryPhotosResponse;
 }
+
+/**
+ * Pobieranie idzie zwykłą nawigacją przeglądarki (natywny pasek postępu, ZIP nie
+ * siedzi w pamięci strony). Nawigacja nie niesie nagłówka, więc token dostępu
+ * wymieniamy najpierw na 2-minutowy bilet, który może trafić do adresu.
+ */
+async function requestDownloadTicket(realizationId: string, accessToken: string) {
+  const response = await fetch(buildBackendApiUrl(`/gallery/${realizationId}/download-ticket`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new GalleryApiError(
+      response.status === 401 ? "Sesja galerii wygasła. Podaj kod ponownie." : "Nie udało się rozpocząć pobierania.",
+      response.status,
+    );
+  }
+
+  return ((await response.json()) as { ticket: string }).ticket;
+}
+
+export async function downloadGalleryArchive(realizationId: string, accessToken: string) {
+  const ticket = await requestDownloadTicket(realizationId, accessToken);
+  startDownload(buildBackendApiUrl(`/gallery/${realizationId}/archive?ticket=${encodeURIComponent(ticket)}`));
+}
+
+export async function downloadGalleryPhoto(realizationId: string, photoId: string, accessToken: string) {
+  const ticket = await requestDownloadTicket(realizationId, accessToken);
+  startDownload(
+    buildBackendApiUrl(
+      `/gallery/${realizationId}/photos/${photoId}/download?ticket=${encodeURIComponent(ticket)}`,
+    ),
+  );
+}
+
+function startDownload(url: string) {
+  // Odpowiedź ma Content-Disposition: attachment, więc strona zostaje na
+  // miejscu, a przeglądarka zapisuje plik.
+  const link = document.createElement("a");
+  link.href = url;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}

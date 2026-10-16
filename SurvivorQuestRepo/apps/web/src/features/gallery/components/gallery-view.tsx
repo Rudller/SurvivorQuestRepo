@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchGalleryPhotos, GalleryApiError, verifyGalleryPassword } from "../api/gallery-client";
-import type { GalleryPhotosResponse } from "../types";
+import {
+  downloadGalleryArchive,
+  downloadGalleryPhoto,
+  fetchGalleryPhotos,
+  GalleryApiError,
+  verifyGalleryPassword,
+} from "../api/gallery-client";
+import type { GalleryPhoto, GalleryPhotosResponse } from "../types";
 import { GalleryPasswordScreen } from "./gallery-password-screen";
 import { GalleryPhotoGrid } from "./gallery-photo-grid";
 
@@ -105,5 +111,12 @@ export function GalleryView({ realizationId }: GalleryViewProps) {
     );
   }
 
-  return <GalleryPhotoGrid realization={galleryData.realization} photos={galleryData.photos} />;
+  return (
+    <GalleryPhotoGrid
+      realization={galleryData.realization}
+      photos={galleryData.photos}
+      onDownloadAll={() => downloadGalleryArchive(realizationId, accessToken)}
+      onDownloadPhoto={(photo: GalleryPhoto) => downloadGalleryPhoto(realizationId, photo.id, accessToken)}
+    />
+  );
 }

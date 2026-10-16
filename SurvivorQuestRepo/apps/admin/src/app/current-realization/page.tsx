@@ -36,6 +36,7 @@ import { SystemHealthPanel } from "@/features/system-health/components/system-he
 import { AdminShell } from "@/shared/components/admin-shell";
 import { resolveApiErrorMessage } from "@/shared/lib/api-error";
 import { QrImageLightbox, type QrImageLightboxImage } from "@/shared/components/qr-image-lightbox";
+import { GalleryLinkActions } from "@/shared/components/gallery-link-actions";
 
 const CurrentRealizationTeamsMap = dynamic(
   () =>
@@ -338,6 +339,15 @@ export default function CurrentRealizationPage() {
                 {isGeneratingJoinCodeQr ? "Generuję..." : "Pokaż QR"}
               </button>
             </div>
+            {overview?.realization.id ? (
+              <div className="max-w-72 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-300">
+                <p className="mb-1.5">Galeria zdjęć dla klienta</p>
+                <GalleryLinkActions
+                  realizationId={overview.realization.id}
+                  joinCode={overview.realization.joinCode}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
