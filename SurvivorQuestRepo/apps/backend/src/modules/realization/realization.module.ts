@@ -7,6 +7,7 @@ import { TranslationModule } from '../translation/translation.module';
 import { CaseFileService } from './case-file.service';
 import { RealizationController } from './realization.controller';
 import { RealizationService } from './realization.service';
+import { ScenarioCaseFileController } from './scenario-case-file.controller';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { RealizationService } from './realization.service';
     TranslationModule,
     RiskQuizModule,
   ],
-  controllers: [RealizationController],
+  controllers: [RealizationController, ScenarioCaseFileController],
   providers: [RealizationService, CaseFileService],
   exports: [RealizationService],
 })

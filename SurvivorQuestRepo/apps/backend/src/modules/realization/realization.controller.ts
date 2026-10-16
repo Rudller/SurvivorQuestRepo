@@ -17,6 +17,13 @@ import { AuthenticatedSessionGuard } from '../auth/guards/authenticated-session.
 import { AdminOnly, AdminOrInstructor } from '../auth/guards/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { StationStorageService } from '../station/station-storage.service';
+import {
+  ALLOWED_AUDIO_MIME_TYPES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  assertUploadedFile,
+  MAX_CASE_FILE_AUDIO_UPLOAD_SIZE_BYTES,
+  MAX_IMAGE_UPLOAD_SIZE_BYTES,
+} from './case-file-upload';
 import { hasExpectedFileSignature } from '../../shared/lib/file-signature';
 import { parseDeleteRealizationDto } from './dto/realization.dto';
 import type {
@@ -28,27 +35,9 @@ import { CaseFileService } from './case-file.service';
 import { requireCaseFileId, type CaseFileDto } from './dto/case-file.dto';
 import { RealizationService } from './realization.service';
 
-const MAX_LOGO_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+// Logo i mapa dzielą limit i formaty ze zdjęciami akt.
+const MAX_LOGO_UPLOAD_SIZE_BYTES = MAX_IMAGE_UPLOAD_SIZE_BYTES;
 const MAX_OFFER_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024;
-const ALLOWED_IMAGE_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-]);
-const MAX_CASE_FILE_AUDIO_UPLOAD_SIZE_BYTES = 12 * 1024 * 1024;
-const ALLOWED_AUDIO_MIME_TYPES = new Set([
-  'audio/mpeg',
-  'audio/wav',
-  'audio/wave',
-  'audio/x-wav',
-  'audio/ogg',
-  'application/ogg',
-  'audio/mp4',
-  'audio/m4a',
-  'audio/x-m4a',
-  'audio/aac',
-  'audio/webm',
-]);
 
 @Controller('realizations')
 @AdminOrInstructor()
@@ -198,25 +187,45 @@ export class RealizationController {
   // 'translate-texts'), żeby ':realizationId' ich nie przechwycił. Uploady mają
   // literał na końcu ścieżki i stoją przed trasami z ':caseFileId'.
 
+  /**
+   * Pobiera od nowa ze scenariusza-wzoru stanowiska, akta, wstęp i zasady gry.
+   * Zastępuje sztuczkę „zmień scenariusz → zapisz → wróć → zapisz”.
+   */
+  @Post(':realizationId/refresh-from-scenario')
+  @AdminOnly()
+  async refreshFromScenario(
+    @Param('realizationId') realizationId: string,
+    @Body() payload: { changedBy?: unknown } | undefined,
+  ) {
+    return this.realizationService.refreshFromScenario(
+      requireCaseFileId(realizationId),
+      typeof payload?.changedBy === 'string' ? payload.changedBy : undefined,
+    );
+  }
+
   @Get(':realizationId/case-files')
   async listCaseFiles(@Param('realizationId') realizationId: string) {
-    return this.caseFileService.listCaseFiles(requireCaseFileId(realizationId));
+    return this.caseFileService.listCaseFiles({
+      realizationId: requireCaseFileId(realizationId),
+    });
   }
 
   @Post(':realizationId/case-files/upload-image')
   @AdminOnly()
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: MAX_LOGO_UPLOAD_SIZE_BYTES } }),
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_LOGO_UPLOAD_SIZE_BYTES },
+    }),
   )
   async uploadCaseFileImage(
     @Param('realizationId') realizationId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    this.assertUploadedFile(file, ALLOWED_IMAGE_MIME_TYPES, 'case file image');
+    assertUploadedFile(file, ALLOWED_IMAGE_MIME_TYPES, 'case file image');
 
     return this.caseFileService.uploadImage(
-      requireCaseFileId(realizationId),
-      file as Express.Multer.File,
+      { realizationId: requireCaseFileId(realizationId) },
+      file,
     );
   }
 
@@ -231,11 +240,11 @@ export class RealizationController {
     @Param('realizationId') realizationId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
-    this.assertUploadedFile(file, ALLOWED_AUDIO_MIME_TYPES, 'case file audio');
+    assertUploadedFile(file, ALLOWED_AUDIO_MIME_TYPES, 'case file audio');
 
     return this.caseFileService.uploadAudio(
-      requireCaseFileId(realizationId),
-      file as Express.Multer.File,
+      { realizationId: requireCaseFileId(realizationId) },
+      file,
     );
   }
 
@@ -246,7 +255,7 @@ export class RealizationController {
     @Body() payload: CaseFileDto | undefined,
   ) {
     return this.caseFileService.createCaseFile(
-      requireCaseFileId(realizationId),
+      { realizationId: requireCaseFileId(realizationId) },
       payload,
     );
   }
@@ -259,7 +268,7 @@ export class RealizationController {
     @Body() payload: CaseFileDto | undefined,
   ) {
     return this.caseFileService.updateCaseFile(
-      requireCaseFileId(realizationId),
+      { realizationId: requireCaseFileId(realizationId) },
       requireCaseFileId(caseFileId),
       payload,
     );
@@ -279,7 +288,7 @@ export class RealizationController {
     }
 
     return this.caseFileService.moveCaseFile(
-      requireCaseFileId(realizationId),
+      { realizationId: requireCaseFileId(realizationId) },
       requireCaseFileId(caseFileId),
       direction,
     );
@@ -292,35 +301,8 @@ export class RealizationController {
     @Param('caseFileId') caseFileId: string,
   ) {
     return this.caseFileService.deleteCaseFile(
-      requireCaseFileId(realizationId),
+      { realizationId: requireCaseFileId(realizationId) },
       requireCaseFileId(caseFileId),
     );
-  }
-
-  /**
-   * Ten sam zestaw bramek, który cztery starsze uploady mają skopiowany u
-   * siebie. Nowe trasy dostają go raz — ujednolicenie pozostałych to osobna
-   * zmiana, żeby nie mieszać refaktoru z funkcją.
-   */
-  private assertUploadedFile(
-    file: Express.Multer.File | undefined,
-    allowedMimeTypes: Set<string>,
-    label: string,
-  ): asserts file is Express.Multer.File {
-    if (!file) {
-      throw new BadRequestException(`Missing ${label} file`);
-    }
-
-    if (!allowedMimeTypes.has(file.mimetype)) {
-      throw new BadRequestException(`Unsupported ${label} type`);
-    }
-
-    if (!Number.isFinite(file.size) || file.size <= 0) {
-      throw new BadRequestException(`Invalid ${label} file`);
-    }
-
-    if (!hasExpectedFileSignature(file.mimetype, file.buffer)) {
-      throw new BadRequestException(`Invalid ${label} file signature`);
-    }
   }
 }

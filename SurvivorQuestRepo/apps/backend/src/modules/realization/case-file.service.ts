@@ -1,8 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CaseFileKind, CaseFileUnlockMode, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { StationStorageService } from '../station/station-storage.service';
+import {
+  StationStorageService,
+  type CaseFileStorageOwner,
+} from '../station/station-storage.service';
 import {
   parseCaseFilePayload,
   type CaseFileDto,
@@ -18,10 +25,17 @@ import {
  * Osobny serwis, nie kolejne sto linii w RealizationService: ten ma już ponad
  * siedemset i obsługuje cały cykl życia realizacji.
  *
+ * Właścicielem dowodu jest realizacja ALBO scenariusz. Akta scenariusza to
+ * wzór: przy tworzeniu realizacji (i przy „pobierz od nowa ze scenariusza”)
+ * rekordy są kopiowane do realizacji, a ta edytuje już własną kopię. Pliki w
+ * R2 nie są kopiowane — oba rekordy wskazują ten sam obiekt, a sprzątanie
+ * (deleteOrphanedObject) usuwa go dopiero, gdy nie trzyma go żaden dowód.
+ *
  * Konwencja bezpieczeństwa przejęta z PointsQrCode w module mobile: każda
  * operacja na pojedynczym rekordzie idzie przez `deleteMany`/`updateMany` z
- * `realizationId` w `where`, nigdy przez `delete({ where: { id } })`. Dzięki
- * temu zgadnięte id z obcej realizacji nie daje dostępu do cudzego rekordu —
+ * właścicielem (`realizationId` albo `scenarioId`) w `where`, nigdy przez
+ * `delete({ where: { id } })`. Dzięki temu zgadnięte id z obcej realizacji
+ * albo scenariusza nie daje dostępu do cudzego rekordu —
  * scoping jest wymuszony przez zapytanie, a nie przez osobne sprawdzenie,
  * które da się przeoczyć.
  */
@@ -49,10 +63,11 @@ const UNLOCK_TO_PRISMA: Record<CaseFileUnlockModeInput, CaseFileUnlockMode> = {
   'after-station': CaseFileUnlockMode.AFTER_STATION,
 };
 
-const UNLOCK_FROM_PRISMA: Record<CaseFileUnlockMode, CaseFileUnlockModeInput> = {
-  [CaseFileUnlockMode.FROM_START]: 'from-start',
-  [CaseFileUnlockMode.AFTER_STATION]: 'after-station',
-};
+const UNLOCK_FROM_PRISMA: Record<CaseFileUnlockMode, CaseFileUnlockModeInput> =
+  {
+    [CaseFileUnlockMode.FROM_START]: 'from-start',
+    [CaseFileUnlockMode.AFTER_STATION]: 'after-station',
+  };
 
 const INCLUDE_STATION = { station: { select: { name: true } } } as const;
 const ORDER_BY: Prisma.CaseFileOrderByWithRelationInput[] = [
@@ -62,6 +77,15 @@ const ORDER_BY: Prisma.CaseFileOrderByWithRelationInput[] = [
 
 export type CaseFileEntry = ReturnType<CaseFileService['toEntry']>;
 
+export type CaseFileOwner = CaseFileStorageOwner;
+
+/** Warunek `where` zawężający do właściciela — jedno miejsce, bez pomyłek. */
+function ownerWhere(owner: CaseFileOwner) {
+  return 'realizationId' in owner
+    ? { realizationId: owner.realizationId }
+    : { scenarioId: owner.scenarioId };
+}
+
 @Injectable()
 export class CaseFileService {
   constructor(
@@ -69,35 +93,35 @@ export class CaseFileService {
     private readonly stationStorageService: StationStorageService,
   ) {}
 
-  async listCaseFiles(realizationId: string) {
-    await this.requireRealization(realizationId);
+  async listCaseFiles(owner: CaseFileOwner) {
+    await this.requireOwner(owner);
 
     const rows = await this.prisma.caseFile.findMany({
-      where: { realizationId },
+      where: ownerWhere(owner),
       orderBy: ORDER_BY,
       include: INCLUDE_STATION,
     });
 
-    return { realizationId, entries: rows.map((row) => this.toEntry(row)) };
+    return { ...owner, entries: rows.map((row) => this.toEntry(row)) };
   }
 
-  async createCaseFile(realizationId: string, payload: CaseFileDto | undefined) {
-    await this.requireRealization(realizationId);
+  async createCaseFile(owner: CaseFileOwner, payload: CaseFileDto | undefined) {
+    await this.requireOwner(owner);
 
     const validated = parseCaseFilePayload(payload);
-    await this.assertStationBelongsToRealization(realizationId, validated.stationId);
+    await this.assertStationBelongsToOwner(owner, validated.stationId);
 
     // Nowy dowód ląduje na końcu. `order` nie ma unikatu, bo wzorzec jest
     // per-element — unikat waliłby konfliktami przy przestawianiu kolejności.
     const last = await this.prisma.caseFile.findFirst({
-      where: { realizationId },
+      where: ownerWhere(owner),
       orderBy: { order: 'desc' },
       select: { order: true },
     });
 
     const row = await this.prisma.caseFile.create({
       data: {
-        realizationId,
+        ...ownerWhere(owner),
         order: (last?.order ?? -1) + 1,
         ...this.toPrismaData(validated),
       },
@@ -108,14 +132,14 @@ export class CaseFileService {
   }
 
   async updateCaseFile(
-    realizationId: string,
+    owner: CaseFileOwner,
     caseFileId: string,
     payload: CaseFileDto | undefined,
   ) {
-    const existing = await this.requireCaseFile(realizationId, caseFileId);
+    const existing = await this.requireCaseFile(owner, caseFileId);
 
     const validated = parseCaseFilePayload(payload);
-    await this.assertStationBelongsToRealization(realizationId, validated.stationId);
+    await this.assertStationBelongsToOwner(owner, validated.stationId);
 
     const row = await this.prisma.caseFile.update({
       where: { id: existing.id },
@@ -139,16 +163,17 @@ export class CaseFileService {
    * sprzątania R2 przy czynności, która nie dotyka ani treści, ani pliku.
    */
   async moveCaseFile(
-    realizationId: string,
+    owner: CaseFileOwner,
     caseFileId: string,
     direction: 'up' | 'down',
   ) {
-    const current = await this.requireCaseFile(realizationId, caseFileId);
+    const current = await this.requireCaseFile(owner, caseFileId);
 
     const neighbour = await this.prisma.caseFile.findFirst({
       where: {
-        realizationId,
-        order: direction === 'up' ? { lt: current.order } : { gt: current.order },
+        ...ownerWhere(owner),
+        order:
+          direction === 'up' ? { lt: current.order } : { gt: current.order },
       },
       orderBy: { order: direction === 'up' ? 'desc' : 'asc' },
     });
@@ -173,11 +198,11 @@ export class CaseFileService {
     return { id: caseFileId, order: neighbour.order };
   }
 
-  async deleteCaseFile(realizationId: string, caseFileId: string) {
-    const existing = await this.requireCaseFile(realizationId, caseFileId);
+  async deleteCaseFile(owner: CaseFileOwner, caseFileId: string) {
+    const existing = await this.requireCaseFile(owner, caseFileId);
 
     const result = await this.prisma.caseFile.deleteMany({
-      where: { id: caseFileId, realizationId },
+      where: { id: caseFileId, ...ownerWhere(owner) },
     });
 
     if (result.count === 0) {
@@ -191,34 +216,124 @@ export class CaseFileService {
     return { id: caseFileId };
   }
 
-  async uploadImage(realizationId: string, file: Express.Multer.File) {
-    await this.requireRealization(realizationId);
+  async uploadImage(owner: CaseFileOwner, file: Express.Multer.File) {
+    await this.requireOwner(owner);
 
-    return this.stationStorageService.uploadCaseFileImage(file, { realizationId });
+    return this.stationStorageService.uploadCaseFileImage(file, owner);
   }
 
-  async uploadAudio(realizationId: string, file: Express.Multer.File) {
-    await this.requireRealization(realizationId);
+  async uploadAudio(owner: CaseFileOwner, file: Express.Multer.File) {
+    await this.requireOwner(owner);
 
-    return this.stationStorageService.uploadCaseFileAudio(file, { realizationId });
+    return this.stationStorageService.uploadCaseFileAudio(file, owner);
   }
 
-  private async requireRealization(realizationId: string) {
-    const realization = await this.prisma.realization.findUnique({
-      where: { id: realizationId },
-      select: { id: true },
-    });
+  /**
+   * Podmienia akta realizacji na kopię akt scenariusza-wzoru.
+   *
+   * Dowód przypięty do stanowiska scenariusza dostaje stanowisko realizacji,
+   * które z niego powstało (`sourceTemplateId`). Gdy takiego nie ma — bo
+   * stanowisko wypadło z realizacji — dowód jest pomijany: bez stanowiska nikt
+   * by go nigdy nie odblokował, a odblokowanie od startu zdradziłoby fabułę.
+   *
+   * Stare pliki sprzątamy PO skopiowaniu, więc obiekty wspólne z akt
+   * scenariusza zostają (licznik odwołań nie spada do zera).
+   */
+  async replaceRealizationCaseFilesFromScenario(
+    realizationId: string,
+    templateScenarioId: string,
+  ) {
+    const [templateRows, previousRows, stations] = await Promise.all([
+      this.prisma.caseFile.findMany({
+        where: { scenarioId: templateScenarioId },
+        orderBy: ORDER_BY,
+      }),
+      this.prisma.caseFile.findMany({
+        where: { realizationId },
+        select: { objectKey: true },
+      }),
+      this.prisma.station.findMany({
+        where: { realizationId },
+        select: { id: true, sourceTemplateId: true },
+      }),
+    ]);
 
-    if (!realization) {
-      throw new NotFoundException('Realization not found');
+    const stationIdByTemplateId = new Map<string, string>();
+    for (const station of stations) {
+      if (
+        station.sourceTemplateId &&
+        !stationIdByTemplateId.has(station.sourceTemplateId)
+      ) {
+        stationIdByTemplateId.set(station.sourceTemplateId, station.id);
+      }
     }
 
-    return realization;
+    let skipped = 0;
+    const data: Prisma.CaseFileCreateManyInput[] = [];
+    for (const row of templateRows) {
+      const stationId = row.stationId
+        ? (stationIdByTemplateId.get(row.stationId) ?? null)
+        : null;
+      if (row.stationId && !stationId) {
+        skipped += 1;
+        continue;
+      }
+
+      data.push({
+        realizationId,
+        order: data.length,
+        kind: row.kind,
+        unlockMode: row.unlockMode,
+        stationId,
+        title: row.title,
+        body: row.body,
+        url: row.url,
+        objectKey: row.objectKey,
+        fields: (row.fields as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
+      });
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.caseFile.deleteMany({ where: { realizationId } }),
+      this.prisma.caseFile.createMany({ data }),
+    ]);
+
+    const previousKeys = new Set(
+      previousRows
+        .map((row) => row.objectKey)
+        .filter((key): key is string => !!key),
+    );
+    for (const key of previousKeys) {
+      await this.deleteOrphanedObject(key);
+    }
+
+    return { copied: data.length, skipped };
   }
 
-  private async requireCaseFile(realizationId: string, caseFileId: string) {
+  private async requireOwner(owner: CaseFileOwner) {
+    if ('realizationId' in owner) {
+      const realization = await this.prisma.realization.findUnique({
+        where: { id: owner.realizationId },
+        select: { id: true },
+      });
+      if (!realization) {
+        throw new NotFoundException('Realization not found');
+      }
+      return;
+    }
+
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: owner.scenarioId },
+      select: { id: true },
+    });
+    if (!scenario) {
+      throw new NotFoundException('Scenario not found');
+    }
+  }
+
+  private async requireCaseFile(owner: CaseFileOwner, caseFileId: string) {
     const existing = await this.prisma.caseFile.findFirst({
-      where: { id: caseFileId, realizationId },
+      where: { id: caseFileId, ...ownerWhere(owner) },
     });
 
     if (!existing) {
@@ -235,18 +350,26 @@ export class CaseFileService {
    * zostałby na zawsze zablokowany, wyglądając przy tym na poprawnie
    * skonfigurowany.
    */
-  private async assertStationBelongsToRealization(
-    realizationId: string,
+  private async assertStationBelongsToOwner(
+    owner: CaseFileOwner,
     stationId: string | null,
   ) {
     if (!stationId) {
       return;
     }
 
-    const station = await this.prisma.station.findFirst({
-      where: { id: stationId, realizationId },
-      select: { id: true },
-    });
+    // Scenariusz nie ma kolumny na stanowiskach — należą do niego przez
+    // tabelę łączącą, więc tam sprawdzamy przynależność.
+    const station =
+      'realizationId' in owner
+        ? await this.prisma.station.findFirst({
+            where: { id: stationId, realizationId: owner.realizationId },
+            select: { id: true },
+          })
+        : await this.prisma.scenarioStation.findFirst({
+            where: { stationId, scenarioId: owner.scenarioId },
+            select: { id: true },
+          });
 
     if (!station) {
       throw new BadRequestException('Invalid payload');
@@ -259,7 +382,9 @@ export class CaseFileService {
    * sprzątanie nie może wywrócić operacji, która w bazie już się powiodła.
    */
   private async deleteOrphanedObject(objectKey: string) {
-    const stillUsed = await this.prisma.caseFile.count({ where: { objectKey } });
+    const stillUsed = await this.prisma.caseFile.count({
+      where: { objectKey },
+    });
 
     if (stillUsed > 0) {
       return;

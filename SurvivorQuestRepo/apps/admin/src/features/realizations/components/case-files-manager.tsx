@@ -8,6 +8,7 @@ import {
   useMoveCaseFileMutation,
   type CaseFileEntry,
   type CaseFileKind,
+  type CaseFileOwner,
 } from "@/features/realizations/api/realization.api";
 import { CaseFileForm } from "./case-file-form";
 
@@ -20,7 +21,7 @@ import { CaseFileForm } from "./case-file-form";
  */
 
 type CaseFilesManagerProps = {
-  realizationId: string;
+  owner: CaseFileOwner;
   stations: { id: string; name: string }[];
 };
 
@@ -31,8 +32,9 @@ const KIND_LABELS: Record<CaseFileKind, string> = {
   dossier: "Kartoteka",
 };
 
-export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerProps) {
-  const { data, isLoading, isError } = useGetCaseFilesQuery({ realizationId });
+export function CaseFilesManager({ owner, stations }: CaseFilesManagerProps) {
+  const { data, isLoading, isError } = useGetCaseFilesQuery({ owner });
+  const isScenario = owner.kind === "scenario";
   const [moveCaseFile] = useMoveCaseFileMutation();
   const [deleteCaseFile] = useDeleteCaseFileMutation();
 
@@ -45,7 +47,7 @@ export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerPr
   async function handleDelete(entry: CaseFileEntry) {
     setDeletingId(entry.id);
     try {
-      await deleteCaseFile({ realizationId, caseFileId: entry.id }).unwrap();
+      await deleteCaseFile({ owner, caseFileId: entry.id }).unwrap();
     } finally {
       setDeletingId(null);
     }
@@ -61,19 +63,23 @@ export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerPr
           wskazane stanowisko — akta są wspólne dla całej realizacji.
         </p>
         <p className="text-xs text-zinc-500">
-          {`Wyłączenie ustawienia „Pokaż akta" ukrywa je w aplikacji, ale ich nie kasuje.`}
+          {isScenario
+            ? "To wzór: przy tworzeniu realizacji z tego scenariusza akta kopiują się do niej, a potem można je tam poprawiać. Zmiany tutaj nie ruszają istniejących realizacji, dopóki nie użyjesz w nich „Pobierz od nowa ze scenariusza”."
+            : `Wyłączenie ustawienia „Pokaż akta" ukrywa je w aplikacji, ale ich nie kasuje.`}
         </p>
       </div>
 
       {stations.length === 0 ? (
         <p className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-xs text-amber-200">
-          {`Realizacja nie ma jeszcze zapisanych stanowisk. Dowody możesz dodawać, ale przypiszesz je do stanowisk dopiero po zapisaniu zakładki „Stanowiska".`}
+          {isScenario
+            ? "Scenariusz nie ma jeszcze zapisanych stanowisk. Dowody możesz dodawać, ale do stanowisk przypiszesz je po zapisaniu scenariusza ze stanowiskami."
+            : `Realizacja nie ma jeszcze zapisanych stanowisk. Dowody możesz dodawać, ale przypiszesz je do stanowisk dopiero po zapisaniu zakładki „Stanowiska".`}
         </p>
       ) : null}
 
       {isAdding ? (
         <CaseFileForm
-          realizationId={realizationId}
+          owner={owner}
           stations={stations}
           onDone={() => setIsAdding(false)}
           onCancel={() => setIsAdding(false)}
@@ -135,7 +141,7 @@ export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerPr
                 <button
                   type="button"
                   onClick={() =>
-                    void moveCaseFile({ realizationId, caseFileId: entry.id, direction: "up" })
+                    void moveCaseFile({ owner, caseFileId: entry.id, direction: "up" })
                   }
                   disabled={index === 0}
                   className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40"
@@ -146,7 +152,7 @@ export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerPr
                 <button
                   type="button"
                   onClick={() =>
-                    void moveCaseFile({ realizationId, caseFileId: entry.id, direction: "down" })
+                    void moveCaseFile({ owner, caseFileId: entry.id, direction: "down" })
                   }
                   disabled={index === entries.length - 1}
                   className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 disabled:opacity-40"
@@ -179,7 +185,7 @@ export function CaseFilesManager({ realizationId, stations }: CaseFilesManagerPr
 
             {editingId === entry.id ? (
               <CaseFileForm
-                realizationId={realizationId}
+                owner={owner}
                 stations={stations}
                 initial={entry}
                 onDone={() => setEditingId(null)}

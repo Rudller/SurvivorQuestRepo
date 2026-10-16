@@ -255,6 +255,20 @@ export type CaseFileEntry = {
   updatedAt: string;
 };
 
+/**
+ * Właściciel akt: realizacja (jej własna kopia) albo scenariusz (wzór kopiowany
+ * do realizacji przy jej tworzeniu i przy „Pobierz od nowa ze scenariusza”).
+ */
+export type CaseFileOwner = { kind: "realization" | "scenario"; id: string };
+
+function caseFileOwnerPath(owner: CaseFileOwner) {
+  return owner.kind === "realization" ? `/realizations/${owner.id}` : `/scenario/${owner.id}`;
+}
+
+function caseFileOwnerTag(owner: CaseFileOwner) {
+  return owner.kind === "realization" ? ("Realization" as const) : ("Scenario" as const);
+}
+
 export type CaseFilePayload = {
   kind: CaseFileKind;
   title: string;
@@ -780,84 +794,79 @@ export const realizationApi = baseApi.injectEndpoints({
       query: ({ realizationId }) =>
         buildApiPath(`/mobile/admin/realizations/${realizationId}/station-qr`),
     }),
-    getCaseFiles: build.query<
-      { realizationId: string; entries: CaseFileEntry[] },
-      { realizationId: string }
-    >({
-      query: ({ realizationId }) =>
-        buildApiPath(`/realizations/${realizationId}/case-files`),
-      providesTags: ["Realization"],
+    getCaseFiles: build.query<{ entries: CaseFileEntry[] }, { owner: CaseFileOwner }>({
+      query: ({ owner }) => buildApiPath(`${caseFileOwnerPath(owner)}/case-files`),
+      providesTags: (_result, _error, { owner }) => [caseFileOwnerTag(owner)],
     }),
-    createCaseFile: build.mutation<
-      CaseFileEntry,
-      { realizationId: string; payload: CaseFilePayload }
-    >({
-      query: ({ realizationId, payload }) => ({
-        url: buildApiPath(`/realizations/${realizationId}/case-files`),
+    createCaseFile: build.mutation<CaseFileEntry, { owner: CaseFileOwner; payload: CaseFilePayload }>({
+      query: ({ owner, payload }) => ({
+        url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files`),
         method: "POST",
         body: payload,
       }),
-      invalidatesTags: ["Realization"],
+      invalidatesTags: (_result, _error, { owner }) => [caseFileOwnerTag(owner)],
     }),
     updateCaseFile: build.mutation<
       CaseFileEntry,
-      { realizationId: string; caseFileId: string; payload: CaseFilePayload }
+      { owner: CaseFileOwner; caseFileId: string; payload: CaseFilePayload }
     >({
-      query: ({ realizationId, caseFileId, payload }) => ({
-        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}`),
+      query: ({ owner, caseFileId, payload }) => ({
+        url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files/${caseFileId}`),
         method: "PUT",
         body: payload,
       }),
-      invalidatesTags: ["Realization"],
+      invalidatesTags: (_result, _error, { owner }) => [caseFileOwnerTag(owner)],
     }),
     moveCaseFile: build.mutation<
       { id: string; order: number },
-      { realizationId: string; caseFileId: string; direction: "up" | "down" }
+      { owner: CaseFileOwner; caseFileId: string; direction: "up" | "down" }
     >({
-      query: ({ realizationId, caseFileId, direction }) => ({
-        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}/move`),
+      query: ({ owner, caseFileId, direction }) => ({
+        url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files/${caseFileId}/move`),
         method: "PUT",
         body: { direction },
       }),
-      invalidatesTags: ["Realization"],
+      invalidatesTags: (_result, _error, { owner }) => [caseFileOwnerTag(owner)],
     }),
-    deleteCaseFile: build.mutation<
-      { id: string },
-      { realizationId: string; caseFileId: string }
-    >({
-      query: ({ realizationId, caseFileId }) => ({
-        url: buildApiPath(`/realizations/${realizationId}/case-files/${caseFileId}`),
+    deleteCaseFile: build.mutation<{ id: string }, { owner: CaseFileOwner; caseFileId: string }>({
+      query: ({ owner, caseFileId }) => ({
+        url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files/${caseFileId}`),
         method: "DELETE",
       }),
+      invalidatesTags: (_result, _error, { owner }) => [caseFileOwnerTag(owner)],
+    }),
+    uploadCaseFileImage: build.mutation<UploadRealizationAssetResponse, { owner: CaseFileOwner; file: File }>({
+      query: ({ owner, file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files/upload-image`),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
+    uploadCaseFileAudio: build.mutation<UploadRealizationAssetResponse, { owner: CaseFileOwner; file: File }>({
+      query: ({ owner, file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return {
+          url: buildApiPath(`${caseFileOwnerPath(owner)}/case-files/upload-audio`),
+          method: "POST",
+          body: formData,
+        };
+      },
+    }),
+    refreshRealizationFromScenario: build.mutation<
+      { caseFilesSkipped: number },
+      { realizationId: string; changedBy?: string }
+    >({
+      query: ({ realizationId, changedBy }) => ({
+        url: buildApiPath(`/realizations/${realizationId}/refresh-from-scenario`),
+        method: "POST",
+        body: { changedBy },
+      }),
       invalidatesTags: ["Realization"],
-    }),
-    uploadCaseFileImage: build.mutation<
-      UploadRealizationAssetResponse,
-      { realizationId: string; file: File }
-    >({
-      query: ({ realizationId, file }) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        return {
-          url: buildApiPath(`/realizations/${realizationId}/case-files/upload-image`),
-          method: "POST",
-          body: formData,
-        };
-      },
-    }),
-    uploadCaseFileAudio: build.mutation<
-      UploadRealizationAssetResponse,
-      { realizationId: string; file: File }
-    >({
-      query: ({ realizationId, file }) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        return {
-          url: buildApiPath(`/realizations/${realizationId}/case-files/upload-audio`),
-          method: "POST",
-          body: formData,
-        };
-      },
     }),
     translateRealizationTexts: build.mutation<
       { texts: string[] },
@@ -896,4 +905,5 @@ export const {
   useDeleteCaseFileMutation,
   useUploadCaseFileImageMutation,
   useUploadCaseFileAudioMutation,
+  useRefreshRealizationFromScenarioMutation,
 } = realizationApi;

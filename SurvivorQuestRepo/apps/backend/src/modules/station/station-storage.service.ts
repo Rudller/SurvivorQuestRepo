@@ -39,6 +39,16 @@ const AUDIO_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'audio/webm': 'webm',
 };
 
+export type CaseFileStorageOwner =
+  | { realizationId: string }
+  | { scenarioId: string };
+
+function caseFileOwnerPrefix(owner: CaseFileStorageOwner) {
+  return 'realizationId' in owner
+    ? `realizations/${owner.realizationId}`
+    : `scenarios/${owner.scenarioId}`;
+}
+
 @Injectable()
 export class StationStorageService {
   private client: S3Client | null = null;
@@ -127,15 +137,16 @@ export class StationStorageService {
   /**
    * Dowody do akt sprawy. Prefiks hierarchiczny, nie płaski jak przy logo —
    * logo i mapy są reużywalne między realizacjami (stąd biblioteka mediów),
-   * a dowód to jednorazowa treść fabularna jednej realizacji.
+   * a dowód to jednorazowa treść fabularna jednej realizacji (albo wzór w
+   * scenariuszu, z którego realizacje kopiują rekordy, ale nie pliki).
    */
   async uploadCaseFileImage(
     file: Express.Multer.File,
-    options: { realizationId: string },
+    owner: CaseFileStorageOwner,
   ) {
     const extension = IMAGE_EXTENSION_BY_MIME_TYPE[file.mimetype];
     const objectKey = this.buildObjectKey(
-      `realizations/${options.realizationId}/case-files`,
+      `${caseFileOwnerPrefix(owner)}/case-files`,
       extension,
     );
 
@@ -146,7 +157,7 @@ export class StationStorageService {
 
   async uploadCaseFileAudio(
     file: Express.Multer.File,
-    options: { realizationId: string },
+    owner: CaseFileStorageOwner,
   ) {
     const extension = AUDIO_EXTENSION_BY_MIME_TYPE[file.mimetype];
 
@@ -155,7 +166,7 @@ export class StationStorageService {
     }
 
     const objectKey = this.buildObjectKey(
-      `realizations/${options.realizationId}/case-files/audio`,
+      `${caseFileOwnerPrefix(owner)}/case-files/audio`,
       extension,
     );
 

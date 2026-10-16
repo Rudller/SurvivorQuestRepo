@@ -13,6 +13,7 @@ import {
   type CaseFileEntry,
   type CaseFileField,
   type CaseFileKind,
+  type CaseFileOwner,
   type CaseFilePayload,
   type CaseFileUnlockMode,
 } from "@/features/realizations/api/realization.api";
@@ -40,7 +41,7 @@ function formatMegabytes(bytes: number) {
 }
 
 type CaseFileFormProps = {
-  realizationId: string;
+  owner: CaseFileOwner;
   stations: { id: string; name: string }[];
   initial?: CaseFileEntry;
   onDone: () => void;
@@ -57,7 +58,7 @@ const KIND_OPTIONS: { value: CaseFileKind; label: string }[] = [
 const EMPTY_FIELD: CaseFileField = { label: "", value: "" };
 
 export function CaseFileForm({
-  realizationId,
+  owner,
   stations,
   initial,
   onDone,
@@ -116,8 +117,8 @@ export function CaseFileForm({
     try {
       const uploaded =
         kind === "audio"
-          ? await uploadAudio({ realizationId, file: fileToUpload }).unwrap()
-          : await uploadImage({ realizationId, file: fileToUpload }).unwrap();
+          ? await uploadAudio({ owner, file: fileToUpload }).unwrap()
+          : await uploadImage({ owner, file: fileToUpload }).unwrap();
 
       setUrl(uploaded.url);
       setObjectKey(uploaded.key);
@@ -190,9 +191,9 @@ export function CaseFileForm({
 
     try {
       if (initial) {
-        await updateCaseFile({ realizationId, caseFileId: initial.id, payload }).unwrap();
+        await updateCaseFile({ owner, caseFileId: initial.id, payload }).unwrap();
       } else {
-        await createCaseFile({ realizationId, payload }).unwrap();
+        await createCaseFile({ owner, payload }).unwrap();
       }
       onDone();
     } catch {

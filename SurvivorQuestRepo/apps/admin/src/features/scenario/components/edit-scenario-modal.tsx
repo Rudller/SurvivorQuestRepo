@@ -7,6 +7,7 @@ import { groupStationsByCategory } from "@/features/games/station-catalog.utils"
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
 import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/scenario.api";
 import { ScenarioCategoriesField } from "./scenario-categories-field";
+import { CaseFilesManager } from "@/features/realizations/components/case-files-manager";
 import { compactScenarioTranslations, ScenarioTextsField } from "./scenario-texts-field";
 
 interface EditScenarioModalProps {
@@ -209,6 +210,19 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
               </div>
             </div>
           </form>
+
+          <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+            <h3 className="text-xs uppercase tracking-wider text-zinc-400">Akta</h3>
+            {/* Stanowiska z ZAPISANEGO scenariusza — backend sprawdza przypisanie
+                dowodu do stanowiska właśnie względem nich, a nie względem
+                niezapisanego zaznaczenia w formularzu powyżej. */}
+            <CaseFilesManager
+              owner={{ kind: "scenario", id: scenario.id }}
+              stations={stations
+                .filter((station) => scenario.stationIds.includes(station.id))
+                .map((station) => ({ id: station.id, name: station.name }))}
+            />
+          </section>
 
           <section className="rounded-lg border border-red-900/70 bg-red-950/20 p-3">
             <p className="text-xs uppercase tracking-wider text-red-300">Usuń scenariusz</p>

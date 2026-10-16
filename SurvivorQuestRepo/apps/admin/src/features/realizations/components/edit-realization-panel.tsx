@@ -41,6 +41,7 @@ import {
   useDeleteRealizationMutation,
   useTranslateRealizationTextsMutation,
   useUploadRealizationLogoMutation,
+  useRefreshRealizationFromScenarioMutation,
   useUploadRealizationMapImageMutation,
   useUploadRealizationOfferMutation,
 } from "../api/realization.api";
@@ -164,6 +165,11 @@ export function EditRealizationPanel({
   const [translateRealizationTexts, { isLoading: isAutoTranslating }] =
     useTranslateRealizationTextsMutation();
 
+  const [refreshFromScenario, { isLoading: isRefreshingFromScenario }] =
+    useRefreshRealizationFromScenarioMutation();
+  const [refreshFromScenarioError, setRefreshFromScenarioError] = useState<
+    string | null
+  >(null);
   const [activeTab, setActiveTab] = useState<RealizationFormTabId>("basic");
   const [editError, setEditError] = useState<string | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -2067,6 +2073,66 @@ export function EditRealizationPanel({
                     </p>
                   )}
                   <input
+                {!isRiskQuizType && realization.scenarioId ? (
+                  <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                    <button
+                      type="button"
+                      disabled={
+                        isRefreshingFromScenario ||
+                        realization.status === "in-progress" ||
+                        editValues.scenarioId !==
+                          (realization.scenarioTemplateId ?? realization.scenarioId)
+                      }
+                      onClick={async () => {
+                        if (
+                          !window.confirm(
+                            "Pobrać od nowa ze scenariusza stanowiska, akta, wstęp i zasady gry? Zmiany zrobione ręcznie w tej realizacji w tych miejscach przepadną.",
+                          )
+                        ) {
+                          return;
+                        }
+                        setRefreshFromScenarioError(null);
+                        try {
+                          const result = await refreshFromScenario({
+                            realizationId: realization.id,
+                            changedBy: userEmail,
+                          }).unwrap();
+                          if (result.caseFilesSkipped > 0) {
+                            window.alert(
+                              `Pominięto dowody przypięte do stanowisk, których nie ma w tej realizacji: ${result.caseFilesSkipped}.`,
+                            );
+                          }
+                          // Formularz trzyma kopię starych stanowisk i tekstów —
+                          // zamknięcie wymusza świeże dane przy ponownym otwarciu,
+                          // zamiast pozwolić nadpisać odświeżenie starym zapisem.
+                          onClose();
+                        } catch (error) {
+                          setRefreshFromScenarioError(
+                            resolveApiErrorMessage(error) ??
+                              "Nie udało się pobrać danych ze scenariusza.",
+                          );
+                        }
+                      }}
+                      className="rounded-md border border-amber-400/60 px-3 py-1.5 text-xs text-amber-200 transition hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isRefreshingFromScenario
+                        ? "Pobieranie…"
+                        : "Pobierz od nowa ze scenariusza"}
+                    </button>
+                    <p className="text-xs text-zinc-500">
+                      {realization.status === "in-progress"
+                        ? "Niedostępne w trakcie gry — podmiana stanowisk zerwałaby postępy drużyn."
+                        : editValues.scenarioId !==
+                            (realization.scenarioTemplateId ?? realization.scenarioId)
+                          ? "Najpierw zapisz zmianę scenariusza."
+                          : "Stanowiska, akta, wstęp i zasady gry wrócą do aktualnej wersji scenariusza. Po pobraniu panel się zamknie."}
+                    </p>
+                    {refreshFromScenarioError ? (
+                      <p className="text-xs text-red-300">{refreshFromScenarioError}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
                     type="file"
                     accept="application/pdf"
                     onChange={(event) => {
@@ -2221,7 +2287,7 @@ export function EditRealizationPanel({
 
             {activeTab === "caseFiles" && (
               <CaseFilesManager
-                realizationId={realization.id}
+                owner={{ kind: "realization", id: realization.id }}
                 stations={scenarioStations.flatMap((station) =>
                   station.id ? [{ id: station.id, name: station.name }] : [],
                 )}

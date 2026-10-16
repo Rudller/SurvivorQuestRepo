@@ -160,6 +160,10 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
 
             <ScenarioTextsField value={texts} onChange={setTexts} />
 
+            <p className="text-xs text-zinc-500">
+              Akta dodasz po utworzeniu scenariusza — w jego edycji, sekcja „Akta”.
+            </p>
+
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
               <div className="max-h-96 space-y-4 overflow-auto rounded-lg border border-zinc-700 bg-zinc-950 p-3">

@@ -212,6 +212,7 @@ model Scenario {
   derivedScenarios Scenario[]       @relation("ScenarioTemplate")
   scenarioStations ScenarioStation[]
   realizations     Realization[]
+  caseFiles        CaseFile[]
 }
 
 model ScenarioStation {
@@ -798,7 +799,10 @@ enum CaseFileUnlockMode {
 /// „stanowisko zniknęło" — a to drugie po cichu odsłoniłoby zablokowaną treść.
 model CaseFile {
   id            String             @id @default(uuid())
-  realizationId String
+  /// Właściciel: dokładnie jedno z realizationId / scenarioId (CHECK w migracji).
+  /// Akta scenariusza są wzorem kopiowanym do realizacji przy jej tworzeniu.
+  realizationId String?
+  scenarioId    String?
   stationId     String?
   kind          CaseFileKind
   unlockMode    CaseFileUnlockMode @default(FROM_START)
@@ -814,9 +818,11 @@ model CaseFile {
   fields        Json?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
-  realization   Realization        @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  realization   Realization?       @relation(fields: [realizationId], references: [id], onDelete: Cascade)
+  scenario      Scenario?          @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   station       Station?           @relation(fields: [stationId], references: [id], onDelete: SetNull)
 
   @@index([realizationId, order])
+  @@index([scenarioId, order])
   @@index([stationId])
 }

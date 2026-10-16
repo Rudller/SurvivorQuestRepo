@@ -19,11 +19,14 @@ import {
 } from './dto/realization.dto';
 import type {
   PointsQrCodeDraftPayload,
+  RealizationLanguage,
+  RealizationTranslations,
   ScenarioStationDraftPayload,
 } from './entities/realization.entity';
 import {
   buildRealizationEntity,
   calculateRequiredDevices,
+  fromPrismaRealizationLanguage,
   fromPrismaRealizationStatus,
   mapRealizationLogs,
   resolveRealizationStatus,
@@ -42,6 +45,7 @@ import { StationStorageService } from '../station/station-storage.service';
 import { TranslationService } from '../translation/translation.service';
 import { RiskQuizService } from '../risk-quiz/risk-quiz.service';
 import { RealizationJoinCodeService } from './domain/realization.join-code';
+import { CaseFileService } from './case-file.service';
 import {
   normalizeScenarioStationDrafts,
   type ParseTimeLimitResult,
@@ -84,6 +88,7 @@ export class RealizationService {
     private readonly stationStorageService: StationStorageService,
     private readonly translationService: TranslationService,
     private readonly riskQuizService: RiskQuizService,
+    private readonly caseFileService: CaseFileService,
   ) {}
 
   async listRealizations(options: RealizationEntityOptions = {}) {
@@ -253,6 +258,15 @@ export class RealizationService {
       );
     }
 
+    // Akta scenariusza-wzoru stają się własną kopią realizacji. Po stanowiskach,
+    // bo dowody „po stanowisku” przepinają się na stanowiska tej realizacji.
+    if (clonedScenario?.sourceTemplateId) {
+      await this.caseFileService.replaceRealizationCaseFilesFromScenario(
+        realizationId,
+        clonedScenario.sourceTemplateId,
+      );
+    }
+
     if (isRiskQuizType) {
       // Give the realization its OWN copy of the chosen deck, exactly like a
       // non-risk realization gets its own cloned Scenario + Stations above. The
@@ -335,6 +349,9 @@ export class RealizationService {
     let scenario: ScenarioEntity | null = null;
     let finalStations: StationEntity[] = [];
     let scenarioInstanceIdToRemove: string | null = null;
+    // Ustawiane tylko przy zmianie scenariusza na inny wzór: stare akta
+    // wskazywałyby wtedy stanowiska, których w realizacji już nie ma.
+    let caseFilesTemplateIdToCopy: string | null = null;
 
     if (isRiskQuizType) {
       // Ryzykanci realizations don't use the Scenario/Station system — drop
@@ -380,6 +397,11 @@ export class RealizationService {
         : await this.scenarioService.cloneScenario(requestedScenario.id, {
             realizationId,
           });
+
+      if (!isReusingCurrentScenarioInstance) {
+        caseFilesTemplateIdToCopy =
+          requestedScenario.sourceTemplateId ?? requestedScenario.id;
+      }
 
       if (!scenario) {
         throw new BadRequestException('Scenario not found');
@@ -457,6 +479,13 @@ export class RealizationService {
       await this.scenarioService.removeScenario(scenarioInstanceIdToRemove);
     }
 
+    if (caseFilesTemplateIdToCopy) {
+      await this.caseFileService.replaceRealizationCaseFilesFromScenario(
+        realizationId,
+        caseFilesTemplateIdToCopy,
+      );
+    }
+
     if (isRiskQuizType) {
       // Picking a different deck in the editor sets riskSchemeId back to a
       // template id, so re-clone here. A no-op when the realization is already
@@ -484,6 +513,114 @@ export class RealizationService {
     }
 
     return entity;
+  }
+
+  /**
+   * „Pobierz od nowa ze scenariusza”: stanowiska, akta, wstęp i zasady gry
+   * wracają do stanu scenariusza-wzoru. To samo, co dawała sztuczka „zmień
+   * scenariusz → zapisz → wróć → zapisz”, plus akta i teksty.
+   *
+   * Ręczne poprawki w realizacji przepadają (admin potwierdza to w panelu).
+   * Zablokowane w trakcie gry: podmiana stanowisk zerwałaby postępy drużyn.
+   */
+  async refreshFromScenario(realizationId: string, changedBy?: string) {
+    const current = await this.prisma.realization.findUnique({
+      where: { id: realizationId },
+    });
+    if (!current) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    const effectiveStatus = resolveRealizationStatus(
+      fromPrismaRealizationStatus(current.status),
+      current.scheduledAt.toISOString(),
+      current.durationMinutes,
+    );
+    if (effectiveStatus === 'in-progress') {
+      throw new BadRequestException(
+        'Cannot refresh a realization that is in progress',
+      );
+    }
+
+    const currentScenario = current.scenarioId
+      ? await this.scenarioService.findScenarioById(current.scenarioId)
+      : null;
+    if (!currentScenario) {
+      throw new BadRequestException('Realization has no scenario');
+    }
+
+    const templateId = currentScenario.sourceTemplateId ?? currentScenario.id;
+    const template = await this.scenarioService.findScenarioById(templateId);
+    if (!template) {
+      throw new BadRequestException('Scenario not found');
+    }
+
+    const ownsCurrentScenario = currentScenario.realizationId === realizationId;
+    if (ownsCurrentScenario) {
+      // Najpierw stare stanowiska — inaczej kody QR klona (te same co we
+      // wzorze) zderzyłyby się z wierszami, które właśnie podmieniamy.
+      await this.stationService.removeStationsByIds(currentScenario.stationIds);
+    }
+
+    const scenario = await this.scenarioService.cloneScenario(templateId, {
+      realizationId,
+    });
+    if (!scenario) {
+      throw new BadRequestException('Scenario not found');
+    }
+    const finalStations = await this.syncScenarioStations(
+      realizationId,
+      scenario,
+      undefined,
+    );
+
+    const texts = resolveScenarioTextsForRealization(
+      template,
+      fromPrismaRealizationLanguage(current.language),
+    );
+
+    await this.prisma.realization.update({
+      where: { id: realizationId },
+      data: {
+        scenarioId: scenario.id,
+        positionsCount: finalStations.length,
+        // Pola, których wzór nie ma, zostają — tak samo jak przy wyborze
+        // scenariusza w formularzu tworzenia realizacji.
+        ...(texts.introText ? { introText: texts.introText } : {}),
+        ...(texts.gameRules ? { gameRules: texts.gameRules } : {}),
+        ...(texts.translations
+          ? {
+              translations: toPrismaRealizationTranslationsData(
+                texts.translations,
+              ),
+            }
+          : {}),
+      },
+    });
+
+    if (ownsCurrentScenario) {
+      await this.scenarioService.removeScenario(currentScenario.id);
+    }
+
+    const caseFiles =
+      await this.caseFileService.replaceRealizationCaseFilesFromScenario(
+        realizationId,
+        templateId,
+      );
+
+    await this.createLog(
+      realizationId,
+      changedBy?.trim() || 'admin@local',
+      'updated',
+      'Pobrano od nowa ze scenariusza stanowiska, akta, wstęp i zasady gry.',
+    );
+
+    const entity = await this.toEntity(realizationId, finalStations);
+    if (!entity) {
+      throw new NotFoundException('Realization not found');
+    }
+
+    return { realization: entity, caseFilesSkipped: caseFiles.skipped };
   }
 
   async deleteRealization(dto: DeleteRealizationDto) {
@@ -912,4 +1049,40 @@ export class RealizationService {
       },
     });
   }
+}
+
+/**
+ * Teksty scenariusza przełożone na język realizacji. Tekst bazowy scenariusza
+ * jest zawsze po polsku; jeśli realizacja ma inny język bazowy, jej tekst
+ * bazowy bierzemy z tłumaczenia (a gdy go brak — z polskiego), a wszystkie
+ * pozostałe wersje lądują w tłumaczeniach realizacji. To samo robi formularz
+ * tworzenia realizacji w adminie przy wyborze scenariusza.
+ */
+export function resolveScenarioTextsForRealization(
+  scenario: Pick<ScenarioEntity, 'introText' | 'gameRules' | 'translations'>,
+  language: RealizationLanguage,
+) {
+  const byLanguage: RealizationTranslations = {
+    ...(scenario.translations ?? {}),
+    polish: {
+      introText: scenario.introText || undefined,
+      gameRules: scenario.gameRules || undefined,
+    },
+  };
+  const base = byLanguage[language] ?? byLanguage.polish ?? {};
+
+  const translations: RealizationTranslations = { ...byLanguage };
+  delete translations[language];
+  for (const key of Object.keys(translations) as RealizationLanguage[]) {
+    const entry = translations[key];
+    if (!entry?.introText && !entry?.gameRules) {
+      delete translations[key];
+    }
+  }
+
+  return {
+    introText: base.introText ?? null,
+    gameRules: base.gameRules ?? null,
+    translations: Object.keys(translations).length > 0 ? translations : null,
+  };
 }

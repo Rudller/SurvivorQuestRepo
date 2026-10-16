@@ -20,6 +20,7 @@ describe('RealizationService.translateTexts', () => {
       {} as StationStorageService,
       translationService,
       {} as RiskQuizService,
+      {} as never,
     );
 
     return { service, translationService };

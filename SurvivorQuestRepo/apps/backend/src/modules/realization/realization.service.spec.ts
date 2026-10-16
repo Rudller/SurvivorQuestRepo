@@ -72,6 +72,11 @@ function createServiceWithStationDouble(
     {} as never,
     {} as never,
     {} as never,
+    {
+      replaceRealizationCaseFilesFromScenario: jest
+        .fn()
+        .mockResolvedValue({ copied: 0, skipped: 0 }),
+    } as never,
   );
 
   return { service, stationService, scenarioService };
@@ -289,6 +294,11 @@ describe('RealizationService.createRealization (risk-quiz)', () => {
       {} as never,
       {} as never,
       riskQuizService as never,
+      {
+        replaceRealizationCaseFilesFromScenario: jest
+          .fn()
+          .mockResolvedValue({ copied: 0, skipped: 0 }),
+      } as never,
     );
 
     return { service, prisma, scenarioService, riskQuizService };
@@ -383,6 +393,11 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
       {} as never,
       {} as never,
       riskQuizService as never,
+      {
+        replaceRealizationCaseFilesFromScenario: jest
+          .fn()
+          .mockResolvedValue({ copied: 0, skipped: 0 }),
+      } as never,
     );
 
     return {
