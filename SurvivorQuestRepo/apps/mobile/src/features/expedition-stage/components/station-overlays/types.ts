@@ -138,5 +138,11 @@ export type RealizationFinishOverlayProps = {
   showLeaderboard: boolean;
   canClose: boolean;
   onClose: () => void;
+  /**
+   * Przytrzymanie nagłówka karty otwiera menu testowe — ten sam gest co na
+   * górnym panelu gry, który ekran końca przykrywa.
+   */
+  onHeaderHoldStart?: () => void;
+  onHeaderHoldEnd?: () => void;
 };
 

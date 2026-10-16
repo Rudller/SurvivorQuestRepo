@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Animated, Image, Pressable, ScrollView, Text, View, useAnimatedValue } from "react-native";
 import { useUiLanguage, type UiLanguage } from "../../../i18n";
-import { EXPEDITION_THEME, TEAM_COLORS, getExpeditionThemeMode } from "../../../onboarding/model/constants";
+import {
+  EXPEDITION_THEME,
+  TEAM_COLORS,
+  getExpeditionThemeFamily,
+  getExpeditionThemeMode,
+} from "../../../onboarding/model/constants";
+import { Snowfall } from "../../../../shared/ui/snowfall";
+import { SnowCap } from "../../../../shared/ui/snow-cap";
 import { useAdaptiveLayout } from "../../../../shared/layout/use-adaptive-layout";
 import type { ExpeditionLeaderboardEntry } from "../../model/types";
 import type { RealizationFinishOverlayProps } from "./types";
@@ -355,6 +362,8 @@ export function RealizationFinishOverlay({
   showLeaderboard,
   canClose,
   onClose,
+  onHeaderHoldStart,
+  onHeaderHoldEnd,
 }: RealizationFinishOverlayProps) {
   const uiLanguage = useUiLanguage();
   const text = REALIZATION_FINISH_TEXT[uiLanguage];
@@ -412,11 +421,16 @@ export function RealizationFinishOverlay({
     return null;
   }
 
+  const isChristmasTheme = getExpeditionThemeFamily() === "christmas";
+
   return (
     <View
       className="absolute inset-0 z-[70] items-center justify-center px-4"
       style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.56)" }}
     >
+      {/* Nad przyciemnieniem, pod kartą: śnieg z ekranu gry zostaje pod scrimem
+          i byłby ledwo widoczny, a koniec gry ma być świąteczny. */}
+      {isChristmasTheme ? <Snowfall isLightTheme={isLightTheme} /> : null}
       <Animated.View
         className="w-full rounded-3xl border"
         style={{
@@ -428,6 +442,7 @@ export function RealizationFinishOverlay({
           padding: isTablet ? 32 : 22,
         }}
       >
+        <SnowCap cornerRadius={24} height={isTablet ? 18 : 14} seed={9} />
         {showLeaderboard ? (
           <Pressable
             className="absolute right-4 top-4 rounded-lg border px-3 py-1.5 active:opacity-90"
@@ -443,16 +458,25 @@ export function RealizationFinishOverlay({
           </Pressable>
         ) : null}
 
-        <View className={`flex-row items-center gap-2 ${showLeaderboard ? "pr-36" : ""}`}>
-          <Text className={isTablet ? "text-2xl" : "text-xl"}>🏆</Text>
-          <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
-            {text.realizationEnd}
-          </Text>
-        </View>
+        {/* Ukryte wejście do menu testowego dla prowadzącego: górny panel gry,
+            na którym normalnie siedzi ten gest, jest pod tą nakładką. */}
+        <Pressable
+          testID="realization-finish-header"
+          onPressIn={onHeaderHoldStart}
+          onPressOut={onHeaderHoldEnd}
+          className={showLeaderboard ? "pr-36" : ""}
+        >
+          <View className="flex-row items-center gap-2">
+            <Text className={isTablet ? "text-2xl" : "text-xl"}>🏆</Text>
+            <Text className="text-xs uppercase tracking-widest" style={{ color: EXPEDITION_THEME.accentStrong }}>
+              {text.realizationEnd}
+            </Text>
+          </View>
 
-        <Text className={isTablet ? "mt-2 text-2xl font-semibold" : "mt-2 text-lg font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
-          {text.finishedTitle}
-        </Text>
+          <Text className={isTablet ? "mt-2 text-2xl font-semibold" : "mt-2 text-lg font-semibold"} style={{ color: EXPEDITION_THEME.textPrimary }}>
+            {text.finishedTitle}
+          </Text>
+        </Pressable>
         <Text className={isTablet ? "mt-1 text-base" : "mt-1 text-sm"} style={{ color: EXPEDITION_THEME.textMuted }}>
           {text.finishedSubtitle}
         </Text>

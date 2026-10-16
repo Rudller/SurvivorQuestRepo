@@ -75,7 +75,13 @@ export function ExpeditionStageOverlayLayer({
       />
 
       <RealizationFinishOverlay
-        visible={isSessionEnded || overlayFlow.isFinishPreviewOpen}
+        // Chowa się na czas menu testowego i stanowiska otwartego z menu —
+        // inaczej, jako wyższa warstwa, przykryłaby je oba. Po zamknięciu wraca.
+        visible={
+          (isSessionEnded || overlayFlow.isFinishPreviewOpen) &&
+          !overlayFlow.isStationTestMenuOpen &&
+          !overlayFlow.activeStationPreview
+        }
         reason={isSessionEnded ? sessionEndReason : "manual-preview"}
         endedAt={isSessionEnded ? sessionEndedAt : null}
         leaderboardEntries={sessionState.leaderboard.entries}
@@ -86,6 +92,8 @@ export function ExpeditionStageOverlayLayer({
         }
         canClose={!isSessionEnded && overlayFlow.isFinishPreviewOpen}
         onClose={() => overlayFlow.setIsFinishPreviewOpen(false)}
+        onHeaderHoldStart={overlayFlow.handleTestMenuHoldStart}
+        onHeaderHoldEnd={overlayFlow.handleTestMenuHoldEnd}
       />
 
       <StationPreviewOverlay
