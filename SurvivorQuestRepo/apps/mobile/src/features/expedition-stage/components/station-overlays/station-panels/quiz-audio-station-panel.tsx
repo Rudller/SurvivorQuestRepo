@@ -115,7 +115,7 @@ const QUIZ_PROMPT_TEXT: Record<UiLanguage, QuizPromptText> = {
 export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: QuizPromptArgs) {
   const text = QUIZ_PROMPT_TEXT[uiLanguage];
 
-  if (station.stationType === "quiz") {
+  if (station.stationType === "quiz" || station.stationType === "ar-evidence") {
     return station.quizQuestion?.trim() || text.classicQuizFallback;
   }
   if (station.stationType === "audio-quiz") {

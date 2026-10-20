@@ -114,6 +114,7 @@ export function resolveStationPreviewPrompt(
     case "reviewed-answer":
     case "true-false":
     case "fill-blank":
+    case "ar-evidence":
       return trimmedQuestion || text.classicQuizFallback;
     case "wordle":
       return text.wordleFallback(wordleLength);

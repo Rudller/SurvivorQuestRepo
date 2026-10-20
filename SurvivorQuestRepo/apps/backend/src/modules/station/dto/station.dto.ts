@@ -36,6 +36,7 @@ const STATION_TYPES: StationType[] = [
   'reviewed-answer',
   'true-false',
   'fill-blank',
+  'ar-evidence',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =

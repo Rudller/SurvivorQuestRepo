@@ -238,7 +238,7 @@ export function buildStationPreviewModel({
   text,
 }: UseStationPreviewModelArgs) {
   const stationFamily = resolveStationFamily(station.stationType);
-  const isClassicQuizStation = station.stationType === "quiz";
+  const isClassicQuizStation = resolveEffectiveStationType(station.stationType) === "quiz";
   const isTrueFalseStation = station.stationType === "true-false";
   const isAudioQuizStation = station.stationType === "audio-quiz";
   const isWordleStation = station.stationType === "wordle";

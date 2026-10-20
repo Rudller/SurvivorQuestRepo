@@ -22,7 +22,8 @@ export type StationTestType =
   | "open-quiz"
   | "reviewed-answer"
   | "true-false"
-  | "fill-blank";
+  | "fill-blank"
+  | "ar-evidence";
 
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 

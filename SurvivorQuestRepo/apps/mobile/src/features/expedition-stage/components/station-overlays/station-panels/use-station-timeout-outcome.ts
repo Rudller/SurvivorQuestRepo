@@ -21,7 +21,8 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "open-quiz" ||
     stationType === "reviewed-answer" ||
     stationType === "true-false" ||
-    stationType === "fill-blank"
+    stationType === "fill-blank" ||
+    stationType === "ar-evidence"
   );
 }
 
@@ -142,7 +143,7 @@ export function useStationTimeoutOutcome({
     }
 
     const isQuizAnswerPending =
-      (station.stationType === "quiz" || station.stationType === "audio-quiz") &&
+      (station.stationType === "quiz" || station.stationType === "audio-quiz" || station.stationType === "ar-evidence") &&
       pendingByType.quiz;
     const isWordlePending = station.stationType === "wordle" && pendingByType.wordle;
     const isHangmanPending = station.stationType === "hangman" && pendingByType.hangman;

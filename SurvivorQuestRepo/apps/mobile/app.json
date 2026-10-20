@@ -2,7 +2,7 @@
   "expo": {
     "name": "SurvivorQuest",
     "slug": "survivorquest",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
@@ -34,8 +34,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-audio",
       "expo-sensors",
+      [
+        "@reactvision/react-viro",
+        {
+          "android": {
+            "xRMode": ["AR"]
+          }
+        }
+      ],
       "expo-asset",
       [
         "expo-font",

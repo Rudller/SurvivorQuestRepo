@@ -18,6 +18,7 @@ import { RebusStationPanel } from "./rebus-station-panel";
 import { ReviewedAnswerStationPanel } from "./reviewed-answer-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
 import { TrueFalseStationPanel } from "./true-false-station-panel";
+import { ArEvidenceStationPanel } from "./ar-evidence-station-panel";
 import { StrongPasswordStationPanel } from "./strong-password-station-panel";
 import { WordleInteractionPanel, WordleMediaBoard } from "./wordle-station-panel";
 
@@ -341,6 +342,14 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     behavesAs: "open-quiz",
     outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" },
     renderInteraction: (c) => <OpenQuizStationPanel {...c.openQuizStationPanelProps} />,
+  },
+  "ar-evidence": {
+    family: "quiz",
+    // Zbieranie śladów w AR, a potem zwykły quiz "kto jest sprawcą": ten sam
+    // zapis i to samo sprawdzanie odpowiedzi co w quizie.
+    behavesAs: "quiz",
+    outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" },
+    renderInteraction: (c) => <ArEvidenceStationPanel {...c.quizAudioPanelSharedProps} />,
   },
 };
 

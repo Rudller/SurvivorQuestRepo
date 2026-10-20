@@ -23,6 +23,7 @@ export const STATION_TYPES: StationType[] = [
   'reviewed-answer',
   'true-false',
   'fill-blank',
+  'ar-evidence',
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;
@@ -56,7 +57,8 @@ export function isQuizDataStationType(stationType: StationType) {
     stationType === 'open-quiz' ||
     stationType === 'reviewed-answer' ||
     stationType === 'true-false' ||
-    stationType === 'fill-blank'
+    stationType === 'fill-blank' ||
+    stationType === 'ar-evidence'
   );
 }
 

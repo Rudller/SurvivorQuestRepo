@@ -38,6 +38,7 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   "reviewed-answer": "#d946ef",
   "true-false": "#2dd4bf",
   "fill-blank": "#fb7185",
+  "ar-evidence": "#a77bff",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -285,7 +286,8 @@ export function isQuizStationType(stationType: StationType) {
     stationType === "open-quiz" ||
     stationType === "reviewed-answer" ||
     stationType === "true-false" ||
-    stationType === "fill-blank"
+    stationType === "fill-blank" ||
+    stationType === "ar-evidence"
   );
 }
 
@@ -496,6 +498,15 @@ export function getQuizLikeStationCopy(stationType: StationType) {
         answersHint:
           "Zaznaczcie lukę trzema podkreślnikami (___) w treści zdania. Podajcie brakujące słowo — wielkość liter i polskie znaki nie mają znaczenia — a niżej ewentualne dodatkowe warianty.",
         validationMessage: "Uzupełnij lukę wymaga zdania i brakującego słowa.",
+      };
+    case "ar-evidence":
+      return {
+        sectionTitle: "Podejrzani",
+        questionLabel: "Pytanie końcowe",
+        questionPlaceholder: "Kto jest sprawcą?",
+        answersHint:
+          "Wpisz 4 podejrzanych (np. „Marek Zając, ogrodnik”) i zaznacz sprawcę. Ślady do znalezienia w AR to na razie przykładowa sprawa wbudowana w aplikację.",
+        validationMessage: "Ślady AR wymagają pytania, 4 podejrzanych i wskazania sprawcy.",
       };
     case "reviewed-answer":
       return {

@@ -387,7 +387,7 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
     if (hasQuiz && !questionFilled && !isPuzzleSecretQuestionStationType(type) && quizQuestion.trim()) {
       queue({ kind: "question" }, quizQuestion);
 
-      if (type === "quiz" || type === "audio-quiz") {
+      if (type === "quiz" || type === "audio-quiz" || type === "ar-evidence") {
         quizAnswers.forEach((answer, answerIndex) => {
           if (answer.trim()) {
             queue({ kind: "answer", answerIndex }, answer);

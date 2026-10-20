@@ -201,6 +201,7 @@ const STATION_TYPE_LABELS: Record<StationTestType, string> = {
   "reviewed-answer": "Odpowiedź opisowa",
   "true-false": "Prawda czy fałsz",
   "fill-blank": "Uzupełnij lukę",
+  "ar-evidence": "Ślady AR",
 };
 // Keep in sync with RISK_QUIZ_INTRO_TEXT_PLACEHOLDER in
 // apps/admin/src/features/realizations/realization.utils.ts — shown to

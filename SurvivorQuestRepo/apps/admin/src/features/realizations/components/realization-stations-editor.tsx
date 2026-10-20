@@ -797,7 +797,7 @@ export function RealizationStationsEditor({
       if (hasQuiz && !questionFilled && station.type !== "simon" && station.quiz?.question?.trim()) {
         queue({ kind: "question", stationIndex }, station.quiz.question);
 
-        if (station.type === "quiz" || station.type === "audio-quiz") {
+        if (station.type === "quiz" || station.type === "audio-quiz" || station.type === "ar-evidence") {
           (station.quiz.answers ?? []).forEach((answer, answerIndex) => {
             if (answer.trim()) {
               queue({ kind: "answer", stationIndex, answerIndex }, answer);

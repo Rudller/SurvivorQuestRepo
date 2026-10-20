@@ -46,6 +46,7 @@ const PROMPT_TYPES = new Set<StationType>([
   "reviewed-answer",
   "true-false",
   "fill-blank",
+  "ar-evidence",
   "wordle",
   "hangman",
   "anagram",
@@ -201,6 +202,8 @@ export function MobileStationPreview({
 function renderPreviewBody(type: StationType, props: StationPreviewProps) {
   switch (type) {
     case "quiz":
+    // ar-evidence ends with the same four-answer pick; the AR hunt itself only runs on the tablet.
+    case "ar-evidence":
       return <QuizPreview {...props} isAudioQuiz={false} />;
     case "audio-quiz":
       return <QuizPreview {...props} isAudioQuiz />;

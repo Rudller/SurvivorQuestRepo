@@ -20,7 +20,8 @@ export type StationType =
   | "open-quiz"
   | "reviewed-answer"
   | "true-false"
-  | "fill-blank";
+  | "fill-blank"
+  | "ar-evidence";
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
@@ -97,6 +98,7 @@ export const stationTypeGroups: StationTypeGroup[] = [
       { value: "time", label: "Na czas" },
       { value: "points", label: "Na punkty" },
       { value: "qr-hunt", label: "Skanowanie kodów QR" },
+      { value: "ar-evidence", label: "Ślady AR (lampa UV)" },
     ],
   },
   {
@@ -122,6 +124,7 @@ export const stationTypeHints: Record<StationType, string> = {
   "open-quiz": "Drużyna wpisuje odpowiedź z klawiatury. Uznajesz warianty zapisu, wielkość liter i polskie znaki nie mają znaczenia.",
   "fill-blank": "Zdanie z luką (___) do uzupełnienia jednym słowem. Sprawdzane tak samo jak pytanie otwarte.",
   "true-false": "Cztery zdania do oznaczenia prawda/fałsz. Liczy się komplet — jedna pomyłka przekreśla zadanie.",
+  "ar-evidence": "Drużyna szuka tabletem wydrukowanych odcisków palców (AR, lampa UV), a potem wskazuje sprawcę spośród czterech podejrzanych.",
   wordle: "Odgadywanie hasła literami, z podpowiedziami po każdej próbie.",
   hangman: "Zgadywanie hasła literami z ograniczoną liczbą pomyłek.",
   anagram: "Przestawianie liter tak, by ułożyć ukryte hasło.",

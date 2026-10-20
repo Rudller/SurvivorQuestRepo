@@ -1,0 +1,1 @@
+ALTER TYPE "StationType" ADD VALUE 'AR_EVIDENCE';

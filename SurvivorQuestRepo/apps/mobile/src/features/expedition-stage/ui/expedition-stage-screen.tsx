@@ -139,6 +139,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeOpenQuiz: string;
     stationTypeTrueFalse: string;
     stationTypeFillBlank: string;
+    stationTypeArEvidence: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
     openScannerFailed: string;
@@ -192,6 +193,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeOpenQuiz: "Pytanie otwarte",
     stationTypeTrueFalse: "Prawda czy fałsz",
     stationTypeFillBlank: "Uzupełnij lukę",
+    stationTypeArEvidence: "Ślady AR",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
     openScannerFailed: "Nie udało się otworzyć skanera.",
@@ -244,6 +246,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeOpenQuiz: "Open question",
     stationTypeTrueFalse: "True or false",
     stationTypeFillBlank: "Fill the gap",
+    stationTypeArEvidence: "AR evidence",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
     openScannerFailed: "Failed to open scanner.",
@@ -296,6 +299,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeOpenQuiz: "Відкрите питання",
     stationTypeTrueFalse: "Правда чи хиба",
     stationTypeFillBlank: "Заповніть пропуск",
+    stationTypeArEvidence: "AR-сліди",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
     openScannerFailed: "Не вдалося відкрити сканер.",
@@ -348,6 +352,7 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeOpenQuiz: "Открытый вопрос",
     stationTypeTrueFalse: "Правда или ложь",
     stationTypeFillBlank: "Заполните пропуск",
+    stationTypeArEvidence: "AR-улики",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
     openScannerFailed: "Не удалось открыть сканер.",
@@ -582,6 +587,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
     return { icon: PIN_ICON_SVGS.quiz, color: "#fb7185" };
   }
 
+  if (stationType === "ar-evidence") {
+    return { icon: PIN_ICON_SVGS.quiz, color: "#a77bff" };
+  }
+
 
   return stationType === "quiz"
     ? { icon: PIN_ICON_SVGS.quiz, color: "#f59e0b" }
@@ -671,6 +680,7 @@ function resolveStationTypeLabel(
     | "stationTypeOpenQuiz"
     | "stationTypeTrueFalse"
     | "stationTypeFillBlank"
+    | "stationTypeArEvidence"
   >,
 ) {
   if (stationType === "time") {
@@ -753,6 +763,10 @@ function resolveStationTypeLabel(
     return text.stationTypeFillBlank;
   }
 
+  if (stationType === "ar-evidence") {
+    return text.stationTypeArEvidence;
+  }
+
 
   return text.stationTypeQuiz;
 }
@@ -775,7 +789,8 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
     stationType === "strong-password" ||
     stationType === "open-quiz" ||
     stationType === "true-false" ||
-    stationType === "fill-blank"
+    stationType === "fill-blank" ||
+    stationType === "ar-evidence"
     // reviewed-answer is deliberately absent: its verdict lives on RiskAttempt,
     // which only a Ryzykanci deck has, so it is hidden from regular station
     // pickers (REGULAR_EXCLUDED_STATION_TYPES on the admin side) too.

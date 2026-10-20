@@ -242,7 +242,8 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "open-quiz" ||
     value === "reviewed-answer" ||
     value === "true-false" ||
-    value === "fill-blank"
+    value === "fill-blank" ||
+    value === "ar-evidence"
   ) {
     return value;
   }

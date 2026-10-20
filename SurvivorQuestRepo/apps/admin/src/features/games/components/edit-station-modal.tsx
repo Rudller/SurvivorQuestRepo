@@ -415,7 +415,7 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
     if (hasQuiz && !questionFilled && !isPuzzleSecretQuestionStationType(editValues.type) && editValues.quizQuestion.trim()) {
       queue({ kind: "question" }, editValues.quizQuestion);
 
-      if (editValues.type === "quiz" || editValues.type === "audio-quiz") {
+      if (editValues.type === "quiz" || editValues.type === "audio-quiz" || editValues.type === "ar-evidence") {
         editValues.quizAnswers.forEach((answer, answerIndex) => {
           if (answer.trim()) {
             queue({ kind: "answer", answerIndex }, answer);

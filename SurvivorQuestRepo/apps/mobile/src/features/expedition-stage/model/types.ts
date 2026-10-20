@@ -156,7 +156,8 @@ export type ExpeditionStationType =
   | "open-quiz"
   | "reviewed-answer"
   | "true-false"
-  | "fill-blank";
+  | "fill-blank"
+  | "ar-evidence";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
