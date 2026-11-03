@@ -37,6 +37,12 @@ const STATION_TYPES: StationType[] = [
   'true-false',
   'fill-blank',
   'ar-evidence',
+  // Stanowiska z modelem 3D na razie wyłączone — zapis takiego typu dostaje 400.
+  // Odkomentuj razem z opcjami w apps/admin/src/features/games/types/station.ts.
+  // 'ar-safe',
+  // 'ar-bomb',
+  // 'ar-artifact',
+  // 'ar-puzzle-box',
 ];
 const QUIZ_ANSWER_COUNT = 4;
 const DEFAULT_STATION_DESCRIPTION =

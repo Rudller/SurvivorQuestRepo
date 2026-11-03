@@ -115,6 +115,10 @@ export function resolveStationPreviewPrompt(
     case "true-false":
     case "fill-blank":
     case "ar-evidence":
+    case "ar-safe":
+    case "ar-bomb":
+    case "ar-artifact":
+    case "ar-puzzle-box":
       return trimmedQuestion || text.classicQuizFallback;
     case "wordle":
       return text.wordleFallback(wordleLength);

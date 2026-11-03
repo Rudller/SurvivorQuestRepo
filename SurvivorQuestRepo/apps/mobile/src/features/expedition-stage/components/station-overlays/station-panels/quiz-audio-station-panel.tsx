@@ -127,7 +127,11 @@ export function resolveStationQuizPrompt({ station, wordleLength, uiLanguage }: 
   if (
     station.stationType === "open-quiz" ||
     station.stationType === "fill-blank" ||
-    station.stationType === "true-false"
+    station.stationType === "true-false" ||
+    station.stationType === "ar-safe" ||
+    station.stationType === "ar-bomb" ||
+    station.stationType === "ar-artifact" ||
+    station.stationType === "ar-puzzle-box"
   ) {
     return station.quizQuestion?.trim() || text.classicQuizFallback;
   }

@@ -157,7 +157,11 @@ export type ExpeditionStationType =
   | "reviewed-answer"
   | "true-false"
   | "fill-blank"
-  | "ar-evidence";
+  | "ar-evidence"
+  | "ar-safe"
+  | "ar-bomb"
+  | "ar-artifact"
+  | "ar-puzzle-box";
 
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";

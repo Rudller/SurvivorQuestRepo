@@ -243,7 +243,11 @@ function normalizeStationType(value: unknown): ExpeditionStationType {
     value === "reviewed-answer" ||
     value === "true-false" ||
     value === "fill-blank" ||
-    value === "ar-evidence"
+    value === "ar-evidence" ||
+    value === "ar-safe" ||
+    value === "ar-bomb" ||
+    value === "ar-artifact" ||
+    value === "ar-puzzle-box"
   ) {
     return value;
   }

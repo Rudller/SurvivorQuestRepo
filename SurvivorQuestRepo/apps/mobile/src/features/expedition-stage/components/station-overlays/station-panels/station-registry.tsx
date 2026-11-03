@@ -19,6 +19,7 @@ import { ReviewedAnswerStationPanel } from "./reviewed-answer-station-panel";
 import { SimonStationPanel } from "./simon-station-panel";
 import { TrueFalseStationPanel } from "./true-false-station-panel";
 import { ArEvidenceStationPanel } from "./ar-evidence-station-panel";
+import { ArModelStationPanel } from "./ar-model-station-panel";
 import { StrongPasswordStationPanel } from "./strong-password-station-panel";
 import { WordleInteractionPanel, WordleMediaBoard } from "./wordle-station-panel";
 
@@ -65,6 +66,7 @@ export type StationInteractionContext = {
   rebusStationPanelProps: ComponentProps<typeof RebusStationPanel>;
   strongPasswordStationPanelProps: ComponentProps<typeof StrongPasswordStationPanel>;
   openQuizStationPanelProps: ComponentProps<typeof OpenQuizStationPanel>;
+  arModelStationPanelProps: ComponentProps<typeof ArModelStationPanel>;
   reviewedAnswerStationPanelProps: ComponentProps<typeof ReviewedAnswerStationPanel>;
   trueFalseStationPanelProps: ComponentProps<typeof TrueFalseStationPanel>;
 };
@@ -159,6 +161,15 @@ export function resolveDefaultStationMediaHeight({
     ? Math.max(190, Math.round(viewportHeight * 0.33))
     : Math.max(128, Math.round(viewportHeight * 0.22));
 }
+
+// Stanowiska z modelem 3D w AR: model składa odpowiedź, a zapis, sprawdzanie
+// i komunikaty są te z pytania otwartego.
+const AR_MODEL_STATION_DEFINITION: StationDefinition = {
+  family: "quiz",
+  behavesAs: "open-quiz",
+  outcome: { success: "openQuizSolvedPopup", failure: "openQuizFailedPopup" },
+  renderInteraction: (c) => <ArModelStationPanel {...c.arModelStationPanelProps} />,
+};
 
 export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
   quiz: {
@@ -351,6 +362,10 @@ export const STATION_DEFINITIONS: Record<StationTestType, StationDefinition> = {
     outcome: { success: "quizSuccessPopup", failure: "outcomeFailed" },
     renderInteraction: (c) => <ArEvidenceStationPanel {...c.quizAudioPanelSharedProps} />,
   },
+  "ar-safe": AR_MODEL_STATION_DEFINITION,
+  "ar-bomb": AR_MODEL_STATION_DEFINITION,
+  "ar-artifact": AR_MODEL_STATION_DEFINITION,
+  "ar-puzzle-box": AR_MODEL_STATION_DEFINITION,
 };
 
 export function resolveStationDefinition(stationType: StationTestType): StationDefinition {

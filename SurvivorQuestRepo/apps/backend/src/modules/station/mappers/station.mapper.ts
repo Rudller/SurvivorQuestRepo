@@ -52,6 +52,10 @@ export function toPrismaStationType(type: StationType) {
   if (type === 'true-false') return PrismaStationType.TRUE_FALSE;
   if (type === 'fill-blank') return PrismaStationType.FILL_BLANK;
   if (type === 'ar-evidence') return PrismaStationType.AR_EVIDENCE;
+  if (type === 'ar-safe') return PrismaStationType.AR_SAFE;
+  if (type === 'ar-bomb') return PrismaStationType.AR_BOMB;
+  if (type === 'ar-artifact') return PrismaStationType.AR_ARTIFACT;
+  if (type === 'ar-puzzle-box') return PrismaStationType.AR_PUZZLE_BOX;
   return PrismaStationType.MATCHING;
 }
 
@@ -78,6 +82,10 @@ export function fromPrismaStationType(type: PrismaStationType): StationType {
   if (type === PrismaStationType.TRUE_FALSE) return 'true-false';
   if (type === PrismaStationType.FILL_BLANK) return 'fill-blank';
   if (type === PrismaStationType.AR_EVIDENCE) return 'ar-evidence';
+  if (type === PrismaStationType.AR_SAFE) return 'ar-safe';
+  if (type === PrismaStationType.AR_BOMB) return 'ar-bomb';
+  if (type === PrismaStationType.AR_ARTIFACT) return 'ar-artifact';
+  if (type === PrismaStationType.AR_PUZZLE_BOX) return 'ar-puzzle-box';
   return 'matching';
 }
 

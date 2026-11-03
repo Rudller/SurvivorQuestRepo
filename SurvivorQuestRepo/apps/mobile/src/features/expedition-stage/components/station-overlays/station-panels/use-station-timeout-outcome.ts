@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { StationTestType, StationTestViewModel } from "../types";
+import { resolveEffectiveStationType } from "./station-registry";
 
 function isQuizStationType(stationType: StationTestType) {
   return (
@@ -22,7 +23,8 @@ function isQuizStationType(stationType: StationTestType) {
     stationType === "reviewed-answer" ||
     stationType === "true-false" ||
     stationType === "fill-blank" ||
-    stationType === "ar-evidence"
+    stationType === "ar-evidence" ||
+    resolveEffectiveStationType(stationType) === "open-quiz"
   );
 }
 
@@ -157,10 +159,10 @@ export function useStationTimeoutOutcome({
     const isMiniSudokuPending = station.stationType === "mini-sudoku" && pendingByType.miniSudoku;
     const isMatchingPending = station.stationType === "matching" && pendingByType.matching;
     const isStrongPasswordPending = station.stationType === "strong-password" && pendingByType.strongPassword;
-    // fill-blank shares the open-quiz submit flag, so it shares the pending gate.
+    // fill-blank and the AR 3D-model stations share the open-quiz submit flag,
+    // so they share the pending gate.
     const isOpenQuizPending =
-      (station.stationType === "open-quiz" || station.stationType === "fill-blank") &&
-      pendingByType.openQuiz;
+      resolveEffectiveStationType(station.stationType) === "open-quiz" && pendingByType.openQuiz;
     const isReviewedAnswerPending =
       station.stationType === "reviewed-answer" && pendingByType.reviewedAnswer;
     const isTrueFalsePending =

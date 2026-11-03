@@ -1,5 +1,15 @@
 import type { StationType } from './station.types';
 
+// Stanowiska z interaktywnym modelem 3D w AR. Zapis i sprawdzanie jak pytanie
+// otwarte: model w tablecie tylko składa odpowiedź (szyfr, kolejność kabli,
+// kod, symbole), którą admin wpisuje jako poprawną.
+export const AR_MODEL_STATION_TYPES: StationType[] = [
+  'ar-safe',
+  'ar-bomb',
+  'ar-artifact',
+  'ar-puzzle-box',
+];
+
 export const STATION_TYPES: StationType[] = [
   'quiz',
   'audio-quiz',
@@ -24,6 +34,7 @@ export const STATION_TYPES: StationType[] = [
   'true-false',
   'fill-blank',
   'ar-evidence',
+  ...AR_MODEL_STATION_TYPES,
 ];
 export const COMPLETION_CODE_REGEX = /^[A-Z0-9-]{3,32}$/;
 export const QUIZ_ANSWER_COUNT = 4;
@@ -58,7 +69,8 @@ export function isQuizDataStationType(stationType: StationType) {
     stationType === 'reviewed-answer' ||
     stationType === 'true-false' ||
     stationType === 'fill-blank' ||
-    stationType === 'ar-evidence'
+    stationType === 'ar-evidence' ||
+    isArModelStationType(stationType)
   );
 }
 
@@ -116,6 +128,10 @@ export function isReviewedAnswerStationType(stationType: StationType) {
 
 // A sentence with a gap in it, answered by typing the missing word. Stored and
 // checked exactly like an open question — only the presentation differs.
+export function isArModelStationType(stationType: StationType) {
+  return AR_MODEL_STATION_TYPES.includes(stationType);
+}
+
 export function isFillBlankStationType(stationType: StationType) {
   return stationType === 'fill-blank';
 }

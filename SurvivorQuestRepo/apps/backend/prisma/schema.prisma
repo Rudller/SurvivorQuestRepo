@@ -43,6 +43,11 @@ enum StationType {
   FILL_BLANK
   // Quiz (who did it?) preceded by an AR evidence hunt on the tablet.
   AR_EVIDENCE
+  // Interactive 3D model in AR; stored and checked like OPEN_QUIZ.
+  AR_SAFE
+  AR_BOMB
+  AR_ARTIFACT
+  AR_PUZZLE_BOX
   // Orphaned: odd-one-out and picture-quiz shipped briefly, then turned out to
   // be pure aliases of QUIZ — same quizData, same server-side check, same mobile
   // panel — so they were dropped from the app. PostgreSQL cannot remove a value

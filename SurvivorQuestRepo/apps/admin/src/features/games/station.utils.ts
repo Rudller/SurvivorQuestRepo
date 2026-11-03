@@ -39,6 +39,10 @@ export const STATION_TYPE_DEFAULT_COLOR: Record<StationType, string> = {
   "true-false": "#2dd4bf",
   "fill-blank": "#fb7185",
   "ar-evidence": "#a77bff",
+  "ar-safe": "#94a3b8",
+  "ar-bomb": "#dc2626",
+  "ar-artifact": "#b45309",
+  "ar-puzzle-box": "#c084fc",
 };
 
 export const challengeDifficultyModeOptions: { value: ChallengeDifficultyMode; label: string }[] = [
@@ -287,14 +291,47 @@ export function isQuizStationType(stationType: StationType) {
     stationType === "reviewed-answer" ||
     stationType === "true-false" ||
     stationType === "fill-blank" ||
-    stationType === "ar-evidence"
+    stationType === "ar-evidence" ||
+    isArModelStationType(stationType)
   );
 }
 
-// fill-blank shares open-quiz's storage and its single typed-answer form: one
-// correct word plus optional accepted variants. Only the card differs.
+// fill-blank and the AR 3D-model stations share open-quiz's storage and its
+// single typed-answer form: one correct answer plus optional accepted variants.
+// Only the card differs — on the tablet the 3D model assembles the answer.
 export function isOpenQuizStationType(stationType: StationType) {
-  return stationType === "open-quiz" || stationType === "fill-blank";
+  return stationType === "open-quiz" || stationType === "fill-blank" || isArModelStationType(stationType);
+}
+
+export const AR_MODEL_STATION_TYPES = ["ar-safe", "ar-bomb", "ar-artifact", "ar-puzzle-box"] as const;
+
+export function isArModelStationType(stationType: StationType) {
+  return (AR_MODEL_STATION_TYPES as readonly StationType[]).includes(stationType);
+}
+
+// Label and placeholder of the single answer field. The formats must match what
+// the tablet builds from the 3D model (ar-model-answer.ts in apps/mobile).
+export function getOpenAnswerFieldCopy(stationType: StationType) {
+  switch (stationType) {
+    case "fill-blank":
+      return { label: "Brakujące słowo", placeholder: "Wpisz słowo, które wypełnia lukę" };
+    case "ar-safe":
+      return { label: "Szyfr sejfu (cyfry 0–9)", placeholder: "Np. 4-1-7" };
+    case "ar-bomb":
+      return {
+        label: "Kable do przecięcia, po kolei",
+        placeholder: "Np. niebieski, czerwony, zielony (kolory: czerwony, niebieski, żółty, zielony, biały)",
+      };
+    case "ar-artifact":
+      return { label: "Kod wygrawerowany na dowodzie", placeholder: "Np. K-417" };
+    case "ar-puzzle-box":
+      return {
+        label: "Symbole na szkatułce, od lewej",
+        placeholder: "Np. księżyc, gwiazda, słońce, klucz (symbole: słońce, księżyc, gwiazda, klucz)",
+      };
+    default:
+      return { label: "Poprawna odpowiedź", placeholder: "Wpisz poprawną odpowiedź" };
+  }
 }
 
 export function isFillBlankStationType(stationType: StationType) {
@@ -498,6 +535,42 @@ export function getQuizLikeStationCopy(stationType: StationType) {
         answersHint:
           "Zaznaczcie lukę trzema podkreślnikami (___) w treści zdania. Podajcie brakujące słowo — wielkość liter i polskie znaki nie mają znaczenia — a niżej ewentualne dodatkowe warianty.",
         validationMessage: "Uzupełnij lukę wymaga zdania i brakującego słowa.",
+      };
+    case "ar-safe":
+      return {
+        sectionTitle: "Sejf 3D",
+        questionLabel: "Polecenie dla drużyny",
+        questionPlaceholder: "Np. Szyfr do sejfu ukryto w aktach sprawy. Otwórzcie sejf.",
+        answersHint:
+          "Na tablecie stanie sejf z pokrętłem. Drużyna ustawia po kolei cyfry szyfru (0–9). Podajcie szyfr — liczba cyfr wyznacza, ile cyfr trzeba ustawić.",
+        validationMessage: "Sejf wymaga polecenia i szyfru.",
+      };
+    case "ar-bomb":
+      return {
+        sectionTitle: "Bomba 3D",
+        questionLabel: "Polecenie dla drużyny",
+        questionPlaceholder: "Np. Instrukcja rozbrojenia leży w skrzynce saperskiej. Przetnijcie kable we właściwej kolejności.",
+        answersHint:
+          "Bomba ma 5 kabli: czerwony, niebieski, żółty, zielony, biały. Podajcie kolory do przecięcia po kolei, oddzielone przecinkami. Zła kolejność = wybuch i stracona próba.",
+        validationMessage: "Bomba wymaga polecenia i kolejności kabli.",
+      };
+    case "ar-artifact":
+      return {
+        sectionTitle: "Dowód 3D",
+        questionLabel: "Polecenie dla drużyny",
+        questionPlaceholder: "Np. Obejrzyjcie skrzyneczkę z każdej strony i odczytajcie numer.",
+        answersHint:
+          "Na tablecie stanie skrzyneczka, którą można obracać i przybliżać. Kod z pola niżej jest wygrawerowany na jej spodzie — drużyna musi go znaleźć i wpisać.",
+        validationMessage: "Dowód wymaga polecenia i kodu.",
+      };
+    case "ar-puzzle-box":
+      return {
+        sectionTitle: "Szkatułka 3D",
+        questionLabel: "Polecenie dla drużyny",
+        questionPlaceholder: "Np. Ułóżcie symbole na wieku tak, jak na starym obrazie w holu.",
+        answersHint:
+          "Na wieku szkatułki są 4 kostki z symbolami: słońce, księżyc, gwiazda, klucz. Tapnięcie obraca kostkę. Podajcie 4 symbole od lewej, oddzielone przecinkami.",
+        validationMessage: "Szkatułka wymaga polecenia i układu symboli.",
       };
     case "ar-evidence":
       return {

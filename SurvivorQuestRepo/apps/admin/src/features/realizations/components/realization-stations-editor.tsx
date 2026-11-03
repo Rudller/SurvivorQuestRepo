@@ -15,6 +15,7 @@ import {
   isQuizStationType,
   isWordPuzzleStationType,
   isMatchingStationType,
+  getOpenAnswerFieldCopy,
   isOpenQuizStationType,
   isImageSupportedStationType,
   formatTimeLimit,
@@ -2149,7 +2150,7 @@ export function RealizationStationsEditor({
                       {isOpenQuizStationType(station.type) ? (
                         <div className="space-y-3">
                           <label className="space-y-1.5">
-                            <span className="text-xs uppercase tracking-wider text-zinc-400">Poprawna odpowiedź</span>
+                            <span className="text-xs uppercase tracking-wider text-zinc-400">{getOpenAnswerFieldCopy(station.type).label}</span>
                             <input
                               value={selectedStationQuizAnswers[0] ?? ""}
                               onChange={(event) =>

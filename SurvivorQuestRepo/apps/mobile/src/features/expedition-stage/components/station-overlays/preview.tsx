@@ -28,6 +28,7 @@ import {
   buildStationInteractionContext,
   buildStationMediaContext,
   resolveStationDefinition,
+  type StationInteractionContext,
 } from "./station-panels/station-registry";
 import { useAudioQuizPlayback } from "./station-panels/use-audio-quiz-playback";
 import { useSimonAudio } from "./station-panels/use-simon-audio";
@@ -1684,6 +1685,19 @@ export function StationPreviewOverlay({
     }
   }
 
+  const openQuizPanelProps: StationInteractionContext["openQuizStationPanelProps"] = {
+    openQuizAttemptsLeft,
+    openQuizInput,
+    openQuizResult,
+    isActionDisabled: isInteractiveLocked || isSubmittingOpenQuiz || openQuizAttemptsLeft <= 0,
+    isSubmittingOpenQuiz,
+    onChangeInput: (value) => {
+      handleOpenQuizInputChange(value);
+    },
+    onSubmit: () => {
+      void submitOpenQuiz();
+    },
+  };
   const stationInteractionContext = buildStationInteractionContext({
     quizAudioPanelSharedProps: {
       station,
@@ -1847,19 +1861,8 @@ export function StationPreviewOverlay({
           void submitRebus();
         },
       },
-    openQuizStationPanelProps: {
-      openQuizAttemptsLeft,
-      openQuizInput,
-      openQuizResult,
-      isActionDisabled: isInteractiveLocked || isSubmittingOpenQuiz || openQuizAttemptsLeft <= 0,
-      isSubmittingOpenQuiz,
-      onChangeInput: (value) => {
-        handleOpenQuizInputChange(value);
-      },
-      onSubmit: () => {
-        void submitOpenQuiz();
-      },
-    },
+    openQuizStationPanelProps: openQuizPanelProps,
+    arModelStationPanelProps: { ...openQuizPanelProps, station },
     trueFalseStationPanelProps: {
       statements: trueFalseStatements,
       selections: trueFalseSelections,

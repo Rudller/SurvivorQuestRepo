@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { parseCaesarShift } from '../domain/station-quiz.schema';
 import {
   QUIZ_ANSWER_COUNT,
+  isArModelStationType,
   isFillBlankStationType,
   isMatchingStationType,
   isOpenQuizStationType,
@@ -151,11 +152,12 @@ export function buildStationQuizFromInput(
     };
   }
 
-  // fill-blank zapisuje się i sprawdza dokładnie jak pytanie otwarte — różni je
-  // tylko prezentacja karty.
+  // fill-blank i stanowiska z modelem 3D zapisują się i sprawdzają dokładnie
+  // jak pytanie otwarte — różni je tylko prezentacja karty.
   if (
     isOpenQuizStationType(stationType) ||
-    isFillBlankStationType(stationType)
+    isFillBlankStationType(stationType) ||
+    isArModelStationType(stationType)
   ) {
     const correctAnswer = requireTrimmedString(
       Array.isArray(quiz.answers) ? quiz.answers[0] : undefined,

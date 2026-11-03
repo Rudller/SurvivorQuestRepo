@@ -140,6 +140,10 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeTrueFalse: string;
     stationTypeFillBlank: string;
     stationTypeArEvidence: string;
+    stationTypeArSafe: string;
+    stationTypeArBomb: string;
+    stationTypeArArtifact: string;
+    stationTypeArPuzzleBox: string;
     realizationEndedScannerBlocked: string;
     qrScannerReady: string;
     openScannerFailed: string;
@@ -194,6 +198,10 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeTrueFalse: "Prawda czy fałsz",
     stationTypeFillBlank: "Uzupełnij lukę",
     stationTypeArEvidence: "Ślady AR",
+    stationTypeArSafe: "Sejf 3D",
+    stationTypeArBomb: "Bomba 3D",
+    stationTypeArArtifact: "Dowód 3D",
+    stationTypeArPuzzleBox: "Szkatułka 3D",
     realizationEndedScannerBlocked: "Realizacja została zakończona. Skanowanie QR jest zablokowane.",
     qrScannerReady: "Skaner QR gotowy.",
     openScannerFailed: "Nie udało się otworzyć skanera.",
@@ -247,6 +255,10 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeTrueFalse: "True or false",
     stationTypeFillBlank: "Fill the gap",
     stationTypeArEvidence: "AR evidence",
+    stationTypeArSafe: "3D safe",
+    stationTypeArBomb: "3D bomb",
+    stationTypeArArtifact: "3D evidence",
+    stationTypeArPuzzleBox: "3D puzzle box",
     realizationEndedScannerBlocked: "The realization has ended. QR scanning is blocked.",
     qrScannerReady: "QR scanner is ready.",
     openScannerFailed: "Failed to open scanner.",
@@ -300,6 +312,10 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeTrueFalse: "Правда чи хиба",
     stationTypeFillBlank: "Заповніть пропуск",
     stationTypeArEvidence: "AR-сліди",
+    stationTypeArSafe: "3D-сейф",
+    stationTypeArBomb: "3D-бомба",
+    stationTypeArArtifact: "3D-доказ",
+    stationTypeArPuzzleBox: "3D-скринька",
     realizationEndedScannerBlocked: "Реалізацію завершено. Сканування QR заблоковано.",
     qrScannerReady: "QR-сканер готовий.",
     openScannerFailed: "Не вдалося відкрити сканер.",
@@ -353,6 +369,10 @@ const EXPEDITION_STAGE_TEXT: Record<
     stationTypeTrueFalse: "Правда или ложь",
     stationTypeFillBlank: "Заполните пропуск",
     stationTypeArEvidence: "AR-улики",
+    stationTypeArSafe: "3D-сейф",
+    stationTypeArBomb: "3D-бомба",
+    stationTypeArArtifact: "3D-улика",
+    stationTypeArPuzzleBox: "3D-шкатулка",
     realizationEndedScannerBlocked: "Реализация завершена. Сканирование QR заблокировано.",
     qrScannerReady: "QR-сканер готов.",
     openScannerFailed: "Не удалось открыть сканер.",
@@ -591,6 +611,10 @@ function resolveStationVisual(stationType: ExpeditionStationType | undefined, st
     return { icon: PIN_ICON_SVGS.quiz, color: "#a77bff" };
   }
 
+  if (stationType === "ar-safe" || stationType === "ar-bomb" || stationType === "ar-artifact" || stationType === "ar-puzzle-box") {
+    return { icon: PIN_ICON_SVGS.quiz, color: "#c084fc" };
+  }
+
 
   return stationType === "quiz"
     ? { icon: PIN_ICON_SVGS.quiz, color: "#f59e0b" }
@@ -681,6 +705,10 @@ function resolveStationTypeLabel(
     | "stationTypeTrueFalse"
     | "stationTypeFillBlank"
     | "stationTypeArEvidence"
+    | "stationTypeArSafe"
+    | "stationTypeArBomb"
+    | "stationTypeArArtifact"
+    | "stationTypeArPuzzleBox"
   >,
 ) {
   if (stationType === "time") {
@@ -767,6 +795,22 @@ function resolveStationTypeLabel(
     return text.stationTypeArEvidence;
   }
 
+  if (stationType === "ar-safe") {
+    return text.stationTypeArSafe;
+  }
+
+  if (stationType === "ar-bomb") {
+    return text.stationTypeArBomb;
+  }
+
+  if (stationType === "ar-artifact") {
+    return text.stationTypeArArtifact;
+  }
+
+  if (stationType === "ar-puzzle-box") {
+    return text.stationTypeArPuzzleBox;
+  }
+
 
   return text.stationTypeQuiz;
 }
@@ -790,7 +834,11 @@ function isInteractiveQuizStationType(stationType?: ExpeditionStationType) {
     stationType === "open-quiz" ||
     stationType === "true-false" ||
     stationType === "fill-blank" ||
-    stationType === "ar-evidence"
+    stationType === "ar-evidence" ||
+    stationType === "ar-safe" ||
+    stationType === "ar-bomb" ||
+    stationType === "ar-artifact" ||
+    stationType === "ar-puzzle-box"
     // reviewed-answer is deliberately absent: its verdict lives on RiskAttempt,
     // which only a Ryzykanci deck has, so it is hidden from regular station
     // pickers (REGULAR_EXCLUDED_STATION_TYPES on the admin side) too.

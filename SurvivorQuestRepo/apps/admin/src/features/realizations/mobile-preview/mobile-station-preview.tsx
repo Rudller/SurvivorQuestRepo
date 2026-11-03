@@ -47,6 +47,10 @@ const PROMPT_TYPES = new Set<StationType>([
   "true-false",
   "fill-blank",
   "ar-evidence",
+  "ar-safe",
+  "ar-bomb",
+  "ar-artifact",
+  "ar-puzzle-box",
   "wordle",
   "hangman",
   "anagram",
@@ -215,6 +219,11 @@ function renderPreviewBody(type: StationType, props: StationPreviewProps) {
       return <TrueFalsePreview {...props} />;
     // fill-blank is an open question whose prompt carries the gap.
     case "fill-blank":
+    // AR 3D-model stations: the model only runs on the tablet; the answer is checked like an open question.
+    case "ar-safe":
+    case "ar-bomb":
+    case "ar-artifact":
+    case "ar-puzzle-box":
       return <OpenQuizPreview {...props} />;
     case "wordle":
       return <WordlePreview {...props} />;

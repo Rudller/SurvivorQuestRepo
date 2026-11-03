@@ -21,7 +21,11 @@ export type StationType =
   | "reviewed-answer"
   | "true-false"
   | "fill-blank"
-  | "ar-evidence";
+  | "ar-evidence"
+  | "ar-safe"
+  | "ar-bomb"
+  | "ar-artifact"
+  | "ar-puzzle-box";
 export type ChallengeDifficultyMode = "admin" | "player";
 export type ChallengeDifficulty = "easy" | "medium" | "hard";
 export type StationKind = "template" | "scenario-instance" | "realization-instance";
@@ -98,7 +102,18 @@ export const stationTypeGroups: StationTypeGroup[] = [
       { value: "time", label: "Na czas" },
       { value: "points", label: "Na punkty" },
       { value: "qr-hunt", label: "Skanowanie kodów QR" },
+    ],
+  },
+  {
+    label: "Zadania AR (tylko tablet z AR)",
+    options: [
       { value: "ar-evidence", label: "Ślady AR (lampa UV)" },
+      // Stanowiska z modelem 3D na razie wyłączone — nie do wybrania w adminie.
+      // Backend też ich nie przyjmie (STATION_TYPES w station.dto.ts).
+      // { value: "ar-safe", label: "Sejf 3D" },
+      // { value: "ar-bomb", label: "Bomba 3D" },
+      // { value: "ar-artifact", label: "Dowód 3D" },
+      // { value: "ar-puzzle-box", label: "Szkatułka 3D" },
     ],
   },
   {
@@ -124,6 +139,10 @@ export const stationTypeHints: Record<StationType, string> = {
   "open-quiz": "Drużyna wpisuje odpowiedź z klawiatury. Uznajesz warianty zapisu, wielkość liter i polskie znaki nie mają znaczenia.",
   "fill-blank": "Zdanie z luką (___) do uzupełnienia jednym słowem. Sprawdzane tak samo jak pytanie otwarte.",
   "true-false": "Cztery zdania do oznaczenia prawda/fałsz. Liczy się komplet — jedna pomyłka przekreśla zadanie.",
+  "ar-safe": "Na stole staje sejf 3D z pokrętłem — drużyna ustawia szyfr znaleziony gdzie indziej.",
+  "ar-bomb": "Bomba 3D z pięcioma kablami — drużyna przecina je w kolejności z instrukcji. Zła kolejność = wybuch.",
+  "ar-artifact": "Skrzyneczka 3D do obracania i przybliżania — kod jest wygrawerowany na spodzie, drużyna go wpisuje.",
+  "ar-puzzle-box": "Szkatułka 3D z czterema obrotowymi kostkami — drużyna układa symbole we właściwej kolejności.",
   "ar-evidence": "Drużyna szuka tabletem wydrukowanych odcisków palców (AR, lampa UV), a potem wskazuje sprawcę spośród czterech podejrzanych.",
   wordle: "Odgadywanie hasła literami, z podpowiedziami po każdej próbie.",
   hangman: "Zgadywanie hasła literami z ograniczoną liczbą pomyłek.",

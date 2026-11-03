@@ -202,6 +202,10 @@ const STATION_TYPE_LABELS: Record<StationTestType, string> = {
   "true-false": "Prawda czy fałsz",
   "fill-blank": "Uzupełnij lukę",
   "ar-evidence": "Ślady AR",
+  "ar-safe": "Sejf 3D",
+  "ar-bomb": "Bomba 3D",
+  "ar-artifact": "Dowód 3D",
+  "ar-puzzle-box": "Szkatułka 3D",
 };
 // Keep in sync with RISK_QUIZ_INTRO_TEXT_PLACEHOLDER in
 // apps/admin/src/features/realizations/realization.utils.ts — shown to

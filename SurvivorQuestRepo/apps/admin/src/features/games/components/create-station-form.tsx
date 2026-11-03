@@ -40,7 +40,7 @@ import {
   isWordPuzzleStationType,
   isPuzzleSecretQuestionStationType,
   isImageSupportedStationType,
-  isFillBlankStationType,
+  getOpenAnswerFieldCopy,
   isOpenQuizStationType,
   isReviewedAnswerStationType,
   isTrueFalseStationType,
@@ -1436,18 +1436,14 @@ export function CreateStationForm({ onClose, onCreated, variant = "regular" }: C
                 <div className="space-y-3">
                   <label className="space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">
-                      {isFillBlankStationType(type) ? "Brakujące słowo" : "Poprawna odpowiedź"}
+                      {getOpenAnswerFieldCopy(type).label}
                     </span>
                     <input
                       value={activeQuizAnswers[0] ?? ""}
                       onChange={(event) =>
                         setActiveQuizField({ answers: [event.target.value, ...activeQuizAnswers.slice(1)] })
                       }
-                      placeholder={
-                        isFillBlankStationType(type)
-                          ? "Wpisz słowo, które wypełnia lukę"
-                          : "Wpisz poprawną odpowiedź"
-                      }
+                      placeholder={getOpenAnswerFieldCopy(type).placeholder}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
                   </label>
