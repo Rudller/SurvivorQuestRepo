@@ -51,31 +51,58 @@ export function RiskQuizFallingCards({ isLightTheme }: RiskQuizFallingCardsProps
         const cardWidth = baseCardWidth * scale;
         const cardHeight = cardWidth * 1.4;
         const speed = FALL_SPEEDS[index % FALL_SPEEDS.length];
+        // Spread the start across the whole column so the sky is already full
+        // on the first frame rather than filling in from the top.
+        const phase = pseudoRandom(index + 11);
+        const drift = (pseudoRandom(index + 37) - 0.5) * cardWidth * 1.6;
+        const spin = (pseudoRandom(index + 53) - 0.5) * 720;
+        // Built here rather than in render: every Animated node made in render
+        // is a fresh native node, so each re-render of the screen used to
+        // rebuild and re-attach the whole layer's animation graph.
+        const progress = Animated.modulo(Animated.add(Animated.multiply(driver, speed), phase), 1);
         return {
           key: index,
           cardWidth,
           cardHeight,
-          speed,
-          // Spread the start across the whole column so the sky is already full
-          // on the first frame rather than filling in from the top.
-          phase: pseudoRandom(index + 11),
           left: -cardWidth * 0.3 + pseudoRandom(index + 23) * (screenWidth + cardWidth * 0.6 - cardWidth * 0.4),
-          drift: (pseudoRandom(index + 37) - 0.5) * cardWidth * 1.6,
-          spin: (pseudoRandom(index + 53) - 0.5) * 720,
           // Smaller cards read as further away, so they sit fainter.
           opacity: layerOpacity * (0.55 + scale * 0.45),
+          transform: [
+            {
+              translateY: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-cardHeight, screenHeight + cardHeight],
+              }),
+            },
+            {
+              translateX: progress.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [0, drift, 0],
+              }),
+            },
+            {
+              rotate: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: ["0deg", `${spin}deg`],
+              }),
+            },
+          ],
         };
       }),
-    [cardCount, baseCardWidth, screenWidth, layerOpacity],
+    [cardCount, baseCardWidth, screenWidth, screenHeight, layerOpacity, driver],
   );
 
   return (
     <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" }}>
       {cards.map((card) => {
-        const progress = Animated.modulo(Animated.add(Animated.multiply(driver, card.speed), card.phase), 1);
         return (
           <Animated.View
             key={card.key}
+            // A rotated rounded border can't be moved as a picture, so Android
+            // re-tessellated both borders of every card on every frame (120 Hz
+            // on the tablet). As a texture the card is drawn once and only
+            // composited — measured RenderThread ~47% -> ~27%.
+            renderToHardwareTextureAndroid
             style={{
               position: "absolute",
               top: 0,
@@ -83,26 +110,7 @@ export function RiskQuizFallingCards({ isLightTheme }: RiskQuizFallingCardsProps
               width: card.cardWidth,
               height: card.cardHeight,
               opacity: card.opacity,
-              transform: [
-                {
-                  translateY: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-card.cardHeight, screenHeight + card.cardHeight],
-                  }),
-                },
-                {
-                  translateX: progress.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0, card.drift, 0],
-                  }),
-                },
-                {
-                  rotate: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ["0deg", `${card.spin}deg`],
-                  }),
-                },
-              ],
+              transform: card.transform,
             }}
           >
             <View

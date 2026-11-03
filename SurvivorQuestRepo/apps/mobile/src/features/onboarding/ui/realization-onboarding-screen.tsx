@@ -28,6 +28,8 @@ import { resolveThemeFamily } from "../model/realization-mode";
 import { buildSessionRealization } from "../model/session-realization";
 import { RiskQuizBackground } from "../../risk-quiz/components/risk-quiz-background";
 import { RyzykanciLogoHeader } from "../../risk-quiz/components/ryzykanci-logo-header";
+import { lampColorCommand, sendLampCommand } from "../../risk-quiz/lamp/risk-lamp";
+import { RiskLampPicker } from "../../risk-quiz/lamp/risk-lamp-picker";
 import { isTeamColor, shouldSkipTeamStepAfterJoin } from "../model/recovery-join";
 import {
   getRealizationLanguageFlag,
@@ -2455,6 +2457,13 @@ export function RealizationOnboardingScreen({
     onThemeFamilyChange?.(onboardingThemeFamily);
   }, [onboardingThemeFamily, onThemeFamilyChange]);
 
+  // Lampka drużyny świeci wybieranym kolorem w trakcie customizacji.
+  useEffect(() => {
+    if (isRiskQuizStyling) {
+      sendLampCommand(lampColorCommand(selectedColor.hex));
+    }
+  }, [isRiskQuizStyling, selectedColor.hex]);
+
   return (
     <View className="relative flex-1 overflow-hidden" style={{ backgroundColor: EXPEDITION_THEME.background }}>
       {isRiskQuizStyling ? (
@@ -2909,6 +2918,9 @@ export function RealizationOnboardingScreen({
                   </>
                 )}
               </View>
+
+              {/* Lampka drużyny — tylko w Ryzykantach, parowana raz na tablecie. */}
+              {activeRealization && resolveThemeFamily(activeRealization) === "risk" ? <RiskLampPicker /> : null}
 
               {hasMultipleLanguageOptions && (
                 <View className="mt-3 items-end">

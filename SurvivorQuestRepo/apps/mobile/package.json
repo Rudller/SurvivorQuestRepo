@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "main": "index.ts",
   "scripts": {
     "dev": "cross-env EXPO_NO_DOCTOR=1 expo start",
@@ -39,6 +39,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-ble-manager": "12.5.3",
     "react-native-css-interop": "0.2.2",
     "react-native-reanimated": "~4.5.1",
     "react-native-safe-area-context": "5.7.0",

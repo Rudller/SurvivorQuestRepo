@@ -3,6 +3,8 @@ import { ActivityIndicator, Animated, Keyboard, Modal, Platform, Pressable, Scro
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Rect } from "react-native-svg";
 import { useAudioQuizPlayback } from "../../expedition-stage/components/station-overlays/station-panels/use-audio-quiz-playback";
+import { useStationPanelLayout } from "../../expedition-stage/components/station-overlays/station-panels/shared-ui";
+import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
 import type { OnboardingSession, RealizationLanguage, RealizationLanguageOption } from "../../onboarding/model/types";
 import { getRealizationLanguageFlag, getRealizationLanguageLabel } from "../../onboarding/model/types";
 import { EXPEDITION_THEME, getTeamColors, type ExpeditionThemeMode } from "../../onboarding/model/constants";
@@ -46,7 +48,7 @@ import {
 import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { AutoScrollingIntroBox } from "../../../shared/ui/intro-text-preview";
 import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
-import { RiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
+import { LiveRiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { PauseIcon, PigIcon, PlayIcon } from "../components/risk-quiz-icons";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
 import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
@@ -63,9 +65,10 @@ import { getRiskQuizSessionPollDelayMs } from "../model/session-poll-delay";
 import { RiskQuizFinishScreen } from "../components/risk-quiz-finish-screen";
 import { isRiskQuizGameOver } from "../model/risk-quiz-finish-summary";
 import type { ExpeditionLeaderboardEntry } from "../../../shared/model/leaderboard";
-import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 import { TEST_MENU_TRIGGER_HOLD_MS } from "../../../shared/dev/test-menu-gesture";
 import { RISK_PIG_BADGE_LABEL } from "../model/risk-quiz-pig-text";
+import { lampDrawCommand, sendLampCommand } from "../lamp/risk-lamp";
+import { useRiskLampSync } from "../lamp/use-risk-lamp-sync";
 
 type RiskQuizScreenProps = {
   session: OnboardingSession;
@@ -336,9 +339,12 @@ export function RiskQuizScreen({
   // lands, which an effect dependency on feedEvents would force.
   const feedEventsRef = useRef<RiskChatMessage[]>([]);
   feedEventsRef.current = feedEvents;
+  const adaptiveLayout = useAdaptiveLayout();
+  const stationPanelLayout = useStationPanelLayout();
   const [isResolvingScan, setIsResolvingScan] = useState(false);
   const [exhaustedNotice, setExhaustedNotice] = useState<{ categoryName: string } | null>(null);
   const [activeDraw, setActiveDraw] = useState<ActiveDraw | null>(null);
+  const [isAbandonConfirmOpen, setIsAbandonConfirmOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   // Measured rather than assumed: the bar's height comes out of the adaptive
   // scale ladder, and the pig button is anchored above whatever it turns out
@@ -549,6 +555,8 @@ export function RiskQuizScreen({
   // here so the swap looks the same however the card arrived.
   const openDrawnCard = useCallback(
     (draw: ActiveDraw) => {
+      // Lampa zmienia kolor od razu, nie po animacji wejścia karty.
+      sendLampCommand(lampDrawCommand(draw));
       Animated.timing(deckIdleRevealAnimation, {
         toValue: 0,
         duration: SCREEN_TRANSITION_HALF_MS,
@@ -822,6 +830,26 @@ export function RiskQuizScreen({
     });
   }
 
+  // Krzyżyk przy zadaniu bez odpowiedzi to rezygnacja: serwer trzyma otwartą
+  // kartę, dopóki leci czas, więc samo schowanie jej na tablecie sprawiało, że
+  // każdy kolejny skan wracał do tego samego zadania. Po potwierdzeniu wysyłamy
+  // "niewykonane" (jak po upływie czasu) — liczy się jak zła odpowiedź, a
+  // następny skan losuje nowe zadanie.
+  function requestCloseCard() {
+    const isUnanswered =
+      activeDraw !== null && answerResult === null && submittedCardIdRef.current !== activeDraw.cardId;
+    if (isUnanswered) {
+      setIsAbandonConfirmOpen(true);
+      return;
+    }
+    dismissActiveCard();
+  }
+
+  function confirmAbandonCard() {
+    setIsAbandonConfirmOpen(false);
+    void submitOutcome({ completed: false });
+  }
+
   // Give the player a moment to read the "Dobrze!/Źle!" result, then
   // auto-dismiss — cancelled if a fresh card gets drawn (answerResult resets
   // to null) before the timer fires, so it never dismisses the wrong question.
@@ -910,6 +938,12 @@ export function RiskQuizScreen({
   const teamColorFromPalette =
     getTeamColors(resolveUiLanguage(selectedLanguage)).find((color) => color.key === liveTeam?.color) ?? null;
   const teamColorHex = teamColorFromPalette?.hex ?? session.team.colorHex;
+  useRiskLampSync({
+    hasCard: activeDraw !== null,
+    cardId: activeDraw?.cardId ?? null,
+    result: answerResult ? (isTaskTimedOut ? "timeout" : answerResult.isCorrect ? "ok" : "bad") : null,
+    teamColorHex: teamColorHex ?? null,
+  });
   const teamColorLabel = teamColorFromPalette?.label ?? session.team.colorLabel;
   const teamName = liveTeam?.name?.trim() || session.team.name || "Drużyna";
   const teamIcon = session.team.icon.trim().length > 0 ? session.team.icon : "🏁";
@@ -917,10 +951,9 @@ export function RiskQuizScreen({
   const teamSlot = liveTeam?.slotNumber ?? session.team.slotNumber;
   const companyName =
     liveRealization?.companyName || session.realization?.companyName || `Realizacja ${session.realizationCode}`;
-  const countdown = useRealizationCountdown(
-    liveRealization?.scheduledAt ?? session.realization?.scheduledAt ?? new Date().toISOString(),
-    liveRealization?.durationMinutes ?? session.realization?.durationMinutes ?? 120,
-  );
+  const realizationScheduledAt =
+    liveRealization?.scheduledAt ?? session.realization?.scheduledAt ?? new Date().toISOString();
+  const realizationDurationMinutes = liveRealization?.durationMinutes ?? session.realization?.durationMinutes ?? 120;
 
   async function handleDetected(rawValue: string) {
     setIsResolvingScan(true);
@@ -1277,6 +1310,11 @@ export function RiskQuizScreen({
   }
 
   const isAnswerIndexType = activeDraw ? ANSWER_INDEX_TYPES.has(activeDraw.station.type) : false;
+  // W quizie pytanie to cała treść karty, więc na tablecie jest wyraźnie
+  // większe niż polecenie w pozostałych typach (tam obok jest jeszcze plansza).
+  const quizQuestionFontSize = stationPanelLayout.isTablet ? adaptiveLayout.fs(30, 24, 38) : 22;
+  const quizAnswerFontSize = adaptiveLayout.fs(stationPanelLayout.isTablet ? 20 : 16, 14, 24);
+  const quizAnswerPaddingVertical = adaptiveLayout.s(stationPanelLayout.isTablet ? 28 : 20, 16, 34);
   const isAudioQuizType = activeDraw?.station.type === "audio-quiz";
   const answers = activeDraw?.station.quiz?.answers ?? [];
   const revealedCorrectAnswer =
@@ -1523,10 +1561,7 @@ export function RiskQuizScreen({
                 ],
               }}
             >
-              <Text style={{ color: EXPEDITION_THEME.textSubtle, fontSize: 13 }}>
-                {activeDraw.categoryName} • {difficultyLabel(activeDraw.difficulty)} • {activeDraw.station.name}
-              </Text>
-              <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 22, fontWeight: "700" }}>
+              <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: quizQuestionFontSize, fontWeight: "700" }}>
                 {activeDraw.station.quiz?.question ?? activeDraw.station.name}
               </Text>
 
@@ -1540,9 +1575,10 @@ export function RiskQuizScreen({
                       key={index}
                       disabled={isSubmittingAnswer || answerResult !== null}
                       onPress={() => void submitOutcome({ selectedIndex: index })}
-                      className="rounded-2xl border px-4 py-5 justify-center"
+                      className="rounded-2xl border px-4 justify-center"
                       style={{
                         width: "47%",
+                        paddingVertical: quizAnswerPaddingVertical,
                         borderColor: isCorrectOption
                           ? "#22c55e"
                           : isWrongOption
@@ -1555,7 +1591,7 @@ export function RiskQuizScreen({
                             : EXPEDITION_THEME.panel,
                       }}
                     >
-                      <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: 16 }}>
+                      <Text style={{ color: EXPEDITION_THEME.textPrimary, fontSize: quizAnswerFontSize }}>
                         {isCorrectOption ? "✓ " : ""}
                         {OPTION_LETTERS[index]}. {option}
                       </Text>
@@ -1617,8 +1653,8 @@ export function RiskQuizScreen({
                 // tego panel dokładał drugi popup "Nie udało się".
                 suppressResultPopups
                 station={buildStationPreviewViewModel(activeDraw)}
-                onClose={dismissActiveCard}
-                onRequestClose={dismissActiveCard}
+                onClose={requestCloseCard}
+                onRequestClose={requestCloseCard}
                 // The second argument is the typed completion code for
                 // "na czas"/"na punkty" stations and a plain type marker
                 // ("QUIZ", "WORDLE", ...) for every other panel — only the
@@ -1751,15 +1787,15 @@ export function RiskQuizScreen({
                 className="w-full max-w-[560px]"
                 onLayout={(event) => setBottomPanelHeight(event.nativeEvent.layout.height)}
               >
-                <RiskQuizBottomPanel
-                  remainingLabel={countdown.remainingLabel}
-                  isCompleted={countdown.isCompleted}
+                <LiveRiskQuizBottomPanel
+                  scheduledAt={realizationScheduledAt}
+                  durationMinutes={realizationDurationMinutes}
                   streak={streak}
                   multiplier={multiplier}
                   onOpenQrScanner={() => setIsScannerVisible(true)}
                   isScannerOpening={isResolvingScan}
                   isCardOpen={Boolean(activeDraw)}
-                  onCloseCard={dismissActiveCard}
+                  onCloseCard={requestCloseCard}
                 />
               </View>
 
@@ -1820,7 +1856,61 @@ export function RiskQuizScreen({
         onDetected={(value) => void handleDetected(value)}
         scanTarget="card"
         cornerStyle="chamfered"
+        facing="front"
+        allowFacingToggle
+        facingStorageKey="sq.mobile.risk-quiz.scanner-facing.v1"
       />
+
+      <Modal
+        visible={isAbandonConfirmOpen && activeDraw !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAbandonConfirmOpen(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center px-6"
+          style={{ backgroundColor: isLightTheme ? `rgba(${EXPEDITION_THEME.scrimWashRgb}, 0.34)` : "rgba(0, 0, 0, 0.45)" }}
+          onPress={() => setIsAbandonConfirmOpen(false)}
+        >
+          <Pressable
+            className="w-full self-center rounded-3xl border px-6 py-6"
+            style={{
+              maxWidth: 440,
+              borderColor: "#ef4444",
+              backgroundColor: EXPEDITION_THEME.panel,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="text-lg font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+              Zrezygnować z zadania?
+            </Text>
+            <Text className="mt-2 text-base" style={{ color: EXPEDITION_THEME.textMuted }}>
+              Rezygnacja liczy się jak zła odpowiedź: tracicie punkty za tę kartę i serię. Następna zeskanowana karta
+              wylosuje nowe zadanie.
+            </Text>
+            <View className="mt-4 gap-3">
+              <Pressable
+                className="rounded-2xl border px-4 py-3 active:opacity-90"
+                style={{ borderColor: "#ef4444", backgroundColor: "rgba(239, 68, 68, 0.18)" }}
+                onPress={confirmAbandonCard}
+              >
+                <Text className="text-center text-base font-semibold" style={{ color: "#fecaca" }}>
+                  Rezygnuję
+                </Text>
+              </Pressable>
+              <Pressable
+                className="rounded-2xl border px-4 py-3 active:opacity-90"
+                style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelMuted }}
+                onPress={() => setIsAbandonConfirmOpen(false)}
+              >
+                <Text className="text-center text-base font-semibold" style={{ color: EXPEDITION_THEME.textPrimary }}>
+                  Wracam do zadania
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={isLanguagePickerOpen}

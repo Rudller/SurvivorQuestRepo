@@ -244,6 +244,44 @@ describe('RiskQuizService.scanCard', () => {
     });
   });
 
+  // Zakończone w każdy sposób = wykluczone z losowania: dobra i zła odpowiedź,
+  // koniec czasu i rezygnacja (ta sama ścieżka co koniec czasu) zapisują
+  // RiskAttempt. Filtr nie może patrzeć na isCorrect, bo wtedy niezaliczone
+  // zadanie wróciłoby do puli.
+  it('never deals a station the team already failed, timed out or gave up on', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue({
+      ...assignment,
+      realization: { ...realization, riskSchemeId: 'scheme-1' },
+    });
+    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: 'failed', station: { id: 'failed' } },
+      { stationId: 'abandoned', station: { id: 'abandoned' } },
+      { stationId: quizStation.id, station: quizStation },
+    ]);
+    prisma.riskAttempt.findMany.mockResolvedValue([
+      { stationId: 'failed' },
+      { stationId: 'abandoned' },
+    ]);
+
+    for (let draw = 0; draw < 20; draw += 1) {
+      const result = await service.scanCard({
+        sessionToken: 'token',
+        code: 'abc123',
+      });
+      expect(result).toMatchObject({ station: { id: quizStation.id } });
+    }
+
+    expect(prisma.riskAttempt.findMany).toHaveBeenCalledWith({
+      where: {
+        teamId: team.id,
+        stationId: { in: ['failed', 'abandoned', quizStation.id] },
+      },
+      select: { stationId: true },
+    });
+  });
+
   it('records the drawn card as the team open draw, so a rescan has something to find', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue({
@@ -311,29 +349,57 @@ describe('RiskQuizService.scanCard', () => {
     );
   });
 
-  it('keeps the task clock running across a rescan of the open card', async () => {
+  // Skan przy otwartej karcie to porzucenie jej: liczy się jak zła odpowiedź,
+  // a zeskanowana karta losuje nowe zadanie. Ponowny skan nie wraca do starego.
+  it('forfeits a still-running open card as a wrong answer and deals a new task from the scanned card', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue({
       ...assignment,
       realization: { ...realization, riskSchemeId: 'scheme-1' },
     });
-    prisma.riskCard.findUnique.mockResolvedValue(card);
-    // Wylosowane 50 s temu, limit 60 s — ponowny skan nie odnawia czasu.
+    prisma.riskCard.findUnique.mockResolvedValue({ ...card, id: 'card-2' });
+    // Wylosowane 10 s temu przy limicie 60 s — czas jeszcze leci.
     prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
       teamId: 'team-1',
       cardId: 'card-1',
-      stationId: quizStation.id,
-      createdAt: new Date(Date.now() - 50_000),
+      stationId: 'open-station',
+      createdAt: new Date(Date.now() - 10_000),
       card: { ...card, category: { name: 'Historia' } },
-      station: { ...quizStation, timeLimitSeconds: 60 },
+      station: { ...quizStation, id: 'open-station', timeLimitSeconds: 60 },
     });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: quizStation.id, station: quizStation },
+    ]);
 
     const result = await service.scanCard({
       sessionToken: 'token',
       code: 'abc123',
     });
 
-    expect(result).toEqual(expect.objectContaining({ remainingSeconds: 10 }));
+    expect(prisma.riskOpenDraw.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'open-1' },
+    });
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cardId: 'card-1',
+        stationId: 'open-station',
+        isCorrect: false,
+        pointsDelta: -2,
+      }),
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        exhausted: false,
+        cardId: 'card-2',
+        // Nowe zadanie, nowy czas — nic nie przechodzi z porzuconej karty.
+        remainingSeconds: null,
+        station: expect.objectContaining({ id: 'station-1' }),
+      }),
+    );
   });
 
   it('settles an open card whose time ran out as a wrong answer and deals a new task from the scanned card', async () => {
@@ -419,32 +485,43 @@ describe('RiskQuizService.scanCard', () => {
     expect(prisma.team.update).not.toHaveBeenCalled();
   });
 
-  it('never expires an open card of a station without a time limit', async () => {
+  it('forfeits an open card of a station without a time limit too', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue({
       ...assignment,
       realization: { ...realization, riskSchemeId: 'scheme-1' },
     });
-    prisma.riskCard.findUnique.mockResolvedValue(card);
+    prisma.riskCard.findUnique.mockResolvedValue({ ...card, id: 'card-2' });
     prisma.riskOpenDraw.findUnique.mockResolvedValue({
       id: 'open-1',
       teamId: 'team-1',
       cardId: 'card-1',
-      stationId: quizStation.id,
+      stationId: 'open-station',
       createdAt: new Date(Date.now() - 3_600_000),
       card: { ...card, category: { name: 'Historia' } },
-      station: quizStation,
+      station: { ...quizStation, id: 'open-station' },
     });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: quizStation.id, station: quizStation },
+    ]);
 
     const result = await service.scanCard({
       sessionToken: 'token',
       code: 'abc123',
     });
 
-    expect(prisma.riskOpenDraw.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        stationId: 'open-station',
+        isCorrect: false,
+      }),
+    });
     expect(result).toEqual(
       expect.objectContaining({
-        cardId: 'card-1',
+        cardId: 'card-2',
         station: expect.objectContaining({ id: 'station-1' }),
       }),
     );
@@ -469,39 +546,39 @@ describe('RiskQuizService.scanCard', () => {
     expect(prisma.riskOpenDraw.create).not.toHaveBeenCalled();
   });
 
-  it('hands back the card already open instead of drawing a second task', async () => {
+  // Porzucona karta jest zagrana jak każda inna: ponowny skan tej samej
+  // fizycznej karty nie wraca do zadania, tylko odbija się jak użyta.
+  it('rejects a rescan of the very card it just forfeited as already used', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue({
       ...assignment,
       realization: { ...realization, riskSchemeId: 'scheme-1' },
     });
     prisma.riskCard.findUnique.mockResolvedValue(card);
-    // A task is already on this team's screen. Closing the card without
-    // answering leaves no RiskAttempt behind, so the pool filter alone would
-    // happily deal the very same station out again.
     prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
       teamId: 'team-1',
       cardId: 'card-1',
       stationId: quizStation.id,
+      createdAt: new Date(),
       card: { ...card, category: { name: 'Historia' } },
       station: quizStation,
     });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst
+      // Forfeit: no attempt at the open station yet.
+      .mockResolvedValueOnce(null)
+      // Card check: the forfeit just wrote one for this card.
+      .mockResolvedValueOnce({ id: 'attempt-1' });
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
 
-    const result = await service.scanCard({
-      sessionToken: 'token',
-      code: 'abc123',
+    await expect(
+      service.scanCard({ sessionToken: 'token', code: 'abc123' }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ cardId: 'card-1', isCorrect: false }),
     });
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        exhausted: false,
-        cardId: 'card-1',
-        station: expect.objectContaining({ id: 'station-1' }),
-      }),
-    );
-    // The whole point: no second draw, and nothing new written.
-    expect(prisma.riskPoolStation.findMany).not.toHaveBeenCalled();
-    expect(prisma.riskOpenDraw.upsert).not.toHaveBeenCalled();
+    expect(prisma.riskOpenDraw.create).not.toHaveBeenCalled();
   });
 
   it('reports the pool as exhausted once every assigned station has been attempted', async () => {
@@ -3154,6 +3231,47 @@ describe('RiskQuizService.pollPendingDraw', () => {
     );
   });
 
+  it('forfeits a still-running open card as a wrong answer when a remote draw replaces it', async () => {
+    const { service, prisma } = createService();
+    prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
+    // Czas jeszcze leci — zamknięta zdalnym losowaniem i tak jest niezaliczona.
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      id: 'open-1',
+      teamId: 'team-1',
+      cardId: 'card-9',
+      stationId: 'open-station',
+      createdAt: new Date(Date.now() - 5_000),
+      card: { ...card, id: 'card-9' },
+    });
+    prisma.riskOpenDraw.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.riskAttempt.findFirst.mockResolvedValue(null);
+    prisma.team.update.mockResolvedValue({ ...team, points: -2 });
+    prisma.riskPendingDraw.findUnique.mockResolvedValue({
+      id: 'draw-1',
+      teamId: 'team-1',
+      cardId: 'card-1',
+      stationId: 'station-1',
+      card: { difficulty: 'EASY', category: { name: 'Historia' } } as never,
+      station: quizStation,
+    });
+    prisma.riskPendingDraw.deleteMany.mockResolvedValue({ count: 1 });
+
+    await service.pollPendingDraw('token');
+
+    expect(prisma.riskOpenDraw.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'open-1' },
+    });
+    expect(prisma.riskAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cardId: 'card-9',
+        stationId: 'open-station',
+        isCorrect: false,
+        pointsDelta: -2,
+      }),
+    });
+    expect(prisma.riskOpenDraw.upsert).toHaveBeenCalled();
+  });
+
   it('settles a timed-out open card as a wrong answer before a remote draw replaces it', async () => {
     const { service, prisma } = createService();
     prisma.teamAssignment.findFirst.mockResolvedValue(assignment);
@@ -3532,6 +3650,69 @@ describe('RiskQuizService.triggerRemoteDraw', () => {
       create: { teamId: 'team-1', cardId: 'card-1', stationId: 'station-2' },
       update: { cardId: 'card-1', stationId: 'station-2' },
     });
+  });
+
+  it('never picks the station open on the tablet, since delivering the draw forfeits it', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.team.findUnique.mockResolvedValue({
+      id: 'team-1',
+      realizationId: 'realization-1',
+    });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: 'open-station' },
+      { stationId: 'station-2' },
+    ]);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      stationId: 'open-station',
+    });
+    prisma.riskCard.findFirst.mockResolvedValue({ id: 'card-1' });
+    prisma.riskCard.count.mockResolvedValue(10);
+
+    for (let draw = 0; draw < 20; draw += 1) {
+      await service.triggerRemoteDraw(
+        'realization-1',
+        'team-1',
+        'category-1',
+        'EASY',
+      );
+    }
+
+    for (const [call] of prisma.riskPendingDraw.upsert.mock.calls) {
+      expect(call.create.stationId).toBe('station-2');
+    }
+  });
+
+  it('counts the open station against the pool limit', async () => {
+    const { service, prisma } = createService();
+    prisma.realization.findUnique.mockResolvedValue({
+      id: 'realization-1',
+      riskSchemeId: 'scheme-1',
+    });
+    prisma.team.findUnique.mockResolvedValue({
+      id: 'team-1',
+      realizationId: 'realization-1',
+    });
+    prisma.riskPoolStation.findMany.mockResolvedValue([
+      { stationId: 'open-station' },
+      { stationId: 'station-2' },
+    ]);
+    prisma.riskAttempt.findMany.mockResolvedValue([]);
+    prisma.riskOpenDraw.findUnique.mockResolvedValue({
+      stationId: 'open-station',
+    });
+    prisma.riskCard.findFirst.mockResolvedValue({ id: 'card-1' });
+    // Jedna wydrukowana karta, a zajmuje ją zadanie otwarte na tablecie.
+    prisma.riskCard.count.mockResolvedValue(1);
+
+    await expect(
+      service.triggerRemoteDraw('realization-1', 'team-1', 'category-1', 'EASY'),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.riskPendingDraw.upsert).not.toHaveBeenCalled();
   });
 
   it('replaces an existing pending draw when launch is sent again', async () => {

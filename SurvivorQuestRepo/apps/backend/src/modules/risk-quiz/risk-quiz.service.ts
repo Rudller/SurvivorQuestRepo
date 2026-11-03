@@ -548,34 +548,18 @@ export class RiskQuizService {
       throw new NotFoundException('Card not found');
     }
 
-    // A task already on this team's screen wins over whatever was just scanned.
-    // RiskAttempt -- the row that keeps a station out of the pool below -- is
-    // only written when an answer is submitted, so without this a team could
-    // close a card unanswered, scan again and be dealt the very same station a
-    // second time. Rescanning now returns the identical card instead.
+    // Skan przy otwartej karcie to porzucenie jej zadania: liczy się jak zła
+    // odpowiedź (kara poziomu, seria do zera), a zeskanowana karta losuje nowe.
+    // Bez zapisu podejścia porzucone zadanie wróciłoby do puli, a ta sama
+    // fizyczna karta dałaby się zagrać drugi raz.
     const openDraw = await this.prisma.riskOpenDraw.findUnique({
       where: { teamId: team.id },
-      include: { card: { include: { category: true } }, station: true },
+      include: { card: true },
     });
-    const openDrawExpired =
-      openDraw !== null &&
-      (await this.expireOpenDrawIfTimedOut(realization.id, team, openDraw));
-    if (openDraw && !openDrawExpired) {
-      return {
-        exhausted: false as const,
-        cardId: openDraw.cardId,
-        categoryName: openDraw.card.category.name,
-        difficulty: openDraw.card.difficulty,
-        // Ponowny skan nie odnawia czasu — liczy się od pierwszego losowania.
-        remainingSeconds: resolveRiskRemainingSeconds(
-          openDraw.station.timeLimitSeconds,
-          openDraw.createdAt,
-        ),
-        station: this.toRiskStationPayload(
-          openDraw.station,
-          this.resolveRiskLanguageContext(realization, input.selectedLanguage),
-        ),
-      };
+    if (openDraw) {
+      await this.teamOutcomeQueue.run(team.id, () =>
+        this.forfeitOpenDrawLocked(realization.id, team, openDraw),
+      );
     }
 
     // Jedna fizyczna karta = jedno zadanie dla drużyny. Bez tego ten sam kod QR
@@ -712,7 +696,7 @@ export class RiskQuizService {
   // so tapping it can go through the exact same scanCard() path a physical
   // QR scan would, instead of a separate no-op preview mode.
   async listTestMenuEntries(sessionToken: string) {
-    const { realization } = await this.requireTeamSession(sessionToken);
+    const { team, realization } = await this.requireTeamSession(sessionToken);
 
     if (!realization.riskSchemeId) {
       return [];
@@ -733,6 +717,16 @@ export class RiskQuizService {
       where: { realizationId: realization.id, categoryId: { in: categoryIds } },
       orderBy: { createdAt: 'asc' },
     });
+    // Kolejne stuknięcie w tę samą pulę ma działać jak skan następnej
+    // fizycznej karty z puli, a nie wracać do już zagranej ("Card already used").
+    const playedCardIds = new Set(
+      (
+        await this.prisma.riskAttempt.findMany({
+          where: { teamId: team.id, cardId: { in: cards.map((item) => item.id) } },
+          select: { cardId: true },
+        })
+      ).map((item) => item.cardId),
+    );
 
     const entries: {
       categoryId: string;
@@ -743,11 +737,16 @@ export class RiskQuizService {
 
     for (const schemeCategory of schemeCategories) {
       for (const difficulty of RISK_DIFFICULTY_ORDER) {
-        const card = cards.find(
+        const poolCards = cards.filter(
           (item) =>
             item.categoryId === schemeCategory.categoryId &&
             item.difficulty === difficulty,
         );
+        // Losowa niezagrana karta — jak drużyna sięgająca po kartę ze stosu.
+        const unplayed = poolCards.filter((item) => !playedCardIds.has(item.id));
+        const card =
+          unplayed[Math.floor(Math.random() * unplayed.length)] ??
+          poolCards[0];
         if (card) {
           entries.push({
             categoryId: schemeCategory.categoryId,
@@ -946,13 +945,16 @@ export class RiskQuizService {
       return { draw: null };
     }
 
-    // Zadanie, któremu minął czas, nie może zniknąć pod upsertem bez kary.
+    // Zdalne losowanie zamyka kartę, która była na ekranie — tak jak skan,
+    // liczy się to jako porzucenie, a nie znika pod upsertem bez kary.
     const openDraw = await this.prisma.riskOpenDraw.findUnique({
       where: { teamId: team.id },
-      include: { card: true, station: true },
+      include: { card: true },
     });
     if (openDraw) {
-      await this.expireOpenDrawIfTimedOut(realization.id, team, openDraw);
+      await this.teamOutcomeQueue.run(team.id, () =>
+        this.forfeitOpenDrawLocked(realization.id, team, openDraw),
+      );
     }
 
     // The remote-launch row is gone the instant it is delivered, so without
@@ -1356,8 +1358,8 @@ export class RiskQuizService {
     return { isCorrect, correctIndex, ...scored };
   }
 
-  // Punktacja jednego podejścia — wspólna dla odpowiedzi z tabletu i dla karty,
-  // którą serwer sam rozlicza po czasie (expireOpenDrawIfTimedOut), żeby kara
+  // Punktacja jednego podejścia — wspólna dla odpowiedzi z tabletu i dla karty
+  // porzuconej skanem albo zdalnym losowaniem (forfeitOpenDrawLocked), żeby kara
   // i seria liczyły się w obu miejscach tak samo.
   private async recordScoredAttempt(input: {
     realizationId: string;
@@ -1414,42 +1416,16 @@ export class RiskQuizService {
   }
 
   /**
-   * Rozlicza otwartą kartę, której skończył się czas, jako błędną odpowiedź.
+   * Rozlicza otwartą kartę jako porzuconą, czyli błędną odpowiedź. Wołane, gdy
+   * drużyna skanuje kolejną kartę albo admin uruchamia zadanie na tablecie:
+   * zamknięta karta = niezaliczona, niezależnie od tego, czy czas jeszcze leci.
    * Zwraca true, gdy karty już nie ma (rozliczona tu albo chwilę wcześniej
-   * przez tablet), false — gdy wciąż trwa.
+   * przez tablet).
    *
-   * Tablet sam wysyła porażkę, gdy licznik dojdzie do zera, ale tylko wtedy,
-   * gdy karta jest na ekranie. Zamknięta krzyżykiem (albo tablet zrestartowany)
-   * wisiała dotąd w nieskończoność: każdy skan wracał do niej z "Czas minął!",
-   * a drużyna nie mogła dobrać nic nowego.
+   * Wywołujący trzyma teamOutcomeQueue: odpowiedź w ostatniej chwili i
+   * porzucenie nie mogą obie zapisać podejścia.
    */
-  private async expireOpenDrawIfTimedOut(
-    realizationId: string,
-    team: { id: string; name: string | null; slotNumber: number },
-    openDraw: {
-      id: string;
-      createdAt: Date;
-      stationId: string;
-      card: { id: string; difficulty: RiskDifficulty };
-      station: { timeLimitSeconds: number };
-    },
-  ): Promise<boolean> {
-    const remainingSeconds = resolveRiskRemainingSeconds(
-      openDraw.station.timeLimitSeconds,
-      openDraw.createdAt,
-    );
-    if (remainingSeconds !== 0) {
-      return false;
-    }
-
-    // W tej samej kolejce co odpowiedź z tabletu: odpowiedź w ostatniej
-    // sekundzie i rozliczenie po czasie nie mogą obie zapisać podejścia.
-    return this.teamOutcomeQueue.run(team.id, () =>
-      this.expireOpenDrawLocked(realizationId, team, openDraw),
-    );
-  }
-
-  private async expireOpenDrawLocked(
+  private async forfeitOpenDrawLocked(
     realizationId: string,
     team: { id: string; name: string | null; slotNumber: number },
     openDraw: {
@@ -3638,6 +3614,19 @@ export class RiskQuizService {
     const attemptedStationIds = new Set(
       attempted.map((item) => item.stationId),
     );
+    // Karta otwarta na tablecie zostanie porzucona, gdy tablet odbierze to
+    // losowanie (pollPendingDraw), więc już teraz liczy się jako zagrana: nie
+    // może wypaść drugi raz i zajmuje miejsce w limicie puli.
+    const openDraw = await this.prisma.riskOpenDraw.findUnique({
+      where: { teamId },
+      select: { stationId: true },
+    });
+    if (
+      openDraw &&
+      poolStations.some((item) => item.stationId === openDraw.stationId)
+    ) {
+      attemptedStationIds.add(openDraw.stationId);
+    }
     const available = poolStations.filter(
       (item) => !attemptedStationIds.has(item.stationId),
     );
