@@ -63,6 +63,61 @@ describe("usePhotoTaskCapture", () => {
     });
   });
 
+  it("tells the team to scan the QR code again when the photo is rejected while the panel is open", async () => {
+    const waiting = createStation({ stationId: "photo-1", stationType: "photo-task", status: "in-progress" });
+    const { result, rerender } = await renderHook<ReturnType<typeof usePhotoTaskCapture>, PhotoTaskCaptureProps>(
+      ({ station }) => usePhotoTaskCapture(station, jest.fn().mockResolvedValue(null), jest.fn()),
+      { initialProps: { station: waiting } },
+    );
+
+    expect(result.current.hasPendingSubmission).toBe(true);
+
+    // Organizator odrzucił: zadanie wraca do todo z nowym znacznikiem.
+    const rejectedAt = new Date(Date.now() + 1_000).toISOString();
+    await rerender({ station: { ...waiting, status: "todo", rejectedAt } });
+
+    await waitFor(() => {
+      expect(result.current.isRejectedForRetry).toBe(true);
+      expect(result.current.hasPendingSubmission).toBe(false);
+      expect(result.current.canCapture).toBe(false);
+    });
+  });
+
+  it("keeps the camera available when a rejection from before the scan arrives late", async () => {
+    // Drużyna zeskanowała kod, zanim tablet odpytał o odrzucenie: panel widzi
+    // jeszcze stare „czeka na ocenę”, a odrzucenie przychodzi później.
+    const stale = createStation({ stationId: "photo-1", stationType: "photo-task", status: "in-progress" });
+    const { result, rerender } = await renderHook<ReturnType<typeof usePhotoTaskCapture>, PhotoTaskCaptureProps>(
+      ({ station }) => usePhotoTaskCapture(station, jest.fn().mockResolvedValue(null), jest.fn()),
+      { initialProps: { station: stale } },
+    );
+
+    const rejectedAt = new Date(Date.now() - 5_000).toISOString();
+    await rerender({ station: { ...stale, status: "todo", rejectedAt } });
+
+    await waitFor(() => {
+      expect(result.current.isRejectedForRetry).toBe(false);
+      expect(result.current.hasPendingSubmission).toBe(false);
+      expect(result.current.canCapture).toBe(true);
+    });
+  });
+
+  it("lets the team take a new photo when the station is opened again after a rejection", async () => {
+    const reopened = createStation({
+      stationId: "photo-1",
+      stationType: "photo-task",
+      status: "todo",
+      rejectedAt: "2026-10-16T12:00:00.000Z",
+    });
+    const { result } = await renderHook<ReturnType<typeof usePhotoTaskCapture>, PhotoTaskCaptureProps>(
+      ({ station }) => usePhotoTaskCapture(station, jest.fn().mockResolvedValue(null), jest.fn()),
+      { initialProps: { station: reopened } },
+    );
+
+    expect(result.current.isRejectedForRetry).toBe(false);
+    expect(result.current.canCapture).toBe(true);
+  });
+
   it("keeps the camera closed for a station that can no longer be captured", async () => {
     const doneStation = createStation({ stationId: "photo-done", stationType: "photo-task", status: "done" });
     const { result } = await renderHook<ReturnType<typeof usePhotoTaskCapture>, PhotoTaskCaptureProps>(

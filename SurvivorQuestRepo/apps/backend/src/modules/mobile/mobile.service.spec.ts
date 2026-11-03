@@ -1459,7 +1459,7 @@ describe('MobileService task scoring', () => {
     expect(result.taskStatus).toBe('todo');
   });
 
-  it('records the dedicated failure event when an admin rejects a photo', async () => {
+  it('sends a rejected photo task back to todo so the team can retry it', async () => {
     const { service, prisma } = createService();
 
     spyOnPrivate(
@@ -1492,20 +1492,183 @@ describe('MobileService task scoring', () => {
     expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
       where: { id: 'progress-1' },
       data: expect.objectContaining({
-        status: TaskStatus.DONE,
+        status: TaskStatus.TODO,
         pointsAwarded: 0,
+        startedAt: null,
+        finishedAt: null,
       }),
     });
     expect(emitEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: 'task_failed',
-        payload: expect.objectContaining({
-          reason: 'photo_rejected_by_admin',
-          reasonLabel: 'Zdjęcie odrzucone przez organizatora',
-        }),
+        eventType: 'task_rejected_for_retry',
+        payload: expect.objectContaining({ stationId: 'station-1' }),
       }),
     );
+    expect(emitEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'task_failed' }),
+    );
+    expect(result.taskStatus).toBe('todo');
+  });
+
+  it('refuses to reject a photo task that is no longer awaiting review', async () => {
+    const { service, prisma } = createService();
+
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminTeamTaskContext',
+    ).mockResolvedValue({
+      realization: { id: 'realization-1' },
+      team: { id: 'team-1' },
+      station: { id: 'station-1', type: 'photo-task' },
+      existingProgress: {
+        id: 'progress-1',
+        status: TaskStatus.DONE,
+        pointsAwarded: 50,
+        startedAt: new Date('2026-05-10T10:00:00.000Z'),
+      },
+      stationId: 'station-1',
+    });
+    const recalculate = spyOnPrivate(
+      service,
+      'recalculateTeamPoints',
+    ).mockResolvedValue(50);
+
+    await expect(
+      service.failMobileAdminTeamTask({
+        realizationId: 'realization-1',
+        teamId: 'team-1',
+        stationId: 'station-1',
+        reason: 'photo_rejected_by_admin',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.teamTaskProgress.update).not.toHaveBeenCalled();
+    expect(recalculate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a photo rejection on a non-photo station permanent', async () => {
+    const { service } = createService();
+
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminTeamTaskContext',
+    ).mockResolvedValue({
+      realization: { id: 'realization-1' },
+      team: { id: 'team-1' },
+      station: { id: 'station-1', type: 'quiz' },
+      existingProgress: {
+        id: 'progress-1',
+        status: TaskStatus.IN_PROGRESS,
+        pointsAwarded: 0,
+        startedAt: new Date('2026-05-10T10:00:00.000Z'),
+      },
+      stationId: 'station-1',
+    });
+    const emitEvent = spyOnPrivate(service, 'emitEvent').mockResolvedValue(
+      undefined,
+    );
+    spyOnPrivate(service, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    await service.failMobileAdminTeamTask({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+      reason: 'photo_rejected_by_admin',
+    });
+
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'task_failed' }),
+    );
+    expect(emitEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'task_rejected_for_retry' }),
+    );
+  });
+
+  it('keeps a manual admin fail permanent', async () => {
+    const { service, prisma } = createService();
+
+    spyOnPrivate(
+      service,
+      'resolveMobileAdminTeamTaskContext',
+    ).mockResolvedValue({
+      realization: { id: 'realization-1' },
+      team: { id: 'team-1' },
+      station: { id: 'station-1', type: 'photo-task' },
+      existingProgress: {
+        id: 'progress-1',
+        status: TaskStatus.IN_PROGRESS,
+        pointsAwarded: 0,
+        startedAt: new Date('2026-05-10T10:00:00.000Z'),
+      },
+      stationId: 'station-1',
+    });
+    const emitEvent = spyOnPrivate(service, 'emitEvent').mockResolvedValue(
+      undefined,
+    );
+    spyOnPrivate(service, 'recalculateTeamPoints').mockResolvedValue(0);
+
+    const result = await service.failMobileAdminTeamTask({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+      stationId: 'station-1',
+    });
+
+    expect(prisma.teamTaskProgress.update).toHaveBeenCalledWith({
+      where: { id: 'progress-1' },
+      data: expect.objectContaining({ status: TaskStatus.DONE }),
+    });
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'task_failed' }),
+    );
     expect(result.taskStatus).toBe('failed');
+  });
+
+  it('reports the latest photo rejection per station until a later outcome clears it', async () => {
+    const { service } = createService();
+
+    spyOnPrivate(service, 'getTaskOutcomeLogsSinceLastReset').mockResolvedValue(
+      [
+        // Najnowsze pierwsze, jak w zapytaniu.
+        {
+          teamId: 'team-1',
+          eventType: 'task_completed',
+          payload: { stationId: 'station-2' },
+          createdAt: new Date('2026-05-10T10:30:00.000Z'),
+        },
+        {
+          teamId: 'team-1',
+          eventType: 'task_rejected_for_retry',
+          payload: { stationId: 'station-1' },
+          createdAt: new Date('2026-05-10T10:20:00.000Z'),
+        },
+        {
+          teamId: 'team-1',
+          eventType: 'task_rejected_for_retry',
+          payload: { stationId: 'station-2' },
+          createdAt: new Date('2026-05-10T10:10:00.000Z'),
+        },
+      ],
+    );
+
+    const state = await (
+      service as unknown as {
+        getTaskOutcomeStateByStation: (input: {
+          realizationId: string;
+          teamId: string;
+        }) => Promise<{
+          failed: Set<string>;
+          rejectedAtByStationId: Map<string, string>;
+        }>;
+      }
+    ).getTaskOutcomeStateByStation({
+      realizationId: 'realization-1',
+      teamId: 'team-1',
+    });
+
+    expect(state.rejectedAtByStationId.get('station-1')).toBe(
+      '2026-05-10T10:20:00.000Z',
+    );
+    expect(state.rejectedAtByStationId.has('station-2')).toBe(false);
+    expect(state.failed.size).toBe(0);
   });
 
   it('requires a location update before starting tasks when realization requires location', async () => {

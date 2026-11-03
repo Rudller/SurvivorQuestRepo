@@ -560,6 +560,7 @@ function normalizeSessionState(raw: unknown, preferredLanguage?: RealizationLang
       ),
       startedAt: asString(task.startedAt ?? task.started_at) || null,
       finishedAt: asString(task.finishedAt ?? task.finished_at) || null,
+      rejectedAt: asString(task.rejectedAt ?? task.rejected_at) || null,
     };
   })
     .filter((task) => task.stationId.length > 0);

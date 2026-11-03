@@ -502,10 +502,11 @@ export class MobileService {
         teamId: team.id,
       },
     });
-    const failedStationIds = await this.getFailedTaskStationIds({
-      realizationId: realization.id,
-      teamId: team.id,
-    });
+    const { failed: failedStationIds, rejectedAtByStationId } =
+      await this.getTaskOutcomeStateByStation({
+        realizationId: realization.id,
+        teamId: team.id,
+      });
     const stationScans = await this.prisma.teamStationScan.findMany({
       where: {
         realizationId: realization.id,
@@ -550,6 +551,9 @@ export class MobileService {
         startedAt: progress?.startedAt?.toISOString() || null,
         finishedAt: progress?.finishedAt?.toISOString() || null,
         qrScanCompletedCount: scanCountByStationId.get(stationId) ?? 0,
+        // Zdjęcie odrzucone do poprawy: zadanie wraca do „do zrobienia”, a ten
+        // znacznik pozwala tabletowi pokazać komunikat i ikonę „do poprawy”.
+        rejectedAt: rejectedAtByStationId.get(stationId) ?? null,
       };
     });
 
@@ -912,6 +916,9 @@ export class MobileService {
       },
       update: {
         status: TaskStatus.IN_PROGRESS,
+        // Po odrzuceniu do poprawy startedAt jest wyczyszczony — nowa próba
+        // liczy czas od nowa, zamiast zakończyć się z czasem 0 s.
+        ...(existingProgress?.startedAt ? {} : { startedAt: new Date() }),
       },
     });
 
@@ -3059,6 +3066,31 @@ export class MobileService {
     const startedAt = existingProgress?.startedAt || null;
     const failureReason = this.resolveTaskFailureReason(input.reason);
 
+    // Odrzucone zdjęcie nie kończy zadania: drużyna może zeskanować kod QR
+    // stanowiska jeszcze raz i wysłać nowe. Ręczne „niezalicz” (bez tego
+    // powodu) i odrzucenia na stanowiskach innych niż foto zostają trwałe.
+    if (
+      failureReason.code === 'photo_rejected_by_admin' &&
+      station.type === 'photo-task'
+    ) {
+      // Tylko zdjęcie czekające na ocenę można odrzucić do poprawy — inaczej
+      // nieaktualna karta w panelu cofnęłaby już przyznane punkty.
+      if (existingProgress?.status !== TaskStatus.IN_PROGRESS) {
+        throw new ConflictException({
+          code: 'TASK_NOT_AWAITING_REVIEW',
+          message: 'To zadanie nie czeka już na ocenę zdjęcia',
+        });
+      }
+      return this.rejectMobileAdminTeamTaskForRetry({
+        realization,
+        team,
+        station,
+        existingProgress,
+        stationId,
+        rejectedAt: finishedAt,
+      });
+    }
+
     if (existingProgress) {
       await this.prisma.teamTaskProgress.update({
         where: { id: existingProgress.id },
@@ -3113,6 +3145,62 @@ export class MobileService {
       pointsAwarded: 0,
       taskStatus: 'failed' as const,
       updatedAt: finishedAt.toISOString(),
+    };
+  }
+
+  private async rejectMobileAdminTeamTaskForRetry(input: {
+    realization: { id: string };
+    team: { id: string };
+    station: { type: string };
+    existingProgress: {
+      id: string;
+      pointsAwarded: number;
+      startedAt: Date | null;
+    } | null;
+    stationId: string;
+    rejectedAt: Date;
+  }) {
+    const { realization, team, station, existingProgress, stationId } = input;
+
+    if (existingProgress) {
+      await this.prisma.teamTaskProgress.update({
+        where: { id: existingProgress.id },
+        data: {
+          status: TaskStatus.TODO,
+          pointsAwarded: 0,
+          startedAt: null,
+          finishedAt: null,
+        },
+      });
+    }
+
+    await this.emitEvent({
+      realizationId: realization.id,
+      teamId: team.id,
+      actorType: EventActorType.ADMIN,
+      actorId: 'admin',
+      eventType: 'task_rejected_for_retry',
+      payload: {
+        stationId,
+        stationType: station.type,
+        previousStartedAt: existingProgress?.startedAt?.toISOString() ?? null,
+        rejectedAt: input.rejectedAt.toISOString(),
+      },
+    });
+
+    const pointsTotal = await this.recalculateTeamPoints(
+      team.id,
+      realization.id,
+    );
+
+    return {
+      realizationId: realization.id,
+      teamId: team.id,
+      stationId,
+      pointsTotal,
+      pointsAwarded: 0,
+      taskStatus: 'todo' as const,
+      updatedAt: input.rejectedAt.toISOString(),
     };
   }
 
@@ -4800,7 +4888,12 @@ export class MobileService {
         realizationId: input.realizationId,
         ...(input.teamId ? { teamId: input.teamId } : {}),
         eventType: {
-          in: ['task_failed', 'task_completed', 'task_reset_by_admin'],
+          in: [
+            'task_failed',
+            'task_completed',
+            'task_reset_by_admin',
+            'task_rejected_for_retry',
+          ],
         },
         ...(lastReset ? { createdAt: { gt: lastReset.createdAt } } : {}),
       },
@@ -4809,6 +4902,7 @@ export class MobileService {
         teamId: true,
         eventType: true,
         payload: true,
+        createdAt: true,
       },
     });
   }
@@ -4817,9 +4911,23 @@ export class MobileService {
     realizationId: string;
     teamId: string;
   }) {
+    return (await this.getTaskOutcomeStateByStation(input)).failed;
+  }
+
+  /**
+   * Ostatni wynik każdego zadania drużyny od resetu: które są niezaliczone
+   * i kiedy zdjęcie zostało ostatnio odrzucone do poprawy. Liczy się tylko
+   * najnowsze zdarzenie stanowiska — późniejsze zaliczenie albo reset kasuje
+   * znacznik odrzucenia.
+   */
+  private async getTaskOutcomeStateByStation(input: {
+    realizationId: string;
+    teamId: string;
+  }) {
     const logs = await this.getTaskOutcomeLogsSinceLastReset(input);
 
     const failed = new Set<string>();
+    const rejectedAtByStationId = new Map<string, string>();
     const decided = new Set<string>();
     for (const log of logs) {
       const stationId = this.parseStationIdFromEventPayload(log.payload);
@@ -4830,10 +4938,12 @@ export class MobileService {
       decided.add(stationId);
       if (log.eventType === 'task_failed') {
         failed.add(stationId);
+      } else if (log.eventType === 'task_rejected_for_retry') {
+        rejectedAtByStationId.set(stationId, log.createdAt.toISOString());
       }
     }
 
-    return failed;
+    return { failed, rejectedAtByStationId };
   }
 
   private fromTaskStatus(status?: TaskStatus | null, failed = false) {

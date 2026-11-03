@@ -482,6 +482,7 @@ export function StationPreviewOverlay({
           current.timeLimitSeconds === stationProp.timeLimitSeconds &&
           current.points === stationProp.points &&
           current.qrScanCompletedCount === stationProp.qrScanCompletedCount &&
+          current.rejectedAt === stationProp.rejectedAt &&
           current.qrScanRequiredCount === stationProp.qrScanRequiredCount &&
           // Also compare the localized content fields, otherwise switching the
           // content language while a station is open keeps showing whatever was
@@ -530,6 +531,7 @@ export function StationPreviewOverlay({
     stationProp?.quizFailed,
     stationProp?.qrScanCompletedCount,
     stationProp?.qrScanRequiredCount,
+    stationProp?.rejectedAt,
     stationProp?.startedAt,
     stationProp?.stationId,
     stationProp?.status,
@@ -2259,6 +2261,7 @@ export function StationPreviewOverlay({
                     text={photoTaskCapture.text}
                     isApproved={photoTaskCapture.isApproved}
                     isRejected={photoTaskCapture.isRejected}
+                    isRejectedForRetry={photoTaskCapture.isRejectedForRetry}
                     hasPendingSubmission={photoTaskCapture.hasPendingSubmission}
                   />
                 </View>

@@ -21,6 +21,7 @@ import {
   buildInitialSessionState,
   resolveDefaultStationPoints,
   type ExpeditionSessionState,
+  type ExpeditionTask,
   type ExpeditionTaskStatus,
   type PlayerLocation,
 } from "../model/types";
@@ -106,6 +107,8 @@ const EXPEDITION_SESSION_TEXT = {
     globalTaskApproved: (stationName: string) =>
       `Twoje zgłoszenie dla „${stationName}” zostało zatwierdzone. Punkty dodane.`,
     globalTaskRejected: (stationName: string) => `Twoje zgłoszenie dla „${stationName}” zostało odrzucone.`,
+    globalTaskRejectedRetry: (stationName: string) =>
+      `Zdjęcie do „${stationName}” zostało odrzucone. Zeskanujcie ponownie kod QR stanowiska i spróbujcie jeszcze raz.`,
     globalOutcomePassed: "Zatwierdzone",
     globalOutcomeFailed: "Odrzucone",
     globalOutcomeTimedOut: "Czas minął",
@@ -138,6 +141,8 @@ const EXPEDITION_SESSION_TEXT = {
     progressSyncRejected: "Some saved progress could not be synced with the server. Refreshing realization state.",
     globalTaskApproved: (stationName: string) => `Your submission for “${stationName}” was approved. Points added.`,
     globalTaskRejected: (stationName: string) => `Your submission for “${stationName}” was rejected.`,
+    globalTaskRejectedRetry: (stationName: string) =>
+      `Your photo for “${stationName}” was rejected. Scan the station's QR code again and try once more.`,
     globalOutcomePassed: "Approved",
     globalOutcomeFailed: "Rejected",
     globalOutcomeTimedOut: "Time expired",
@@ -171,6 +176,8 @@ const EXPEDITION_SESSION_TEXT = {
     globalTaskApproved: (stationName: string) =>
       `Ваше подання для «${stationName}» затверджено. Бали нараховано.`,
     globalTaskRejected: (stationName: string) => `Ваше подання для «${stationName}» відхилено.`,
+    globalTaskRejectedRetry: (stationName: string) =>
+      `Фото для «${stationName}» відхилено. Відскануйте QR-код станції ще раз і спробуйте знову.`,
     globalOutcomePassed: "Затверджено",
     globalOutcomeFailed: "Відхилено",
     globalOutcomeTimedOut: "Час вичерпано",
@@ -204,6 +211,8 @@ const EXPEDITION_SESSION_TEXT = {
     globalTaskApproved: (stationName: string) =>
       `Ваша заявка для «${stationName}» подтверждена. Баллы начислены.`,
     globalTaskRejected: (stationName: string) => `Ваша заявка для «${stationName}» отклонена.`,
+    globalTaskRejectedRetry: (stationName: string) =>
+      `Фото для «${stationName}» отклонено. Отсканируйте QR-код станции ещё раз и попробуйте снова.`,
     globalOutcomePassed: "Подтверждено",
     globalOutcomeFailed: "Отклонено",
     globalOutcomeTimedOut: "Время истекло",
@@ -542,6 +551,79 @@ export function applyPendingTaskMutationsState(current: ExpeditionSessionState, 
   return mutations.reduce(applyPendingTaskMutationState, current);
 }
 
+/**
+ * Komunikaty „zatwierdzone / odrzucone / odrzucone do poprawy” wynikające ze
+ * zmiany stanu zadań między dwoma odczytami sesji. Aktualizuje (mutuje) mapy
+ * poprzednich stanów, które hook trzyma w refach. Pomija tylko stanowisko,
+ * którego panel jest otwarty — ten pokazuje wynik sam. Komunikaty o innych
+ * stanowiskach trafiają do kolejki; ekran wstrzymuje ją, dopóki jakaś nakładka
+ * jest otwarta.
+ */
+export function collectGlobalTaskOutcomes(input: {
+  tasks: ExpeditionTask[];
+  stations: { id: string; name?: string }[];
+  previousStatusByStationId: Record<string, ExpeditionTaskStatus>;
+  previousRejectedAtByStationId: Record<string, string | null>;
+  openStationId: string | null;
+  text: {
+    globalTaskApproved: (stationName: string) => string;
+    globalTaskRejected: (stationName: string) => string;
+    globalTaskRejectedRetry: (stationName: string) => string;
+  };
+  now: number;
+}): GlobalTaskOutcomeEvent[] {
+  const additions: GlobalTaskOutcomeEvent[] = [];
+  const resolveName = (stationId: string) =>
+    input.stations.find((station) => station.id === stationId)?.name?.trim() || stationId;
+
+  for (const task of input.tasks) {
+    const previousStatus = input.previousStatusByStationId[task.stationId];
+    input.previousStatusByStationId[task.stationId] = task.status;
+    const previousRejectedAt = input.previousRejectedAtByStationId[task.stationId];
+    const rejectedAt = task.rejectedAt ?? null;
+    input.previousRejectedAtByStationId[task.stationId] = rejectedAt;
+
+    const stationSeenBefore = previousStatus !== undefined;
+    if (!stationSeenBefore || task.stationId === input.openStationId) {
+      continue;
+    }
+
+    // Zdjęcie odrzucone do poprawy: zadanie nie przechodzi w done/failed, tylko
+    // wraca do todo z nowym znacznikiem — to on, a nie status, niesie komunikat.
+    // Pierwszy odczyt (np. po restarcie aplikacji) odpada wyżej, więc stare
+    // odrzucenie nie wyskakuje drugi raz.
+    if (task.status === "todo" && rejectedAt !== null && rejectedAt !== previousRejectedAt) {
+      additions.push({
+        id: `${task.stationId}:rejected:${rejectedAt}`,
+        stationId: task.stationId,
+        variant: "failed",
+        message: input.text.globalTaskRejectedRetry(resolveName(task.stationId)),
+      });
+      continue;
+    }
+
+    const transitioned =
+      previousStatus !== "done" &&
+      previousStatus !== "failed" &&
+      (task.status === "done" || task.status === "failed");
+    if (!transitioned) {
+      continue;
+    }
+
+    additions.push({
+      id: `${task.stationId}:${task.status}:${input.now}`,
+      stationId: task.stationId,
+      variant: task.status === "done" ? "success" : "failed",
+      message:
+        task.status === "done"
+          ? input.text.globalTaskApproved(resolveName(task.stationId))
+          : input.text.globalTaskRejected(resolveName(task.stationId)),
+    });
+  }
+
+  return additions;
+}
+
 export function isPhotoSubmissionRecorded(state: ExpeditionSessionState, stationId: string) {
   const status = state.tasks.find((task) => task.stationId === stationId)?.status;
   return status === "in-progress" || status === "done";
@@ -654,11 +736,12 @@ export function applyCompletedTaskState({
 
 export function useExpeditionSession(
   session: OnboardingSession,
-  isAnyStationOverlayOpenRef?: MutableRefObject<boolean>,
+  openStationOverlayIdRef?: MutableRefObject<string | null>,
 ) {
   const uiLanguage = useUiLanguage();
   const text = EXPEDITION_SESSION_TEXT[uiLanguage];
   const previousTaskStatusByStationIdRef = useRef<Record<string, ExpeditionTaskStatus>>({});
+  const previousRejectedAtByStationIdRef = useRef<Record<string, string | null>>({});
   const [globalTaskOutcomeQueue, setGlobalTaskOutcomeQueue] = useState<GlobalTaskOutcomeEvent[]>([]);
   // Deliberately excludes selectedLanguage: switching the display language is not
   // a new session and must not reset sessionState / previousTaskStatusByStationIdRef,
@@ -711,46 +794,25 @@ export function useExpeditionSession(
     setSyncMessage(null);
     setIsFlushingPendingMutations(false);
     previousTaskStatusByStationIdRef.current = {};
+    previousRejectedAtByStationIdRef.current = {};
     setGlobalTaskOutcomeQueue([]);
   }, [stableSession]);
 
   useEffect(() => {
-    const additions: GlobalTaskOutcomeEvent[] = [];
-
-    for (const task of sessionState.tasks) {
-      const previousStatus = previousTaskStatusByStationIdRef.current[task.stationId];
-      previousTaskStatusByStationIdRef.current[task.stationId] = task.status;
-
-      const stationSeenBefore = previousStatus !== undefined;
-      const transitioned =
-        stationSeenBefore &&
-        previousStatus !== "done" &&
-        previousStatus !== "failed" &&
-        (task.status === "done" || task.status === "failed");
-
-      if (!transitioned || isAnyStationOverlayOpenRef?.current) {
-        continue;
-      }
-
-      const stationName =
-        sessionState.realization.stations.find((station) => station.id === task.stationId)?.name?.trim() ||
-        task.stationId;
-
-      additions.push({
-        id: `${task.stationId}:${task.status}:${Date.now()}`,
-        stationId: task.stationId,
-        variant: task.status === "done" ? "success" : "failed",
-        message:
-          task.status === "done"
-            ? text.globalTaskApproved(stationName)
-            : text.globalTaskRejected(stationName),
-      });
-    }
+    const additions = collectGlobalTaskOutcomes({
+      tasks: sessionState.tasks,
+      stations: sessionState.realization.stations,
+      previousStatusByStationId: previousTaskStatusByStationIdRef.current,
+      previousRejectedAtByStationId: previousRejectedAtByStationIdRef.current,
+      openStationId: openStationOverlayIdRef?.current ?? null,
+      text,
+      now: Date.now(),
+    });
 
     if (additions.length > 0) {
       setGlobalTaskOutcomeQueue((current) => [...current, ...additions]);
     }
-  }, [isAnyStationOverlayOpenRef, sessionState.realization.stations, sessionState.tasks, text]);
+  }, [openStationOverlayIdRef, sessionState.realization.stations, sessionState.tasks, text]);
 
   const dismissCurrentGlobalTaskOutcome = useCallback(() => {
     setGlobalTaskOutcomeQueue((current) => current.slice(1));

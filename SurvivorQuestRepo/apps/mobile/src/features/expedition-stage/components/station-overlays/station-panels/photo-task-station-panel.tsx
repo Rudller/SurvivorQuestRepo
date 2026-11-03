@@ -12,6 +12,7 @@ type PhotoTaskText = {
   pendingReview: string;
   approved: string;
   rejected: string;
+  rejectedRetry: string;
   overlayTitle: string;
   cameraAccessTitle: string;
   cameraAccessDescription: string;
@@ -27,6 +28,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     pendingReview: "Zdjęcie wysłane, czeka na akceptację przez organizatora.",
     approved: "Zdjęcie zaakceptowane, zadanie zaliczone.",
     rejected: "Zdjęcie odrzucone, zadanie niezaliczone.",
+    rejectedRetry: "Zdjęcie odrzucone. Zeskanujcie ponownie kod QR stanowiska i zróbcie nowe zdjęcie.",
     overlayTitle: "Zadanie fotograficzne",
     cameraAccessTitle: "Dostęp do kamery",
     cameraAccessDescription: "Aby zrobić zdjęcie, włącz dostęp do kamery.",
@@ -41,6 +43,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     pendingReview: "Photo submitted, waiting for organizer approval.",
     approved: "Photo approved, task completed.",
     rejected: "Photo rejected, task not completed.",
+    rejectedRetry: "Photo rejected. Scan the station's QR code again and take a new photo.",
     overlayTitle: "Photo task",
     cameraAccessTitle: "Camera access",
     cameraAccessDescription: "Enable camera access to take a photo.",
@@ -55,6 +58,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     pendingReview: "Фото надіслано, очікує на підтвердження організатора.",
     approved: "Фото підтверджено, завдання зараховано.",
     rejected: "Фото відхилено, завдання не зараховано.",
+    rejectedRetry: "Фото відхилено. Відскануйте QR-код станції ще раз і зробіть нове фото.",
     overlayTitle: "Фотозавдання",
     cameraAccessTitle: "Доступ до камери",
     cameraAccessDescription: "Щоб зробити фото, увімкніть доступ до камери.",
@@ -69,6 +73,7 @@ const PHOTO_TASK_TEXT: Record<UiLanguage, PhotoTaskText> = {
     pendingReview: "Фото отправлено, ожидает подтверждения организатора.",
     approved: "Фото подтверждено, задание зачтено.",
     rejected: "Фото отклонено, задание не зачтено.",
+    rejectedRetry: "Фото отклонено. Отсканируйте QR-код станции ещё раз и сделайте новое фото.",
     overlayTitle: "Фотозадание",
     cameraAccessTitle: "Доступ к камере",
     cameraAccessDescription: "Чтобы сделать фото, включите доступ к камере.",
@@ -96,7 +101,21 @@ export function usePhotoTaskCapture(
   const text = PHOTO_TASK_TEXT[uiLanguage];
   const isApproved = station?.status === "done";
   const isRejected = station?.status === "failed";
-  const canCapture = !isApproved && !isRejected;
+  // Znacznik odrzucenia z chwili otwarcia panelu. Nowszy, i to z czasem po
+  // otwarciu, oznacza, że organizator odrzucił zdjęcie, gdy panel był otwarty —
+  // wtedy kierujemy do ponownego skanu QR (zadanie wróciło do „do zrobienia”).
+  // Odrzucenie sprzed otwarcia, które dotarło dopiero z kolejnym odpytaniem
+  // (drużyna zeskanowała kod, zanim tablet się o nim dowiedział), nie blokuje
+  // aparatu — ten skan już jest tą nową próbą.
+  const [visitRejectedAt, setVisitRejectedAt] = useState(station?.rejectedAt ?? null);
+  const [visitOpenedAtMs, setVisitOpenedAtMs] = useState(() => Date.now());
+  const rejectedAtMs = station?.rejectedAt ? Date.parse(station.rejectedAt) : Number.NaN;
+  const isRejectedForRetry =
+    Boolean(station?.rejectedAt) &&
+    station?.rejectedAt !== visitRejectedAt &&
+    station?.status === "todo" &&
+    !(rejectedAtMs < visitOpenedAtMs);
+  const canCapture = !isApproved && !isRejected && !isRejectedForRetry;
   const shouldAutoOpenCapture = Boolean(options?.autoOpenCapture) && canCapture;
   const [isCaptureActive, setIsCaptureActive] = useState(shouldAutoOpenCapture);
   const [isUploading, setIsUploading] = useState(false);
@@ -111,14 +130,25 @@ export function usePhotoTaskCapture(
     }
 
     previousStationIdRef.current = station?.stationId;
+    setVisitRejectedAt(station?.rejectedAt ?? null);
+    setVisitOpenedAtMs(Date.now());
     setIsCaptureActive(shouldAutoOpenCapture);
     setIsUploading(false);
     setUploadError(null);
     setHasSubmittedThisVisit(false);
     setPreviewUri(null);
+    // station.rejectedAt celowo poza zależnościami: zapamiętujemy go tylko przy wejściu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [station?.stationId, shouldAutoOpenCapture]);
 
-  const hasPendingSubmission = station?.status === "in-progress" || hasSubmittedThisVisit;
+  useEffect(() => {
+    if (isRejectedForRetry) {
+      setIsCaptureActive(false);
+    }
+  }, [isRejectedForRetry]);
+
+  const hasPendingSubmission =
+    !isRejectedForRetry && (station?.status === "in-progress" || hasSubmittedThisVisit);
 
   async function handleConfirmedCapture(uri: string) {
     setPreviewUri(uri);
@@ -152,6 +182,7 @@ export function usePhotoTaskCapture(
     hasPendingSubmission,
     isApproved,
     isRejected,
+    isRejectedForRetry,
     canCapture,
     previewUri,
     handleConfirmedCapture: (uri: string) => void handleConfirmedCapture(uri),
@@ -162,10 +193,17 @@ type PhotoTaskStatusTextProps = {
   text: PhotoTaskText;
   isApproved: boolean;
   isRejected: boolean;
+  isRejectedForRetry?: boolean;
   hasPendingSubmission: boolean;
 };
 
-export function PhotoTaskStatusText({ text, isApproved, isRejected, hasPendingSubmission }: PhotoTaskStatusTextProps) {
+export function PhotoTaskStatusText({
+  text,
+  isApproved,
+  isRejected,
+  isRejectedForRetry = false,
+  hasPendingSubmission,
+}: PhotoTaskStatusTextProps) {
   const layout = useStationPanelLayout();
 
   if (isApproved) {
@@ -183,6 +221,14 @@ export function PhotoTaskStatusText({ text, isApproved, isRejected, hasPendingSu
     return (
       <Text className="text-center" style={{ color: EXPEDITION_THEME.danger, fontSize: layout.resultFontSize }}>
         {text.rejected}
+      </Text>
+    );
+  }
+
+  if (isRejectedForRetry) {
+    return (
+      <Text className="text-center" style={{ color: EXPEDITION_THEME.danger, fontSize: layout.resultFontSize }}>
+        {text.rejectedRetry}
       </Text>
     );
   }

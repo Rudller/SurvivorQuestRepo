@@ -231,10 +231,17 @@ export class GalleryService {
       this.prisma.eventLog.findMany({
         where: {
           realizationId,
-          eventType: { in: ['task_completed', 'task_failed'] },
+          eventType: {
+            in: ['task_completed', 'task_failed', 'task_rejected_for_retry'],
+          },
         },
         orderBy: { createdAt: 'desc' },
-        select: { teamId: true, eventType: true, payload: true },
+        select: {
+          teamId: true,
+          eventType: true,
+          payload: true,
+          createdAt: true,
+        },
       }),
     ]);
 
@@ -243,7 +250,10 @@ export class GalleryService {
       stations.map((station) => [station.id, station]),
     );
 
-    const latestOutcomeByKey = new Map<string, 'done' | 'failed'>();
+    const latestOutcomeByKey = new Map<string, 'done' | 'failed' | 'retry'>();
+    // Zdjęcia sprzed ostatniego odrzucenia do poprawy organizator odrzucił —
+    // nawet jeśli kolejne zostało zaakceptowane, te nie trafiają do klienta.
+    const latestRejectedAtByKey = new Map<string, Date>();
     for (const log of taskOutcomeLogs) {
       const stationId = this.parseStationIdFromPayload(log.payload);
       if (!log.teamId || !stationId) {
@@ -253,8 +263,18 @@ export class GalleryService {
       if (!latestOutcomeByKey.has(key)) {
         latestOutcomeByKey.set(
           key,
-          log.eventType === 'task_completed' ? 'done' : 'failed',
+          log.eventType === 'task_completed'
+            ? 'done'
+            : log.eventType === 'task_rejected_for_retry'
+              ? 'retry'
+              : 'failed',
         );
+      }
+      if (
+        log.eventType === 'task_rejected_for_retry' &&
+        !latestRejectedAtByKey.has(key)
+      ) {
+        latestRejectedAtByKey.set(key, log.createdAt);
       }
     }
 
@@ -263,10 +283,12 @@ export class GalleryService {
         return true;
       }
 
-      const outcome = latestOutcomeByKey.get(
-        `${photo.teamId}:${photo.stationId}`,
-      );
-      return outcome === 'done';
+      const key = `${photo.teamId}:${photo.stationId}`;
+      if (latestOutcomeByKey.get(key) !== 'done') {
+        return false;
+      }
+      const rejectedAt = latestRejectedAtByKey.get(key);
+      return !rejectedAt || photo.createdAt > rejectedAt;
     });
 
     return {

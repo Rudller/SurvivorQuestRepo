@@ -924,6 +924,57 @@ function extractStationQrToken(rawValue: string) {
   return normalized;
 }
 
+// Kwadracik przy zadaniu na liście: ✓ zaliczone, ✕ niezaliczone, ↻ zdjęcie
+// odrzucone do poprawy (wróćcie i zeskanujcie kod QR jeszcze raz).
+function TaskChecklistBox({
+  done,
+  failed,
+  retry,
+  size,
+  markFontSize,
+}: {
+  done: boolean;
+  failed: boolean;
+  retry: boolean;
+  size: number;
+  markFontSize: number;
+}) {
+  const mark = done ? "✓" : failed ? "✕" : retry ? "↻" : null;
+  const markColor = done ? "#6ee7b7" : failed ? "#fecaca" : "#fdba74";
+  return (
+    <View
+      className="items-center justify-center rounded border"
+      style={{
+        width: size,
+        height: size,
+        borderColor: done ? "#34d399" : failed ? "#ef4444" : retry ? "#f97316" : EXPEDITION_THEME.border,
+        backgroundColor: done
+          ? "rgba(52, 211, 153, 0.2)"
+          : failed
+            ? "rgba(127, 29, 29, 0.3)"
+            : retry
+              ? "rgba(249, 115, 22, 0.18)"
+              : EXPEDITION_THEME.panelStrong,
+      }}
+    >
+      {mark ? (
+        <Text
+          className="font-bold"
+          style={{
+            color: markColor,
+            fontSize: markFontSize,
+            lineHeight: markFontSize,
+            includeFontPadding: false,
+            transform: [{ translateY: -1 }],
+          }}
+        >
+          {mark}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function ExpeditionStageScreen({
   session,
   onSessionInvalid,
@@ -951,6 +1002,7 @@ export function ExpeditionStageScreen({
   const mapControlButtonSize = adaptiveLayout.hit(isTabletLayout ? 50 : 44);
   const mapControlTopOffset = adaptiveLayout.s(isTabletLayout ? 232 : 154, 146, 244);
   const isAnyStationOverlayOpenRef = useRef(false);
+  const openStationOverlayIdRef = useRef<string | null>(null);
   const {
     sessionState,
     isLoading,
@@ -966,7 +1018,7 @@ export function ExpeditionStageScreen({
     globalTaskOutcomePopup,
     dismissCurrentGlobalTaskOutcome,
     globalOutcomePanelText,
-  } = useExpeditionSession(session, isAnyStationOverlayOpenRef);
+  } = useExpeditionSession(session, openStationOverlayIdRef);
 
   const [mapAnchor, setMapAnchor] = useState<MapCoordinate | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -1233,6 +1285,8 @@ export function ExpeditionStageScreen({
           ),
           done: task.status === "done",
           failed: task.status !== "done" && failedTaskIds.has(task.stationId),
+          // Zdjęcie odrzucone do poprawy: zadanie czeka na ponowny skan QR.
+          retry: task.status === "todo" && Boolean(task.rejectedAt),
         }))
         .sort((left, right) => {
           if (typeof left.stationNumber === "number" && typeof right.stationNumber === "number") {
@@ -1272,6 +1326,7 @@ export function ExpeditionStageScreen({
                 fastestCompletionBonusPoints: stationCatalog.fastestCompletionBonusPoints,
                 qrScanRequiredCount: stationCatalog.qrScanRequiredCount,
                 qrScanCompletedCount: task?.qrScanCompletedCount,
+                rejectedAt: task?.rejectedAt ?? null,
                 timeLimitLabel: formatTimeLimitLabel(stationCatalog.timeLimitSeconds ?? 0),
                 quizQuestion: stationCatalog.quiz?.question,
                 quizAnswers: stationCatalog.quiz?.answers,
@@ -1312,6 +1367,7 @@ export function ExpeditionStageScreen({
                 startedAt: task.startedAt,
                 fastestBonusPoints: task.fastestBonusPoints,
                 qrScanCompletedCount: task.qrScanCompletedCount,
+                rejectedAt: task.rejectedAt ?? null,
               } satisfies StationTestViewModel;
             });
 
@@ -1496,27 +1552,24 @@ export function ExpeditionStageScreen({
   });
   const openStationByType = overlayFlow.openStationByType;
 
+  const openStationOverlayId =
+    overlayFlow.activeStationTestId ||
+    overlayFlow.pendingQuizStartStationId ||
+    overlayFlow.pendingTimeStartStationId ||
+    overlayFlow.pendingPhotoStartStationId ||
+    null;
+  const isAnyStationOverlayOpen = Boolean(
+    openStationOverlayId ||
+      overlayFlow.isStationTestMenuOpen ||
+      overlayFlow.isWelcomePreviewOpen ||
+      overlayFlow.isFinishPreviewOpen ||
+      qrFlow.isQrScannerOpen,
+  );
+
   useEffect(() => {
-    isAnyStationOverlayOpenRef.current = Boolean(
-      overlayFlow.activeStationTestId ||
-        overlayFlow.pendingQuizStartStationId ||
-        overlayFlow.pendingTimeStartStationId ||
-        overlayFlow.pendingPhotoStartStationId ||
-        overlayFlow.isStationTestMenuOpen ||
-        overlayFlow.isWelcomePreviewOpen ||
-        overlayFlow.isFinishPreviewOpen ||
-        qrFlow.isQrScannerOpen,
-    );
-  }, [
-    overlayFlow.activeStationTestId,
-    overlayFlow.pendingQuizStartStationId,
-    overlayFlow.pendingTimeStartStationId,
-    overlayFlow.pendingPhotoStartStationId,
-    overlayFlow.isStationTestMenuOpen,
-    overlayFlow.isWelcomePreviewOpen,
-    overlayFlow.isFinishPreviewOpen,
-    qrFlow.isQrScannerOpen,
-  ]);
+    isAnyStationOverlayOpenRef.current = isAnyStationOverlayOpen;
+    openStationOverlayIdRef.current = openStationOverlayId;
+  }, [isAnyStationOverlayOpen, openStationOverlayId]);
 
   useEffect(() => {
     const apiBaseUrl = session.apiBaseUrl?.trim();
@@ -1782,35 +1835,13 @@ export function ExpeditionStageScreen({
               <View style={{ marginTop: adaptiveLayout.s(8, 7, 10), rowGap: tasksRowGap }}>
                 {checklistItems.map((item) => (
                   <View key={item.stationId} className="flex-row items-center gap-2">
-                    <View
-                      className="items-center justify-center rounded border"
-                      style={{
-                        width: tasksCheckboxSize,
-                        height: tasksCheckboxSize,
-                        borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
-                        backgroundColor: item.done
-                          ? "rgba(52, 211, 153, 0.2)"
-                          : item.failed
-                            ? "rgba(127, 29, 29, 0.3)"
-                            : EXPEDITION_THEME.panelStrong,
-                      }}
-                    >
-                      {item.done ? (
-                        <Text
-                          className="font-bold text-emerald-300"
-                          style={{ fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                        >
-                          ✓
-                        </Text>
-                      ) : item.failed ? (
-                        <Text
-                          className="font-bold"
-                          style={{ color: "#fecaca", fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                        >
-                          ✕
-                        </Text>
-                      ) : null}
-                    </View>
+                    <TaskChecklistBox
+                      done={item.done}
+                      failed={item.failed}
+                      retry={item.retry}
+                      size={tasksCheckboxSize}
+                      markFontSize={tasksMarkFontSize}
+                    />
                     <Text
                       className="flex-1"
                       style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary, fontSize: tasksLabelFontSize }}
@@ -1838,35 +1869,13 @@ export function ExpeditionStageScreen({
                 >
                   {checklistItems.map((item) => (
                     <View key={item.stationId} className="flex-row items-center gap-2">
-                      <View
-                        className="items-center justify-center rounded border"
-                        style={{
-                          width: tasksCheckboxSize,
-                          height: tasksCheckboxSize,
-                          borderColor: item.done ? "#34d399" : item.failed ? "#ef4444" : EXPEDITION_THEME.border,
-                          backgroundColor: item.done
-                            ? "rgba(52, 211, 153, 0.2)"
-                            : item.failed
-                              ? "rgba(127, 29, 29, 0.3)"
-                              : EXPEDITION_THEME.panelStrong,
-                        }}
-                      >
-                        {item.done ? (
-                          <Text
-                            className="font-bold text-emerald-300"
-                            style={{ fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                          >
-                            ✓
-                          </Text>
-                        ) : item.failed ? (
-                          <Text
-                            className="font-bold"
-                            style={{ color: "#fecaca", fontSize: tasksMarkFontSize, lineHeight: tasksMarkFontSize, includeFontPadding: false, transform: [{ translateY: -1 }] }}
-                          >
-                            ✕
-                          </Text>
-                        ) : null}
-                      </View>
+                      <TaskChecklistBox
+                        done={item.done}
+                        failed={item.failed}
+                        retry={item.retry}
+                        size={tasksCheckboxSize}
+                        markFontSize={tasksMarkFontSize}
+                      />
                       <Text
                         className="flex-1"
                         style={{ color: item.failed ? "#fecaca" : EXPEDITION_THEME.textPrimary, fontSize: tasksLabelFontSize }}
@@ -1999,7 +2008,8 @@ export function ExpeditionStageScreen({
       />
 
       <QuizOutcomePopupPanel
-        popup={globalTaskOutcomePopup}
+        // Komunikat o innym stanowisku czeka w kolejce, aż nakładka się zamknie.
+        popup={isAnyStationOverlayOpen ? null : globalTaskOutcomePopup}
         timeoutSecondsLeft={null}
         isLightTheme={isLightTheme}
         onClose={dismissCurrentGlobalTaskOutcome}

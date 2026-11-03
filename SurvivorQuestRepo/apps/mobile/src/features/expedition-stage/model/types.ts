@@ -132,6 +132,8 @@ export type ExpeditionTask = {
   qrScanCompletedCount?: number;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Kiedy organizator ostatnio odrzucił zdjęcie do poprawy; null = nie odrzucano od ostatniego wyniku. */
+  rejectedAt?: string | null;
 };
 
 export type ExpeditionStationType =

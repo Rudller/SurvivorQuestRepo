@@ -1,4 +1,4 @@
-import type { ExpeditionSessionState } from "../model/types";
+import type { ExpeditionSessionState, ExpeditionTask } from "../model/types";
 
 import {
   buildMobileApiHttpError,
@@ -10,6 +10,7 @@ import {
 import {
   applyCompletedTaskState,
   applyPendingTaskMutationsState,
+  collectGlobalTaskOutcomes,
   isPhotoSubmissionRecorded,
   createRequestTimeoutError,
   isImmediatelyRetriableError,
@@ -429,5 +430,88 @@ describe("network retry helpers", () => {
     const { message } = buildMobileApiHttpError({}, 500);
 
     expect(message).toBe("HTTP 500");
+  });
+});
+
+describe("collectGlobalTaskOutcomes", () => {
+  const text = {
+    globalTaskApproved: (name: string) => `ok ${name}`,
+    globalTaskRejected: (name: string) => `odrzucone ${name}`,
+    globalTaskRejectedRetry: (name: string) => `popraw ${name}`,
+  };
+  const stations = [{ id: "photo-1", name: "Zdjęcie z rampy" }];
+  const task = (overrides: Partial<ExpeditionTask>): ExpeditionTask => ({
+    stationId: "photo-1",
+    status: "in-progress",
+    pointsAwarded: 0,
+    startedAt: null,
+    finishedAt: null,
+    rejectedAt: null,
+    ...overrides,
+  });
+
+  function collect(
+    tasks: ExpeditionTask[],
+    previousStatusByStationId: Record<string, ExpeditionTask["status"]>,
+    previousRejectedAtByStationId: Record<string, string | null>,
+    openStationId: string | null = null,
+  ) {
+    return collectGlobalTaskOutcomes({
+      tasks,
+      stations,
+      previousStatusByStationId,
+      previousRejectedAtByStationId,
+      openStationId,
+      text,
+      now: 1,
+    });
+  }
+
+  it("asks the team to rescan the QR code when a photo is rejected for retry", () => {
+    const statuses = { "photo-1": "in-progress" as const };
+    const rejections: Record<string, string | null> = { "photo-1": null };
+
+    const outcomes = collect([task({ status: "todo", rejectedAt: "2026-10-16T12:00:00.000Z" })], statuses, rejections);
+
+    expect(outcomes).toEqual([
+      expect.objectContaining({ variant: "failed", message: "popraw Zdjęcie z rampy" }),
+    ]);
+    // Ten sam znacznik przy kolejnym odczycie nie wyskakuje drugi raz.
+    expect(collect([task({ status: "todo", rejectedAt: "2026-10-16T12:00:00.000Z" })], statuses, rejections)).toEqual([]);
+  });
+
+  it("still queues a rejection for another station while a station panel is open", () => {
+    const outcomes = collect(
+      [task({ status: "todo", rejectedAt: "2026-10-16T12:00:00.000Z" })],
+      { "photo-1": "in-progress" },
+      { "photo-1": null },
+      "quiz-1",
+    );
+
+    expect(outcomes).toEqual([expect.objectContaining({ message: "popraw Zdjęcie z rampy" })]);
+  });
+
+  it("leaves the outcome of the open station to its own panel", () => {
+    const rejections: Record<string, string | null> = { "photo-1": null };
+    const outcomes = collect(
+      [task({ status: "todo", rejectedAt: "2026-10-16T12:00:00.000Z" })],
+      { "photo-1": "in-progress" },
+      rejections,
+      "photo-1",
+    );
+
+    expect(outcomes).toEqual([]);
+    // Po zamknięciu panelu to samo odrzucenie nie wyskakuje drugi raz.
+    expect(rejections["photo-1"]).toBe("2026-10-16T12:00:00.000Z");
+  });
+
+  it("does not repeat an old rejection on the first read after an app restart", () => {
+    expect(collect([task({ status: "todo", rejectedAt: "2026-10-16T12:00:00.000Z" })], {}, {})).toEqual([]);
+  });
+
+  it("still announces a permanent failure as rejected", () => {
+    expect(collect([task({ status: "failed" })], { "photo-1": "in-progress" }, { "photo-1": null })).toEqual([
+      expect.objectContaining({ variant: "failed", message: "odrzucone Zdjęcie z rampy" }),
+    ]);
   });
 });

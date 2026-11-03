@@ -122,6 +122,10 @@ export function renderLogTitle(log: EventLogEntry, stationName: string | null) {
     return `Zresetowano zadanie (admin)${stationName ? ` - ${stationName}` : ""}`;
   }
 
+  if (log.eventType === "task_rejected_for_retry") {
+    return `Odrzucono zdjęcie do poprawy${stationName ? ` - ${stationName}` : ""}`;
+  }
+
   if (log.eventType === "points_recalculated") {
     return "Przeliczono punkty drużyny";
   }
@@ -141,6 +145,10 @@ export function renderLogDescription(log: EventLogEntry, stationName: string | n
 
   if (log.eventType === "task_reset_by_admin") {
     return "Stan zadania ustawiono na „do zrobienia”.";
+  }
+
+  if (log.eventType === "task_rejected_for_retry") {
+    return "Zadanie wróciło do „do zrobienia” — drużyna może zeskanować kod QR i wysłać nowe zdjęcie.";
   }
 
   if (log.eventType === "station_qr_rejected") {

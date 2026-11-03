@@ -57,8 +57,16 @@ export function CurrentRealizationPhotoReviewsPanel({
     teamId: string,
     stationId: string,
     action: "approve" | "reject",
+    kind: "photo" | "text",
   ) {
-    if (action === "reject" && !window.confirm("Odrzucić to zgłoszenie? Zadanie zostanie trwale niezaliczone, bez możliwości ponownej próby.")) {
+    // Ryzykanci i zgłoszenia inne niż zdjęcie: odrzucenie jest ostateczne.
+    // Ekspedycja: zadanie ze zdjęciem wraca do „do zrobienia” i drużyna może je
+    // powtórzyć po ponownym skanie QR (backend też sprawdza typ stanowiska).
+    const rejectConfirmMessage =
+      isRiskQuizRealization || kind !== "photo"
+        ? "Odrzucić to zgłoszenie? Zadanie zostanie trwale niezaliczone, bez możliwości ponownej próby."
+        : "Odrzucić to zdjęcie? Zadanie wróci do „do zrobienia” — drużyna może zeskanować kod QR stanowiska i wysłać nowe.";
+    if (action === "reject" && !window.confirm(rejectConfirmMessage)) {
       return;
     }
 
@@ -168,7 +176,7 @@ export function CurrentRealizationPhotoReviewsPanel({
                 <button
                   type="button"
                   disabled={isMutating}
-                  onClick={() => void handleAction(review.teamId, review.stationId, "approve")}
+                  onClick={() => void handleAction(review.teamId, review.stationId, "approve", review.kind)}
                   aria-label="Zatwierdź zgłoszenie"
                   className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-500/10 px-2 py-1.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-55"
                 >
@@ -177,7 +185,7 @@ export function CurrentRealizationPhotoReviewsPanel({
                 <button
                   type="button"
                   disabled={isMutating}
-                  onClick={() => void handleAction(review.teamId, review.stationId, "reject")}
+                  onClick={() => void handleAction(review.teamId, review.stationId, "reject", review.kind)}
                   aria-label="Odrzuć zgłoszenie"
                   className="flex-1 rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-55"
                 >

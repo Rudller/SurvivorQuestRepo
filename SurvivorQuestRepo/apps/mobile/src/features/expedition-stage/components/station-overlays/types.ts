@@ -42,6 +42,8 @@ export type StationTestViewModel = {
   fastestCompletionBonusPoints?: number;
   qrScanRequiredCount?: number;
   qrScanCompletedCount?: number;
+  /** Zob. ExpeditionTask.rejectedAt — zdjęcie odrzucone do poprawy. */
+  rejectedAt?: string | null;
   name: string;
   typeLabel: string;
   description: string;
