@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Animated, Pressable, Text, View, useAnimatedValue } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CameraView, useCameraPermissions, type CameraType } from "expo-camera";
+import Svg, { Path } from "react-native-svg";
 import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { EXPEDITION_THEME, getExpeditionThemeMode } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
@@ -14,6 +16,10 @@ type QrScannerOverlayProps = {
   // Ryzykanci scan cards rather than stations, and its screens are chamfered.
   scanTarget?: "station" | "card";
   cornerStyle?: PanelCornerStyle;
+  facing?: CameraType;
+  allowFacingToggle?: boolean;
+  // Where the last toggled camera is remembered, so the scanner reopens on it.
+  facingStorageKey?: string;
 };
 
 const QR_SCANNER_OVERLAY_TEXT: Record<
@@ -28,6 +34,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     tabletHintTitle: string;
     cardHintTitle: string;
     tabletHintBody: string;
+    switchCamera: string;
   }
 > = {
   polish: {
@@ -40,6 +47,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     tabletHintTitle: "Skanowanie stanowiska",
     cardHintTitle: "Zeskanuj kartę",
     tabletHintBody: "Trzymaj tablet stabilnie i ustaw kod QR w środku ramki. Po rozpoznaniu stanowisko otworzy się automatycznie.",
+    switchCamera: "Zmień aparat",
   },
   english: {
     title: "QR scanner",
@@ -51,6 +59,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     tabletHintTitle: "Station scanning",
     cardHintTitle: "Scan a card",
     tabletHintBody: "Hold the tablet steady and place the QR code in the center of the frame. The station opens automatically after detection.",
+    switchCamera: "Switch camera",
   },
   ukrainian: {
     title: "QR-сканер",
@@ -62,6 +71,7 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     tabletHintTitle: "Сканування станції",
     cardHintTitle: "Скануйте картку",
     tabletHintBody: "Тримайте планшет стабільно та розмістіть QR-код у центрі рамки. Після розпізнавання станція відкриється автоматично.",
+    switchCamera: "Змінити камеру",
   },
   russian: {
     title: "QR-сканер",
@@ -73,8 +83,31 @@ const QR_SCANNER_OVERLAY_TEXT: Record<
     tabletHintTitle: "Сканирование станции",
     cardHintTitle: "Отсканируйте карту",
     tabletHintBody: "Держите планшет ровно и поместите QR-код в центр рамки. После распознавания станция откроется автоматически.",
+    switchCamera: "Сменить камеру",
   },
 };
+
+// Camera body with two arrows chasing each other round the lens, so the button
+// reads as "switch camera" rather than a generic refresh.
+function SwitchCameraIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 8a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8.55 12.39A3.5 3.5 0 0 1 15.17 11.52M15.58 9.97L15.17 11.52L13.72 10.85M15.45 13.61A3.5 3.5 0 0 1 8.83 14.48M8.42 16.03L8.83 14.48L10.28 15.15"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export function QrScannerOverlay({
   visible,
@@ -83,6 +116,9 @@ export function QrScannerOverlay({
   onDetected,
   scanTarget = "station",
   cornerStyle = "rounded",
+  facing = "back",
+  allowFacingToggle = false,
+  facingStorageKey,
 }: QrScannerOverlayProps) {
   const adaptiveLayout = useAdaptiveLayout();
   const uiLanguage = useUiLanguage();
@@ -94,19 +130,53 @@ export function QrScannerOverlay({
   const cameraOverlayTextColor = isLightTheme ? EXPEDITION_THEME.panel : EXPEDITION_THEME.textPrimary;
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanLocked, setIsScanLocked] = useState(false);
+  const [preferredFacing, setPreferredFacing] = useState<CameraType>(facing);
+  const [activeFacing, setActiveFacing] = useState<CameraType>(facing);
   const [isMounted, setIsMounted] = useState(visible);
   const slideAnimation = useAnimatedValue(visible ? 1 : 0);
 
   useEffect(() => {
     if (!visible) {
       setIsScanLocked(false);
+      setActiveFacing(preferredFacing);
       return;
     }
 
     if (!permission?.granted) {
       void requestPermission();
     }
-  }, [permission?.granted, requestPermission, visible]);
+  }, [preferredFacing, permission?.granted, requestPermission, visible]);
+
+  useEffect(() => {
+    if (!facingStorageKey) {
+      return;
+    }
+
+    let cancelled = false;
+    AsyncStorage.getItem(facingStorageKey)
+      .then((stored) => {
+        if (cancelled || (stored !== "front" && stored !== "back")) {
+          return;
+        }
+
+        setPreferredFacing(stored);
+        setActiveFacing(stored);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [facingStorageKey]);
+
+  function toggleFacing() {
+    const nextFacing: CameraType = activeFacing === "back" ? "front" : "back";
+    setActiveFacing(nextFacing);
+    setPreferredFacing(nextFacing);
+    if (facingStorageKey) {
+      void AsyncStorage.setItem(facingStorageKey, nextFacing).catch(() => undefined);
+    }
+  }
 
   useEffect(() => {
     if (!isResolving) {
@@ -213,6 +283,18 @@ export function QrScannerOverlay({
                 {text.subtitle}
               </Text>
             </View>
+            {allowFacingToggle && permission?.granted ? (
+              <Pressable
+                className="items-center justify-center rounded-full border active:opacity-90"
+                style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
+                accessibilityLabel={text.switchCamera}
+                onPress={toggleFacing}
+              >
+                <View style={{ width: closeSize, height: closeSize, alignItems: "center", justifyContent: "center" }}>
+                  <SwitchCameraIcon size={Math.round(closeSize * 0.56)} color={EXPEDITION_THEME.textPrimary} />
+                </View>
+              </Pressable>
+            ) : null}
             <Pressable
               className="items-center justify-center rounded-full border active:opacity-90"
               style={{ borderColor: EXPEDITION_THEME.border, backgroundColor: EXPEDITION_THEME.panelStrong }}
@@ -273,7 +355,7 @@ export function QrScannerOverlay({
                 <CameraView
                   style={{ flex: 1 }}
                   active={visible}
-                  facing="back"
+                  facing={activeFacing}
                   barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                   onBarcodeScanned={
                     canScan

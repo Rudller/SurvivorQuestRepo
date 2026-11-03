@@ -19,7 +19,7 @@ import {
 } from "../../onboarding/model/types";
 import { usesLocationTracking } from "../../onboarding/model/realization-mode";
 import { LanguagePickerModal } from "../../../shared/ui/language-picker-modal";
-import { BottomCountdownPanel } from "../components/bottom-countdown-panel";
+import { LiveBottomCountdownPanel } from "../components/bottom-countdown-panel";
 import { ExpeditionMap } from "../components/expedition-map";
 import { HiddenMapBackdrop } from "../components/hidden-map-backdrop";
 import { ChristmasBackground } from "../../../shared/ui/christmas-background";
@@ -35,7 +35,7 @@ import {
 } from "../components/station-overlays";
 import { TopRealizationPanel } from "../components/top-realization-panel";
 import { TopLeaderboardStrip } from "../components/top-leaderboard-strip";
-import { useExpeditionSession, usePlayerLocation, useRealizationCountdown } from "../hooks";
+import { useExpeditionSession, usePlayerLocation, useRealizationCountdownFlags } from "../hooks";
 import { DEFAULT_MAP_ANCHOR } from "../model/station-pin-layout";
 import { resolveStageBackdropKind } from "../model/stage-backdrop-kind";
 import {
@@ -1465,9 +1465,12 @@ export function ExpeditionStageScreen({
     }
     setIsLanguagePickerOpen(true);
   };
-  const countdown = useRealizationCountdown(
+  // Same flagi, bez sekund — sekundy liczy LiveBottomCountdownPanel, żeby cały
+  // ekran (z otwartymi Poszlakami włącznie) nie przerysowywał się co sekundę.
+  const countdown = useRealizationCountdownFlags(
     sessionState.realization.scheduledAt,
     sessionState.realization.durationMinutes,
+    sessionState.realization.hideLeaderboardMinutesBeforeEnd * 60,
   );
   const localDeadlineAt = useMemo(
     () => resolveRealizationDeadlineIso(sessionState.realization.scheduledAt, sessionState.realization.durationMinutes),
@@ -1640,7 +1643,7 @@ export function ExpeditionStageScreen({
   );
   const isLeaderboardHiddenByCountdown =
     sessionState.realization.hideLeaderboardMinutesBeforeEnd > 0 &&
-    countdown.remainingSeconds <= sessionState.realization.hideLeaderboardMinutesBeforeEnd * 60;
+    countdown.isBelowThreshold;
   const shouldShowTopLeaderboard =
     sessionState.realization.showLeaderboardDuringGame &&
     !isLeaderboardHiddenByCountdown &&
@@ -1981,9 +1984,9 @@ export function ExpeditionStageScreen({
         ) : null}
 
         <View className="w-full" style={{ maxWidth: BOTTOM_COLUMN_MAX_WIDTH }}>
-          <BottomCountdownPanel
-            remainingLabel={countdown.remainingLabel}
-            isCompleted={countdown.isCompleted}
+          <LiveBottomCountdownPanel
+            scheduledAt={sessionState.realization.scheduledAt}
+            durationMinutes={sessionState.realization.durationMinutes}
             progressLabel={`${completedTasks}/${taskTotal}`}
             onOpenQrScanner={() => void qrFlow.handleOpenQrScanner()}
             isScannerOpening={qrFlow.isScannerOpening}

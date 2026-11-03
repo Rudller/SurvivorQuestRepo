@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   Text,
   View,
   useWindowDimensions,
   type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from "react-native";
 
 import { useUiLanguage, type UiLanguage } from "../../i18n";
@@ -18,10 +18,9 @@ import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { MOBILE_UX_TOKENS } from "../../../shared/ui/ux-tokens";
 import { textRole } from "../../../shared/ui/typography";
 import type { ExpeditionCaseFile, ExpeditionCaseFileKind, ExpeditionTask } from "../model/types";
-import {
-  resolveUnlockStationNumber,
-  sortCaseFiles,
-} from "./case-files.model";
+import { resolveSwipeTarget, resolveUnlockStationNumber, sortCaseFiles } from "./case-files.model";
+import { CaseFileImageViewer } from "./case-file-image-viewer";
+import { fitContain } from "./case-file-image-zoom.model";
 import { useCaseFileAudio } from "./use-case-file-audio";
 
 /**
@@ -103,6 +102,7 @@ const CASE_FILES_TEXT: Record<
     close: string;
     kinds: Record<ExpeditionCaseFileKind, string>;
     imageFailed: string;
+    imageZoomHint: string;
     audioPlay: string;
     audioPause: string;
     audioFailed: string;
@@ -120,6 +120,7 @@ const CASE_FILES_TEXT: Record<
     close: "Zamknij",
     kinds: { text: "Notatka", image: "Zdjęcie", audio: "Nagranie", dossier: "Kartoteka" },
     imageFailed: "Nie udało się wczytać zdjęcia.",
+    imageZoomHint: "Dotknij, aby powiększyć",
     audioPlay: "Odtwórz",
     audioPause: "Pauza",
     audioFailed: "Nie udało się odtworzyć nagrania.",
@@ -136,6 +137,7 @@ const CASE_FILES_TEXT: Record<
     close: "Close",
     kinds: { text: "Note", image: "Photo", audio: "Recording", dossier: "Dossier" },
     imageFailed: "The photo could not be loaded.",
+    imageZoomHint: "Tap to enlarge",
     audioPlay: "Play",
     audioPause: "Pause",
     audioFailed: "The recording could not be played.",
@@ -152,6 +154,7 @@ const CASE_FILES_TEXT: Record<
     close: "Закрити",
     kinds: { text: "Нотатка", image: "Фото", audio: "Запис", dossier: "Картотека" },
     imageFailed: "Не вдалося завантажити фото.",
+    imageZoomHint: "Торкніться, щоб збільшити",
     audioPlay: "Відтворити",
     audioPause: "Пауза",
     audioFailed: "Не вдалося відтворити запис.",
@@ -168,6 +171,7 @@ const CASE_FILES_TEXT: Record<
     close: "Закрыть",
     kinds: { text: "Заметка", image: "Фото", audio: "Запись", dossier: "Картотека" },
     imageFailed: "Не удалось загрузить фото.",
+    imageZoomHint: "Нажмите, чтобы увеличить",
     audioPlay: "Воспроизвести",
     audioPause: "Пауза",
     audioFailed: "Не удалось воспроизвести запись.",
@@ -212,8 +216,32 @@ export function CaseFilesModal({
   const snapInterval = cardWidth + cardGap;
   const sideInset = Math.max(0, (carouselWidth - cardWidth) / 2);
 
-  const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(firstUnlockedIndex);
+  // Jeden podgląd na cały modal (a nie po jednym na kartę). Po pierwszym
+  // otwarciu zostaje zamontowany, żeby zamknięcie mogło się animować.
+  const [zoom, setZoom] = useState<{ url: string; visible: boolean } | null>(null);
+
+  // Przesuwanie kart robimy sami (PanResponder + Animated), a nie natywnym
+  // snapem ScrollView: ten na Androidzie cofał spokojny swipe, gdy palec zwolnił
+  // przed puszczeniem — patrz resolveSwipeTarget. Pionowy scroll w karcie
+  // zostaje natywny.
+  const offset = useRef(new Animated.Value(-firstUnlockedIndex * snapInterval)).current;
+  // PanResponder powstaje raz, więc bieżące wartości czyta z refa.
+  const live = useRef({ index, snapInterval, count: ordered.length });
+  live.current = { index, snapInterval, count: ordered.length };
+
+  function goTo(nextIndex: number) {
+    const clamped = Math.min(Math.max(nextIndex, 0), ordered.length - 1);
+    setIndex(clamped);
+    Animated.spring(offset, {
+      toValue: -clamped * snapInterval,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 18,
+    }).start();
+  }
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
 
   // Każde otwarcie zaczyna od pierwszej odblokowanej karty — także gdy między
   // otwarciami odblokowała się nowa.
@@ -222,21 +250,48 @@ export function CaseFilesModal({
       return;
     }
     setIndex(firstUnlockedIndex);
-    scrollRef.current?.scrollTo({ x: firstUnlockedIndex * snapInterval, animated: false });
-    // snapInterval celowo poza zależnościami: zmiana rozmiaru nie ma resetować pozycji.
+    offset.setValue(-firstUnlockedIndex * snapInterval);
+    // snapInterval celowo poza zależnościami: zmiana rozmiaru obsługuje efekt niżej.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, firstUnlockedIndex]);
 
-  function goTo(nextIndex: number) {
-    const clamped = Math.min(Math.max(nextIndex, 0), ordered.length - 1);
-    setIndex(clamped);
-    scrollRef.current?.scrollTo({ x: clamped * snapInterval, animated: true });
-  }
+  // Po pomiarze szerokości (albo obrocie) karta ma zostać na swoim miejscu.
+  useEffect(() => {
+    offset.setValue(-live.current.index * snapInterval);
+  }, [offset, snapInterval]);
 
-  function handleScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const settled = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
-    setIndex(Math.min(Math.max(settled, 0), ordered.length - 1));
-  }
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        // Dotyk trzeba wziąć już na starcie: inaczej respondentem zostaje panel
+        // okna (Pressable nad karuzelą), a gdy responderem jest przodek, przy
+        // ruchu pytani są tylko JEGO przodkowie — karuzela nigdy by gestu nie dostała.
+        // Przyciski w karcie są głębiej, więc i tak dostają start pierwsze.
+        onStartShouldSetPanResponder: () => true,
+        // Capture: swipe w bok ma wygrać z przyciskami w karcie (np. zdjęcie),
+        // ale tylko gdy ruch jest wyraźnie poziomy — pionowy zostaje dla scrolla karty.
+        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+          Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          offset.stopAnimation();
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const { index: current, snapInterval: interval, count } = live.current;
+          const atEdge = (current === 0 && gesture.dx > 0) || (current === count - 1 && gesture.dx < 0);
+          // Za pierwszą i ostatnią kartą karta stawia opór zamiast odjeżdżać.
+          offset.setValue(-current * interval + (atEdge ? gesture.dx * 0.3 : gesture.dx));
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const { index: current, snapInterval: interval, count } = live.current;
+          goToRef.current(resolveSwipeTarget({ index: current, dx: gesture.dx, vx: gesture.vx, interval, count }));
+        },
+        onPanResponderTerminate: () => {
+          goToRef.current(live.current.index);
+        },
+      }),
+    [offset],
+  );
 
   function handleCarouselLayout(event: LayoutChangeEvent) {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -312,19 +367,21 @@ export function CaseFilesModal({
             </Text>
           ) : (
             <>
-              <View className="flex-1" style={{ marginTop: isTabletLayout ? 20 : 14 }} onLayout={handleCarouselLayout}>
-                <ScrollView
-                  ref={scrollRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  decelerationRate="fast"
-                  snapToInterval={snapInterval}
-                  snapToAlignment="start"
-                  disableIntervalMomentum
-                  contentOffset={{ x: firstUnlockedIndex * snapInterval, y: 0 }}
-                  contentContainerStyle={{ paddingHorizontal: sideInset, columnGap: cardGap }}
-                  onMomentumScrollEnd={handleScrollEnd}
-                  onScrollEndDrag={handleScrollEnd}
+              <View
+                testID="case-files-carousel"
+                className="flex-1"
+                style={{ marginTop: isTabletLayout ? 20 : 14, overflow: "hidden" }}
+                onLayout={handleCarouselLayout}
+                {...swipe.panHandlers}
+              >
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    flexDirection: "row",
+                    paddingHorizontal: sideInset,
+                    columnGap: cardGap,
+                    transform: [{ translateX: offset }],
+                  }}
                 >
                   {ordered.map((caseFile, cardIndex) => (
                     <CaseFileCard
@@ -336,9 +393,10 @@ export function CaseFilesModal({
                       sizes={sizes}
                       width={cardWidth}
                       isCurrent={cardIndex === index}
+                      onOpenImage={(url) => setZoom({ url, visible: true })}
                     />
                   ))}
-                </ScrollView>
+                </Animated.View>
               </View>
 
               <View
@@ -398,6 +456,14 @@ export function CaseFilesModal({
           )}
         </Pressable>
       </Pressable>
+      {zoom ? (
+        <CaseFileImageViewer
+          url={zoom.url}
+          visible={zoom.visible}
+          closeLabel={text.close}
+          onRequestClose={() => setZoom((current) => (current ? { ...current, visible: false } : current))}
+        />
+      ) : null}
     </Modal>
   );
 }
@@ -449,6 +515,7 @@ function CaseFileCard({
   sizes,
   width,
   isCurrent,
+  onOpenImage,
 }: {
   caseFile: ExpeditionCaseFile;
   position: number;
@@ -457,6 +524,7 @@ function CaseFileCard({
   sizes: Sizes;
   width: number;
   isCurrent: boolean;
+  onOpenImage: (url: string) => void;
 }) {
   const isWide = sizes === TABLET_SIZES;
   const number = String(position + 1).padStart(2, "0");
@@ -492,7 +560,11 @@ function CaseFileCard({
         </View>
       ) : (
         // Pionowy scroll w karcie: długa kartoteka nie może wyjść poza okno.
-        <ScrollView nestedScrollEnabled contentContainerStyle={{ padding: sizes.cardPadding }}>
+        <ScrollView
+          nestedScrollEnabled
+          // Zdjęcie ma zająć całe wolne miejsce karty, więc treść musi rosnąć do jej wysokości.
+          contentContainerStyle={{ padding: sizes.cardPadding, flexGrow: caseFile.kind === "image" ? 1 : 0 }}
+        >
           <Text
             className="mb-2 uppercase"
             style={[textRole("navigation"), { color: EXPEDITION_THEME.textSubtle, fontSize: sizes.kindLabel }]}
@@ -524,7 +596,7 @@ function CaseFileCard({
             </Text>
           ) : null}
 
-          {caseFile.kind === "image" ? <CaseFileImage url={caseFile.url} text={text} /> : null}
+          {caseFile.kind === "image" ? <CaseFileImage url={caseFile.url} text={text} onOpen={onOpenImage} /> : null}
 
           {caseFile.kind === "audio" ? <CaseFileAudio url={caseFile.url} text={text} /> : null}
 
@@ -572,9 +644,24 @@ function CaseFileCard({
   );
 }
 
-function CaseFileImage({ url, text }: { url: string | undefined; text: SharedText }) {
+function CaseFileImage({
+  url,
+  text,
+  onOpen,
+}: {
+  url: string | undefined;
+  text: SharedText;
+  onOpen: (url: string) => void;
+}) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasFailed, setHasFailed] = useState(false);
+  // Wolne miejsce w karcie (onLayout) i naturalny rozmiar zdjęcia (onLoad).
+  // Z obu liczymy dokładny rozmiar wpisany w kartę z zachowaniem proporcji —
+  // samo `contain` na całym polu też by je zachowało, ale zaokrąglone rogi
+  // lądowałyby wtedy na pustych pasach zamiast na krawędziach zdjęcia.
+  const [area, setArea] = useState<{ width: number; height: number } | null>(null);
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const displayed = area ? (natural ? fitContain(natural, area) : area) : null;
 
   if (!url || hasFailed) {
     return (
@@ -585,26 +672,73 @@ function CaseFileImage({ url, text }: { url: string | undefined; text: SharedTex
   }
 
   return (
-    <View>
-      <Image
-        source={{ uri: url }}
-        // `contain`, nie `cover`: dowód to dokument, a nie ozdoba — obcięcie
-        // krawędzi mogłoby zabrać właśnie ten fragment, po który gracz przyszedł.
-        resizeMode="contain"
-        accessibilityLabel={text.kinds.image}
-        style={{ width: "100%", aspectRatio: 4 / 3, borderRadius: 12 }}
-        onLoadStart={() => setIsLoading(true)}
-        onLoadEnd={() => setIsLoading(false)}
-        onError={() => {
-          setIsLoading(false);
-          setHasFailed(true);
+    <View style={{ flex: 1, minHeight: 180 }}>
+      <View
+        style={{ flex: 1 }}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width > 0 && height > 0 && (width !== area?.width || height !== area?.height)) {
+            setArea({ width, height });
+          }
         }}
-      />
-      {isLoading ? (
-        <View className="absolute inset-0 items-center justify-center">
-          <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+      >
+        {/* Zdjęcie leży w warstwie absolutnej, więc nie wpływa na mierzone pole —
+            inaczej pole rosłoby razem ze zdjęciem i nigdy nie malało. */}
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Pressable
+            testID="case-file-image-open"
+            onPress={() => onOpen(url)}
+            disabled={isLoading}
+            accessibilityRole="imagebutton"
+            accessibilityHint={text.imageZoomHint}
+          >
+            <Image
+              source={{ uri: url }}
+              // `contain`, nie `cover`: dowód to dokument, a nie ozdoba — obcięcie
+              // krawędzi mogłoby zabrać właśnie ten fragment, po który gracz przyszedł.
+              resizeMode="contain"
+              accessibilityLabel={text.kinds.image}
+              style={
+                displayed
+                  ? { width: displayed.width, height: displayed.height, borderRadius: 12 }
+                  : { width: "100%", aspectRatio: 4 / 3, borderRadius: 12 }
+              }
+              onLoad={(event) => {
+                const { width, height } = event.nativeEvent.source;
+                if (width > 0 && height > 0) {
+                  setNatural({ width, height });
+                }
+              }}
+              onLoadStart={() => setIsLoading(true)}
+              onLoadEnd={() => setIsLoading(false)}
+              onError={() => {
+                setIsLoading(false);
+                setHasFailed(true);
+              }}
+            />
+            {isLoading ? (
+              <View className="absolute inset-0 items-center justify-center">
+                <ActivityIndicator color={EXPEDITION_THEME.accentStrong} />
+              </View>
+            ) : null}
+          </Pressable>
         </View>
-      ) : null}
+      </View>
+      {isLoading ? null : (
+        <Text className="mt-2 text-center text-xs" style={[textRole("body"), { color: EXPEDITION_THEME.textSubtle }]}>
+          {`🔍 ${text.imageZoomHint}`}
+        </Text>
+      )}
     </View>
   );
 }

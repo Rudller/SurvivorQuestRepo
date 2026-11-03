@@ -7,6 +7,7 @@ import { QrScannerIcon, StreakFlameIcon } from "./risk-quiz-icons";
 import { ChamferedPanel } from "../../../shared/ui/chamfered-panel";
 import { useUiLanguage } from "../../i18n";
 import { RISK_QUIZ_TEXT } from "../model/risk-quiz-text";
+import { useRealizationCountdown } from "../../expedition-stage/hooks/use-realization-countdown";
 
 // Scale-squish-and-release "flip", matching the memory station's card flip
 // (see memory-station-panel.tsx) — a true 3D rotateY/backfaceVisibility flip
@@ -199,4 +200,18 @@ export function RiskQuizBottomPanel({
       </View>
     </ChamferedPanel>
   );
+}
+
+/**
+ * Panel, który sam liczy czas do końca realizacji. Tyka co sekundę tylko on —
+ * ekran Ryzykantów nie trzyma sekund w swoim stanie, więc nie przerysowuje się
+ * cały (razem ze spadającymi kartami) co sekundę.
+ */
+export function LiveRiskQuizBottomPanel({
+  scheduledAt,
+  durationMinutes,
+  ...props
+}: Omit<RiskQuizBottomPanelProps, "remainingLabel" | "isCompleted"> & { scheduledAt: string; durationMinutes: number }) {
+  const countdown = useRealizationCountdown(scheduledAt, durationMinutes);
+  return <RiskQuizBottomPanel remainingLabel={countdown.remainingLabel} isCompleted={countdown.isCompleted} {...props} />;
 }

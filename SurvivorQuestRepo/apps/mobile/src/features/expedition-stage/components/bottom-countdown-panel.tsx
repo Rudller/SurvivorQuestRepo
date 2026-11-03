@@ -4,6 +4,7 @@ import { useUiLanguage, type UiLanguage } from "../../i18n";
 import { SnowCap } from "../../../shared/ui/snow-cap";
 import { EXPEDITION_THEME } from "../../onboarding/model/constants";
 import { useAdaptiveLayout } from "../../../shared/layout/use-adaptive-layout";
+import { useRealizationCountdown } from "../hooks/use-realization-countdown";
 
 type BottomCountdownPanelProps = {
   remainingLabel: string;
@@ -142,4 +143,18 @@ export function BottomCountdownPanel({
       <SnowCap cornerRadius={panelRadius} height={isTabletLayout ? 16 : 13} seed={3} />
     </View>
   );
+}
+
+/**
+ * Panel, który sam liczy czas do końca realizacji. Tyka co sekundę tylko on —
+ * ekran ekspedycji nie musi trzymać sekund w swoim stanie i przerysowywać się
+ * cały (zob. useRealizationCountdownFlags).
+ */
+export function LiveBottomCountdownPanel({
+  scheduledAt,
+  durationMinutes,
+  ...props
+}: Omit<BottomCountdownPanelProps, "remainingLabel" | "isCompleted"> & { scheduledAt: string; durationMinutes: number }) {
+  const countdown = useRealizationCountdown(scheduledAt, durationMinutes);
+  return <BottomCountdownPanel remainingLabel={countdown.remainingLabel} isCompleted={countdown.isCompleted} {...props} />;
 }

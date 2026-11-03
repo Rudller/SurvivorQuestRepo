@@ -1413,6 +1413,13 @@ export function StationPreviewOverlay({
     ],
   } as const;
   const stationQuizPrompt = resolveStationQuizPrompt({ station, wordleLength, uiLanguage });
+  // Wordle, wisielec i anagram trzymają w pytaniu samo hasło, więc podpowiedź
+  // siedzi w opisie. To ona jest treścią zadania i idzie w wyróżnione miejsce
+  // pytania, a ogólne "Wordle: odgadnij słowo (n liter)." schodzi na miejsce opisu.
+  const isHintInPrompt =
+    (isWordleStation || isHangmanStation || isAnagramStation) && stationDescription.length > 0;
+  const taskPromptText = isHintInPrompt ? stationDescription : stationQuizPrompt;
+  const taskDescriptionText = isHintInPrompt ? stationQuizPrompt : stationDescription;
   // Ryzykanci: these tasks are their own visual object (the wordle grid, the
   // hangman word, the anagram tiles), so the wrapper's rounded border and
   // muted fill only draw a second box around a box. They sit straight on the
@@ -1472,7 +1479,9 @@ export function StationPreviewOverlay({
       displayLength: wordleDisplayLength,
       attempts: wordleAttempts,
       revealedCellCounts: wordleRevealedCellCounts,
-      cellSize: wordleBoardCellSize,
+      // Plansza sama dopasowuje kratki do zmierzonego pudełka, więc limit może
+      // być hojny — wcześniej trzymał ją przy rozmiarze kratek rzędu wpisywania.
+      cellSize: Math.max(wordleBoardCellSize, adaptiveLayout.s(isTabletOverlay ? 96 : 56, 48, 120)),
       letterGap: wordleInputCellGap,
       rowGap: wordleDisplayLength >= 12 ? 4 : 6,
     },
@@ -2114,7 +2123,7 @@ export function StationPreviewOverlay({
                         lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                       }}
                     >
-                      <FormattedText text={stationDescription} />
+                      <FormattedText text={taskDescriptionText} />
                     </Text>
                   </AutoScrollingBox>
                 ) : null}
@@ -2495,7 +2504,7 @@ export function StationPreviewOverlay({
                     </Text>
                   </AutoScrollingBox>
                 </View>
-              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && !requiresQrScan && !isBoggleStation && station.stationType !== "strong-password" && stationDescription.length > 0 ? (
+              ) : !isCaesarStation && !requiresPhotoUpload && !isAnagramStation && !isClassicQuizStation && !requiresQrScan && !isBoggleStation && station.stationType !== "strong-password" && taskDescriptionText.length > 0 ? (
                 <AutoScrollingBox className="mt-1">
                   <Text
                     style={{
@@ -2504,7 +2513,7 @@ export function StationPreviewOverlay({
                       lineHeight: adaptiveLayout.s(isTabletOverlay ? 20 : 13, 12, 24),
                     }}
                   >
-                    <FormattedText text={stationDescription} />
+                    <FormattedText text={taskDescriptionText} />
                   </Text>
                 </AutoScrollingBox>
               ) : null}
@@ -2552,7 +2561,7 @@ export function StationPreviewOverlay({
                 >
                   <StationQuizTaskWrapper
                     className={isTabletOverlay ? "mt-3" : "mt-2"}
-                    prompt={stationQuizPrompt}
+                    prompt={taskPromptText}
                     hidePrompt={isRebusStation}
                     isTabletOverlay={isTabletOverlay}
                     error={quizSubmitError}

@@ -39,3 +39,40 @@ export function resolveUnlockStationNumber(
 
   return task?.stationNumber ?? null;
 }
+
+/** Jaka część odstępu między kartami wystarczy, żeby spokojny swipe zmienił kartę. */
+export const SWIPE_DISTANCE_RATIO = 0.15;
+/** Prędkość (px/ms), od której krótki, szybki ruch też liczy się jako swipe. */
+export const SWIPE_FLICK_VELOCITY = 0.3;
+const SWIPE_FLICK_MIN_DISTANCE = 8;
+
+/**
+ * Karta, na którą ma przeskoczyć karuzela po puszczeniu palca.
+ *
+ * Natywny snap Androida liczy się z prędkością w chwili podniesienia palca: gdy
+ * palec zwolni przed puszczeniem, prędkość jest zerowa i karta wraca, o ile nie
+ * przeciągnięto jej za połowę. Karta zajmuje ~85% szerokości okna, więc spokojny
+ * swipe „raz działał, raz nie”. Tu o zmianie decyduje kierunek i niewielki
+ * dystans, a szybki ruch wystarcza nawet krótki. Zawsze najwyżej o jedną kartę.
+ */
+export function resolveSwipeTarget({
+  index,
+  dx,
+  vx,
+  interval,
+  count,
+}: {
+  index: number;
+  dx: number;
+  vx: number;
+  interval: number;
+  count: number;
+}): number {
+  const farEnough = Math.abs(dx) > interval * SWIPE_DISTANCE_RATIO;
+  const flicked = Math.abs(vx) > SWIPE_FLICK_VELOCITY && Math.abs(dx) > SWIPE_FLICK_MIN_DISTANCE;
+  if (!farEnough && !flicked) {
+    return index;
+  }
+  const next = dx < 0 ? index + 1 : index - 1;
+  return Math.min(Math.max(next, 0), Math.max(count - 1, 0));
+}

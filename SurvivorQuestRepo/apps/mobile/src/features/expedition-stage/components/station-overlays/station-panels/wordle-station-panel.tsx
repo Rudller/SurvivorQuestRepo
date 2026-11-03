@@ -15,7 +15,12 @@ const WORDLE_KEYBOARD_ROWS = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
   ["Z", "X", "C", "V", "B", "N", "M"],
+  // Hasła są po polsku (SŁOŃCE, FAŁSZ) i sprawdzane litera w literę — bez tego
+  // rzędu takiego wordle nie dało się rozwiązać. Ten sam rząd co w wisielcu.
+  ["Ą", "Ć", "Ę", "Ł", "Ń", "Ó", "Ś", "Ź", "Ż"],
 ] as const;
+// "Sprawdź" stoi na końcu rzędu Z–M, nie pod polskimi literami.
+const WORDLE_SUBMIT_ROW_INDEX = 2;
 
 const WORDLE_TILE_COLORS = {
   correct: "#6aaa64",
@@ -331,7 +336,9 @@ export function WordleInteractionPanel({
   const submitLabelColor = resolveActionLabelColor(!hasSubmitAccent);
   const inputLetterFontSize = Math.max(9, Math.min(layout.isTablet ? 20 : 16, Math.floor(boardCellSize * 0.58)));
   const backspaceFontSize = Math.max(9, Math.min(layout.isTablet ? 18 : 14, Math.floor(boardCellSize * 0.52)));
-  const keyboardKeyHeight = layout.isTablet ? keyboardKeySize : Math.round(keyboardKeySize * 1.25);
+  // Na tablecie kwadratowe klawisze w czterech rzędach zabierały planszy połowę
+  // wysokości — spłaszczone mieszczą się tam, gdzie wcześniej trzy rzędy.
+  const keyboardKeyHeight = layout.isTablet ? Math.round(keyboardKeySize * 0.75) : Math.round(keyboardKeySize * 1.25);
   const inputPopAnimationsRef = useRef<Animated.Value[]>([]);
   const previousInputRef = useRef<string[]>(inputCharacters);
   const inputShakeAnimation = useAnimatedValue(0);
@@ -489,7 +496,7 @@ export function WordleInteractionPanel({
               );
             })}
 
-            {rowIndex === WORDLE_KEYBOARD_ROWS.length - 1 ? (
+            {rowIndex === WORDLE_SUBMIT_ROW_INDEX ? (
               <Pressable
                 className="absolute items-center justify-center rounded-xl active:opacity-90"
                 style={{

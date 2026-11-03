@@ -147,6 +147,21 @@ describe("CaseFilesModal", () => {
     expect(getByTestId("case-files-position").props.children).toBe("1 / 2");
   });
 
+  it("dotknięcie zdjęcia otwiera je na pełnym ekranie, a „Zamknij” chowa", async () => {
+    const { getByTestId, getByLabelText, queryByTestId } = await renderModal([
+      caseFile({ id: "i", kind: "image", title: "Odcisk buta", url: "https://t/1.jpg" }),
+    ]);
+
+    expect(queryByTestId("case-file-image-viewer")).toBeNull();
+
+    await fireEvent(getByLabelText("Zdjęcie"), "loadEnd");
+    await fireEvent.press(getByTestId("case-file-image-open"));
+    expect(getByTestId("case-file-image-viewer")).toBeTruthy();
+
+    await fireEvent.press(getByTestId("case-file-image-viewer-close"));
+    expect(queryByTestId("case-file-image-viewer")).toBeNull();
+  });
+
   it("na tablecie ma ten sam układ kart", async () => {
     const { getByText, getByTestId } = await renderModal(
       [caseFile({ id: "a", body: "Słyszałam kłótnię." })],
