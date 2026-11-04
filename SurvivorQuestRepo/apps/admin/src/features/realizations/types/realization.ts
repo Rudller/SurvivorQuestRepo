@@ -296,6 +296,7 @@ export type Realization = {
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
   showCaseFiles: boolean;
+  caseFilesSequentialUnlock: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -368,6 +369,7 @@ export type RealizationExportRealizationData = {
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
   showCaseFiles: boolean;
+  caseFilesSequentialUnlock: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;

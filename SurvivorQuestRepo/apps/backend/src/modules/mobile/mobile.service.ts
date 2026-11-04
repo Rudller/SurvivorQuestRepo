@@ -27,6 +27,7 @@ import { isUniqueConstraintError } from '../../shared/lib/prisma-errors';
 import { VISIBLE_EVENT_LOG_WHERE } from '../../shared/lib/event-log';
 import {
   isCaseFileUnlocked,
+  resolveSequentialUnlockedCaseFileIds,
   toMobileCaseFilePayload,
 } from './domain/case-file-payload';
 import { generateRandomCode } from '../../shared/lib/random-code';
@@ -557,7 +558,11 @@ export class MobileService {
       };
     });
 
-    const caseFiles = await this.resolveMobileCaseFiles(realization);
+    const caseFiles = await this.resolveMobileCaseFiles(
+      realization,
+      taskProgress.filter((progress) => progress.status === TaskStatus.DONE)
+        .length,
+    );
 
     // Jeden odczyt drużyn dla zajętości kolorów i rankingu.
     const realizationTeams = await this.prisma.team.findMany({
@@ -4111,11 +4116,20 @@ export class MobileService {
    * stanowisko. Istniejące zapytanie o postęp tej drużyny (wyżej w tej metodzie)
    * świadomie zostaje nietknięte — poszerzenie go o wszystkie drużyny
    * obciążyłoby każdą realizację, także te bez akt.
+   *
+   * Wyjątek: tryb „poszlaki po kolei” (caseFilesSequentialUnlock) liczy postęp
+   * TEJ drużyny — każde jej zaliczone zadanie otwiera jej kolejną poszlakę,
+   * niezależnie od stanowiska. Liczba przychodzi z wywołującego, który i tak
+   * trzyma postęp drużyny, więc tryb nie dokłada zapytania.
    */
-  private async resolveMobileCaseFiles(realization: {
-    id: string;
-    showCaseFiles?: boolean;
-  }) {
+  private async resolveMobileCaseFiles(
+    realization: {
+      id: string;
+      showCaseFiles?: boolean;
+      caseFilesSequentialUnlock?: boolean;
+    },
+    teamSolvedTaskCount: number,
+  ) {
     if (!realization.showCaseFiles) {
       return [];
     }
@@ -4127,6 +4141,21 @@ export class MobileService {
 
     if (rows.length === 0) {
       return [];
+    }
+
+    if (realization.caseFilesSequentialUnlock) {
+      const unlockedIds = resolveSequentialUnlockedCaseFileIds(
+        rows,
+        teamSolvedTaskCount,
+      );
+      // Stanowisko nie ma tu znaczenia, więc nie wysyłamy go: tablet
+      // pokazałby „po zadaniu nr X”, a poszlakę otworzy dowolne zadanie.
+      return rows.map((row) =>
+        toMobileCaseFilePayload(
+          { ...row, stationId: null },
+          { isUnlocked: unlockedIds.has(row.id) },
+        ),
+      );
     }
 
     const gatedStationIds = [

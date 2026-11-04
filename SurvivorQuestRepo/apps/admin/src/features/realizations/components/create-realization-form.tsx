@@ -166,6 +166,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const [timedStationPointsDecayEnabled, setTimedStationPointsDecayEnabled] = useState(false);
   const [hideTaskList, setHideTaskList] = useState(false);
   const [showCaseFiles, setShowCaseFiles] = useState(false);
+  const [caseFilesSequentialUnlock, setCaseFilesSequentialUnlock] = useState(false);
   const [riskChatEnabled, setRiskChatEnabled] = useState(true);
   const [riskChatTeamsCanPost, setRiskChatTeamsCanPost] = useState(true);
   const [pigsEnabled, setPigsEnabled] = useState(true);
@@ -581,6 +582,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     setTimedStationPointsDecayEnabled(data.realization.timedStationPointsDecayEnabled);
     setHideTaskList(data.realization.hideTaskList);
     setShowCaseFiles(data.realization.showCaseFiles);
+    setCaseFilesSequentialUnlock(data.realization.caseFilesSequentialUnlock);
     setRiskChatEnabled(data.realization.riskChatEnabled);
     setRiskChatTeamsCanPost(data.realization.riskChatTeamsCanPost);
     setPigsEnabled(data.realization.pigsEnabled);
@@ -701,6 +703,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
     timedStationPointsDecayEnabled,
     hideTaskList,
     showCaseFiles,
+    caseFilesSequentialUnlock,
     riskChatEnabled,
     riskChatTeamsCanPost,
     pigsEnabled,
@@ -854,6 +857,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 timedStationPointsDecayEnabled,
                 hideTaskList,
                 showCaseFiles,
+                caseFilesSequentialUnlock,
                 riskChatEnabled,
                 riskChatTeamsCanPost,
                 pigsEnabled,
@@ -1405,6 +1409,23 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     />
                     Pokaż akta — scenariusz kryminalny
                   </label>
+                  {showCaseFiles ? (
+                    <label className="flex items-start gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={caseFilesSequentialUnlock}
+                        onChange={(event) => setCaseFilesSequentialUnlock(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-amber-400"
+                      />
+                      <span>
+                        Poszlaki po kolei
+                        <span className="block text-xs text-zinc-500">
+                          Każde zadanie zaliczone przez drużynę odblokowuje jej następną poszlakę z listy, niezależnie od
+                          stanowiska. Przypisane stanowiska są wtedy ignorowane.
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
                   <p className="text-xs text-zinc-500">
                     Dowody dodasz po zapisaniu realizacji, w zakładce Akta.
                   </p>

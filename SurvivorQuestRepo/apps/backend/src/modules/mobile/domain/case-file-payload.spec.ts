@@ -2,6 +2,7 @@ import { CaseFileKind, CaseFileUnlockMode } from '@prisma/client';
 
 import {
   isCaseFileUnlocked,
+  resolveSequentialUnlockedCaseFileIds,
   toMobileCaseFilePayload,
   type CaseFileRowForPayload,
 } from './case-file-payload';
@@ -134,5 +135,42 @@ describe('isCaseFileUnlocked', () => {
         new Set(['s-1']),
       ),
     ).toBe(false);
+  });
+});
+
+describe('resolveSequentialUnlockedCaseFileIds — poszlaki po kolei', () => {
+  const files = [
+    { id: 'start', unlockMode: CaseFileUnlockMode.FROM_START },
+    { id: 'p1', unlockMode: CaseFileUnlockMode.AFTER_STATION },
+    { id: 'p2', unlockMode: CaseFileUnlockMode.AFTER_STATION },
+    { id: 'p3', unlockMode: CaseFileUnlockMode.AFTER_STATION },
+  ];
+
+  it('bez zaliczonych zadań otwiera tylko dowody od startu', () => {
+    expect([...resolveSequentialUnlockedCaseFileIds(files, 0)]).toEqual(['start']);
+  });
+
+  it('każde zaliczone zadanie otwiera kolejną poszlakę w kolejności listy', () => {
+    // Dowód „od startu” nie zabiera miejsca w kolejce — pierwsze zadanie
+    // otwiera pierwszą poszlakę „po zadaniu”, nie przepada na niego.
+    expect([...resolveSequentialUnlockedCaseFileIds(files, 2)]).toEqual([
+      'start',
+      'p1',
+      'p2',
+    ]);
+  });
+
+  it('więcej zadań niż poszlak otwiera wszystko i nic nie wybucha', () => {
+    expect(resolveSequentialUnlockedCaseFileIds(files, 10).size).toBe(4);
+  });
+
+  it('ignoruje przypisane stanowisko — liczy się tylko kolejność', () => {
+    // Tu właśnie różni się od isCaseFileUnlocked: dowód bez stanowiska (np. po
+    // podmianie scenariusza) też dostaje swoje miejsce w kolejce.
+    const withoutStation = [
+      { id: 'a', unlockMode: CaseFileUnlockMode.AFTER_STATION },
+      { id: 'b', unlockMode: CaseFileUnlockMode.AFTER_STATION },
+    ];
+    expect([...resolveSequentialUnlockedCaseFileIds(withoutStation, 1)]).toEqual(['a']);
   });
 });

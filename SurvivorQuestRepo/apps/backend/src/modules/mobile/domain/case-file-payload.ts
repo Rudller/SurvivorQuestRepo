@@ -74,6 +74,36 @@ export function isCaseFileUnlocked(
   return Boolean(row.stationId && unlockedStationIds.has(row.stationId));
 }
 
+/**
+ * Tryb „poszlaki po kolei” (Realization.caseFilesSequentialUnlock).
+ *
+ * Każde zadanie zaliczone przez drużynę otwiera jej kolejną poszlakę „po
+ * zadaniu” w kolejności listy — niezależnie od tego, które stanowisko
+ * rozwiązała i do którego stanowiska poszlaka jest przypisana. Dzięki temu
+ * każda drużyna poznaje historię w tej samej kolejności.
+ *
+ * Dowody „od startu” są otwarte zawsze i nie zajmują miejsca w kolejce.
+ * `rows` muszą przyjść już posortowane tak, jak widzi je tablet.
+ */
+export function resolveSequentialUnlockedCaseFileIds(
+  rows: readonly Pick<CaseFileRowForPayload, 'id' | 'unlockMode'>[],
+  solvedTaskCount: number,
+): Set<string> {
+  const unlocked = new Set<string>();
+  let remaining = Math.max(0, solvedTaskCount);
+
+  for (const row of rows) {
+    if (row.unlockMode === CaseFileUnlockMode.FROM_START) {
+      unlocked.add(row.id);
+    } else if (remaining > 0) {
+      unlocked.add(row.id);
+      remaining -= 1;
+    }
+  }
+
+  return unlocked;
+}
+
 function parseFields(value: unknown): { label: string; value: string }[] {
   if (!Array.isArray(value)) {
     return [];

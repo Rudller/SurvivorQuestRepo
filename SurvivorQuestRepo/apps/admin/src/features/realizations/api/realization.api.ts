@@ -115,6 +115,7 @@ type RealizationDto = {
   timedStationPointsDecayEnabled?: boolean;
   hideTaskList?: boolean;
   showCaseFiles?: boolean;
+  caseFilesSequentialUnlock?: boolean;
   riskChatEnabled?: boolean;
   riskChatTeamsCanPost?: boolean;
   pigsEnabled?: boolean;
@@ -163,6 +164,7 @@ type CreateRealizationPayload = {
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
   showCaseFiles: boolean;
+  caseFilesSequentialUnlock: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -217,6 +219,7 @@ type UpdateRealizationPayload = {
   timedStationPointsDecayEnabled: boolean;
   hideTaskList: boolean;
   showCaseFiles: boolean;
+  caseFilesSequentialUnlock: boolean;
   riskChatEnabled: boolean;
   riskChatTeamsCanPost: boolean;
   pigsEnabled: boolean;
@@ -504,6 +507,7 @@ function normalizeRealization(dto: RealizationDto): Realization {
         : false,
     hideTaskList: dto.hideTaskList === true,
     showCaseFiles: dto.showCaseFiles === true,
+    caseFilesSequentialUnlock: dto.caseFilesSequentialUnlock === true,
     // Both default to on when absent, matching the backend DTO — a response
     // from an older server must not read as "chat off".
     riskChatEnabled: dto.riskChatEnabled !== false,

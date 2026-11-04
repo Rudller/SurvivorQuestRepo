@@ -43,6 +43,7 @@ const realizationExportDataSchema = z.object({
   // Optional + default: pliki wyeksportowane przed aktami nadal muszą dać
   // się zaimportować i wtedy dostają akta wyłączone.
   showCaseFiles: z.boolean().optional().default(false),
+  caseFilesSequentialUnlock: z.boolean().optional().default(false),
   riskChatEnabled: z.boolean(),
   riskChatTeamsCanPost: z.boolean(),
   pigsEnabled: z.boolean(),
@@ -131,6 +132,7 @@ export function buildRealizationExport(realization: Realization): RealizationExp
       timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
       hideTaskList: realization.hideTaskList,
       showCaseFiles: realization.showCaseFiles,
+      caseFilesSequentialUnlock: realization.caseFilesSequentialUnlock,
       riskChatEnabled: realization.riskChatEnabled,
       riskChatTeamsCanPost: realization.riskChatTeamsCanPost,
       pigsEnabled: realization.pigsEnabled,

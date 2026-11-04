@@ -280,6 +280,9 @@ model Realization {
   timedStationPointsDecayEnabled Boolean @default(false)
   hideTaskList        Boolean            @default(false)
   showCaseFiles       Boolean            @default(false)
+  // Poszlaki „po kolei”: każde zadanie zaliczone przez drużynę odblokowuje jej
+  // kolejną poszlakę z listy, niezależnie od przypisanego stanowiska.
+  caseFilesSequentialUnlock Boolean       @default(false)
   // Ryzykanci chat room. Disabled entirely, or kept as an announcements-only
   // channel by letting the Game Master post while teams can only read.
   riskChatEnabled     Boolean            @default(true)

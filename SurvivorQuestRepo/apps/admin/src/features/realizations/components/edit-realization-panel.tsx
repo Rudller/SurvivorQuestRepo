@@ -249,6 +249,7 @@ export function EditRealizationPanel({
     timedStationPointsDecayEnabled: realization.timedStationPointsDecayEnabled,
     hideTaskList: realization.hideTaskList ?? false,
     showCaseFiles: realization.showCaseFiles ?? false,
+    caseFilesSequentialUnlock: realization.caseFilesSequentialUnlock ?? false,
     riskChatEnabled: realization.riskChatEnabled ?? true,
     riskChatTeamsCanPost: realization.riskChatTeamsCanPost ?? true,
     pigsEnabled: realization.pigsEnabled ?? true,
@@ -971,6 +972,7 @@ export function EditRealizationPanel({
                   editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
                 showCaseFiles: editValues.showCaseFiles,
+                caseFilesSequentialUnlock: editValues.caseFilesSequentialUnlock,
                 riskChatEnabled: editValues.riskChatEnabled,
                 riskChatTeamsCanPost: editValues.riskChatTeamsCanPost,
                 pigsEnabled: editValues.pigsEnabled,
@@ -1792,6 +1794,29 @@ export function EditRealizationPanel({
                     />
                     Pokaż akta — scenariusz kryminalny
                   </label>
+
+                  {editValues.showCaseFiles ? (
+                    <label className="flex items-start gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={editValues.caseFilesSequentialUnlock}
+                        onChange={(event) =>
+                          setEditValues((prev) => ({
+                            ...prev,
+                            caseFilesSequentialUnlock: event.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 h-4 w-4 accent-amber-400"
+                      />
+                      <span>
+                        Poszlaki po kolei
+                        <span className="block text-xs text-zinc-500">
+                          Każde zadanie zaliczone przez drużynę odblokowuje jej następną poszlakę z listy, niezależnie od
+                          stanowiska. Przypisane stanowiska są wtedy ignorowane.
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
 
                 </FormSection>
 
