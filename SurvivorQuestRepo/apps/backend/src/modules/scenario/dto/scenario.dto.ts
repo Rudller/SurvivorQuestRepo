@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import type { RealizationTranslations } from '../../realization/entities/realization.entity';
+import type {
+  RealizationThemePack,
+  RealizationTranslations,
+} from '../../realization/entities/realization.entity';
 import { ensureRealizationTranslations } from '../../realization/dto/realization.dto';
+import { REALIZATION_THEME_PACK_VALUES } from '../../realization/mappers/realization.mapper';
 import type { ScenarioEntity } from '../scenario.service';
 
 export type CreateScenarioDto = {
@@ -11,6 +15,8 @@ export type CreateScenarioDto = {
   translations?: RealizationTranslations;
   stationIds: string[];
   categories: string[];
+  /** undefined = klient nie wysłał pola (starszy admin). */
+  themePack?: RealizationThemePack;
 };
 
 export type UpdateScenarioDto = CreateScenarioDto & {
@@ -81,6 +87,16 @@ function sanitizeScenarioTranslations(value: unknown) {
   return Object.keys(translations).length > 0 ? translations : undefined;
 }
 
+// Nieznana albo brakująca oprawa to undefined, a nie błąd: tworzenie zamienia
+// je na standardową, a edycja zostawia dotychczasową — starszy admin, który
+// pola nie wysyła, nie może po cichu zdjąć scenariuszowi oprawy kryminalnej.
+function sanitizeThemePack(value: unknown): RealizationThemePack | undefined {
+  return typeof value === 'string' &&
+    REALIZATION_THEME_PACK_VALUES.includes(value as RealizationThemePack)
+    ? (value as RealizationThemePack)
+    : undefined;
+}
+
 function sanitizeStationIds(value: unknown) {
   if (!Array.isArray(value)) {
     throw new BadRequestException('Invalid payload');
@@ -113,6 +129,7 @@ export function parseCreateScenarioDto(payload: unknown): CreateScenarioDto {
     translations: sanitizeScenarioTranslations(body.translations),
     stationIds: sanitizeStationIds(body.stationIds),
     categories: sanitizeCategories(body.categories),
+    themePack: sanitizeThemePack(body.themePack),
   };
 }
 
@@ -165,6 +182,7 @@ export function toCreateScenarioEntity(dto: CreateScenarioDto): ScenarioEntity {
     translations: dto.translations,
     stationIds: dto.stationIds,
     categories: dto.categories,
+    themePack: dto.themePack ?? 'standard',
     kind: 'template',
     isTemplate: true,
     isInstance: false,
@@ -186,6 +204,7 @@ export function toUpdatedScenarioEntity(
     translations: dto.translations,
     stationIds: dto.stationIds,
     categories: dto.categories,
+    themePack: dto.themePack ?? current.themePack,
     updatedAt: new Date().toISOString(),
   };
 }

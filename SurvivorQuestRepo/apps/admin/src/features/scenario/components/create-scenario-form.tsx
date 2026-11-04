@@ -5,8 +5,22 @@ import type { Station } from "@/features/games/types/station";
 import { stationTypeOptions } from "@/features/games/types/station";
 import { groupStationsByCategory } from "@/features/games/station-catalog.utils";
 import { useIsDirty } from "@/shared/lib/use-is-dirty";
+import {
+  useCreateCaseFileMutation,
+  useUploadCaseFileAudioMutation,
+  useUploadCaseFileImageMutation,
+} from "@/features/realizations/api/realization.api";
+import type { RealizationThemePack } from "@/features/realizations/types/realization";
+import {
+  releaseDraftPreview,
+  saveDraftCaseFiles,
+  type DraftCaseFile,
+} from "@/features/realizations/components/case-file-draft";
+import { CaseFilesDraftManager } from "@/features/realizations/components/case-files-draft-manager";
 import { useCreateScenarioMutation } from "../api/scenario.api";
+import type { Scenario } from "../types/scenario";
 import { ScenarioCategoriesField } from "./scenario-categories-field";
+import { ScenarioThemePackField } from "./scenario-theme-pack-field";
 import {
   compactScenarioTranslations,
   ScenarioTextsField,
@@ -19,21 +33,48 @@ interface CreateScenarioFormProps {
   stations: Station[];
   isStationsLoading: boolean;
   onClose: () => void;
+  /**
+   * Scenariusz powstał, ale część dowodów nie weszła — strona otwiera wtedy
+   * jego edycję z listą brakujących, żeby nic nie przepadło po cichu.
+   */
+  onCreatedWithMissingCaseFiles: (scenario: Scenario, failedTitles: string[]) => void;
 }
 
 function getTypeLabel(value: string) {
   return stationTypeOptions.find((option) => option.value === value)?.label ?? "Quiz";
 }
 
-export function CreateScenarioForm({ stations, isStationsLoading, onClose }: CreateScenarioFormProps) {
-  const [createScenario, { isLoading: isCreating }] = useCreateScenarioMutation();
+export function CreateScenarioForm({
+  stations,
+  isStationsLoading,
+  onClose,
+  onCreatedWithMissingCaseFiles,
+}: CreateScenarioFormProps) {
+  const [createScenario] = useCreateScenarioMutation();
+  const [createCaseFile] = useCreateCaseFileMutation();
+  const [uploadCaseFileImage] = useUploadCaseFileImageMutation();
+  const [uploadCaseFileAudio] = useUploadCaseFileAudioMutation();
+  const [isCreating, setIsCreating] = useState(false);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [texts, setTexts] = useState<ScenarioTexts>(emptyTexts);
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [themePack, setThemePack] = useState<RealizationThemePack>("standard");
+  const [caseFileDrafts, setCaseFileDrafts] = useState<DraftCaseFile[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
+  const isCrime = themePack === "crime";
+
+  // Stanowiska w kolejności zaznaczenia — taką kolejność dostanie scenariusz,
+  // więc numery w wyborze „po stanowisku” zgadzają się z późniejszymi.
+  const selectedStations = useMemo(() => {
+    const byId = new Map(stations.map((station) => [station.id, station]));
+    return selectedStationIds
+      .map((id) => byId.get(id))
+      .filter((station): station is Station => Boolean(station))
+      .map((station) => ({ id: station.id, name: station.name }));
+  }, [selectedStationIds, stations]);
 
   function toggleSelection(stationId: string) {
     setSelectedStationIds((current) =>
@@ -57,7 +98,15 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
     );
   }
 
-  const isDirty = useIsDirty({ name, description, texts, selectedStationIds, categories });
+  const isDirty = useIsDirty({
+    name,
+    description,
+    texts,
+    selectedStationIds,
+    categories,
+    themePack,
+    caseFileDrafts,
+  });
 
   return (
     <>
@@ -89,9 +138,27 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
               return;
             }
 
+            // Akta zapisują się tylko przy oprawie kryminalnej — tylko tam są widoczne.
+            const draftsToSave = isCrime ? caseFileDrafts : [];
+            const orphaned = draftsToSave.filter(
+              (draft) =>
+                draft.payload.unlockMode === "after-station" &&
+                !selectedStationIds.includes(draft.payload.stationId ?? ""),
+            );
+            if (orphaned.length > 0) {
+              setFormError(
+                `Dowody przypisane do odznaczonych stanowisk: ${orphaned
+                  .map((draft) => `„${draft.payload.title}”`)
+                  .join(", ")}. Zaznacz te stanowiska albo zmień odblokowanie dowodów.`,
+              );
+              return;
+            }
+
+            setIsCreating(true);
+            let created: Scenario;
             try {
               setFormError(null);
-              await createScenario({
+              created = await createScenario({
                 name: trimmedName,
                 description: trimmedDescription,
                 introText: texts.introText.trim(),
@@ -99,17 +166,28 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
                 translations: compactScenarioTranslations(texts.translations),
                 stationIds: selectedStationIds,
                 categories,
+                themePack,
               }).unwrap();
-              setName("");
-              setDescription("");
-              setTexts(emptyTexts);
-              setSelectedStationIds([]);
-              setCategories([]);
-              setFormError(null);
-              onClose();
             } catch {
+              setIsCreating(false);
               setFormError("Nie udało się utworzyć scenariusza.");
+              return;
             }
+
+            const owner = { kind: "scenario" as const, id: created.id };
+            const { failedTitles } = await saveDraftCaseFiles(owner, draftsToSave, {
+              uploadImage: (target, file) => uploadCaseFileImage({ owner: target, file }).unwrap(),
+              uploadAudio: (target, file) => uploadCaseFileAudio({ owner: target, file }).unwrap(),
+              createCaseFile: (target, payload) => createCaseFile({ owner: target, payload }).unwrap(),
+            });
+            caseFileDrafts.forEach(releaseDraftPreview);
+            setIsCreating(false);
+
+            if (failedTitles.length > 0) {
+              onCreatedWithMissingCaseFiles(created, failedTitles);
+              return;
+            }
+            onClose();
           }}
         >
           <div className="flex items-center justify-between">
@@ -147,6 +225,8 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
 
             <ScenarioCategoriesField categories={categories} onChange={setCategories} />
 
+            <ScenarioThemePackField value={themePack} onChange={setThemePack} />
+
             <label className="space-y-1.5">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Opis</span>
               <textarea
@@ -159,10 +239,6 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
             </label>
 
             <ScenarioTextsField value={texts} onChange={setTexts} />
-
-            <p className="text-xs text-zinc-500">
-              Akta dodasz po utworzeniu scenariusza — w jego edycji, sekcja „Akta”.
-            </p>
 
             <div className="space-y-2">
               <span className="text-xs uppercase tracking-wider text-zinc-400">Stanowiska</span>
@@ -226,6 +302,18 @@ export function CreateScenarioForm({ stations, isStationsLoading, onClose }: Cre
             </div>
           </div>
         </form>
+
+        {/* Poza <form>: Enter w polu dowodu nie może wysłać całego scenariusza. */}
+        {isCrime ? (
+          <section className="mt-5 space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+            <h3 className="text-xs uppercase tracking-wider text-zinc-400">Akta</h3>
+            <CaseFilesDraftManager drafts={caseFileDrafts} onChange={setCaseFileDrafts} stations={selectedStations} />
+          </section>
+        ) : caseFileDrafts.length > 0 ? (
+          <p className="mt-5 rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-xs text-amber-200">
+            Masz {caseFileDrafts.length} dowodów w aktach — zapiszą się tylko przy oprawie kryminalnej.
+          </p>
+        ) : null}
       </aside>
     </>
   );

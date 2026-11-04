@@ -100,3 +100,41 @@ describe('scenario dto — translations', () => {
     expect(updated.translations).toBeUndefined();
   });
 });
+
+describe('scenario dto — themePack (oprawa)', () => {
+  it('przyjmuje znaną oprawę i przenosi ją do encji', () => {
+    const created = toCreateScenarioEntity(
+      parseCreateScenarioDto({ ...basePayload, themePack: 'crime' }),
+    );
+    expect(created.themePack).toBe('crime');
+  });
+
+  it('bez pola albo z nieznaną wartością tworzy scenariusz standardowy', () => {
+    expect(toCreateScenarioEntity(parseCreateScenarioDto(basePayload)).themePack).toBe(
+      'standard',
+    );
+    expect(
+      toCreateScenarioEntity(
+        parseCreateScenarioDto({ ...basePayload, themePack: 'disco' }),
+      ).themePack,
+    ).toBe('standard');
+  });
+
+  it('edycja bez pola zostawia dotychczasową oprawę — starszy admin jej nie wysyła', () => {
+    const created = toCreateScenarioEntity(
+      parseCreateScenarioDto({ ...basePayload, themePack: 'crime' }),
+    );
+
+    const updatedWithoutField = toUpdatedScenarioEntity(
+      created,
+      parseUpdateScenarioDto({ ...basePayload, id: created.id }),
+    );
+    expect(updatedWithoutField.themePack).toBe('crime');
+
+    const updatedToChristmas = toUpdatedScenarioEntity(
+      created,
+      parseUpdateScenarioDto({ ...basePayload, id: created.id, themePack: 'christmas' }),
+    );
+    expect(updatedToChristmas.themePack).toBe('christmas');
+  });
+});

@@ -211,6 +211,10 @@ model Scenario {
   translations     Json?
   /// Tagi scenariusza do filtrowania listy — niezależne od kategorii stanowisk.
   categories       String[]         @default([])
+  /// Oprawa, którą realizacja dostaje przy tworzeniu z tego scenariusza
+  /// (w realizacji można ją potem zmienić). Akta scenariusza edytuje się przy
+  /// oprawie kryminalnej.
+  themePack        RealizationThemePack @default(STANDARD)
   sourceTemplateId String?
   realizationId    String?
   createdAt        DateTime         @default(now())

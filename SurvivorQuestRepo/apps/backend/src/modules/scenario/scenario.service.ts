@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import type { RealizationTranslations } from '../realization/entities/realization.entity';
+import type {
+  Prisma,
+  RealizationThemePack as PrismaRealizationThemePack,
+} from '@prisma/client';
+import type {
+  RealizationThemePack,
+  RealizationTranslations,
+} from '../realization/entities/realization.entity';
 import {
+  fromPrismaRealizationThemePack,
   parseRealizationTranslationsData,
+  toPrismaRealizationThemePack,
   toPrismaRealizationTranslationsData,
 } from '../realization/mappers/realization.mapper';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,6 +28,8 @@ export type ScenarioEntity = {
   translations?: RealizationTranslations;
   stationIds: string[];
   categories: string[];
+  /** Oprawa przepisywana do realizacji przy jej tworzeniu. */
+  themePack: RealizationThemePack;
   sourceTemplateId?: string;
   realizationId?: string;
   kind: ScenarioKind;
@@ -48,6 +58,7 @@ function mapScenario(input: {
   gameRules: string | null;
   translations: Prisma.JsonValue | null;
   categories: string[];
+  themePack: PrismaRealizationThemePack;
   sourceTemplateId: string | null;
   realizationId: string | null;
   createdAt: Date;
@@ -65,6 +76,7 @@ function mapScenario(input: {
     translations: parseRealizationTranslationsData(input.translations),
     stationIds: input.scenarioStations.map((item) => item.stationId),
     categories: input.categories,
+    themePack: fromPrismaRealizationThemePack(input.themePack),
     sourceTemplateId: input.sourceTemplateId || undefined,
     realizationId: input.realizationId || undefined,
     kind,
@@ -140,6 +152,7 @@ export class ScenarioService {
           scenario.translations,
         ),
         categories: scenario.categories,
+        themePack: toPrismaRealizationThemePack(scenario.themePack),
         sourceTemplateId: scenario.sourceTemplateId,
         realizationId: scenario.realizationId,
         scenarioStations: {
@@ -172,6 +185,7 @@ export class ScenarioService {
             updatedScenario.translations,
           ),
           categories: updatedScenario.categories,
+          themePack: toPrismaRealizationThemePack(updatedScenario.themePack),
           sourceTemplateId: updatedScenario.sourceTemplateId,
         },
       }),
@@ -227,6 +241,7 @@ export class ScenarioService {
       translations: source.translations,
       stationIds: clonedStations.map((station) => station.id),
       categories: source.categories,
+      themePack: source.themePack,
       sourceTemplateId: source.sourceTemplateId ?? source.id,
       realizationId: options?.realizationId,
       kind: 'realization-instance',

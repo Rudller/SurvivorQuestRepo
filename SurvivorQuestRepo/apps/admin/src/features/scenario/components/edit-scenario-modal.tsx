@@ -9,14 +9,22 @@ import { useUpdateScenarioMutation, useDeleteScenarioMutation } from "../api/sce
 import { ScenarioCategoriesField } from "./scenario-categories-field";
 import { CaseFilesManager } from "@/features/realizations/components/case-files-manager";
 import { compactScenarioTranslations, ScenarioTextsField } from "./scenario-texts-field";
+import { ScenarioThemePackField } from "./scenario-theme-pack-field";
 
 interface EditScenarioModalProps {
   scenario: Scenario;
   stations: Station[];
   onClose: () => void;
+  /** Dowody, które nie weszły przy tworzeniu scenariusza — do dodania ponownie. */
+  missingCaseFileTitles?: string[];
 }
 
-export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioModalProps) {
+export function EditScenarioModal({
+  scenario,
+  stations,
+  onClose,
+  missingCaseFileTitles = [],
+}: EditScenarioModalProps) {
   const [updateScenario, { isLoading: isUpdating }] = useUpdateScenarioMutation();
   const [deleteScenario, { isLoading: isDeleting }] = useDeleteScenarioMutation();
 
@@ -28,6 +36,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
     translations: scenario.translations ?? {},
     stationIds: scenario.stationIds,
     categories: scenario.categories ?? [],
+    themePack: scenario.themePack ?? "standard",
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
@@ -102,6 +111,14 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
 
           {editError && <p className="text-sm text-red-300">{editError}</p>}
 
+          {missingCaseFileTitles.length > 0 ? (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 px-3 py-2 text-sm text-amber-200">
+              Scenariusz został utworzony, ale nie udało się zapisać dowodów:{" "}
+              {missingCaseFileTitles.map((title) => `„${title}”`).join(", ")}. Dodaj je ponownie w sekcji „Akta”
+              poniżej.
+            </div>
+          ) : null}
+
           <form
             id="edit-scenario-form"
             onSubmit={async (event) => {
@@ -130,6 +147,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                   translations: compactScenarioTranslations(editValues.translations),
                   stationIds: editValues.stationIds,
                   categories: editValues.categories,
+                  themePack: editValues.themePack,
                 }).unwrap();
                 onClose();
               } catch {
@@ -150,6 +168,11 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
             <ScenarioCategoriesField
               categories={editValues.categories}
               onChange={(categories) => setEditValues((prev) => ({ ...prev, categories }))}
+            />
+
+            <ScenarioThemePackField
+              value={editValues.themePack}
+              onChange={(themePack) => setEditValues((prev) => ({ ...prev, themePack }))}
             />
 
             <label className="space-y-1.5">
@@ -211,6 +234,7 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
             </div>
           </form>
 
+          {editValues.themePack === "crime" ? (
           <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
             <h3 className="text-xs uppercase tracking-wider text-zinc-400">Akta</h3>
             {/* Stanowiska z ZAPISANEGO scenariusza — backend sprawdza przypisanie
@@ -223,6 +247,12 @@ export function EditScenarioModal({ scenario, stations, onClose }: EditScenarioM
                 .map((station) => ({ id: station.id, name: station.name }))}
             />
           </section>
+          ) : (
+            <p className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-500">
+              Akta są dostępne przy oprawie kryminalnej. Zmiana oprawy niczego w nich nie kasuje — wrócą po
+              ponownym wybraniu kryminalnej.
+            </p>
+          )}
 
           <section className="rounded-lg border border-red-900/70 bg-red-950/20 p-3">
             <p className="text-xs uppercase tracking-wider text-red-300">Usuń scenariusz</p>

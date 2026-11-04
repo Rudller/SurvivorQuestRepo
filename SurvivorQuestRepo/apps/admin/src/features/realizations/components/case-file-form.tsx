@@ -17,6 +17,7 @@ import {
   type CaseFilePayload,
   type CaseFileUnlockMode,
 } from "@/features/realizations/api/realization.api";
+import type { DraftCaseFile } from "./case-file-draft";
 
 /**
  * Formularz dowodu — wspólny dla dodawania i edycji.
@@ -41,12 +42,20 @@ function formatMegabytes(bytes: number) {
 }
 
 type CaseFileFormProps = {
-  owner: CaseFileOwner;
   stations: { id: string; name: string }[];
-  initial?: CaseFileEntry;
   onDone: () => void;
   onCancel?: () => void;
-};
+} & (
+  | { owner: CaseFileOwner; initial?: CaseFileEntry; draft?: undefined }
+  | {
+      // Tryb roboczy (nowy scenariusz, którego jeszcze nie ma w bazie): nic nie
+      // idzie na serwer, plik zostaje w przeglądarce, a gotowy dowód trafia do
+      // listy w formularzu scenariusza przez onSave.
+      owner?: undefined;
+      initial?: undefined;
+      draft: { initial?: DraftCaseFile; onSave: (draft: DraftCaseFile) => void };
+    }
+);
 
 const KIND_OPTIONS: { value: CaseFileKind; label: string }[] = [
   { value: "text", label: "Notatka" },
@@ -57,13 +66,18 @@ const KIND_OPTIONS: { value: CaseFileKind; label: string }[] = [
 
 const EMPTY_FIELD: CaseFileField = { label: "", value: "" };
 
-export function CaseFileForm({
-  owner,
-  stations,
-  initial,
-  onDone,
-  onCancel,
-}: CaseFileFormProps) {
+export function CaseFileForm(props: CaseFileFormProps) {
+  const { owner, stations, onDone, onCancel, draft } = props;
+  // W trybie roboczym formularz wypełnia się z dowodu roboczego — ma ten sam
+  // kształt pól co zapisany dowód.
+  const initial: Partial<CaseFileEntry> | undefined = draft
+    ? draft.initial && {
+        ...draft.initial.payload,
+        stationId: draft.initial.payload.stationId ?? null,
+        objectKey: draft.initial.payload.objectKey ?? null,
+      }
+    : props.initial;
+  const [localFile, setLocalFile] = useState<File | null>(draft?.initial?.file ?? null);
   const [kind, setKind] = useState<CaseFileKind>(initial?.kind ?? "text");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
@@ -112,6 +126,17 @@ export function CaseFileForm({
       } finally {
         setIsCompressing(false);
       }
+    }
+
+    if (!owner) {
+      // Tryb roboczy: plik poczeka w przeglądarce do utworzenia scenariusza.
+      if (url.startsWith("blob:") && url !== draft?.initial?.payload.url) {
+        URL.revokeObjectURL(url);
+      }
+      setLocalFile(fileToUpload);
+      setUrl(URL.createObjectURL(fileToUpload));
+      setObjectKey(null);
+      return;
     }
 
     try {
@@ -189,9 +214,23 @@ export function CaseFileForm({
       return;
     }
 
+    if (draft) {
+      draft.onSave({
+        localId: draft.initial?.localId ?? crypto.randomUUID(),
+        payload,
+        file: kind === "image" || kind === "audio" ? localFile : null,
+      });
+      onDone();
+      return;
+    }
+
+    if (!owner) {
+      return;
+    }
+
     try {
-      if (initial) {
-        await updateCaseFile({ owner, caseFileId: initial.id, payload }).unwrap();
+      if (props.initial) {
+        await updateCaseFile({ owner, caseFileId: props.initial.id, payload }).unwrap();
       } else {
         await createCaseFile({ owner, payload }).unwrap();
       }

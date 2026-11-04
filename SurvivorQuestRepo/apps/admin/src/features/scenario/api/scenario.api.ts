@@ -1,6 +1,6 @@
 import { baseApi } from "@/shared/api/base-api";
 import { buildApiPath } from "@/shared/api/api-path";
-import type { RealizationTranslations } from "@/features/realizations/types/realization";
+import type { RealizationThemePack, RealizationTranslations } from "@/features/realizations/types/realization";
 import type { Scenario } from "../types/scenario";
 
 type CreateScenarioPayload = {
@@ -11,6 +11,7 @@ type CreateScenarioPayload = {
   translations: RealizationTranslations;
   stationIds: string[];
   categories: string[];
+  themePack: RealizationThemePack;
 };
 
 type UpdateScenarioPayload = {
@@ -22,6 +23,7 @@ type UpdateScenarioPayload = {
   translations: RealizationTranslations;
   stationIds: string[];
   categories: string[];
+  themePack: RealizationThemePack;
 };
 
 type DeleteScenarioPayload = {

@@ -1618,6 +1618,19 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                         }
                         delete scenarioTexts[baseTextLanguage];
                         setTranslations(scenarioTexts);
+
+                        // Oprawa przychodzi ze scenariusza jako punkt wyjścia —
+                        // dalej da się ją zmienić ręcznie. Gdy scenariusz ma
+                        // własny wstęp, ustawiamy samą oprawę: handleThemePackChange
+                        // podmieniłby wstęp na domyślny briefing oprawy.
+                        if (nextScenario.themePack) {
+                          if (baseTexts?.introText?.trim()) {
+                            setSelectedThemePack(nextScenario.themePack);
+                          } else {
+                            handleThemePackChange(nextScenario.themePack);
+                          }
+                          setShowCaseFiles(nextScenario.themePack === "crime");
+                        }
                       }
                     }}
                     className={`w-full rounded-lg border bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none ${resolveFieldBorderClassName(isScenarioInvalid)}`}

@@ -16,6 +16,7 @@ export default function ScenarioPage() {
   const router = useRouter();
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const [missingCaseFileTitles, setMissingCaseFileTitles] = useState<string[]>([]);
 
   const {
     data: meData,
@@ -108,13 +109,22 @@ export default function ScenarioPage() {
               stations={stations}
               isStationsLoading={isStationsLoading}
               onClose={() => setIsCreatePanelOpen(false)}
+              onCreatedWithMissingCaseFiles={(created, failedTitles) => {
+                setIsCreatePanelOpen(false);
+                setMissingCaseFileTitles(failedTitles);
+                setEditingScenario(created);
+              }}
             />
           )}
           {editingScenario && (
             <EditScenarioModal
               scenario={editingScenario}
               stations={stations}
-              onClose={() => setEditingScenario(null)}
+              missingCaseFileTitles={missingCaseFileTitles}
+              onClose={() => {
+                setEditingScenario(null);
+                setMissingCaseFileTitles([]);
+              }}
             />
           )}
         </>

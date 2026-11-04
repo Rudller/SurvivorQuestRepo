@@ -1,4 +1,4 @@
-import type { RealizationTranslations } from "@/features/realizations/types/realization";
+import type { RealizationThemePack, RealizationTranslations } from "@/features/realizations/types/realization";
 
 export type Scenario = {
   id: string;
@@ -10,6 +10,8 @@ export type Scenario = {
   translations?: RealizationTranslations;
   stationIds: string[];
   categories: string[];
+  /** Oprawa przepisywana do realizacji; brak = serwer sprzed tej zmiany (standardowa). */
+  themePack?: RealizationThemePack;
   sourceTemplateId?: string;
   createdAt: string;
   updatedAt: string;
