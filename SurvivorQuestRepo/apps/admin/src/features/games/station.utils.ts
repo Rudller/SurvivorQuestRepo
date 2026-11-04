@@ -379,6 +379,19 @@ export function isPuzzleSecretQuestionStationType(stationType: StationType) {
   );
 }
 
+// Wyjątek od kopiowania hasła: anagram układa się z dowolnego słowa, a wisielec
+// zgaduje dowolne słowo/zdanie, więc przetłumaczone hasło to nadal poprawna
+// zagadka. Wordle (stała długość), szyfr (szyfrogram), mastermind, simon,
+// rebus i boggle dalej dostają hasło bazowe.
+export function isAutoTranslatablePuzzleSecretStationType(stationType: StationType) {
+  return stationType === "anagram" || stationType === "hangman";
+}
+
+// Czy auto-tłumacz ma skopiować hasło bez tłumaczenia.
+export function shouldCopyPuzzleSecretOnAutoTranslate(stationType: StationType) {
+  return isPuzzleSecretQuestionStationType(stationType) && !isAutoTranslatablePuzzleSecretStationType(stationType);
+}
+
 export function supportsChallengeDifficulty(stationType: StationType) {
   return stationType === "strong-password" || stationType === "mastermind" || stationType === "mini-sudoku";
 }

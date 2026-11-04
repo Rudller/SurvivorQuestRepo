@@ -39,7 +39,8 @@ import {
   isCompletionCodeRequired,
   isQuizStationType,
   isWordPuzzleStationType,
-  isPuzzleSecretQuestionStationType,
+  isAutoTranslatablePuzzleSecretStationType,
+  shouldCopyPuzzleSecretOnAutoTranslate,
   isImageSupportedStationType,
   getOpenAnswerFieldCopy,
   isOpenQuizStationType,
@@ -408,11 +409,11 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
     }
 
     const puzzleSecretToCopy =
-      hasQuiz && !questionFilled && isPuzzleSecretQuestionStationType(editValues.type) && editValues.quizQuestion.trim()
+      hasQuiz && !questionFilled && shouldCopyPuzzleSecretOnAutoTranslate(editValues.type) && editValues.quizQuestion.trim()
         ? editValues.quizQuestion.trim()
         : undefined;
 
-    if (hasQuiz && !questionFilled && !isPuzzleSecretQuestionStationType(editValues.type) && editValues.quizQuestion.trim()) {
+    if (hasQuiz && !questionFilled && !shouldCopyPuzzleSecretOnAutoTranslate(editValues.type) && editValues.quizQuestion.trim()) {
       queue({ kind: "question" }, editValues.quizQuestion);
 
       if (editValues.type === "quiz" || editValues.type === "audio-quiz" || editValues.type === "ar-evidence") {
@@ -537,7 +538,11 @@ export function EditStationModal({ station, onClose, variant = "regular" }: Edit
 
     if (Object.keys(patch).length > 0) {
       updateActiveTranslation(patch);
-      setAutoTranslateMessage("Przetłumaczono stanowisko.");
+      setAutoTranslateMessage(
+        patch.quiz && isAutoTranslatablePuzzleSecretStationType(editValues.type)
+          ? "Przetłumaczono stanowisko razem z hasłem — sprawdź, czy hasło pasuje do opisu i podpowiedzi."
+          : "Przetłumaczono stanowisko.",
+      );
     } else {
       setAutoTranslateMessage("Nie udało się uzupełnić żadnego pola — spróbuj ponownie.");
     }
