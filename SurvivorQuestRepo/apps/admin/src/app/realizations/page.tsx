@@ -29,7 +29,7 @@ export default function RealizationsPage() {
 
   const [sortField, setSortField] = useState<RealizationSortField>("scheduledAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(true);
   const [editingRealization, setEditingRealization] = useState<Realization | null>(null);
   const [qrRealization, setQrRealization] = useState<Realization | null>(null);
 

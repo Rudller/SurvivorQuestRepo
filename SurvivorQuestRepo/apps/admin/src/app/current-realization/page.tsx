@@ -121,6 +121,12 @@ export default function CurrentRealizationPage() {
     realizationOptions.some((realization) => realization.id === selectedRealizationId)
       ? selectedRealizationId
       : "current";
+  // Zakończone realizacje nie trafiają do listy wyboru — po kilkudziesięciu
+  // robiła się za długa. Wyjątek: ta, która jest właśnie wybrana, żeby po
+  // kliknięciu „Zakończ” widok nie przeskakiwał sam na „Aktualna (auto)”.
+  const selectableRealizationOptions = realizationOptions.filter(
+    (realization) => realization.status !== "done" || realization.id === effectiveSelectedRealizationId,
+  );
 
   const {
     data: overview,
@@ -372,7 +378,7 @@ export default function CurrentRealizationPage() {
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80 disabled:opacity-60"
             >
               <option value={AUTO_CURRENT_REALIZATION_VALUE}>Aktualna (auto)</option>
-              {realizationOptions.map((realization) => (
+              {selectableRealizationOptions.map((realization) => (
                 <option key={realization.id} value={realization.id}>
                   {realization.companyName} • {new Date(realization.scheduledAt).toLocaleString("pl-PL")} •{" "}
                   {realization.status}
