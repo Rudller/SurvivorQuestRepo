@@ -90,13 +90,15 @@ export function RiskQuizBottomPanel({
   const labelFontSize = adaptiveLayout.fs(isTabletLayout ? 11 : 10, 10, 12);
   const valueFontSize = adaptiveLayout.fs(isTabletLayout ? 24 : 20, 18, 26);
   const fireIconSize = adaptiveLayout.s(isTabletLayout ? 26 : 20, 18, 30);
-  const footerFontSize = adaptiveLayout.fs(isTabletLayout ? 12 : 11, 10, 13);
-  const qrButtonSize = adaptiveLayout.hit(isTabletLayout ? 62 : 56);
-  const qrIconSize = adaptiveLayout.s(isTabletLayout ? 34 : 30, 28, 38);
+  // Podpis siedzi w środku przycisku, więc koło jest dużo większe niż sama
+  // ikona — to główna akcja ekranu i ma się dać trafić bez celowania.
+  const buttonLabelFontSize = adaptiveLayout.fs(isTabletLayout ? 14 : 12, 11, 16);
+  const qrButtonSize = adaptiveLayout.hit(isTabletLayout ? 108 : 88);
+  const qrIconSize = adaptiveLayout.s(isTabletLayout ? 40 : 34, 30, 46);
   const qrButtonMarginHorizontal = adaptiveLayout.s(isTabletLayout ? 14 : 12, 10, 16);
-  const footerMarginTop = adaptiveLayout.s(isTabletLayout ? 9 : 8, 6, 10);
+  const buttonLabelMarginTop = adaptiveLayout.s(isTabletLayout ? 4 : 3, 2, 6);
   const streakNoteFontSize = adaptiveLayout.fs(isTabletLayout ? 10 : 9, 8, 11);
-  const centerColumnHeight = qrButtonSize + footerMarginTop + footerFontSize * 1.25;
+  const centerColumnHeight = qrButtonSize;
   const sideLabelTop = Math.max(0, centerColumnHeight / 2 - valueFontSize * 1.25);
   // Bez osobnego napisu na czas otwierania skanera — dłuższy tekst zmieniał
   // wysokość panelu. Stan sygnalizuje przygaszony przycisk.
@@ -105,6 +107,7 @@ export function RiskQuizBottomPanel({
     : isCompleted
       ? text.realizationFinished
       : text.scanCard;
+  const buttonLabelColor = showsCloseIcon ? "#ffffff" : isCompleted ? EXPEDITION_THEME.textSubtle : "#0f172a";
   const hasStreak = streak > 0;
 
   return (
@@ -160,11 +163,24 @@ export function RiskQuizBottomPanel({
               }}
             >
               {showsCloseIcon ? <CloseCardIcon size={qrIconSize} /> : <QrScannerIcon size={qrIconSize} color="#0f172a" />}
+              <Text
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                style={{
+                  marginTop: buttonLabelMarginTop,
+                  maxWidth: qrButtonSize * 0.78,
+                  textAlign: "center",
+                  fontWeight: "700",
+                  color: buttonLabelColor,
+                  fontSize: buttonLabelFontSize,
+                  lineHeight: Math.round(buttonLabelFontSize * 1.15),
+                }}
+              >
+                {footerLabel}
+              </Text>
             </Animated.View>
           </Pressable>
-          <Text className="text-center" style={{ marginTop: footerMarginTop, color: EXPEDITION_THEME.textSubtle, fontSize: footerFontSize }}>
-            {footerLabel}
-          </Text>
         </View>
 
         <View style={{ flex: 1, height: centerColumnHeight, alignItems: "center", justifyContent: "center", position: "relative" }}>
@@ -187,8 +203,8 @@ export function RiskQuizBottomPanel({
               x{multiplier}
             </Text>
           )}
-          {/* Pinned to the column's bottom edge so it sits level with the
-              "scan a card" caption without pushing the value off-centre. */}
+          {/* Pinned to the column's bottom edge so it doesn't push the value
+              off-centre. */}
           <Text
             className="text-center"
             numberOfLines={2}

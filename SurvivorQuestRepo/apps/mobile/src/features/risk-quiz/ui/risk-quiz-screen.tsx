@@ -51,7 +51,6 @@ import { HiddenResetOnHold } from "../../../shared/ui/hidden-reset-on-hold";
 import { LiveRiskQuizBottomPanel } from "../components/risk-quiz-bottom-panel";
 import { PauseIcon, PigIcon, PlayIcon } from "../components/risk-quiz-icons";
 import { RiskQuizRemainingCards } from "../components/risk-quiz-remaining-cards";
-import { RiskQuizHowToPlay } from "../components/risk-quiz-how-to-play";
 import { RiskQuizEventFeed } from "../components/risk-quiz-event-feed";
 import {
   RiskQuizPigBanner,
@@ -1778,7 +1777,6 @@ export function RiskQuizScreen({
                 }}
               >
                 <RiskQuizRemainingCards remainingCards={deckStatus?.remainingCards ?? null} />
-                <RiskQuizHowToPlay />
               </Animated.View>
             ) : null}
           {keyboardHeight === 0 ? (
