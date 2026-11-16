@@ -80,7 +80,10 @@ jobs:
           username: ${{ secrets.PROD_SSH_USER }}
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           envs: DOMAIN,LEGACY_DOMAIN,LETSENCRYPT_EMAIL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,JOIN_CODE_PEPPER,STATION_QR_SECRET,JOIN_CODE_LEGACY_PEPPER,MOBILE_QR_ENTRY_BASE_URL,R2_ENDPOINT,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_BUCKET,R2_PUBLIC_BASE_URL,PGADMIN_DEFAULT_EMAIL,PGADMIN_DEFAULT_PASSWORD
-          script_stop: true
+          # Bez script_stop: drone-ssh dopisuje wtedy „exit przy błędzie” po KAŻDEJ
+          # linii, także w środku funkcji, więc pierwszy nieudany curl kończył
+          # deploy i pętla ponowień smoke testu nigdy nie ruszała. `set -eu`
+          # przerywa skrypt tak samo, ale poprawnie pomija warunki pętli/ifów.
           script: |
             set -eu
 
@@ -127,7 +130,7 @@ jobs:
               url="$1"
 
               if command -v curl >/dev/null 2>&1; then
-                curl --fail --silent --show-error "${url}" >/dev/null
+                curl --fail --silent --show-error --max-time 15 "${url}" >/dev/null
                 return $?
               fi
 
@@ -147,14 +150,17 @@ jobs:
                 check_route "https://${LEGACY_DOMAIN}/api/mobile/bootstrap"
             }
 
+            # ~3 min: kontenery muszą wstać, a przy nowej domenie Let's Encrypt
+            # wystawia certyfikat (do tego czasu Traefik daje samopodpisany).
             attempt=1
-            max_attempts=10
+            max_attempts=36
             until check_http_surface; do
               if [ "${attempt}" -ge "${max_attempts}" ]; then
                 echo "Smoke test failed: expected /, /admin/login and /api/mobile/bootstrap (also on LEGACY_DOMAIN) to return success." >&2
                 exit 1
               fi
 
+              echo "Smoke test: próba ${attempt}/${max_attempts} nieudana, ponawiam za 5 s..." >&2
               attempt=$((attempt + 1))
-              sleep 3
+              sleep 5
             done
