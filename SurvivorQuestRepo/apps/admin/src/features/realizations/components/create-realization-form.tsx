@@ -293,6 +293,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
   const hasInvalidScenarioStations = hasInvalidRealizationStationDrafts(scenarioStations);
   const isCompanyNameInvalid = submitAttempted && !companyName.trim();
   const isRiskQuizType = selectedType === "risk-quiz";
+  // Akta to mechanika oprawy kryminalnej; Ryzykanci mają oprawę wymuszoną na
+  // standardową, więc ten warunek wyklucza ich automatycznie.
+  const caseFilesAvailable = !isRiskQuizType && selectedThemePack === "crime";
+  const caseFilesActive = caseFilesAvailable && showCaseFiles;
   const isScenarioInvalid = submitAttempted && !isRiskQuizType && !selectedScenarioId;
   const isContactPersonInvalid = submitAttempted && !contactPerson.trim();
   const isContactChannelInvalid = submitAttempted && !contactPhone.trim() && !contactEmail.trim();
@@ -856,7 +860,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 teamStationNumberingEnabled,
                 timedStationPointsDecayEnabled,
                 hideTaskList,
-                showCaseFiles,
+                // Ukryta opcja nie może działać po cichu.
+                showCaseFiles: caseFilesActive,
                 caseFilesSequentialUnlock,
                 riskChatEnabled,
                 riskChatTeamsCanPost,
@@ -983,10 +988,11 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
           )}
           {formError && <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{formError}</p>}
 
-          <div className="sq-thin-scrollbar min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <div className="sq-thin-scrollbar @container min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             {activeTab === "basic" && (
               <>
                 <FormSection title="Klient">
+                  <div className="grid gap-3 @xl:grid-cols-3">
                   <label className="block space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Nazwa firmy</span>
                     <input
@@ -1034,10 +1040,13 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </p>
                   </label>
 
+                  </div>
+
+
                   <label className="block space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">Język realizacji</span>
                     <div
-                      className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
+                      className={`flex flex-wrap gap-x-5 gap-y-2 rounded-lg border bg-zinc-950 px-3 py-2 ${
                         isLanguageSelectionInvalid ? "border-red-500/70" : "border-zinc-700"
                       }`}
                     >
@@ -1071,9 +1080,9 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     ) : null}
                   </label>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 @md:grid-cols-2 @xl:grid-cols-3">
                     {selectedLanguagesSet.has("other") && (
-                      <label className="space-y-1.5 sm:col-span-2">
+                      <label className="space-y-1.5 @md:col-span-2 @xl:col-span-3">
                         <span className="text-xs uppercase tracking-wider text-zinc-400">Wpisz język</span>
                         <input
                           value={customLanguage}
@@ -1085,7 +1094,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       </label>
                     )}
 
-                    <label className="space-y-1.5 sm:col-span-2">
+                    <label className="space-y-1.5 @md:col-span-2 @xl:col-span-3">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Lokalizacja realizacji</span>
                       <input
                         value={location}
@@ -1117,7 +1126,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       />
                     </label>
 
-                    <label className="space-y-1.5 sm:col-span-2">
+                    <label className="space-y-1.5 @md:col-span-2 @xl:col-span-1">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">E-mail kontaktowy</span>
                       <input
                         type="email"
@@ -1182,6 +1191,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   </div>
                 </FormSection>
 
+                <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Instruktorzy">
                   <div className="flex gap-2">
                     <input
@@ -1231,15 +1241,17 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                       value={notes}
                       onChange={(event) => setNotes(event.target.value)}
                       placeholder="Notatki robocze widoczne tylko w panelu admina."
-                      rows={4}
+                      rows={3}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
                     <p className="text-xs text-zinc-500">Widoczne tylko w panelu admina, nie w aplikacji mobilnej.</p>
                   </label>
                 </FormSection>
+                </div>
 
+                <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Harmonogram i status">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 @md:grid-cols-2 @3xl:grid-cols-1">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Termin realizacji</span>
                       <div className="flex gap-2">
@@ -1287,7 +1299,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                 </FormSection>
 
                 <FormSection title="Liczebność">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">Drużyny</span>
                       <input
@@ -1311,7 +1323,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </label>
 
                     <label className="space-y-1.5">
-                      <span className="text-xs uppercase tracking-wider text-zinc-400">Czas trwania (min)</span>
+                      <span className="text-xs uppercase tracking-wider text-zinc-400">Czas (min)</span>
                       <input
                         type="number"
                         min={1}
@@ -1323,11 +1335,12 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </label>
                   </div>
                 </FormSection>
+                </div>
               </>
             )}
 
             {activeTab === "gameplay" && (
-              <>
+              <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Tablica wyników">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1369,6 +1382,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
 
                 </FormSection>
 
+                {!isRiskQuizType && (
                 <FormSection title="Przebieg gry">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1400,6 +1414,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
                   </label>
 
+                  {caseFilesAvailable && (
+                  <>
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1429,9 +1445,14 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                   <p className="text-xs text-zinc-500">
                     Dowody dodasz po zapisaniu realizacji, w zakładce Akta.
                   </p>
+                  </>
+                  )}
 
                 </FormSection>
+                )}
 
+                {isRiskQuizType && (
+                <>
                 <FormSection title="Czat w Ryzykantach">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1509,7 +1530,10 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </label>
                   </div>
                 </FormSection>
+                </>
+                )}
 
+                {!isRiskQuizType && (
                 <FormSection title="Mapa">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1581,7 +1605,8 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     </div>
                   )}
                 </FormSection>
-              </>
+                )}
+              </div>
             )}
 
             {activeTab === "scenario" && (
@@ -1945,7 +1970,7 @@ export function CreateRealizationForm({ scenarios, stations, realizations, userE
                     <span className="text-zinc-500">Lista zadań (mobile):</span> {hideTaskList ? "Ukryta" : "Widoczna"}
                   </p>
                   <p>
-                    <span className="text-zinc-500">Akta:</span> {showCaseFiles ? "Włączone" : "Wyłączone"}
+                    <span className="text-zinc-500">Akta:</span> {caseFilesActive ? "Włączone" : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Mapa:</span>{" "}

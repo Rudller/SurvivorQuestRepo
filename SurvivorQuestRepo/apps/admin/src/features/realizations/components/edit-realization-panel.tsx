@@ -439,6 +439,11 @@ export function EditRealizationPanel({
     setTextEditingLanguage(baseTextLanguage);
   }
   const isRiskQuizType = editValues.type === "risk-quiz";
+  // Akta to mechanika oprawy kryminalnej; Ryzykanci mają oprawę wymuszoną na
+  // standardową, więc ten warunek wyklucza ich automatycznie.
+  const caseFilesAvailable =
+    !isRiskQuizType && editValues.themePack === "crime";
+  const caseFilesActive = caseFilesAvailable && editValues.showCaseFiles;
   const isEditingBaseTextLanguage = textEditingLanguage === baseTextLanguage;
   const isTextAutoTranslateDisabled =
     isAutoTranslating ||
@@ -593,7 +598,7 @@ export function EditRealizationPanel({
     // Zakładka reaguje na editValues, nie na zapisaną realizację — zaznaczenie
     // checkboxa odsłania ją od razu. Endpointy dowodów używają realization.id,
     // które w edycji zawsze istnieje, więc zapis nie jest potrzebny.
-    if (id === "caseFiles") return editValues.showCaseFiles;
+    if (id === "caseFiles") return caseFilesActive;
     return true;
   }).map((id) => ({
     id,
@@ -971,7 +976,9 @@ export function EditRealizationPanel({
                 timedStationPointsDecayEnabled:
                   editValues.timedStationPointsDecayEnabled,
                 hideTaskList: editValues.hideTaskList,
-                showCaseFiles: editValues.showCaseFiles,
+                // Ukryta opcja nie może działać po cichu — po zmianie oprawy
+                // albo typu akta wyłączają się przy zapisie.
+                showCaseFiles: caseFilesActive,
                 caseFilesSequentialUnlock: editValues.caseFilesSequentialUnlock,
                 riskChatEnabled: editValues.riskChatEnabled,
                 riskChatTeamsCanPost: editValues.riskChatTeamsCanPost,
@@ -1049,7 +1056,7 @@ export function EditRealizationPanel({
             <p className="sq-error-banner mx-4 mt-3 sm:mx-6">{editError}</p>
           )}
 
-          <div className="sq-thin-scrollbar min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
+          <div className="sq-thin-scrollbar @container min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 sm:p-6">
             {activeTab === "basic" && (
               <>
                 <SummaryCard title="Informacje o realizacji">
@@ -1107,6 +1114,7 @@ export function EditRealizationPanel({
                 </SummaryCard>
 
                 <FormSection title="Klient">
+                  <div className="grid gap-3 @xl:grid-cols-3">
                   <label className="block space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">
                       Nazwa firmy
@@ -1176,12 +1184,15 @@ export function EditRealizationPanel({
                     </p>
                   </label>
 
+                  </div>
+
+
                   <label className="block space-y-1.5">
                     <span className="text-xs uppercase tracking-wider text-zinc-400">
                       Język realizacji
                     </span>
                     <div
-                      className={`grid gap-2 rounded-lg border bg-zinc-950 p-3 ${
+                      className={`flex flex-wrap gap-x-5 gap-y-2 rounded-lg border bg-zinc-950 px-3 py-2 ${
                         isLanguageSelectionInvalid
                           ? "border-red-500/70"
                           : "border-zinc-700"
@@ -1229,9 +1240,9 @@ export function EditRealizationPanel({
                     ) : null}
                   </label>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 @md:grid-cols-2 @xl:grid-cols-3">
                     {selectedLanguagesSet.has("other") && (
-                      <label className="space-y-1.5 sm:col-span-2">
+                      <label className="space-y-1.5 @md:col-span-2 @xl:col-span-3">
                         <span className="text-xs uppercase tracking-wider text-zinc-400">
                           Wpisz język
                         </span>
@@ -1250,7 +1261,7 @@ export function EditRealizationPanel({
                       </label>
                     )}
 
-                    <label className="space-y-1.5 sm:col-span-2">
+                    <label className="space-y-1.5 @md:col-span-2 @xl:col-span-3">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">
                         Lokalizacja realizacji
                       </span>
@@ -1304,7 +1315,7 @@ export function EditRealizationPanel({
                       />
                     </label>
 
-                    <label className="space-y-1.5 sm:col-span-2">
+                    <label className="space-y-1.5 @md:col-span-2 @xl:col-span-1">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">
                         E-mail kontaktowy
                       </span>
@@ -1396,6 +1407,7 @@ export function EditRealizationPanel({
                   </div>
                 </FormSection>
 
+                <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Instruktorzy">
                   <div className="flex gap-2">
                     <input
@@ -1458,7 +1470,7 @@ export function EditRealizationPanel({
                         }))
                       }
                       placeholder="Notatki robocze widoczne tylko w panelu admina."
-                      rows={4}
+                      rows={3}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-amber-400/80"
                     />
                     <p className="text-xs text-zinc-500">
@@ -1466,9 +1478,11 @@ export function EditRealizationPanel({
                     </p>
                   </label>
                 </FormSection>
+                </div>
 
+                <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Harmonogram i status">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 @md:grid-cols-2 @3xl:grid-cols-1">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">
                         Termin realizacji
@@ -1541,7 +1555,7 @@ export function EditRealizationPanel({
                 </FormSection>
 
                 <FormSection title="Liczebność">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">
                         Drużyny
@@ -1580,7 +1594,7 @@ export function EditRealizationPanel({
 
                     <label className="space-y-1.5">
                       <span className="text-xs uppercase tracking-wider text-zinc-400">
-                        Czas trwania (min)
+                        Czas (min)
                       </span>
                       <input
                         type="number"
@@ -1602,6 +1616,7 @@ export function EditRealizationPanel({
                     </label>
                   </div>
                 </FormSection>
+                </div>
 
                 <section className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
                   <h3 className="text-sm font-semibold text-red-200">
@@ -1674,7 +1689,7 @@ export function EditRealizationPanel({
             )}
 
             {activeTab === "gameplay" && (
-              <>
+              <div className="grid items-start gap-3 @3xl:grid-cols-2">
                 <FormSection title="Tablica wyników">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1734,6 +1749,7 @@ export function EditRealizationPanel({
 
                 </FormSection>
 
+                {!isRiskQuizType && (
                 <FormSection title="Przebieg gry">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1780,6 +1796,8 @@ export function EditRealizationPanel({
                     Ukryj listę zadań (mobile) — pasek postępu zostaje widoczny
                   </label>
 
+                  {caseFilesAvailable && (
+                  <>
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
                       type="checkbox"
@@ -1817,9 +1835,14 @@ export function EditRealizationPanel({
                       </span>
                     </label>
                   ) : null}
+                  </>
+                  )}
 
                 </FormSection>
+                )}
 
+                {isRiskQuizType && (
+                <>
                 <FormSection title="Czat w Ryzykantach">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -1962,7 +1985,10 @@ export function EditRealizationPanel({
                     </div>
                   </div>
                 </FormSection>
+                </>
+                )}
 
+                {!isRiskQuizType && (
                 <FormSection title="Mapa">
                   <label className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
                     <input
@@ -2059,7 +2085,8 @@ export function EditRealizationPanel({
                     </div>
                   )}
                 </FormSection>
-              </>
+                )}
+              </div>
             )}
 
             {activeTab === "scenario" && (
@@ -2493,7 +2520,7 @@ export function EditRealizationPanel({
                   </p>
                   <p>
                     <span className="text-zinc-500">Akta:</span>{" "}
-                    {editValues.showCaseFiles ? "Włączone" : "Wyłączone"}
+                    {caseFilesActive ? "Włączone" : "Wyłączone"}
                   </p>
                   <p>
                     <span className="text-zinc-500">Mapa:</span>{" "}
