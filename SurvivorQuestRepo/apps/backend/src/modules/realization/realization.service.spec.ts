@@ -526,6 +526,33 @@ describe('RealizationService.updateRealization (risk-quiz)', () => {
     expect(result?.scenarioId).toBeNull();
   });
 
+  // Prisma reads `undefined` as "leave the column alone", so a contact field
+  // the admin emptied has to be sent as null — otherwise the old value comes
+  // back right after saving.
+  it.each([
+    ['contactEmail', { contactPhone: '123456789', contactEmail: undefined }],
+    ['contactPhone', { contactPhone: undefined, contactEmail: 'a@b.pl' }],
+  ] as const)('clears %s when the admin empties it', async (field, contact) => {
+    const { service, prisma } = createService({
+      id: 'realization-1',
+      companyName: 'Firma testowa',
+      scenarioId: null,
+      scheduledAt: '2026-06-01T10:00:00.000Z',
+      durationMinutes: 120,
+      status: 'PLANNED',
+      joinCode: 'JOIN01',
+      contactPhone: '999888777',
+      contactEmail: 'stary@firma.pl',
+    });
+
+    await service.updateRealization({ ...updatePayload, ...contact });
+
+    const [[{ data: updateData }]] = prisma.realization.update.mock.calls as [
+      [{ data: Record<string, unknown> }],
+    ];
+    expect(updateData[field]).toBeNull();
+  });
+
   it('provisions the risk cards after updating a risk-quiz realization', async () => {
     const { service, riskQuizService } = createService({
       id: 'realization-1',

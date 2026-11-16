@@ -435,8 +435,11 @@ export class RealizationService {
           ? toPrismaRealizationTranslationsData(validated.translations)
           : undefined,
         contactPerson: validated.contactPerson,
-        contactPhone: validated.contactPhone,
-        contactEmail: validated.contactEmail,
+        // Walidacja wymaga telefonu albo e-maila, więc oba pola zawsze
+        // przychodzą razem — puste ma wyczyścić kolumnę, a nie zostać przy
+        // starej wartości (Prisma traktuje undefined jako „nie ruszaj”).
+        contactPhone: validated.contactPhone ?? null,
+        contactEmail: validated.contactEmail ?? null,
         instructors: validated.instructors,
         notes: validated.notes,
         type: toPrismaRealizationType(validated.type),
