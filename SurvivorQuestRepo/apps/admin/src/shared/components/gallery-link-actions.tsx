@@ -10,7 +10,7 @@ import { useState } from "react";
  * oba w gotowy tekst do maila albo komunikatora.
  */
 
-const PRODUCTION_WEB_URL = "https://survivorquest.pl";
+const PRODUCTION_WEB_URL = "https://sq-events.pl";
 const LOCAL_WEB_URL = "http://localhost:3000";
 
 export function resolveGalleryUrl(realizationId: string) {

@@ -106,14 +106,15 @@ export function getApiConnectionLabel() {
   return getConfiguredApiUrl();
 }
 
-const PRODUCTION_API_HOSTNAME = "survivorquest.pl";
+// sq-events.pl to domena główna; survivorquest.pl dalej serwuje /api (stare tablety).
+const PRODUCTION_API_HOSTNAMES = ["sq-events.pl", "survivorquest.pl"];
 
 export function isProductionApiUrl(apiUrl: string) {
   try {
     const hostname = new URL(apiUrl).hostname.toLowerCase();
-    return (
-      hostname === PRODUCTION_API_HOSTNAME ||
-      hostname.endsWith(`.${PRODUCTION_API_HOSTNAME}`)
+    return PRODUCTION_API_HOSTNAMES.some(
+      (productionHostname) =>
+        hostname === productionHostname || hostname.endsWith(`.${productionHostname}`),
     );
   } catch {
     return false;

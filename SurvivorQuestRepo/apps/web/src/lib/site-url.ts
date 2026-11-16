@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = "https://survivorquest.pl";
+const DEFAULT_SITE_URL = "https://sq-events.pl";
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, "");

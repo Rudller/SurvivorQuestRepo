@@ -64,7 +64,9 @@ services:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/api`)
+      # API odpowiada też na starej domenie BEZ przekierowania: tablety mają zapisane
+      # https://${LEGACY_DOMAIN}/api, a 301 na POST gubi treść żądania.
+      - traefik.http.routers.backend.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`${LEGACY_DOMAIN}`) || Host(`www.${LEGACY_DOMAIN}`)) && PathPrefix(`/api`)
       - traefik.http.routers.backend.entrypoints=websecure
       - traefik.http.routers.backend.tls=true
       - traefik.http.routers.backend.tls.certresolver=letsencrypt
@@ -87,7 +89,7 @@ services:
       - backend
     labels:
       - traefik.enable=true
-      - traefik.http.routers.admin.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/admin`)
+      - traefik.http.routers.admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)
       - traefik.http.routers.admin.entrypoints=websecure
       - traefik.http.routers.admin.tls=true
       - traefik.http.routers.admin.tls.certresolver=letsencrypt
@@ -108,12 +110,27 @@ services:
       PORT: 3000
     labels:
       - traefik.enable=true
-      - traefik.http.routers.web.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      - traefik.http.routers.web.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.web.entrypoints=websecure
       - traefik.http.routers.web.tls=true
       - traefik.http.routers.web.tls.certresolver=letsencrypt
       - traefik.http.routers.web.priority=10
       - traefik.http.services.web.loadbalancer.server.port=3000
+      # Jeden kanoniczny adres strony: www.${DOMAIN} i stara domena (z www i bez)
+      # lecą 301 na ten sam adres w https://${DOMAIN} — www i bez www to dla
+      # Facebooka dwa różne linki (osobne podglądy i liczniki udostępnień).
+      # /api jest wyjątkiem: router backend ma wyższy priorytet i odpowiada
+      # na wszystkich tych hostach bez przekierowania.
+      - traefik.http.routers.canonical-redirect.rule=Host(`www.${DOMAIN}`) || Host(`${LEGACY_DOMAIN}`) || Host(`www.${LEGACY_DOMAIN}`)
+      - traefik.http.routers.canonical-redirect.entrypoints=websecure
+      - traefik.http.routers.canonical-redirect.tls=true
+      - traefik.http.routers.canonical-redirect.tls.certresolver=letsencrypt
+      - traefik.http.routers.canonical-redirect.priority=50
+      - traefik.http.routers.canonical-redirect.service=noop@internal
+      - traefik.http.routers.canonical-redirect.middlewares=to-canonical-domain@docker
+      - traefik.http.middlewares.to-canonical-domain.redirectregex.regex=^https?://[^/]+/?(.*)$$
+      - traefik.http.middlewares.to-canonical-domain.redirectregex.replacement=https://${DOMAIN}/$${1}
+      - traefik.http.middlewares.to-canonical-domain.redirectregex.permanent=true
     restart: unless-stopped
 
   pgadmin:
@@ -134,6 +151,13 @@ services:
       - traefik.http.routers.pgadmin.tls=true
       - traefik.http.routers.pgadmin.tls.certresolver=letsencrypt
       - traefik.http.services.pgadmin.loadbalancer.server.port=80
+      # Osobny router (= osobny certyfikat), żeby brak DNS-u pgadmin.${DOMAIN}
+      # nie blokował certyfikatu dla starego adresu.
+      - traefik.http.routers.pgadmin-legacy.rule=Host(`pgadmin.${LEGACY_DOMAIN}`)
+      - traefik.http.routers.pgadmin-legacy.entrypoints=websecure
+      - traefik.http.routers.pgadmin-legacy.tls=true
+      - traefik.http.routers.pgadmin-legacy.tls.certresolver=letsencrypt
+      - traefik.http.routers.pgadmin-legacy.service=pgadmin
     restart: unless-stopped
 
 volumes:

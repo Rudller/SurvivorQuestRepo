@@ -87,7 +87,7 @@ export function OfferPage({ offer }: { offer: Offer }) {
       <p className="text-sm text-ivory-faint">
         Więcej o formatach, zdjęcia i odpowiedzi na częste pytania:{" "}
         <Link href="/" className="text-amber underline-offset-4 hover:underline">
-          survivorquest.pl
+          sq-events.pl
         </Link>
       </p>
     </main>
