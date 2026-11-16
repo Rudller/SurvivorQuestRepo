@@ -6,6 +6,12 @@ on:
       - main
   workflow_dispatch:
 
+# Jeden deploy naraz: kolejny push czeka, aż poprzedni skończy (nie przerywamy
+# deployu w trakcie budowania obrazów / migracji).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   migration-gate:
     runs-on: ubuntu-latest
