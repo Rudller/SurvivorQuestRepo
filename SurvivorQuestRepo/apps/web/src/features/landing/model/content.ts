@@ -148,7 +148,7 @@ export const EVENT_FORMATS: readonly EventFormat[] = [
         ],
         image: {
           src: "/formaty/aura-restart-challenge-outdoor.jpg",
-          alt: "Instruktor SurvivorQuest przy boisku, na którym uczestnicy grają w bumper ball.",
+          alt: "Instruktor SQ-Events przy boisku, na którym uczestnicy grają w bumper ball.",
         },
       },
     ],

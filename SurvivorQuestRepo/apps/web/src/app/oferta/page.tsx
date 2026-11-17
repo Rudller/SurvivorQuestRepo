@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { OfferIndexPage } from "@/features/offers/components/offer-index-page";
 import { OG_IMAGE } from "@/lib/site-url";
 
-const TITLE = "Oferta | SurvivorQuest";
+const TITLE = "Oferta | SQ-Events";
 const DESCRIPTION =
-  "Oferty SurvivorQuest dla firm — gry terenowe, gry hotelowe i quizy drużynowe. Każdą ofertę można pobrać jako PDF.";
+  "Oferty SQ-Events dla firm — gry terenowe, gry hotelowe i quizy drużynowe. Każdą ofertę można pobrać jako PDF.";
 
 export const metadata: Metadata = {
   title: TITLE,

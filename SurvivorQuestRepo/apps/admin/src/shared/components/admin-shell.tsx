@@ -55,7 +55,7 @@ export function AdminShell({
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/95 px-4 py-3 backdrop-blur lg:hidden">
-        <p className="text-sm font-semibold tracking-wide text-zinc-100">SurvivorQuest Admin</p>
+        <p className="text-sm font-semibold tracking-wide text-zinc-100">SQ-Events Admin</p>
         <button
           type="button"
           aria-label="Otwórz menu nawigacji"

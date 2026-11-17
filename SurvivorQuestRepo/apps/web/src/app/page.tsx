@@ -6,7 +6,7 @@ import { LandingPage } from "@/features/landing/components/landing-page";
 import { HERO_SLIDES } from "@/features/landing/lib/hero-slides";
 import { FAQ_ITEMS } from "@/features/landing/model/content";
 
-const TITLE = "Gry terenowe i eventy integracyjne dla firm | SurvivorQuest";
+const TITLE = "Gry terenowe i eventy integracyjne dla firm | SQ-Events";
 const DESCRIPTION =
   "Organizujemy gry terenowe, gry hotelowe i quizy drużynowe dla firm. Drużyny grają na tabletach z naszej autorskiej aplikacji, z rankingiem na żywo.";
 
@@ -29,6 +29,8 @@ export const metadata: Metadata = {
     "wyjazd integracyjny",
     "integracja zespołu",
     "quiz drużynowy dla firm",
+    "SQ-Events",
+    "SQ Events",
     "SurvivorQuest",
     "Survivor Quest",
   ],
@@ -36,7 +38,7 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   openGraph: {
-    title: "SurvivorQuest (Survivor Quest) | Eventy, które angażują od pierwszej minuty",
+    title: "SQ-Events | Eventy, które angażują od pierwszej minuty",
     description:
       "Gra terenowa, gra hotelowa lub quiz drużynowy Ryzykanci dla Twojej firmy — prowadzone w aplikacji, którą napisaliśmy sami.",
     url: "/",

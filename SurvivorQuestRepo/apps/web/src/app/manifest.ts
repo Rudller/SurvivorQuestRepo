@@ -8,8 +8,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SurvivorQuest — eventy integracyjne dla firm",
-    short_name: "SurvivorQuest",
+    name: "SQ-Events — eventy integracyjne dla firm",
+    short_name: "SQ-Events",
     description:
       "Gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm — integracje prowadzone na tabletach z rankingiem na żywo.",
     start_url: "/",

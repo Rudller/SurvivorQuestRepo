@@ -12,8 +12,8 @@ export default function LoginPage() {
         <div className="grid w-full max-w-md gap-4">
           <div className="space-y-1 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/admin/logo-sq.svg" alt="Logo SurvivorQuest" width={72} height={72} className="mx-auto mb-3 size-18" />
-            <h1 className="text-3xl font-semibold tracking-tight">SurvivorQuest Panel</h1>
+            <img src="/admin/logo-sq-events.png" alt="Logo SQ-Events" width={120} height={72} className="mx-auto mb-3 h-18 w-auto" />
+            <h1 className="text-3xl font-semibold tracking-tight">SQ-Events Panel</h1>
             <p className="text-sm text-zinc-300">Zaloguj się, aby zarządzać użytkownikami i dostępem.</p>
           </div>
           <LoginForm />

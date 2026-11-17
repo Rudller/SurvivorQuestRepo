@@ -10,7 +10,7 @@ import type { Offer } from "@/features/offers/model/offers";
  * automatically and every title has to carry it itself.
  */
 export function buildOfferMetadata(offer: Offer, path: string): Metadata {
-  const title = `${offer.title} | SurvivorQuest`;
+  const title = `${offer.title} | SQ-Events`;
 
   return {
     title,

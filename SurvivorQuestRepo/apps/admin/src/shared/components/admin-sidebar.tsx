@@ -55,9 +55,9 @@ export function AdminSidebar({ userEmail, userRole, isLoggingOut, onLogout, onNa
     <div className="flex h-full flex-col p-4">
       <div className="flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/admin/logo-sq.svg" alt="Logo SurvivorQuest" width={40} height={40} className="size-10 shrink-0" />
+        <img src="/admin/logo-sq-events.png" alt="Logo SQ-Events" width={67} height={40} className="h-10 w-auto shrink-0" />
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">SurvivorQuest</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">SQ-Events</p>
           <h2 className="mt-0.5 text-lg font-semibold text-zinc-100">Admin Panel</h2>
         </div>
       </div>

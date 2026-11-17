@@ -4,14 +4,14 @@ import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Polityka cookies | SurvivorQuest",
-  description: "Informacje o plikach cookie wykorzystywanych w SurvivorQuest.",
+  title: "Polityka cookies | SQ-Events",
+  description: "Informacje o plikach cookie wykorzystywanych w serwisie SQ-Events.",
   alternates: {
     canonical: "/polityka-cookies",
   },
   openGraph: {
-    title: "Polityka cookies | SurvivorQuest",
-    description: "Informacje o plikach cookie wykorzystywanych w SurvivorQuest.",
+    title: "Polityka cookies | SQ-Events",
+    description: "Informacje o plikach cookie wykorzystywanych w serwisie SQ-Events.",
     url: "/polityka-cookies",
     type: "article",
     locale: "pl_PL",
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Polityka cookies | SurvivorQuest",
-    description: "Informacje o plikach cookie wykorzystywanych w SurvivorQuest.",
+    title: "Polityka cookies | SQ-Events",
+    description: "Informacje o plikach cookie wykorzystywanych w serwisie SQ-Events.",
     images: [OG_IMAGE.url],
   },
 };

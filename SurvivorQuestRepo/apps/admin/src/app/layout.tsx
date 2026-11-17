@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Survivor Quest Admin Panel",
-  description: "Panel administratora SurvivorQuest",
+  title: "SQ-Events Admin Panel",
+  description: "Panel administratora SQ-Events",
   robots: {
     index: false,
     follow: false,

@@ -18,8 +18,10 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
-const BRAND_NAME = "SurvivorQuest";
-const BRAND_ALTERNATE_NAME = "Survivor Quest";
+const BRAND_NAME = "SQ-Events";
+// Dawna nazwa marki zostaje jako alternateName, żeby wyszukiwania „SurvivorQuest”
+// nadal trafiały w tę organizację (SurvivorQuest to teraz nazwa naszej aplikacji).
+const BRAND_ALTERNATE_NAMES = ["SQ Events", "SurvivorQuest", "Survivor Quest"];
 const siteUrl = getSiteUrl();
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 
@@ -29,14 +31,14 @@ const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?
  * keeping a second version of it here is how the two drift apart.
  *
  * The title stays under ~60 characters because that is where Google truncates.
- * The spaced-out "Survivor Quest" spelling is carried by `alternateName` in the
- * JSON-LD below, not by the title, where it cost 16 characters and pushed the
+ * Alternative spellings (and the former brand name) are carried by
+ * `alternateName` in the JSON-LD below, not by the title, where it cost 16 characters and pushed the
  * part that actually sells out of the result.
  */
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Gry terenowe i eventy integracyjne dla firm | SurvivorQuest",
+    default: "Gry terenowe i eventy integracyjne dla firm | SQ-Events",
     template: "%s",
   },
   description:
@@ -75,9 +77,9 @@ export default function RootLayout({
         "@type": "Organization",
         "@id": `${siteUrl}#organization`,
         name: BRAND_NAME,
-        alternateName: BRAND_ALTERNATE_NAME,
+        alternateName: BRAND_ALTERNATE_NAMES,
         url: siteUrl,
-        logo: toAbsoluteUrl("/logo-sq.png"),
+        logo: toAbsoluteUrl("/icon-512.png"),
         email: contactEmail,
         telephone: toDialablePhone(contactPhone),
         contactPoint: [
@@ -94,7 +96,7 @@ export default function RootLayout({
         "@type": "WebSite",
         "@id": `${siteUrl}#website`,
         name: BRAND_NAME,
-        alternateName: BRAND_ALTERNATE_NAME,
+        alternateName: BRAND_ALTERNATE_NAMES,
         url: siteUrl,
         inLanguage: "pl-PL",
         publisher: {

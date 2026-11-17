@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { GalleryView } from "@/features/gallery/components/gallery-view";
 
 export const metadata: Metadata = {
-  title: "Galeria zdjęć | SurvivorQuest",
-  description: "Zdjęcia z realizacji SurvivorQuest — dostęp chroniony kodem realizacji.",
+  title: "Galeria zdjęć | SQ-Events",
+  description: "Zdjęcia z realizacji SQ-Events — dostęp chroniony kodem realizacji.",
   robots: {
     index: false,
     follow: false,

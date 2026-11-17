@@ -55,7 +55,7 @@ export const OFFERS: readonly Offer[] = [
     pdfPath: "/oferty/survivorquest-oferta-ogolna.pdf",
     pdfNote: "Plik PDF — możesz go zapisać i wrócić do niego później.",
     metaDescription:
-      "Pobierz ofertę SurvivorQuest: gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm. Tablety, prowadzący i scenariusz pod Waszą firmę.",
+      "Pobierz ofertę SQ-Events: gry terenowe, gry hotelowe i quiz drużynowy Ryzykanci dla firm. Tablety, prowadzący i scenariusz pod Waszą firmę.",
   },
 ];
 

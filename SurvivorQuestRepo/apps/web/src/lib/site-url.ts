@@ -39,5 +39,5 @@ export const OG_IMAGE = {
   url: "/og-default.jpg",
   width: 1200,
   height: 630,
-  alt: "SurvivorQuest — gry terenowe i eventy integracyjne dla firm",
+  alt: "SQ-Events — gry terenowe i eventy integracyjne dla firm",
 } as const;

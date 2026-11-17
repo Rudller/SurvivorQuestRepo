@@ -3,7 +3,7 @@ type WordmarkProps = {
 };
 
 /**
- * The name set as the brand lockup: "Survivor" in Ivory, "Quest" in Amber.
+ * The name set as the brand lockup: "SQ" in Ivory, "-Events" in Amber.
  *
  * Only for places where the name stands on its own — the header lockup, a
  * section eyebrow, a footer heading. Inside a sentence it stays plain text: a
@@ -17,8 +17,8 @@ type WordmarkProps = {
 export function Wordmark({ className }: WordmarkProps) {
   return (
     <span className={`uppercase tracking-[0.18em] ${className ?? ""}`}>
-      <span className="text-ivory">Survivor</span>
-      <span className="text-amber">Quest</span>
+      <span className="text-ivory">SQ</span>
+      <span className="text-amber">-Events</span>
     </span>
   );
 }

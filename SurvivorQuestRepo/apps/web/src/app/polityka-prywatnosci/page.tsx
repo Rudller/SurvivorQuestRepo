@@ -4,14 +4,14 @@ import { OG_IMAGE } from "@/lib/site-url";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Polityka prywatności | SurvivorQuest",
-  description: "Informacje o przetwarzaniu danych osobowych w SurvivorQuest.",
+  title: "Polityka prywatności | SQ-Events",
+  description: "Informacje o przetwarzaniu danych osobowych w SQ-Events.",
   alternates: {
     canonical: "/polityka-prywatnosci",
   },
   openGraph: {
-    title: "Polityka prywatności | SurvivorQuest",
-    description: "Informacje o przetwarzaniu danych osobowych w SurvivorQuest.",
+    title: "Polityka prywatności | SQ-Events",
+    description: "Informacje o przetwarzaniu danych osobowych w SQ-Events.",
     url: "/polityka-prywatnosci",
     type: "article",
     locale: "pl_PL",
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Polityka prywatności | SurvivorQuest",
-    description: "Informacje o przetwarzaniu danych osobowych w SurvivorQuest.",
+    title: "Polityka prywatności | SQ-Events",
+    description: "Informacje o przetwarzaniu danych osobowych w SQ-Events.",
     images: [OG_IMAGE.url],
   },
 };
@@ -38,7 +38,7 @@ export default function PrivacyPolicyPage() {
         </p>
         <h1 className="text-3xl font-semibold tracking-tight text-ivory sm:text-4xl">Polityka prywatności</h1>
         <p className="text-sm text-ivory-muted sm:text-base">
-          Niniejsza polityka opisuje, jakie dane przetwarzamy w związku z korzystaniem z serwisu SurvivorQuest oraz
+          Niniejsza polityka opisuje, jakie dane przetwarzamy w związku z korzystaniem z serwisu SQ-Events oraz
           aplikacji mobilnej SurvivorQuest (Android/iOS), i na jakich zasadach.
         </p>
         <p className="text-xs text-ivory-faint">Ostatnia aktualizacja: 5 września 2026 r.</p>
@@ -47,7 +47,7 @@ export default function PrivacyPolicyPage() {
       <section className={sectionClassName}>
         <h2 className={headingClassName}>1. Administrator danych</h2>
         <p>
-          Administratorem danych jest właściciel marki SurvivorQuest. W sprawach związanych z danymi osobowymi możesz
+          Administratorem danych jest właściciel marki SQ-Events. W sprawach związanych z danymi osobowymi możesz
           skontaktować się mailowo na adres:{" "}
           <a href="mailto:kontakt@survivorquest.pl" className="text-amber underline-offset-4 hover:underline">
             kontakt@survivorquest.pl
@@ -62,7 +62,7 @@ export default function PrivacyPolicyPage() {
 
       <section className={sectionClassName}>
         <h2 className={headingClassName}>2. Jakie dane przetwarzamy</h2>
-        <p>W zależności od tego, jak korzystasz z SurvivorQuest, możemy przetwarzać:</p>
+        <p>W zależności od tego, jak korzystasz z serwisu SQ-Events i aplikacji SurvivorQuest, możemy przetwarzać:</p>
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
             <span className="text-ivory">Dane uczestnika gry (aplikacja mobilna):</span> kod dołączenia do

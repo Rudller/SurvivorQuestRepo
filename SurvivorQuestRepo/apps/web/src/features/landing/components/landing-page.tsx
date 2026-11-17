@@ -63,7 +63,7 @@ export function LandingPage({
   adminHref,
 }: LandingPageProps) {
   const currentYear = new Date().getFullYear();
-  const quoteHref = withQuoteSubject(quoteHrefBase, "Wycena eventu SurvivorQuest");
+  const quoteHref = withQuoteSubject(quoteHrefBase, "Wycena eventu SQ-Events");
   const ideaHref = withQuoteSubject(quoteHrefBase, "Pomysł na technologię eventową");
 
   return (
@@ -75,7 +75,7 @@ export function LandingPage({
       >
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <Image src="/logo-sq.png" alt="Logo SurvivorQuest" width={40} height={40} className="size-10" />
+            <Image src="/logo-sq-events.png" alt="Logo SQ-Events" width={67} height={40} className="h-10 w-auto" />
             <div>
               <p className="text-[11px] font-medium">
                 <Wordmark />
@@ -297,11 +297,11 @@ export function LandingPage({
             <aside className="relative rounded-2xl bg-ink p-6 text-sm text-ivory-muted">
               <header className="flex items-center gap-3">
                 <Image
-                  src="/logo-sq.png"
-                  alt="Logo SurvivorQuest"
-                  width={32}
+                  src="/logo-sq-events.png"
+                  alt="Logo SQ-Events"
+                  width={54}
                   height={32}
-                  className="size-8"
+                  className="h-8 w-auto"
                 />
                 <div>
                   <p className="font-semibold">
@@ -338,7 +338,7 @@ export function LandingPage({
                 <Wordmark />
               </p>
               <p className="text-xs text-ivory-faint">Interaktywne gry dla firm</p>
-              <p className="text-xs text-ivory-faint">© {currentYear} SurvivorQuest. Wszelkie prawa zastrzeżone.</p>
+              <p className="text-xs text-ivory-faint">© {currentYear} SQ-Events. Wszelkie prawa zastrzeżone.</p>
             </section>
 
             <section className="grid gap-1 text-sm">
